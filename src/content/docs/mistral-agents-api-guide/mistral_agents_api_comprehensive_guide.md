@@ -3,9 +3,14 @@ title: "Mistral Agents API: Comprehensive Technical Guide"
 description: "Reference for Mistral's Agents and Conversations APIs with the mistralai Python SDK: agents, versions, conversations, streaming, tools, handoffs, structured output, guardrails and errors."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "Core reference"
+  order: 1
 ---
 
-**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Every method, parameter and tool shape on this page was checked against an installed copy of the SDK. The architecture diagrams that used to open this page now live on the [diagrams page](/mistral-agents-api-guide/mistral_agents_api_diagrams/).
+**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Every method, parameter and tool shape on this page was checked against an installed copy of the SDK. Diagrams are on the [diagrams page](/mistral-agents-api-guide/mistral_agents_api_diagrams/).
+
+**Status:** the Agents and Conversations APIs are beta (they live under `client.beta`), and registered MCP connectors are a public preview. Request and response shapes can still change between SDK releases.
 
 ---
 
@@ -44,6 +49,13 @@ Built-in tools (web search, code interpreter, image generation, document librari
 | Built-in tool execution | Mistral |
 | Function tools | your code |
 | MCP servers | Mistral (registered connectors) or your code (`mistralai.extra.mcp`) |
+
+Related Mistral features that this guide does not cover in depth:
+
+- **Le Chat deployment.** `agents.update(..., deployment_chat=True)` makes an agent available in Le Chat; `agents.list_pages(deployment_chat=True)` lists those agents.
+- **Reasoning effort.** `completion_args={"reasoning_effort": "low"}` (`"none"` to `"xhigh"`) on models that support it.
+- **Prompts and Skills** (`client.beta.prompts`, `client.beta.skills`): stored, versioned prompt and skill objects.
+- **Workflows** (`client.workflows`, `mistralai.extra.workflows`) and **voice agents** (`mistralai.extra.voice_agents`) are separate products with their own documentation.
 
 ---
 
@@ -93,7 +105,7 @@ Agents accept any chat model your workspace can use. Current general-purpose cho
 | Mistral Small 4 | `mistral-small-2603` | `mistral-small-latest` | 256k | Fast, cheap agents and routers |
 | Ministral 3 8B | `ministral-8b-2512` | — | 256k | Edge and high-volume classification |
 
-Aliases move when Mistral releases a new version, so pin the dated API name in production and use aliases in prototypes. `mistral-medium-2505` (Medium 3) and `mistral-medium-2508` (Medium 3.1) reached retirement on 31 August 2026; their replacement is Mistral Medium 3.5.
+Aliases move when Mistral releases a new version, so pin the versioned API name (`mistral-medium-3-5`, `mistral-small-2603`) in production and use aliases in prototypes. `mistral-medium-2505` (Medium 3) and `mistral-medium-2508` (Medium 3.1) reached retirement on 31 August 2026; their replacement is Mistral Medium 3.5.
 
 ---
 
@@ -125,10 +137,17 @@ print(agent.id, agent.version)
 
 ```python
 agent = client.beta.agents.get(agent_id=agent.id)
-for a in client.beta.agents.list(page_size=50, name="research-assistant"):
-    print(a.id, a.name, a.version)
+
+page = client.beta.agents.list_pages(page_size=50, name="research-assistant")
+while page is not None:
+    for a in page.result.data:
+        print(a.id, a.name, a.version)
+    page = page.next()          # None after the last page
+
 client.beta.agents.delete(agent_id=agent.id)
 ```
+
+`list_pages()` is cursor-paginated (`page.result.next_page_token`, or pass `page_token=` yourself) and filters by `name`, `search`, `metadata` and `deployment_chat`. The older `agents.list()` is deprecated: it ignores agent sharing and emits a `DeprecationWarning`.
 
 ### Versions and aliases
 
@@ -262,7 +281,7 @@ Event types: `conversation.response.started`, `message.output.delta`, `tool.exec
 | `web_search_premium` | Web search plus news agencies | `tool_configuration` |
 | `code_interpreter` | Runs Python in a sandbox | `tool_configuration` |
 | `image_generation` | Generates images (returned as files) | `tool_configuration` |
-| `document_library` | Retrieval over your Libraries | `library_ids` |
+| `document_library` | Retrieval over your Libraries | `library_ids`, `tool_configuration` |
 | `connector` | A registered MCP connector | `connector_id`, `authorization`, `tool_configuration` |
 | `function` | Your own function | `function` |
 
@@ -376,7 +395,7 @@ triage = client.beta.agents.create(
 response = client.beta.conversations.start(
     agent_id=triage.id,
     inputs="I was charged twice this month.",
-    handoff_execution="server",   # the platform runs the target agent in the same request
+    handoff_execution="server",   # the default: the platform runs the target agent in the same request
 )
 for entry in response.outputs:
     if entry.type == "agent.handoff":
@@ -437,7 +456,7 @@ safe = client.beta.agents.create(
 
 ## 12. Errors, retries and timeouts
 
-HTTP errors raise subclasses of `mistralai.client.errors.MistralError`, which carry `status_code`, `body` and the raw `httpx2` response. `HTTPValidationError` is raised for 422s; `SDKError` for everything else.
+HTTP errors raise subclasses of `mistralai.client.errors.MistralError`, which carry `status_code`, `body` and the raw `httpx2` response. `HTTPValidationError` is raised for 422s and `SDKError` for other error statuses. `ResponseValidationError` means a response did not match the SDK's model (often an SDK that is older than the API), `NoResponseError` means no response arrived, and `ObservabilityError` comes from the observability endpoints.
 
 ```python
 from mistralai.client import Mistral, errors
@@ -501,3 +520,10 @@ For streaming: `async with await client.beta.conversations.start_stream_async(..
 - **Observability and workflow deployment** APIs changed shape (single pipeline `definition`; Mistral Cloud deployment backend).
 
 Upgrading from v1 as well? v2 moved every import from `mistralai` to `mistralai.client`, and Azure/GCP clients to `mistralai.azure.client` / `mistralai.gcp.client`.
+
+### Earlier history
+
+- **27 May 2025.** Mistral launched the Agents API as a beta: stored agents, server-side conversations (append, restart, streaming), built-in code execution, image generation, web search (with a premium news variant) and document libraries, handoffs, and MCP tool use. The launch material's "persistent memory" meant server-side conversation history, not a separate tool.
+- **2025–2026.** `document_library` with `library_ids`; MCP `connector` tools with stored credentials and OAuth; `tool_configuration` (`include`, `exclude`, `requires_confirmation`); agent versions and aliases; guardrails; `handoff_execution`.
+- **March 2026.** Python SDK v2 moved imports to `mistralai.client` and renamed 42 request and response types.
+- **2026 model retirements.** `mistral-moderation-2411` retired on 30 June 2026 (replaced by `mistral-moderation-2603`); `mistral-medium-2505` and `mistral-medium-2508` retired on 31 August 2026 (replaced by `mistral-medium-3-5`).

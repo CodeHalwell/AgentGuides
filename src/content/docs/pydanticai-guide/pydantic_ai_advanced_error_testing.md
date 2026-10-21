@@ -549,16 +549,28 @@ model = TestModel(
 ### Inspecting calls made to `TestModel`
 
 ```python
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelRequest, ModelResponse
 from pydantic_ai.models.test import TestModel
 
 model = TestModel()
 agent = Agent('openai:%%model=openai%%', output_type=str)
 
-with agent.override(model=model):
-    result = agent.run_sync('Hello')
+@agent.tool_plain
+def lookup(sku: str) -> str:
+    return f'{sku}: in stock'
 
-print(model.agent_model_requests)   # list of ModelRequest objects
-print(model.agent_model_responses)  # list of ModelResponse objects
+with agent.override(model=model):
+    result = agent.run_sync('Is ABC-1 in stock?')
+
+# What the agent offered the model on the last request
+params = model.last_model_request_parameters
+print([t.name for t in params.function_tools])   # ['lookup']
+
+# What was actually exchanged
+requests = [m for m in result.all_messages() if isinstance(m, ModelRequest)]
+responses = [m for m in result.all_messages() if isinstance(m, ModelResponse)]
+print(len(requests), len(responses))             # 2 2
 ```
 
 ---

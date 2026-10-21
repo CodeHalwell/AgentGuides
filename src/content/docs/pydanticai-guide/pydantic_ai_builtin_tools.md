@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Built-in / Native Tools & Common Tools"
-description: "Provider-native tools (WebSearchTool, CodeExecutionTool, ImageGenerationTool, …) and local common tools (web_fetch_tool, duckduckgo_search_tool) — source-verified coverage of both families."
+description: "Provider-native tools (WebSearchTool, CodeExecutionTool, ImageGenerationTool, …) and local common tools (web_fetch_tool, duckduckgo_search_tool) — what each does and which providers support it."
 framework: "pydanticai"
 language: "python"
 ---
@@ -55,19 +55,19 @@ print(result.output)
 
 All are exported from `pydantic_ai` directly (also at `pydantic_ai.native_tools`):
 
-| Tool                  | Providers that support it                            | Requires config | Status              |
-| --------------------- | ---------------------------------------------------- | --------------- | ------------------- |
-| `WebSearchTool`       | Anthropic, OpenAI Responses, Groq, Google, xAI, OpenRouter | no        | GA                  |
-| `WebFetchTool`        | Anthropic, Google                                    | no              | GA (replaced `UrlContextTool`, removed in 2.0) |
-| `CodeExecutionTool`   | Anthropic, OpenAI Responses, Google                  | no              | GA                  |
-| `ImageGenerationTool` | OpenAI Responses, Google                             | no              | GA                  |
-| `FileSearchTool`      | OpenAI Responses, Google (Gemini Files), xAI         | yes (`file_store_ids`) | GA              |
-| `MemoryTool`          | Anthropic                                            | yes (provider account) | GA              |
-| `MCPServerTool`       | OpenAI Responses, Anthropic, xAI                     | yes (`id`, `url`)| GA                 |
-| `XSearchTool`         | xAI only                                             | no              | GA                  |
-| `AdvisorTool`         | Anthropic                                            | no              | GA                  |
+| Tool | Providers that support it | Needs configuration |
+|---|---|---|
+| `WebSearchTool` | Anthropic, OpenAI Responses, Groq, Google, xAI, OpenRouter | no |
+| `WebFetchTool` | Anthropic, Google | no (replaced `UrlContextTool`, removed in 2.0) |
+| `CodeExecutionTool` | Anthropic, OpenAI Responses, Google, Bedrock (Nova 2.0), xAI | no |
+| `ImageGenerationTool` | OpenAI Responses, Google | no |
+| `FileSearchTool` | OpenAI Responses, Google (Gemini), xAI (collections search) | yes (`file_store_ids`) |
+| `MemoryTool` | Anthropic | no |
+| `MCPServerTool` | OpenAI Responses, Anthropic, xAI | yes (`id`, `url`) |
+| `XSearchTool` | xAI | no |
+| `AdvisorTool` | Anthropic, OpenRouter | yes (`model`) |
 
-A tool listed as GA may still have provider-specific constraints (e.g. `blocked_domains` is Anthropic-only on `WebSearchTool`). Each class's docstring catalogs the per-provider support for every argument.
+This table follows the "Supported by" list in each class's docstring. Individual arguments can still be provider-specific (e.g. `WebSearchTool(blocked_domains=...)` is not supported on Google, and Anthropic accepts `blocked_domains` or `allowed_domains` but not both). The docstrings list per-provider support for every argument.
 
 ## `WebSearchTool` / `WebSearch` capability
 
@@ -489,7 +489,7 @@ result = agent.run_sync('Summarise the content of https://docs.pydantic.dev/late
 print(result.output)
 ```
 
-#### Constructor (source: `common_tools/web_fetch.py:web_fetch_tool`)
+#### Constructor
 
 ```python
 web_fetch_tool(
@@ -600,7 +600,7 @@ result = research_agent.run_sync(
 print(result.output)
 ```
 
-#### `WebFetchResult` TypedDict (source-verified)
+#### `WebFetchResult` TypedDict
 
 ```python
 from pydantic_ai.common_tools.web_fetch import WebFetchResult
@@ -648,7 +648,7 @@ duckduckgo_search_tool(
 | `duckduckgo_client` | `None` | Pass a pre-configured `DDGS()` instance to share across calls |
 | `max_results` | `None` | Max results to return. `None` = results from the first response only |
 
-#### `DuckDuckGoResult` TypedDict (source-verified)
+#### `DuckDuckGoResult` TypedDict
 
 Each result is a dict with these fields:
 

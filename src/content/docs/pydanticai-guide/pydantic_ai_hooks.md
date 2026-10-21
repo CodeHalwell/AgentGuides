@@ -332,7 +332,6 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import CallDeferred
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults
-from pydantic_ai.messages import ToolReturn
 
 hooks = Hooks()
 
@@ -342,9 +341,10 @@ async def log_and_auto_resolve(ctx, *, requests: DeferredToolRequests):
     print(f'[deferred] {len(requests.calls)} call(s) deferred this step')
     for call in requests.calls:
         print(f'  → {call.tool_name}({call.args})')
-    # Return resolved results to continue the run automatically
+    # Return resolved results to continue the run automatically;
+    # each value is what the tool would have returned
     return DeferredToolResults(calls={
-        call.tool_call_id: ToolReturn(content=f'Auto-resolved: {call.tool_name}')
+        call.tool_call_id: f'Auto-resolved: {call.tool_name}'
         for call in requests.calls
     })
 

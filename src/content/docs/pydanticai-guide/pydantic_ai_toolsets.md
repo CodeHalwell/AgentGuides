@@ -48,16 +48,16 @@ All of these live in `pydantic_ai.toolsets` and are exported from `pydantic_ai` 
 | `IncludeReturnSchemasToolset` | Sets `include_return_schema=True` on every wrapped tool.                                      |
 | `SetMetadataToolset`          | Merges metadata onto every wrapped tool.                                                      |
 | `WrapperToolset` / `AbstractToolset` | Base classes for custom toolsets.                                                      |
-| `MCPServer*` (in `pydantic_ai.mcp`) | Toolsets backed by MCP stdio/SSE/HTTP.                                                  |
+| `MCPToolset` (in `pydantic_ai.mcp`) | Toolset backed by an MCP server over stdio, HTTP or in-process FastMCP. The V1 `MCPServer*` classes were removed in 2.0. |
 
 ## `FunctionToolset` — the primitive
 
-`toolsets/function.py:44`. Constructor args (verified at `:60`):
+`pydantic_ai.toolsets.FunctionToolset` (also exported from `pydantic_ai`). Constructor arguments:
 
 | Arg                           | Default                   | Notes                                                              |
 | ----------------------------- | ------------------------- | ------------------------------------------------------------------ |
 | `tools`                       | `[]`                      | `Sequence[Tool | ToolFunc]` — seed tools.                          |
-| `max_retries`                 | `1`                       | Per-tool retry budget.                                             |
+| `max_retries`                 | `None`                    | Per-tool retry budget; `None` inherits the agent's `retries`.     |
 | `timeout`                     | `None`                    | Seconds per tool call (per-tool override available).               |
 | `docstring_format`            | `'auto'`                  | `'google' | 'numpy' | 'sphinx' | 'auto'`.                         |
 | `require_parameter_descriptions` | `False`                | If `True`, missing param doc raises at registration.               |
@@ -557,7 +557,7 @@ async with agent:
 
 ## Dynamic toolsets — `@agent.toolset`
 
-`agent/__init__.py:2237`. Register a factory that builds a toolset per run based on `RunContext`:
+Register a factory that builds a toolset per run based on `RunContext`:
 
 ```python
 @agent.toolset

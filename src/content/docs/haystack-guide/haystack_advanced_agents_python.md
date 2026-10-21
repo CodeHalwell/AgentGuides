@@ -9,34 +9,58 @@ language: "python"
 
 This page assumes you have read [Creating Agents](/haystack-guide/haystack_comprehensive_guide/#creating-agents-with-the-agent-class) and [Agent Configuration](/haystack-guide/haystack_comprehensive_guide/#agent-configuration-and-customisation).
 
+## Token budgets
+
+`max_agent_steps` bounds the number of loop iterations, not what they cost. To cap spending, use the built-in `TokenBudgetHook` (experimental; it emits an `ExperimentalWarning`). It runs at `before_llm`, reads the cumulative `token_usage` the Agent records, and ends the run with `exit_reason="token_budget_exceeded"` before the next model call, keeping the messages collected so far:
+
+```python
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack.hooks.budget import TokenBudgetHook
+from haystack.tools import tool
+
+
+@tool
+def slow_lookup(key: str) -> str:
+    """Look up a value."""
+    return f"value for {key}"
+
+
+agent = Agent(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    tools=[slow_lookup],
+    hooks={"before_llm": [TokenBudgetHook(max_total_tokens=20_000, add_final_message=True)]},
+)
+```
+
+Only the Agent's own chat-generator calls count; tokens spent inside tools (including `AgentTool` sub-agents) or by other hooks do not. Give each sub-agent its own budget. To keep long runs within the context window rather than a spending limit, see [context management](/haystack-guide/haystack_comprehensive_guide/#context-management).
+
 ## Stateful hooks
 
-The `@hook` decorator suits simple functions. For hooks that hold configuration or resources, implement the `Hook` protocol directly: a `run(self, state)` method, and optionally `run_async(self, state)`.
+The `@hook` decorator suits simple functions. For hooks that hold configuration or resources, implement the `Hook` protocol directly: a `run(self, state)` method, and optionally `run_async(self, state)`. `TokenBudgetHook` is written this way; here are two more:
 
 ```python
 import logging
 import time
 
-from haystack.components.agents import Agent, State
-from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.dataclasses import ChatMessage
+from haystack.components.agents import State
 from haystack.hooks import FunctionHook
-from haystack.tools import tool
 
 logger = logging.getLogger(__name__)
 
 
-class TokenBudget:
-    """Stop the run once total tokens exceed a budget."""
+class ToolCallLimit:
+    """Stop the run once the agent has made too many tool calls in total."""
 
-    def __init__(self, max_tokens: int):
-        self.max_tokens = max_tokens
+    def __init__(self, max_calls: int):
+        self.max_calls = max_calls
 
     def run(self, state: State) -> None:
-        used = (state.get("token_usage") or {}).get("total_tokens", 0)
-        if used > self.max_tokens:
-            logger.warning("Token budget exceeded (%d > %d)", used, self.max_tokens)
-            state.set("stop_run", "token_budget")      # becomes the run's exit_reason
+        calls = sum((state.get("tool_call_counts") or {}).values())
+        if calls >= self.max_calls:
+            logger.warning("Tool-call limit reached (%d)", calls)
+            state.set("stop_run", "tool_call_limit")      # becomes the run's exit_reason
 
 
 class StepTimer:
@@ -54,26 +78,20 @@ class StepTimer:
         logger.info("step %s tools took %.2fs", state.get("step_count"), time.perf_counter() - self._started)
 
 
-@tool
-def slow_lookup(key: str) -> str:
-    """Look up a value."""
-    return f"value for {key}"
-
-
 timer = StepTimer()
 
 agent = Agent(
     chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
     tools=[slow_lookup],
     hooks={
-        "before_llm": [TokenBudget(max_tokens=20_000)],
+        "before_llm": [TokenBudgetHook(max_total_tokens=20_000), ToolCallLimit(max_calls=10)],
         "before_tool": [timer.start],
         "after_tool": [timer.stop],
     },
 )
 ```
 
-Hook points, in order of a run: `before_run` → (`before_llm` → model call → `before_tool` → tools → `after_tool`)* → `on_exit` → `after_run`. In `on_exit`, setting `continue_run` to `True` sends the agent round the loop again; setting `stop_run` before an LLM call ends the run with that string as `exit_reason`.
+Hook points, in order of a run: `before_run` → (`before_llm` → model call → `before_tool` → tools → `after_tool`)* → `on_exit` → `after_run`. In `on_exit`, setting `continue_run` to `True` sends the agent round the loop again; setting `stop_run` in any hook that runs before the next LLM call ends the run with that string as `exit_reason`.
 
 ## State handlers
 
@@ -132,7 +150,7 @@ Alternatively give the agent a `final_answer` tool whose parameters are the fiel
 
 ## Custom components with async and lifecycle
 
-Components that hold clients should create them in `warm_up()` and release them in `close()`. Provide `run_async` for non-blocking I/O.
+Components that hold clients should create them in `warm_up()` and release them in `close()` (sync) and `close_async()` (async); `pipeline.close()` and `await pipeline.close_async()` call them. Provide `run_async` for non-blocking I/O.
 
 ```python
 import httpx
@@ -144,27 +162,36 @@ from haystack import component
 class ExchangeRates:
     def __init__(self, base_url: str = "https://api.example.com"):
         self.base_url = base_url
-        self._client: httpx.AsyncClient | None = None
+        self._client: httpx.Client | None = None
+        self._aclient: httpx.AsyncClient | None = None
 
     def warm_up(self) -> None:
         if self._client is None:
-            self._client = httpx.AsyncClient(base_url=self.base_url, timeout=10)
+            self._client = httpx.Client(base_url=self.base_url, timeout=10)
+            self._aclient = httpx.AsyncClient(base_url=self.base_url, timeout=10)
+
+    def close(self) -> None:
+        if self._client is not None:
+            self._client.close()
+            self._client = None
 
     async def close_async(self) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        self.close()
+        if self._aclient is not None:
+            await self._aclient.aclose()
+            self._aclient = None
 
     @component.output_types(rate=float)
     def run(self, base: str, quote: str):
-        resp = httpx.get(f"{self.base_url}/rates", params={"base": base, "quote": quote}, timeout=10)
+        self.warm_up()
+        resp = self._client.get("/rates", params={"base": base, "quote": quote})
         resp.raise_for_status()
         return {"rate": resp.json()["rate"]}
 
     @component.output_types(rate=float)
     async def run_async(self, base: str, quote: str):
         self.warm_up()
-        resp = await self._client.get("/rates", params={"base": base, "quote": quote})
+        resp = await self._aclient.get("/rates", params={"base": base, "quote": quote})
         resp.raise_for_status()
         return {"rate": resp.json()["rate"]}
 ```
@@ -175,7 +202,7 @@ Wrap it with `ComponentTool(component=ExchangeRates(), name="fx_rate", descripti
 
 - **Return, don't raise, for expected failures.** "No order with that ID" is information the model can use; a stack trace is not.
 - **Keep schemas small.** Every parameter is a chance for the model to get it wrong. Prefer `Literal[...]` over free text for enumerations.
-- **Hide privileged inputs.** Values such as tenant or user IDs belong in `State` via `inputs_from_state`, not in the tool schema.
+- **Keep privileged inputs away from the model.** `inputs_from_state` is a convenience, not a security boundary: arguments the model supplies override the state lookup. Read tenant or user IDs from a `State`-typed tool parameter (`def search(query: str, state: State)` then `state.get("tenant_id")`), which the Agent always injects itself, or from `hook_context` in hooks. See the [multi-tenant recipe](/haystack-guide/haystack_recipes/#multi-tenant-customer-support-agent).
 - **Make side effects idempotent** (accept a client-generated request ID) so a retried tool call is harmless, and put a `ConfirmationHook` in front of anything irreversible.
 - **Bound concurrency.** The agent may call several tools in one step; `tool_concurrency_limit` (default 4) caps how many run at once.
 

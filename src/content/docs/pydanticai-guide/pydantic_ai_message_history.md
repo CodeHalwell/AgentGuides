@@ -68,7 +68,7 @@ row.messages_json = ModelMessagesTypeAdapter.dump_json(existing)
 
 ## (De)serialisation with `ModelMessagesTypeAdapter`
 
-`messages.py:2034` exports a Pydantic `TypeAdapter[list[ModelMessage]]`. This is the supported way to round-trip history through JSON / DB / queue:
+`pydantic_ai.messages.ModelMessagesTypeAdapter` (also exported from `pydantic_ai`) is a Pydantic `TypeAdapter[list[ModelMessage]]`. This is the supported way to round-trip history through JSON / DB / queue:
 
 ```python
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -256,7 +256,7 @@ agent = Agent(
 
 ## `capture_run_messages` — inspect mid-failure
 
-If a run raises (validation error, model error, tool retry exhaustion), you still need to see the messages up to the failure. `capture_run_messages` (`_agent_graph.py:1791`) exposes them:
+If a run raises (validation error, model error, tool retry exhaustion), you still need to see the messages up to the failure. `capture_run_messages` (exported from `pydantic_ai`) exposes them:
 
 ```python
 from pydantic_ai import Agent, capture_run_messages

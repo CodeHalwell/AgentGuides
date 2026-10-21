@@ -3,6 +3,9 @@ title: "Mistral Agents API: Model Context Protocol (MCP) Guide"
 description: "Using MCP servers with Mistral agents: registered connectors, client-side MCP with RunContext, building servers with the mcp 2.x SDK, and human approval for tool calls."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "MCP"
+  order: 4
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%), with `mcp` 2.x as installed by `mistralai[agents]`.
@@ -18,7 +21,7 @@ The [Model Context Protocol](https://modelcontextprotocol.io) is an open standar
 | Works with stored agents in any client | yes | only where your code runs the loop |
 | SDK surface | `client.beta.connectors`, `{"type": "connector"}` tool | `mistralai.extra.run.context.RunContext`, `mistralai.extra.mcp.*` |
 
-There is no `{"type": "mcp"}` agent tool; remote MCP servers are attached as connectors.
+There is no `{"type": "mcp"}` agent tool; remote MCP servers are attached as connectors. Registered connectors are a public preview, and the Agents and Conversations APIs they plug into are beta.
 
 ```bash
 pip install "mistralai[agents]==%%version=mistralai%%"   # RunContext + mcp>=2.2
@@ -240,7 +243,43 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-For MCP tools, pass `tool_configuration={"requires_confirmation": ["post_comment"]}` to `register_mcp_client()`. For registered connectors, put the same key in the connector tool's `tool_configuration`.
+For client-side MCP tools, pass `tool_configuration={"requires_confirmation": ["post_comment"]}` to `register_mcp_client()`; the run then pauses in the same way.
+
+### Approving connector and built-in tool calls
+
+Registered connectors and built-in tools run on Mistral's side, so the approval goes through the conversation itself. List the tool names in the tool's `tool_configuration.requires_confirmation`; Mistral then stops before running them and returns a `function.call` entry with `confirmation_status == "pending"`. Answer with `tool_confirmations` on the next `append()`:
+
+```python
+from mistralai.client.models import FunctionCallEntry
+
+response = client.beta.conversations.start(
+    model="mistral-medium-latest",
+    inputs="Add a comment to ticket T-42 saying the fix is deployed.",
+    tools=[{
+        "type": "connector",
+        "connector_id": "tickets",
+        "tool_configuration": {"requires_confirmation": ["post_comment"]},
+    }],
+)
+
+pending = [
+    e for e in response.outputs
+    if isinstance(e, FunctionCallEntry) and e.confirmation_status == "pending"
+]
+if pending:
+    confirmations = []
+    for call in pending:
+        print("needs approval:", call.name, call.arguments)
+        approved = True                                   # ask a person here
+        confirmations.append({"tool_call_id": call.tool_call_id, "confirmation": "allow" if approved else "deny"})
+    response = client.beta.conversations.append(
+        conversation_id=response.conversation_id,
+        tool_confirmations=confirmations,
+    )
+print(response.outputs[-1].content)
+```
+
+`"deny"` tells the model the call was refused, and it answers accordingly. Because the conversation is stored, the approval can come in a later request: persist the `conversation_id` and the pending `tool_call_id`s. The same works for built-in tools, for example `{"type": "web_search_premium", "tool_configuration": {"requires_confirmation": ["web_search", "news_search"]}}`.
 
 ---
 
@@ -274,10 +313,10 @@ def get_ticket(ticket_id: str) -> dict:
     return {"id": ticket_id, **TICKETS[ticket_id]}
 
 if __name__ == "__main__":
-    server.run(transport="streamable-http")      # or "stdio" for MCPClientSTDIO
+    server.run()      # stdio; use transport="streamable-http" to serve it over HTTP as a connector
 ```
 
-Run it locally with `MCPClientSTDIO(stdio_params=StdioServerParameters(command="python", args=["tickets_server.py"]))`, or deploy it behind HTTPS and register it as a connector.
+Run it locally with `MCPClientSTDIO(stdio_params=StdioServerParameters(command="python", args=["tickets_server.py"]))`. To use it as a registered connector instead, switch to `server.run(transport="streamable-http")` (it serves `/mcp` on port 8000), deploy it behind HTTPS and register that URL. A stdio client cannot talk to the HTTP transport, and the other way round.
 
 Design advice for tools:
 

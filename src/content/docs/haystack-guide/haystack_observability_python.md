@@ -102,9 +102,48 @@ Correlate logs with traces by logging the trace or request ID in your API layer;
 
 ### Retries and fallbacks
 
-- `OpenAIChatGenerator(timeout=..., max_retries=...)` retries transient API failures inside the client.
-- `FallbackChatGenerator(chat_generators=[primary, secondary])` fails over between providers.
-- Agent tools report exceptions back to the model by default, so it can try again; `raise_on_tool_invocation_failure=True` makes them fatal.
+This is the guide's one place for resilience around the model and the agent loop. Several layers help:
+
+1. **Inside tools.** Return error strings the model can act on. Tool exceptions are reported to the model as error results unless the Agent has `raise_on_tool_invocation_failure=True`.
+2. **Chat generator.** `timeout` and `max_retries` on OpenAI-family generators retry transient API errors inside the client.
+3. **Provider fallback.** `FallbackChatGenerator` tries generators in order until one succeeds.
+4. **Loop bounds.** `max_agent_steps` and [`TokenBudgetHook`](/haystack-guide/haystack_advanced_agents_python/#token-budgets) cap cost; `exit_reason` in the result says why the run stopped, and can drive a `ConditionalRouter` downstream.
+5. **Around the run.** Retry with back-off for errors that escape the agent.
+
+```python
+import logging
+import time
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import FallbackChatGenerator, OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack_integrations.components.generators.anthropic import AnthropicChatGenerator  # pip install anthropic-haystack
+
+logger = logging.getLogger(__name__)
+
+resilient_llm = FallbackChatGenerator(chat_generators=[
+    OpenAIChatGenerator(model="%%model=openai-small%%", timeout=30, max_retries=2),
+    AnthropicChatGenerator(model="%%model=anthropic%%", timeout=30, max_retries=2),
+])
+
+agent = Agent(chat_generator=resilient_llm, max_agent_steps=10)
+
+
+def run_with_retry(agent: Agent, text: str, attempts: int = 3, backoff: float = 2.0) -> dict:
+    for attempt in range(1, attempts + 1):
+        try:
+            result = agent.run(messages=[ChatMessage.from_user(text)])
+            # exit_reason is "text", "length", "content_filter", "max_agent_steps",
+            # the name of an exit-condition tool, or a reason set by a hook (stop_run)
+            if result["exit_reason"] == "max_agent_steps":
+                logger.warning("Agent hit max_agent_steps; the answer may be incomplete")
+            return result
+        except Exception:
+            logger.exception("Agent run failed (attempt %d/%d)", attempt, attempts)
+            if attempt == attempts:
+                raise
+            time.sleep(backoff ** attempt)
+```
 
 ### Pipeline errors
 

@@ -103,13 +103,13 @@ For semantic search, add `OpenAIDocumentEmbedder` before the writer, `OpenAIText
 
 ## Multi-Tenant Customer Support Agent
 
-One agent definition serves every tenant. The tenant ID travels in the agent's `State`, so the model never sees or chooses it, and tools receive it through `inputs_from_state`.
+One agent definition serves every tenant. The tenant ID is passed to `run()` as a state value, and each data-access tool reads it from a parameter typed as `State`. The Agent always injects that parameter itself, so the model can neither see nor replace the tenant ID.
 
 ```python
 from typing import Annotated
 
 from haystack import Document
-from haystack.components.agents import Agent
+from haystack.components.agents import Agent, State
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
 from haystack.dataclasses import ChatMessage
@@ -126,24 +126,24 @@ kb_retriever = InMemoryBM25Retriever(document_store=kb, top_k=3)
 CUSTOMERS = {("acme", "C-1"): {"name": "Ada", "plan": "pro"}, ("globex", "C-9"): {"name": "Hank", "plan": "free"}}
 
 
-@tool(inputs_from_state={"tenant_id": "tenant_id"})
-def search_kb(query: Annotated[str, "What to look up"], tenant_id: str) -> str:
+@tool
+def search_kb(query: Annotated[str, "What to look up"], state: State) -> str:
     """Search this company's support knowledge base."""
-    filters = {"field": "meta.tenant_id", "operator": "==", "value": tenant_id}
+    filters = {"field": "meta.tenant_id", "operator": "==", "value": state.get("tenant_id")}
     docs = kb_retriever.run(query=query, filters=filters)["documents"]
     return "\n".join(d.content for d in docs) or "Nothing found."
 
 
-@tool(inputs_from_state={"tenant_id": "tenant_id"})
-def lookup_customer(customer_id: Annotated[str, "Customer ID"], tenant_id: str) -> dict:
+@tool
+def lookup_customer(customer_id: Annotated[str, "Customer ID"], state: State) -> dict:
     """Look up a customer record."""
-    return CUSTOMERS.get((tenant_id, customer_id), {"error": "Unknown customer"})
+    return CUSTOMERS.get((state.get("tenant_id"), customer_id), {"error": "Unknown customer"})
 
 
-@tool(inputs_from_state={"tenant_id": "tenant_id"})
-def create_ticket(summary: Annotated[str, "Issue summary"], tenant_id: str) -> str:
+@tool
+def create_ticket(summary: Annotated[str, "Issue summary"], state: State) -> str:
     """Open a support ticket."""
-    return f"Ticket {tenant_id.upper()}-1042 created: {summary}"
+    return f"Ticket {state.get('tenant_id').upper()}-1042 created: {summary}"
 
 
 support_agent = Agent(
@@ -171,7 +171,9 @@ def handle(tenant_id: str, text: str) -> str:
 print(handle("acme", "How long do refunds take? I'm customer C-1."))
 ```
 
-Because `tenant_id` is not part of any tool's JSON schema, a prompt-injected request cannot switch tenants. Apply the same filter in every data-access tool.
+A `State`-typed parameter is left out of the tool's JSON schema and is always filled by the Agent, even if the model sends an argument with the same name. If a prompt-injected request makes the model add `tenant_id` to a call, the tool fails with an unexpected-argument error (reported back to the model) instead of switching tenant. Apply the same filter in every data-access tool.
+
+Do not use `inputs_from_state` for this. It is a convenience for filling arguments from state, not a security boundary: in Haystack 3, arguments the model supplies take precedence over the state lookup, so a tool declared with `inputs_from_state={"tenant_id": "tenant_id"}` will happily run against whatever tenant the model names.
 
 ---
 
@@ -180,6 +182,7 @@ Because `tenant_id` is not part of any tool's JSON schema, a prompt-injected req
 Convert files, split them into chunks, summarise each chunk with an `LLM` component, then combine the summaries (map-reduce).
 
 ```python
+import tempfile
 from pathlib import Path
 
 from haystack import Pipeline
@@ -187,7 +190,6 @@ from haystack.components.converters import TextFileToDocument
 from haystack.components.generators.chat import LLM, OpenAIChatGenerator
 from haystack.components.preprocessors import DocumentSplitter
 
-Path("report.txt").write_text("Revenue grew 12% in Q3. Costs fell 3%. " * 50)
 
 preprocess = Pipeline()
 preprocess.add_component("convert", TextFileToDocument())
@@ -212,7 +214,10 @@ def summarise(path: str, length: str = "150-word") -> str:
     return final_summariser.run(partials="\n".join(partials), length=length)["last_message"].text
 
 
-print(summarise("report.txt"))
+with tempfile.TemporaryDirectory() as tmp:
+    report = Path(tmp) / "report.txt"
+    report.write_text("Revenue grew 12% in Q3. Costs fell 3%. " * 50)
+    print(summarise(str(report)))
 ```
 
 `PyPDFToDocument`, `DOCXToDocument`, `HTMLToDocument`, `MarkdownToDocument` and `MultiFileConverter` (routes by file type) are drop-in replacements for the converter. For many chunks, call `await chunk_summariser.run_async(...)` concurrently with `asyncio.gather`.
@@ -273,7 +278,7 @@ For general web search, add `ComponentTool(component=SerperDevWebSearch(top_k=5)
 
 ## Multi-Agent Collaboration System
 
-A coordinator delegates to researcher, analyst, writer and critic agents exposed through `AgentTool`. The coordinator owns the plan; each specialist has a narrow prompt and only the tools it needs.
+A complete report-writing app: a coordinator delegates to researcher, analyst, writer and critic agents exposed through `AgentTool`, and loops writer and critic until the draft is approved. The patterns it combines (coordinator, specialists, shared state, refinement) are explained in the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/).
 
 ```python
 from typing import Annotated

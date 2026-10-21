@@ -3,11 +3,16 @@ title: "Mistral Agents API: Connectors and Built-in Tools Guide"
 description: "Web search, code interpreter, image generation, document libraries and MCP connectors in Mistral's Agents and Conversations APIs, with mistralai Python examples."
 framework: "mistral-agents-api"
 language: "python"
+sidebar:
+  label: "Built-in tools and connectors"
+  order: 2
 ---
 
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Tool shapes on this page were validated against the SDK's request models.
 
 Mistral calls its server-side tools "connectors". They run on Mistral's infrastructure: you declare them on an agent (or a conversation), and the results appear as `tool.execution` entries in the conversation output. Since SDK v3 they are accepted only by the Agents and Conversations APIs, not by `chat.complete()`.
+
+Status: the tools themselves are part of the beta Agents and Conversations APIs; registered MCP connectors (section 5) are a public preview, so their API can change.
 
 | `type` | Purpose | Fields besides `type` |
 |---|---|---|
@@ -15,10 +20,10 @@ Mistral calls its server-side tools "connectors". They run on Mistral's infrastr
 | `web_search_premium` | Web search plus news-agency sources | `tool_configuration` |
 | `code_interpreter` | Python in a sandbox | `tool_configuration` |
 | `image_generation` | Image generation | `tool_configuration` |
-| `document_library` | Retrieval over your Libraries | `library_ids` |
+| `document_library` | Retrieval over your Libraries | `library_ids`, `tool_configuration` |
 | `connector` | A registered MCP server | `connector_id`, `authorization`, `tool_configuration` |
 
-`tool_configuration` has three optional lists: `include` and `exclude` (which of a connector's tools to expose) and `requires_confirmation` (tools that need human approval; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/#3-human-approval-for-tool-calls)). There are no other per-tool settings such as timeouts or result counts.
+`tool_configuration` has three optional lists: `include` and `exclude` (which of a connector's tools to expose) and `requires_confirmation` (tools that need human approval; see [approving connector and built-in tool calls](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/#approving-connector-and-built-in-tool-calls)). There are no other per-tool settings such as timeouts or result counts.
 
 The examples use this setup and the `text_of()` helper from the [comprehensive guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#5-conversations):
 
@@ -150,16 +155,18 @@ library = client.beta.libraries.create(
     description="Product manuals and support policies",
 )
 
-for path in Path("handbook").glob("*.pdf"):
-    doc = client.beta.libraries.documents.upload(
+docs = [
+    client.beta.libraries.documents.upload(
         library_id=library.id,
         file=File(file_name=path.name, content=path.read_bytes()),
     )
-    print("uploaded", doc.id, doc.name)
+    for path in Path("handbook").glob("*.pdf")
+]
 
-# Processing is asynchronous; check before relying on a document
-status = client.beta.libraries.documents.status(library_id=library.id, document_id=doc.id)
-print(status.process_status)          # "todo", "in_progress", "done" or "error"
+# Processing is asynchronous; check each document before relying on it
+for doc in docs:
+    status = client.beta.libraries.documents.status(library_id=library.id, document_id=doc.id)
+    print(doc.name, status.process_status)   # "todo", "in_progress", "done" or "error", among others
 
 support = client.beta.agents.create(
     model="mistral-medium-latest",
@@ -224,15 +231,29 @@ auth = client.beta.connectors.get_auth_url(
 print("send the user to", auth.auth_url)
 ```
 
-You can also call a connector tool directly, without the model, which is useful for tests:
+To call a connector's tools directly, without the model (useful in tests and for checking credentials), `connectors.mcp_client()` opens an official `mcp` client session through Mistral's Connectors Gateway, using the Mistral client's credentials. It needs `mistralai[agents]`:
 
 ```python
-result = client.beta.connectors.call_tool(
-    connector_id_or_name="deepwiki",
-    tool_name="read_wiki_structure",
-    arguments={"repoName": "sqlite/sqlite"},
-)
+import asyncio
+from mcp import MCPError
+from mistralai.extra.connectors_gateway import ConnectorsGatewayError
+
+async def check_connector() -> None:
+    try:
+        async with client.beta.connectors.mcp_client(connector_id_or_name="deepwiki") as session:
+            listed = await session.list_tools()
+            print([t.name for t in listed.tools])
+            result = await session.call_tool("read_wiki_structure", {"repoName": "sqlite/sqlite"})
+            print(result.content[0].text[:200])
+    except ConnectorsGatewayError as e:     # unknown connector, missing credentials, server unreachable
+        print("gateway:", e.proxy_error, e.details)
+    except MCPError as e:                    # an error returned by the MCP server itself
+        print("server:", e)
+
+asyncio.run(check_connector())
 ```
+
+`connectors.call_tool()` still exists but is deprecated and will be removed. Pass `credentials_name=` to use a stored credential other than the default.
 
 For MCP servers that should run inside your own process or network (local stdio servers, private services), use the client-side MCP support in `mistralai.extra` instead; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/).
 
@@ -288,7 +309,7 @@ print(text_of(response))
 - **Give each agent few tools.** Several narrow agents connected with [handoffs](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/) are easier to test than one agent with everything.
 - **Inspect `outputs`.** `tool.execution` entries show what ran and with which arguments; log them.
 - **Check document processing.** Uploaded documents are not searchable until processing finishes.
-- **Watch usage.** `response.usage.connector_tokens` and `response.usage.connectors` report connector consumption separately from model tokens.
+- **Watch usage.** `response.usage.connector_tokens` and `response.usage.connectors` (calls per tool, for example `{"web_search": 1}`) report tool consumption separately from your own prompt and completion tokens; see [cost](/mistral-agents-api-guide/mistral_agents_api_production_guide/#cost).
 
 ## Security
 

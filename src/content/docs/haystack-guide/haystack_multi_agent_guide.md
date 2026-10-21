@@ -13,7 +13,7 @@ language: "python"
 
 1. [Introduction to Multi-Agent Systems](#introduction-to-multi-agent-systems)
 2. [Multi-Agent Architecture Patterns](#multi-agent-architecture-patterns)
-3. [Agent Specialization & Roles](#agent-specialization--roles)
+3. [Agent Specialisation & Roles](#agent-specialisation--roles)
 4. [Agent Communication Protocols](#agent-communication-protocols)
 5. [Coordination & Orchestration](#coordination--orchestration)
 6. [Complete Production Multi-Agent Example](#complete-production-multi-agent-example)
@@ -184,7 +184,7 @@ def refine(brief: str, max_rounds: int = 3) -> str:
 print(refine("Describe a stainless-steel water bottle."))
 ```
 
-The same loop can be expressed inside a pipeline with a `ConditionalRouter` and a `BranchJoiner` (see [Iterative refinement loop](/haystack-guide/haystack_comprehensive_guide/#iterative-refinement-loop)), or inside one agent with an `on_exit` hook that sets `continue_run`.
+The same loop can be expressed inside a pipeline with a validator component and a `BranchJoiner` (see [Iterative refinement loop](/haystack-guide/haystack_comprehensive_guide/#iterative-refinement-loop)), or inside one agent with an `on_exit` hook that sets `continue_run`.
 
 ### Pattern 5: Consensus Building
 
@@ -213,7 +213,7 @@ print(asyncio.run(consensus("Should a 20-person company adopt a four-day week?")
 
 ---
 
-## Agent Specialization & Roles
+## Agent Specialisation & Roles
 
 ### Defining Agent Expertise
 
@@ -417,10 +417,14 @@ desk = make_agent(
     max_agent_steps=8,
 )
 
-# Tracing (pip install langfuse-haystack); instantiating the connector enables it globally
+# Tracing (pip install langfuse-haystack); instantiating the connector enables it globally.
+# HAYSTACK_CONTENT_TRACING_ENABLED is read once, when haystack is imported, so setting the
+# environment variable here would be too late; switch content tracing on through the tracer.
 if os.getenv("LANGFUSE_SECRET_KEY"):
-    os.environ.setdefault("HAYSTACK_CONTENT_TRACING_ENABLED", "true")
+    from haystack import tracing
     from haystack_integrations.components.connectors.langfuse import LangfuseConnector
+
+    tracing.tracer.is_content_tracing_enabled = True
     LangfuseConnector("support-desk")
 
 result = desk.run(messages=[ChatMessage.from_user("Order ORD-1 arrived broken, can I get my money back?")])

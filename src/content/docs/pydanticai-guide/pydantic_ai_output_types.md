@@ -247,7 +247,7 @@ agent = Agent(
 )
 ```
 
-Arguments (`output.py:141`):
+Arguments (`pydantic_ai.output.NativeOutput`):
 
 - `outputs` — a type or sequence of types. A list produces a tagged union.
 - `name`, `description` — override the schema name and description sent to the model.
@@ -621,9 +621,9 @@ asyncio.run(main())
 
 ## Reference
 
-- `Agent.__init__(..., output_type=...)` — `agent/__init__.py:220`
-- `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — `output.py`
-- `output_validator` decorator — `agent/__init__.py:1911`
-- `OutputSpec` type alias — `output.py`
-- `TextOutputFunc` — `output.py` — `Callable[[str], T] | Callable[[RunContext, str], T]`
+- `Agent(..., output_type=...)` — `pydantic_ai.Agent`
+- `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — `pydantic_ai.output` (all re-exported from `pydantic_ai`)
+- `@agent.output_validator` decorator — `pydantic_ai.Agent.output_validator`
+- `OutputSpec` type alias — `pydantic_ai.output`
+- `TextOutputFunc` — `pydantic_ai.output` — `Callable[[str], T] | Callable[[RunContext, str], T]`
 - Advanced patterns with `AgentSpec` and output — see [Class & API Reference](/pydanticai-guide/pydantic_ai_comprehensive_guide/#class--api-reference) in the comprehensive guide

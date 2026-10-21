@@ -27,13 +27,13 @@ def test_greet():
 
 ## `TestModel` — structural test double
 
-Lives at `pydantic_ai.models.test.TestModel` (`models/test.py:60`). Given the agent's tool schemas, it:
+Lives at `pydantic_ai.models.test.TestModel`. Given the agent's tool schemas, it:
 
 1. Calls every tool once (unless you restrict with `call_tools=[...]`).
 2. Synthesises tool arguments that match each tool's JSON schema.
 3. Produces a final response — a string, or args that match the output tool's schema.
 
-Constructor (`models/test.py:94`):
+Constructor:
 
 | Argument              | Type                                | Default | Purpose                                                       |
 | --------------------- | ----------------------------------- | ------- | ------------------------------------------------------------- |
@@ -84,7 +84,7 @@ For agents with `output_type=MyModel`, set `custom_output_args` to a dict matchi
 
 ## `FunctionModel` — write your own response
 
-`pydantic_ai.models.function.FunctionModel` (`models/function.py:45`) lets you implement the model as a function. You get the full message history and metadata, and return a `ModelResponse`.
+`pydantic_ai.models.function.FunctionModel` lets you implement the model as a function. You get the full message history and metadata, and return a `ModelResponse`.
 
 ```python
 from pydantic_ai import Agent
@@ -101,7 +101,7 @@ result = agent.run_sync('hello')
 assert result.output == 'echo: hello'
 ```
 
-`AgentInfo` (`models/function.py:219`) exposes what the agent decided to send this step:
+`AgentInfo` (`pydantic_ai.models.function.AgentInfo`) exposes what the agent decided to send this step:
 
 - `function_tools: list[ToolDefinition]`
 - `output_tools: list[ToolDefinition]`
@@ -237,7 +237,7 @@ asyncio.run(test_stream())
 
 ## `Agent.override(...)` — swap parts per run/test
 
-`agent/__init__.py:1639`. Temporarily replaces any of:
+`Agent.override(...)` is a context manager that temporarily replaces any of:
 
 - `model` (`Model`, a `KnownModelName`, or any `str`)
 - `deps`
@@ -482,8 +482,8 @@ test_valid_invoice()
 
 ## Reference
 
-- `TestModel` — `models/test.py:60`
-- `FunctionModel`, `AgentInfo`, `DeltaToolCalls` — `models/function.py`
-- `Agent.override(...)` — `agent/__init__.py:1639`
-- `capture_run_messages()` — `_agent_graph.py:1791`
-- `ModelMessagesTypeAdapter` — `messages.py:2034`
+- `TestModel` — `pydantic_ai.models.test`
+- `FunctionModel`, `AgentInfo`, `DeltaToolCalls` — `pydantic_ai.models.function`
+- `Agent.override(...)` — `pydantic_ai.Agent`
+- `capture_run_messages()` — `pydantic_ai`
+- `ModelMessagesTypeAdapter` — `pydantic_ai.messages`
