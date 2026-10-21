@@ -263,14 +263,14 @@ export async function multiAgentSupervisor(): Promise<void> {
     // Supervisor node
     .addNode('supervisor', async (state) => {
       const coordinationPrompt = `
-        You are a supervisor managing multiple agents.
-        Task: ${state.task}
-        
-        Current agent results: ${JSON.stringify(state.agentResults)}
-        
-        Decide which agent should work next or if we should finish.
-        Respond with: AGENT_RESEARCH, AGENT_ANALYSIS, AGENT_WRITING, or COMPLETE
-      `;
+      You are a supervisor managing multiple agents.
+      Task: ${state.task}
+      
+      Current agent results: ${JSON.stringify(state.agentResults)}
+      
+      Decide which agent should work next or if we should finish.
+      Respond with: AGENT_RESEARCH, AGENT_ANALYSIS, AGENT_WRITING, or COMPLETE
+    `;
   
       const response = await model.invoke(coordinationPrompt);
       return {
@@ -827,7 +827,6 @@ const ParallelStateAnnotation = Annotation.Root({
 });
 
 function createProcessingGraph() {
-  const graph = new StateGraph(ParallelStateAnnotation);
 
   // Create dynamic processing nodes for each batch
   const createBatchProcessor = (batchIndex: number) => {
@@ -859,41 +858,38 @@ function createProcessingGraph() {
   };
 
   // Add batch processing nodes
-  graph.addNode('batch0', createBatchProcessor(0));
-  graph.addNode('batch1', createBatchProcessor(1));
-  graph.addNode('batch2', createBatchProcessor(2));
-
-  // Deferred aggregation node
-  graph.addNode(
-    'aggregate',
-    async (state) => {
-      const allProcessed = Object.values(state.processedBatches).flat();
-
-      return {
-        aggregatedResult: {
-          totalItems: allProcessed.length,
-          successful: allProcessed.filter((item) => item.processed).length,
-          errors: state.errors.length,
-          data: allProcessed,
-        },
-      };
-    },
-    {
-      defer: true, // Wait for all batch processors
-    }
-  );
-
-  // Fan-out: Start all batch processors in parallel
-  graph.addEdge(START, 'batch0');
-  graph.addEdge(START, 'batch1');
-  graph.addEdge(START, 'batch2');
-
-  // Fan-in: All processors feed into aggregator
-  graph.addEdge('batch0', 'aggregate');
-  graph.addEdge('batch1', 'aggregate');
-  graph.addEdge('batch2', 'aggregate');
-
-  graph.addEdge('aggregate', END);
+    const graph = new StateGraph(ParallelStateAnnotation)
+      .addNode('batch0', createBatchProcessor(0))
+      .addNode('batch1', createBatchProcessor(1))
+      .addNode('batch2', createBatchProcessor(2))
+      // Deferred aggregation node
+      .addNode(
+      'aggregate',
+      async (state) => {
+        const allProcessed = Object.values(state.processedBatches).flat();
+  
+        return {
+          aggregatedResult: {
+            totalItems: allProcessed.length,
+            successful: allProcessed.filter((item) => item.processed).length,
+            errors: state.errors.length,
+            data: allProcessed,
+          },
+        };
+      },
+      {
+        defer: true, // Wait for all batch processors
+      }
+    )
+      // Fan-out: Start all batch processors in parallel
+      .addEdge(START, 'batch0')
+      .addEdge(START, 'batch1')
+      .addEdge(START, 'batch2')
+      // Fan-in: All processors feed into aggregator
+      .addEdge('batch0', 'aggregate')
+      .addEdge('batch1', 'aggregate')
+      .addEdge('batch2', 'aggregate')
+      .addEdge('aggregate', END);
 
   return graph.compile();
 }
@@ -1128,13 +1124,13 @@ const conversationGraph = new StateGraph(UserConversationAnnotation)
     });
   
     const context = `
-  User Profile: ${JSON.stringify(state.userProfile, null, 2)}
-  
-  Previous Conversations:
-  ${state.conversationHistory.join('\n\n')}
-  
-  Current Message: ${state.message}
-    `.trim();
+User Profile: ${JSON.stringify(state.userProfile, null, 2)}
+
+Previous Conversations:
+${state.conversationHistory.join('\n\n')}
+
+Current Message: ${state.message}
+  `.trim();
   
     const response = await model.invoke(context);
   

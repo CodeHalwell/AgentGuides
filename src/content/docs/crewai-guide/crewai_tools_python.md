@@ -163,6 +163,7 @@ When the agent calls `get_final_report`, its output is returned verbatim — no 
 ```python
 @tool("external_api", max_usage_count=3)
 def external_api(q: str) -> str:
+    """Query the partner API (at most three calls per task)."""
     ...
 ```
 

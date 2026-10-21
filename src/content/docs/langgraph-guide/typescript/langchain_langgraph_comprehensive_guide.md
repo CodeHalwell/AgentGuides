@@ -1037,7 +1037,6 @@ const MultiAgentStateAnnotation = Annotation.Root({
   }),
 });
 
-const multiAgentGraph = new StateGraph(MultiAgentStateAnnotation);
 
 // Define individual agent nodes
 const model = new ChatOpenAI({
@@ -1046,48 +1045,47 @@ const model = new ChatOpenAI({
 });
 
 // Research agent
-multiAgentGraph.addNode('researchAgent', async (state) => {
-  const response = await model.invoke(
-    `Research the following topic and provide key findings: ${state.task}`
-  );
-  
-  return {
-    agentResponses: {
-      research: response.content as string,
-    },
-    messageLog: [`Research agent completed analysis`],
-  };
-});
-
-// Analysis agent
-multiAgentGraph.addNode('analysisAgent', async (state) => {
-  const response = await model.invoke(
-    `Analyse the following information: ${state.agentResponses.research}`
-  );
-  
-  return {
-    agentResponses: {
-      ...state.agentResponses,
-      analysis: response.content as string,
-    },
-    messageLog: [`Analysis agent completed review`],
-  };
-});
-
-// Writing agent
-multiAgentGraph.addNode('writingAgent', async (state) => {
-  const response = await model.invoke(
-    `Based on this research and analysis, write a comprehensive summary:\nResearch: ${state.agentResponses.research}\nAnalysis: ${state.agentResponses.analysis}`
-  );
-  
-  return {
-    agentResponses: {
-      ...state.agentResponses,
-      writing: response.content as string,
-    },
-    messageLog: [`Writing agent completed summary`],
-  };
-});
+const multiAgentGraph = new StateGraph(MultiAgentStateAnnotation)
+  .addNode('researchAgent', async (state) => {
+    const response = await model.invoke(
+      `Research the following topic and provide key findings: ${state.task}`
+    );
+    
+    return {
+      agentResponses: {
+        research: response.content as string,
+      },
+      messageLog: [`Research agent completed analysis`],
+    };
+  })
+  // Analysis agent
+  .addNode('analysisAgent', async (state) => {
+    const response = await model.invoke(
+      `Analyse the following information: ${state.agentResponses.research}`
+    );
+    
+    return {
+      agentResponses: {
+        ...state.agentResponses,
+        analysis: response.content as string,
+      },
+      messageLog: [`Analysis agent completed review`],
+    };
+  })
+  // Writing agent
+  .addNode('writingAgent', async (state) => {
+    const response = await model.invoke(
+      `Based on this research and analysis, write a comprehensive summary:\nResearch: ${state.agentResponses.research}\nAnalysis: ${state.agentResponses.analysis}`
+    );
+    
+    return {
+      agentResponses: {
+        ...state.agentResponses,
+        writing: response.content as string,
+      },
+      messageLog: [`Writing agent completed summary`],
+    };
+  });
 ```
 
 ### Supervisor Patterns with Agent Nodes
@@ -2204,7 +2202,6 @@ const StateAnnotation = Annotation.Root({
   }),
 });
 
-const graph = new StateGraph(StateAnnotation);
 
 // Traditional approach (verbose)
 function processNodeOld(state: SimpleState): Partial<SimpleState> {
@@ -2213,20 +2210,19 @@ function processNodeOld(state: SimpleState): Partial<SimpleState> {
     messages: [`Processed: ${state.input}`],
   };
 }
-graph.addNode('process', processNodeOld);
-
-// New .addNode() approach (concise)
-graph
+const graph = new StateGraph(StateAnnotation)
+  .addNode('process', processNodeOld)
+  // New .addNode() approach (concise)
   .addNode('process', (state) => ({
-    count: state.count + 1,
-    messages: [`Processed: ${state.input}`],
-  }))
+      count: state.count + 1,
+      messages: [`Processed: ${state.input}`],
+    }))
   .addNode('validate', (state) => ({
-    messages: state.count > 0 ? ['Valid'] : ['Invalid'],
-  }))
+      messages: state.count > 0 ? ['Valid'] : ['Invalid'],
+    }))
   .addNode('finalize', (state) => ({
-    messages: [`Final count: ${state.count}`],
-  }));
+      messages: [`Final count: ${state.count}`],
+    }));
 ```
 
 ### Chaining .addNode() Calls
@@ -2904,69 +2900,55 @@ const MultiStageAnnotation = Annotation.Root({
 
 const multiStageGraph = new StateGraph(MultiStageAnnotation)
   // Router node (no state update)
-  .addNode('router', () => ({}));
-
-// Parallel paths
-multiStageGraph
+  .addNode('router', () => ({}))
+  // Parallel paths
   .addNode('pathA', async (state) => ({
-    paths: [...state.paths, 'A'],
-    pathAResult: 'Path A completed',
-  }))
+      paths: [...state.paths, 'A'],
+      pathAResult: 'Path A completed',
+    }))
   .addNode('pathB', async (state) => ({
-    paths: [...state.paths, 'B'],
-    pathBResult: 'Path B completed',
-  }))
+      paths: [...state.paths, 'B'],
+      pathBResult: 'Path B completed',
+    }))
   .addNode('pathC', async (state) => ({
-    paths: [...state.paths, 'C'],
-    pathCResult: 'Path C completed',
-  }));
-
-// Deferred merger node
-multiStageGraph.addNode(
-  'merge',
-  async (state) => {
-    const results = [
-      state.pathAResult,
-      state.pathBResult,
-      state.pathCResult,
-    ].filter(Boolean);
-
-    return {
-      finalResult: `Merged ${results.length} paths: ${results.join(', ')}`,
-    };
-  },
-  {
-    defer: true,
-  }
-);
-
-// Conditional routing from router
-multiStageGraph.addEdge(START, 'router');
-
-multiStageGraph.addConditionalEdges(
-  'router',
-  (state) => {
-    if (state.stage === 'preprocessing') {
-      return 'all';
-    } else if (state.stage === 'processing') {
-      return 'ab';
-    } else {
-      return 'single';
+      paths: [...state.paths, 'C'],
+      pathCResult: 'Path C completed',
+    }))
+  // Deferred merger node
+  .addNode(
+    'merge',
+    async (state) => {
+      const results = [
+        state.pathAResult,
+        state.pathBResult,
+        state.pathCResult,
+      ].filter(Boolean);
+  
+      return {
+        finalResult: `Merged ${results.length} paths: ${results.join(', ')}`,
+      };
+    },
+    {
+      defer: true,
     }
-  },
-  {
-    all: ['pathA', 'pathB', 'pathC'],
-    ab: ['pathA', 'pathB'],
-    single: ['pathA'],
-  }
-);
-
-// All paths lead to deferred merge
-multiStageGraph.addEdge('pathA', 'merge');
-multiStageGraph.addEdge('pathB', 'merge');
-multiStageGraph.addEdge('pathC', 'merge');
-
-multiStageGraph.addEdge('merge', END);
+  )
+  // Conditional routing from router
+  .addEdge(START, 'router')
+  .addConditionalEdges(
+    'router',
+    // Return a list of node names to run several branches in parallel
+    (state) => {
+      if (state.stage === 'preprocessing') return ['pathA', 'pathB', 'pathC'];
+      if (state.stage === 'processing') return ['pathA', 'pathB'];
+      return ['pathA'];
+    },
+    ['pathA', 'pathB', 'pathC'],   // possible destinations (for the diagram and type checking)
+  )
+  // All paths lead to deferred merge
+  .addEdge('pathA', 'merge')
+  .addEdge('pathB', 'merge')
+  .addEdge('pathC', 'merge')
+  .addEdge('merge', END);
 
 const multiStageWorkflow = multiStageGraph.compile();
 
@@ -3014,7 +2996,6 @@ const ResilientStateAnnotation = Annotation.Root({
   summary: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const resilientGraph = new StateGraph(ResilientStateAnnotation);
 
 // Dynamic task processors
 const createTaskNode = (taskId: string) => {
@@ -3046,19 +3027,18 @@ const createTaskNode = (taskId: string) => {
 };
 
 // Add task nodes
-resilientGraph
+const resilientGraph = new StateGraph(ResilientStateAnnotation)
   .addNode('task1', createTaskNode('task1'))
   .addNode('task2', createTaskNode('task2'))
-  .addNode('task3', createTaskNode('task3'));
-
-// Deferred summary node with error handling
-resilientGraph.addNode(
-  'summarize',
-  async (state) => {
-    const successful = state.results.filter((r) => !r.error);
-    const failed = state.results.filter((r) => r.error);
-
-    const summary = `
+  .addNode('task3', createTaskNode('task3'))
+  // Deferred summary node with error handling
+  .addNode(
+    'summarize',
+    async (state) => {
+      const successful = state.results.filter((r: ResilientState['results'][number]) => !r.error);
+      const failed = state.results.filter((r: ResilientState['results'][number]) => r.error);
+  
+      const summary = `
 Execution Summary:
 ------------------
 Total Tasks: ${state.results.length}
@@ -3070,24 +3050,21 @@ ${successful.map((r) => `- ${r.task}: ${r.result}`).join('\n')}
 
 ${failed.length > 0 ? `Failed Tasks:\n${failed.map((r) => `- ${r.task}: ${r.error}`).join('\n')}` : ''}
     `.trim();
-
-    return { summary };
-  },
-  {
-    defer: true,
-  }
-);
-
-// Connect all tasks in parallel
-resilientGraph.addEdge(START, 'task1');
-resilientGraph.addEdge(START, 'task2');
-resilientGraph.addEdge(START, 'task3');
-
-resilientGraph.addEdge('task1', 'summarize');
-resilientGraph.addEdge('task2', 'summarize');
-resilientGraph.addEdge('task3', 'summarize');
-
-resilientGraph.addEdge('summarize', END);
+  
+      return { summary };
+    },
+    {
+      defer: true,
+    }
+  )
+  // Connect all tasks in parallel
+  .addEdge(START, 'task1')
+  .addEdge(START, 'task2')
+  .addEdge(START, 'task3')
+  .addEdge('task1', 'summarize')
+  .addEdge('task2', 'summarize')
+  .addEdge('task3', 'summarize')
+  .addEdge('summarize', END);
 
 const resilientWorkflow = resilientGraph.compile();
 

@@ -205,7 +205,7 @@ agent = Agent(
 Custom base URL (non-default daemon):
 
 ```python
-OllamaChatClient(model="llama3.1", base_url="http://gpu-host:11434")
+OllamaChatClient(model="llama3.1", host="http://gpu-host:11434")
 ```
 
 ## Amazon Bedrock (native)

@@ -259,6 +259,9 @@ Works for OpenAI, Gemini, and Claude's structured-tool mode. For other providers
 ### 5. LiteLLM routing config
 
 ```python
+import os
+from crewai import LLM
+
 LLM(model="groq/llama-3.3-70b-versatile", is_litellm=True, api_base=os.environ["LITELLM_PROXY"])
 ```
 
