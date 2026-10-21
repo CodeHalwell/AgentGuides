@@ -586,7 +586,7 @@ Both `Graph` and `Swarm` have `stream()` for node-level events, accept a `sessio
 
 ## MCP tools
 
-`McpClient` connects to a Model Context Protocol server and exposes its tools. Pass the client itself in `tools`; it connects lazily on first use. It needs `@modelcontextprotocol/client` installed.
+`McpClient` connects to a Model Context Protocol server and exposes its tools. Pass the client itself in `tools`; the agent connects and lists the server's tools when it initialises (on the first `invoke()`, or call `await agent.initialize()` to do it up front). It needs `@modelcontextprotocol/client` installed.
 
 ```typescript
 import { Agent, McpClient } from '@strands-agents/sdk'

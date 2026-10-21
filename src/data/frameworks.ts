@@ -148,11 +148,11 @@ export const frameworks: Framework[] = [
     name: 'Amazon Bedrock Agents',
     tagline: 'Multi-agent collaboration GA, AgentCore, AWS-native.',
     href: '/amazon-bedrock-agents-guide/',
-    languages: ['Python'],
+    languages: ['Python', 'TypeScript'],
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['aws', 'multi-agent', 'managed'],
-    version: `AgentCore ${v('bedrock-agentcore')}`,
+    version: `Strands ${v('strands-agents')} / AgentCore ${v('bedrock-agentcore')} (Python)`,
   },
   {
     id: 'ms-agent-fx',

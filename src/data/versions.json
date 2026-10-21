@@ -218,6 +218,11 @@
       "name": "bedrock-agentcore",
       "version": "0.4.6",
       "guide": "amazon-bedrock-agents-guide"
+    },
+    "@aws/agentcore": {
+      "registry": "npm",
+      "version": "0.31.1",
+      "guide": "amazon-bedrock-agents-guide"
     }
   }
 }

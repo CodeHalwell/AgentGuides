@@ -9,7 +9,7 @@ language: "typescript"
 
 AgentCore Runtime runs Node.js agents in the same session-isolated microVMs as Python ones. There are two ways to ship one: the **AgentCore CLI** (`@aws/agentcore`), which scaffolds the project, builds it and deploys it with CDK; or **by hand** with the AWS SDK for JavaScript control-plane client, as either a container image in ECR or a zipped code bundle on the managed `NODE_22` runtime.
 
-> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore-ts%%, `@strands-agents/sdk` %%version=@strands-agents/sdk%% and the AgentCore CLI 0.31.1 (checked %%versions-checked%%). TypeScript examples compile under `tsc --strict`; the CLI commands were checked against its `--help` output and generated project.
+> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore-ts%%, `@strands-agents/sdk` %%version=@strands-agents/sdk%% and the AgentCore CLI (`@aws/agentcore`) %%version=@aws/agentcore%% (checked %%versions-checked%%). TypeScript examples compile under `tsc --strict`; the CLI commands were checked against its `--help` output and generated project.
 
 The server code itself is covered in [Runtime: BedrockAgentCoreApp](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/#runtime-bedrockagentcoreapp). The Python equivalents of the deployment steps are in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#getting-started) and the [production guide](/amazon-bedrock-agents-guide/bedrock_agents_production_guide/).
 

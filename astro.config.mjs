@@ -148,7 +148,23 @@ export default defineConfig({
           label: 'Cloud-Native',
           collapsed: true,
           items: [
-            { label: 'Amazon Bedrock Agents', link: '/amazon-bedrock-agents-guide/' },
+            {
+              label: 'Amazon Bedrock Agents',
+              collapsed: true,
+              items: [
+                { label: 'Overview (Python)', link: '/amazon-bedrock-agents-guide/' },
+                {
+                  label: 'TypeScript',
+                  collapsed: true,
+                  items: [
+                    { label: 'Overview', link: '/amazon-bedrock-agents-guide/typescript/' },
+                    { label: 'Strands Agents', link: '/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/' },
+                    { label: 'AgentCore SDK', link: '/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/' },
+                    { label: 'Deploying to AgentCore Runtime', link: '/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/' },
+                  ],
+                },
+              ],
+            },
             {
               label: 'Microsoft Agent Framework',
               collapsed: true,
