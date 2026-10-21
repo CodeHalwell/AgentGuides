@@ -87,7 +87,7 @@ print(result)
 **Next Steps**:
 1. Read [CrewAI README](/crewai-guide/)
 2. Try more [CrewAI Recipes](/crewai-guide/crewai_recipes/)
-3. Deep dive: [CrewAI Comprehensive Guide](/crewai-guide/crewai_comprehensive_guide/)
+3. Full reference: [CrewAI Comprehensive Guide](/crewai-guide/crewai_comprehensive_guide/)
 
 ---
 
@@ -125,7 +125,7 @@ print(result.final_output)
 **Next Steps**:
 1. Read [OpenAI Agents SDK README](/openai-agents-sdk-guides/)
 2. Try more [OpenAI Recipes](/openai-agents-sdk-guides/openai_agents_sdk_recipes/)
-3. Deep dive: [OpenAI Comprehensive Guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/)
+3. Full reference: [OpenAI Comprehensive Guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/)
 
 ---
 
@@ -199,7 +199,7 @@ print(result)
 **Next Steps**:
 1. Read [LangGraph README](/langgraph-guide/)
 2. Try more [LangGraph Recipes](/langgraph-guide/python/langgraph_recipes/)
-3. Deep dive: [LangGraph Comprehensive Guide](/langgraph-guide/python/langgraph_comprehensive_guide/)
+3. Full reference: [LangGraph Comprehensive Guide](/langgraph-guide/python/langgraph_comprehensive_guide/)
 
 ---
 
