@@ -466,7 +466,7 @@ from agent_framework import Agent, CompactionProvider, ContextWindowCompactionSt
 from agent_framework.openai import OpenAIChatClient
 
 strategy = ContextWindowCompactionStrategy(
-    max_context_window_tokens=128_000,   # gpt-4o
+    max_context_window_tokens=128_000,   # your model's context window
     max_output_tokens=16_384,
     tool_eviction_threshold=0.5,
     truncation_threshold=0.8,            # must be >= tool_eviction_threshold
@@ -769,7 +769,7 @@ Excluded messages stay in the original list — `apply_compaction` mutates in pl
 
 **Default for chat UIs.** `SlidingWindowStrategy(keep_last_groups=20)` as `before_strategy`, `ToolResultCompactionStrategy(keep_last_tool_call_groups=1)` as `after_strategy`. Predictable, no judge tokens.
 
-**Research agents with long plans.** Use `SummarizationStrategy` with a cheap model — Phi-3 / Haiku / gpt-4o-mini. The summary retains goals and open questions so the agent stays on-track past 50 turns.
+**Research agents with long plans.** Use `SummarizationStrategy` with a cheap model — the small tier of your provider (for example `%%model=openai-small%%` or `%%model=anthropic-small%%`). The summary retains goals and open questions so the agent stays on-track past 50 turns.
 
 **Strict SLA on context size.** `TokenBudgetComposedStrategy(token_budget=32_000, ...)` guarantees you never send >32k tokens, with deterministic fallback even if summarisation fails.
 
@@ -1201,7 +1201,7 @@ agent = Agent(
 
 Constructor:
 
-```python
+```text
 SelectiveToolCallCompactionStrategy(
     keep_last_tool_call_groups: int = 1,   # set to 0 to drop all tool-call groups
 )
@@ -1327,7 +1327,7 @@ asyncio.run(main())
 
 ### `CompactionProvider` constructor reference
 
-```python
+```text
 CompactionProvider(
     *,
     before_strategy: CompactionStrategy | None = None,

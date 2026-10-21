@@ -1,7 +1,9 @@
 ---
-title: "Microsoft Agent Framework - Recipes & Code Patterns"
+title: "Microsoft Agent Framework — Recipes"
 description: "Language-neutral recipes for common Microsoft Agent Framework scenarios, in Python and C#. For examples verified against the current packages, see the per-language recipe pages."
 framework: "microsoft-agent-framework"
+sidebar:
+  label: "Recipes"
 ---
 
 **First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  

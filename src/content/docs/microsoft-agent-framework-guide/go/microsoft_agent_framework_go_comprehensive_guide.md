@@ -497,7 +497,7 @@ func main() {
 
 `foundryprovider.NewAgent` takes the **project endpoint** (`FOUNDRY_PROJECT_ENDPOINT`), an `azcore.TokenCredential`, and a target. There are two targets:
 
-- `foundryprovider.ModelDeployment("gpt-4o-mini")` — the agent is defined in your Go code and calls a model deployed in the project through its OpenAI-compatible Responses endpoint.
+- `foundryprovider.ModelDeployment("%%model=openai-small%%")` — the agent is defined in your Go code and calls a model deployed in the project through its OpenAI-compatible Responses endpoint.
 - `foundryprovider.ServerAgent("name")` — invokes an agent that already exists in the Foundry project. Its instructions are owned by the service, so `AgentConfig.Instructions` is ignored.
 
 ```go

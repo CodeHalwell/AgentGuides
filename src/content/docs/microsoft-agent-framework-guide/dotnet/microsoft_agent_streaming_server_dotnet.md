@@ -1,8 +1,10 @@
 ---
-title: "Microsoft Agent Streaming Server (.NET)"
+title: "Microsoft Agent Framework (.NET) — Streaming Server"
 description: "Minimal ASP.NET Core endpoint that streams agent responses to the browser as server-sent events."
 framework: "microsoft-agent-framework"
 language: "dotnet"
+sidebar:
+  label: "Streaming server"
 ---
 
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%.

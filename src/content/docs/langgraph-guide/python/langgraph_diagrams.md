@@ -401,7 +401,7 @@ graph TB
     end
     
     subgraph API["API Layer"]
-        LGCloud["LangGraph Cloud<br/>REST API"]
+        LGCloud["LangSmith Deployment<br/>Agent Server API"]
     end
     
     subgraph Runtime["Runtime"]

@@ -1,26 +1,60 @@
 ---
-title: "Microsoft Agent Framework Advanced (.NET)"
-description: "Advanced agent orchestration, resilience, and deployment patterns in .NET."
+title: "Microsoft Agent Framework (.NET) — Advanced Patterns"
+description: "Service-managed agents in Microsoft Foundry and the classic Persistent Agents service, agent middleware with AIAgentBuilder and DelegatingAIAgent, and workflows exposed as agents."
 framework: "microsoft-agent-framework"
 language: "dotnet"
+sidebar:
+  label: "Advanced patterns"
 ---
 
+Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%; every C# block compiles against that release. Deployment, resilience and security are on the [production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/).
 
-Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%. The service-agent example below goes through `Microsoft.Agents.AI.AzureAI.Persistent`, which wraps the Azure AI Agents SDK (`Azure.AI.Agents.Persistent`).
-Upstream: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.Agents.Persistent | https://learn.microsoft.com/dotnet/api/overview/azure/ai.agents.persistent-readme
+This page covers:
 
-## Topics
-- Agent orchestration and HITL
-- Polly resilience, telemetry with OTEL
-- Azure deployments (AKS/App Service), identity, Key Vault
+- Agents whose definition lives in Microsoft Foundry (`Microsoft.Agents.AI.Foundry`), and the older Persistent Agents service.
+- Wrapping any agent with your own behaviour (`AIAgentBuilder.Use`, `DelegatingAIAgent`).
+- Turning a workflow into an `AIAgent`.
 
-## Azure AI Persistent Agents (.NET) Example
+## Microsoft Foundry agents
 
-Service-managed agents live in Azure AI Foundry; `Microsoft.Agents.AI.AzureAI.Persistent` (preview) bridges them into the framework as an ordinary `AIAgent`, so the session and streaming APIs are the same as for `ChatClientAgent`:
+`Microsoft.Agents.AI.Foundry` (preview) adds `AsAIAgent` overloads to `AIProjectClient` (package `Azure.AI.Projects`). There are two kinds of agent:
+
+- **A model in your project, agent defined in code.** `AsAIAgent(model, instructions, ...)` returns a `ChatClientAgent` over the project's Responses endpoint. Instructions and tools stay in your code.
+- **An agent defined in Foundry.** `AsAIAgent(agentReference)` (or an agent endpoint, record or version) returns a `FoundryAgent` that runs the agent as configured in the Foundry portal, with its hosted tools.
+
+```bash
+dotnet add package Microsoft.Agents.AI.Foundry --prerelease
+dotnet add package Azure.Identity
+```
+
+```csharp
+using Azure.AI.Projects;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+
+var project = new AIProjectClient(
+    new Uri(Environment.GetEnvironmentVariable("FOUNDRY_PROJECT_ENDPOINT")!),
+    new DefaultAzureCredential());
+
+// Agent defined in code, model deployed in the project.
+AIAgent writer = project.AsAIAgent(
+    model: "%%model=openai-small%%",
+    instructions: "You are a helpful writing assistant.",
+    name: "writer");
+
+AgentSession session = await writer.CreateSessionAsync();
+AgentResponse response = await writer.RunAsync("Draft a summary of LangGraph.", session);
+Console.WriteLine(response.Text);
+```
+
+Either kind is an ordinary `AIAgent`: sessions, streaming, middleware, workflows and hosting work unchanged. Foundry also offers evaluation (`FoundryEvals`, see [evaluation](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#evaluation)) and memory stores (`FoundryMemoryProvider`) through the same package. To run your own code *as* a Foundry hosted agent, see the [production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/#foundry-hosted-agents).
+
+### Classic Persistent Agents
+
+Projects that still use the Azure AI Agents service (`Azure.AI.Agents.Persistent`, server-side threads and runs) can bring those agents in with `Microsoft.Agents.AI.AzureAI.Persistent` (preview). Prefer the Foundry package for new work.
 
 ```bash
 dotnet add package Microsoft.Agents.AI.AzureAI.Persistent --prerelease
-dotnet add package Azure.Identity
 ```
 
 ```csharp
@@ -28,113 +62,70 @@ using Azure.AI.Agents.Persistent;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 
-var endpoint = Environment.GetEnvironmentVariable("AZURE_AI_PROJECT_ENDPOINT")!;
-var client = new PersistentAgentsClient(endpoint, new DefaultAzureCredential());
+var client = new PersistentAgentsClient(
+    Environment.GetEnvironmentVariable("AZURE_AI_PROJECT_ENDPOINT")!, new DefaultAzureCredential());
 
-// Create the server-side agent and get an AIAgent wrapper for it in one call.
-// (Use client.GetAIAgentAsync(agentId) to attach to an agent that already exists.)
+// Create the server-side agent and wrap it; use client.GetAIAgentAsync(agentId) for an existing one.
 AIAgent agent = await client.CreateAIAgentAsync(
     model: "%%model=openai-small%%",
     name: "writer",
     instructions: "You are a helpful writing assistant.");
 
 AgentSession session = await agent.CreateSessionAsync();   // backed by a service-side thread
-var response = await agent.RunAsync("Draft a summary of LangGraph.", session);
-Console.WriteLine(response.Text);
+Console.WriteLine((await agent.RunAsync("Draft a summary of LangGraph.", session)).Text);
 ```
 
+## Wrapping agents with your own behaviour
 
-## Resilience & Telemetry
-- Wrap client calls with Polly (retry + circuit-breaker)
-- Add OpenTelemetry spans: agent.create, thread.create, run.create, messages.get
+`agent.AsBuilder().Use(...)` adds agent-level middleware: a function that sees the messages, session and options of each run and decides whether and how to call the inner agent. Pass `runFunc` and `runStreamingFunc` separately, or one shared function that wraps both. This is the place for audit logging, input screening, per-tenant limits and caching.
 
-## Deployment (Kubernetes)
+```csharp
+using System.Diagnostics;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
-deployment.yaml
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ms-agent-dotnet
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: ms-agent-dotnet
-  template:
-    metadata:
-      labels:
-        app: ms-agent-dotnet
-    spec:
-      containers:
-        - name: app
-          image: ghcr.io/yourorg/ms-agent-dotnet:latest
-          env:
-            - name: AZURE_AI_ENDPOINT
-              valueFrom:
-                secretKeyRef:
-                  name: azure-secrets
-                  key: endpoint
-          ports:
-            - containerPort: 8080
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: ms-agent-dotnet
-spec:
-  selector:
-    app: ms-agent-dotnet
-  ports:
-    - port: 80
-      targetPort: 8080
+public static class TimingMiddleware
+{
+    public static AIAgent WithTiming(this AIAgent agent) =>
+        agent.AsBuilder()
+            .Use(
+                runFunc: async (messages, session, options, inner, ct) =>
+                {
+                    var stopwatch = Stopwatch.StartNew();
+                    AgentResponse response = await inner.RunAsync(messages, session, options, ct);
+                    Console.WriteLine($"{inner.Name}: {stopwatch.ElapsedMilliseconds} ms, {response.Usage?.TotalTokenCount} tokens");
+                    return response;
+                },
+                runStreamingFunc: null)
+            .Build();
+}
 ```
 
-## CI/CD (GitHub Actions)
+For something you want to unit-test or register in DI, derive from `DelegatingAIAgent` instead; the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#a-reusable-safety-wrapper) has a Content Safety wrapper written that way. Chat-level middleware (around each model call) goes on the `IChatClient` with `ChatClientBuilder.Use(...)`, and tool-level approval with `ApprovalRequiredAIFunction` (see [tool approval](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tool-approval)).
 
+## Workflows as agents
 
-```yaml
-name: build-and-deploy
-on:
-  push:
-    branches: [ main ]
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: 8.0.x
-      - run: dotnet publish -c Release -o out
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: ghcr.io/${{ github.repository }}:latest
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: azure/k8s-deploy@v5
-        with:
-          action: deploy
-          manifests: |
-            deployment.yaml
-          images: ghcr.io/${{ github.repository }}:latest
-          namespace: default
+`workflow.AsAIAgent(...)` turns a workflow whose input is a list of chat messages (any `AgentWorkflowBuilder` workflow qualifies) into an `AIAgent`. A multi-agent pipeline can then be called, hosted or used as a tool exactly like a single agent.
+
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
+
+public static class Pipeline
+{
+    public static async Task<string> RunAsync(IChatClient chatClient, string topic)
+    {
+        AIAgent researcher = new ChatClientAgent(chatClient, instructions: "List the key facts about the topic.", name: "researcher");
+        AIAgent writer = new ChatClientAgent(chatClient, instructions: "Turn the facts into one paragraph.", name: "writer");
+
+        AIAgent pipeline = AgentWorkflowBuilder.BuildSequential(researcher, writer)
+            .AsAIAgent(name: "research-pipeline");
+
+        AgentResponse response = await pipeline.RunAsync(topic);
+        return response.Text;
+    }
+}
 ```
 
-
-## Security Best Practices
-- Store keys in cloud secret managers (Key Vault/Secret Manager/Secrets Manager)
-- Use least-privileged IAM roles; separate read/write roles for tools
-- Network egress allowlisting for tool calls
-- Encrypt logs; avoid sensitive data in traces
-- Rotate keys regularly; monitor for anomalies
-
+Requests raised inside the workflow (a `RequestPort` waiting for a person, or a tool waiting for approval) come back on the agent's response as user-input requests. The [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#human-in-the-loop) covers request ports and checkpointing; the orchestration patterns (sequential, concurrent, handoff, group chat, Magentic) are in the [comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#multi-agent-systems).

@@ -30,7 +30,7 @@ from langchain_core.messages import SystemMessage
 
 # Construct the model ONCE at module scope — reusing across node calls avoids
 # unnecessary client-creation overhead in production.
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 def call_model(state: MessagesState) -> dict:
     """Call the LLM with the full message history."""
@@ -92,7 +92,7 @@ class State(TypedDict):
     query_type: str
     result: str
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 def classify_query(state: State) -> dict:
@@ -294,7 +294,7 @@ def calculator(expression: str) -> str:
         return f"Error: {e}"
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([search, calculator])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([search, calculator])
 
 
 def agent_node(state: MessagesState) -> dict:

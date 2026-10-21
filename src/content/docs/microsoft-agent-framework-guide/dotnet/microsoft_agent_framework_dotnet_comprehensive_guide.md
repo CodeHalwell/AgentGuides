@@ -1,6 +1,8 @@
 ---
-title: "Microsoft Agent Framework .NET - Comprehensive Technical Guide"
-description: "Comprehensive .NET reference for Microsoft.Agents.AI — ChatClientAgent, hosting and DI, workflows, tools, structured output, MCP, memory, context providers and Azure integration, with compiled examples."
+title: "Microsoft Agent Framework (.NET) — Comprehensive Guide"
+sidebar:
+  label: "Comprehensive guide"
+description: "Microsoft.Agents.AI for .NET: ChatClientAgent, hosting and DI, workflows, tools, structured output, MCP, memory, the harness agent, Anthropic and GitHub Copilot agents, evaluation and DevUI, with compiled examples."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 ---
@@ -707,6 +709,168 @@ builder.Services.UseClaimsBasedAgentIsolation();               // isolation key 
 builder.AddAIAgent("assistant", "You are a helpful assistant.")
        .WithInMemorySessionStore(withIsolation: true);         // swap for a durable AgentSessionStore in production
 ```
+
+---
+
+## More agent types
+
+`ChatClientAgent` covers any `IChatClient`. Three stable packages add agents with more built in.
+
+### `HarnessAgent` — planning, memory and compaction wired together
+
+`Microsoft.Agents.AI.Harness` wraps a chat client in an agent that already has the harness context providers: a todo list, plan/execute modes, file memory, skills, background sub-agents, standing tool approvals, compaction and OpenTelemetry. Each one can be turned off (`DisableTodoProvider`, `DisableAgentModeProvider`, `DisableFileMemory`, `DisableAgentSkillsProvider`, `DisableCompaction`, `DisableWebSearch`, `DisableOpenTelemetry`) or configured through `HarnessAgentOptions`.
+
+```bash
+dotnet add package Microsoft.Agents.AI.Harness --version %%version=Microsoft.Agents.AI%%
+```
+
+```csharp
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+
+IChatClient chatClient = new AzureOpenAIClient(
+        new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+        new DefaultAzureCredential())
+    .GetChatClient("%%model=openai%%")
+    .AsIChatClient();
+
+HarnessAgent agent = chatClient.AsHarnessAgent(new HarnessAgentOptions
+{
+    Name = "research-agent",
+    ChatOptions = new ChatOptions { Instructions = "Focus on primary sources." },
+    MaxContextWindowTokens = 200_000,   // enables context-window compaction
+    MaxOutputTokens = 32_000,
+    DisableWebSearch = true,
+});
+
+AgentSession session = await agent.CreateSessionAsync();
+AgentResponse response = await agent.RunAsync("Compare three heat-pump designs and summarise.", session);
+Console.WriteLine(response.Text);
+```
+
+Setting `MaxContextWindowTokens` and `MaxOutputTokens` turns on compaction sized to the model; `LoopEvaluators` keeps the agent working until a condition (for example, no open todos) is met. The same providers (`TodoProvider`, `AgentModeProvider`, `AgentSkillsProvider`, `BackgroundAgentsProvider`, file memory and file access) live in `Microsoft.Agents.AI` and can be added to a plain `ChatClientAgent` individually through `ChatClientAgentOptions.AIContextProviders`.
+
+### Anthropic
+
+`Microsoft.Agents.AI.Anthropic` adds `AsAIAgent` to the official Anthropic SDK client (`Anthropic` package), including its beta service.
+
+```bash
+dotnet add package Microsoft.Agents.AI.Anthropic --version %%version=Microsoft.Agents.AI%%
+```
+
+```csharp
+using Anthropic;
+using Anthropic.Core;
+using Microsoft.Agents.AI;
+
+AnthropicClient anthropic = new(new ClientOptions
+{
+    ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),
+});
+
+AIAgent claude = anthropic.AsAIAgent(
+    model: "%%model=anthropic%%",
+    instructions: "You are a concise technical writer.",
+    name: "writer");
+
+Console.WriteLine((await claude.RunAsync("Explain idempotency in two sentences.")).Text);
+```
+
+`AsAIAgent` also takes `tools:` and `defaultMaxTokens:`; the agent is a normal `ChatClientAgent`, so sessions, middleware and workflows work unchanged.
+
+### GitHub Copilot
+
+`Microsoft.Agents.AI.GitHub.Copilot` exposes the GitHub Copilot SDK as an `AIAgent` (`GitHubCopilotAgent`). The Copilot CLI does the tool use and file editing, so the agent suits repository tasks. It needs the Copilot CLI installed and signed in.
+
+```bash
+dotnet add package Microsoft.Agents.AI.GitHub.Copilot --version %%version=Microsoft.Agents.AI%%
+```
+
+```csharp
+using GitHub.Copilot;
+using Microsoft.Agents.AI;
+
+AIAgent copilot = new CopilotClient(new CopilotClientOptions())
+    .AsAIAgent(ownsClient: true, name: "repo-helper", instructions: "Answer questions about this repository.");
+
+AgentSession session = await copilot.CreateSessionAsync();
+Console.WriteLine((await copilot.RunAsync("Which projects in this solution have no tests?", session)).Text);
+```
+
+Pass a `SessionConfig` instead of `instructions:` to control the model, tools and permissions of the Copilot session.
+
+---
+
+## Evaluation
+
+Evaluation is in the core package. `LocalEvaluator` runs cheap, deterministic checks (`EvalChecks.KeywordCheck`, `ToolCalledCheck`, `ToolCallsPresent`, `ToolCallArgsMatch`, `NonEmpty`, `ContainsExpected`, or your own via `FunctionEvaluator.Create`). `agent.EvaluateAsync(queries, evaluator)` runs the agent on each query and scores the results; overloads take expected outputs and tool calls, a conversation splitter and a repetition count. `Microsoft.Extensions.AI.Evaluation` evaluators (`IEvaluator`, for model-graded relevance, coherence and so on) and Foundry's evaluators (`FoundryEvals`, package `Microsoft.Agents.AI.Foundry`) plug into the same `EvaluateAsync` overloads.
+
+```csharp
+using Microsoft.Agents.AI;
+
+public static class AgentQualityChecks
+{
+    public static async Task RunAsync(AIAgent agent)
+    {
+        var evaluator = new LocalEvaluator(
+            EvalChecks.KeywordCheck("refund"),
+            EvalChecks.ToolCalledCheck("lookup_order"),
+            FunctionEvaluator.Create("short_answer", (string response) => response.Length < 1_000));
+
+        AgentEvaluationResults results = await agent.EvaluateAsync(
+            ["I want a refund for order 1042", "How do I return a damaged item?"],
+            evaluator);
+
+        Console.WriteLine($"{results.Passed}/{results.Total} passed");
+        results.AssertAllPassed();      // throws, failing the test, if any item failed
+    }
+}
+```
+
+`AgentEvaluationResults` has `Passed`, `Failed`, `Total`, per-item detail and assertion helpers (`AssertAllPassed`, `AssertNoFailedItems`, `AssertScoreAtLeast`, `AssertDimensionScoreAtLeast`), so the same code works as an xUnit or NUnit test. For workflows, `run.EvaluateAsync(evaluator, includePerAgent: true)` (in `Microsoft.Agents.AI.Workflows`) scores a finished run overall and per agent.
+
+---
+
+## Local testing with DevUI
+
+`Microsoft.Agents.AI.DevUI` (preview) adds a browser UI for chatting with your registered agents and workflows during development. It talks to the OpenAI Responses and Conversations endpoints from `Microsoft.Agents.AI.Hosting.OpenAI`, so map those too. DevUI is a development tool; don't expose it in production.
+
+```bash
+dotnet add package Microsoft.Agents.AI.DevUI --prerelease
+```
+
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.DevUI;
+using Microsoft.Agents.AI.Hosting;
+using Microsoft.Extensions.AI;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddChatClient(Models.ChatClient());
+builder.AddAIAgent("writer", "You write short stories about the given topic.");
+
+builder.Services.AddOpenAIResponses();
+builder.Services.AddOpenAIConversations();
+builder.AddDevUI();
+
+var app = builder.Build();
+
+app.MapOpenAIResponses();
+app.MapOpenAIConversations();
+if (app.Environment.IsDevelopment())
+{
+    app.MapDevUI();     // /devui
+}
+
+app.Run();
+
+static class Models { public static IChatClient ChatClient() => null!; }
+```
+
+With .NET Aspire, the `Aspire.Hosting.AgentFramework.DevUI` integration runs one DevUI for several agent services; see [Microsoft's DevUI page](https://learn.microsoft.com/agent-framework/integrations/by-component/ui/devui/).
 
 ---
 

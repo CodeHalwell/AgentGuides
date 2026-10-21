@@ -321,8 +321,8 @@ Fields:
 - `tool_call_id` — the `id` field of the tool call currently being executed.
 - `store` — the `BaseStore` compiled into the graph, or `None`.
 - `tools` — the list of tools registered with this `ToolNode`.
-- `execution_info` — `ExecutionInfo` with `checkpoint_id`, `thread_id`, `run_id`, `node_attempt`, `node_first_attempt_time`. Set by LangGraph Platform; `None` locally.
-- `server_info` — `ServerInfo` set by LangGraph Platform only; `None` locally.
+- `execution_info` — `ExecutionInfo` with `checkpoint_id`, `thread_id`, `run_id`, `node_attempt`, `node_first_attempt_time`. Populated whenever the tool runs inside a graph.
+- `server_info` — `ServerInfo`, set only when running in the LangGraph Agent Server; `None` otherwise.
 
 ### `emit_output_delta`
 

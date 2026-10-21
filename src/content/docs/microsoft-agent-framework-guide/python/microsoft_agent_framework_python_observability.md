@@ -292,7 +292,8 @@ class TokenSpendProcessor(SpanProcessor):
     def force_flush(self, timeout_millis: int = 30_000) -> bool: return True
 
 
-# Register alongside the framework's exporters.
+# Register alongside the framework's exporters. configure_otel_providers() (or your own
+# TracerProvider setup) must run first: the default proxy provider has no add_span_processor.
 from opentelemetry import trace
 trace.get_tracer_provider().add_span_processor(TokenSpendProcessor())
 ```

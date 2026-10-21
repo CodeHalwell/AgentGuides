@@ -42,7 +42,7 @@ class State(TypedDict):
     query: str
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 def research_node(state: State, runtime: Runtime) -> dict:
@@ -299,8 +299,8 @@ for event in graph.stream({"query": "test"}, config, stream_mode="debug"):
 Set two environment variables and every graph run is automatically traced in LangSmith — node-by-node latency, inputs/outputs, errors, retry counts.
 
 ```bash
-export LANGCHAIN_API_KEY="ls__..."
-export LANGCHAIN_TRACING_V2="true"
+export LANGSMITH_API_KEY="lsv2_..."
+export LANGSMITH_TRACING="true"
 export LANGCHAIN_PROJECT="my-agent"   # optional; defaults to "default"
 ```
 

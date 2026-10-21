@@ -125,7 +125,7 @@ function validateEnvironmentVariables(): EnvironmentConfig {
       },
       anthropic: {
         apiKey: process.env.ANTHROPIC_API_KEY || '',
-        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
+        model: process.env.ANTHROPIC_MODEL || '%%model=anthropic%%',
       },
     },
     
@@ -367,7 +367,7 @@ export class TokenCounter {
       // USD per 1K tokens. Illustrative only: check current provider pricing.
       '%%model=openai%%': { input: 0.0025, output: 0.01 },
       '%%model=openai-small%%': { input: 0.00015, output: 0.0006 },
-      'claude-sonnet-5-5': { input: 0.002, output: 0.01 },
+      '%%model=anthropic%%': { input: 0.002, output: 0.01 },
     };
     
     const rates = pricing[model] || { input: 0.001, output: 0.002 };

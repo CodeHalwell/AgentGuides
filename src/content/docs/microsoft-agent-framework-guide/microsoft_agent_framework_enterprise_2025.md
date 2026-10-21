@@ -1,7 +1,9 @@
 ---
-title: "Microsoft Agent Framework - Enterprise Features"
+title: "Microsoft Agent Framework — Enterprise Patterns"
 description: "Enterprise patterns for the Microsoft Agent Framework — OpenTelemetry, Entra ID, Azure AI Content Safety, PII redaction, Purview, governance and audit logging — built from the framework's real middleware, client and observability APIs."
 framework: "microsoft-agent-framework"
+sidebar:
+  label: "Enterprise patterns"
 ---
 
 **Target audience:** enterprise architects, security teams, compliance officers
@@ -469,7 +471,7 @@ async def production_agent_with_managed_identity() -> str:
 
 # Grant the identity data-plane access, for example:
 #   az role assignment create --assignee <principal-id> \
-#     --role "Azure AI User" --scope <foundry-project-resource-id>
+#     --role "53ca6127-db72-4b80-b1b0-d745d6d5456d" --scope <foundry-project-resource-id>   # Foundry User (formerly Azure AI User)
 # or, for a plain Azure OpenAI resource, "Cognitive Services OpenAI User".
 ```
 
@@ -550,7 +552,7 @@ spec:
             - name: FOUNDRY_PROJECT_ENDPOINT
               value: https://contoso.services.ai.azure.com/api/projects/support
             - name: FOUNDRY_MODEL
-              value: gpt-4o-mini
+              value: %%model=openai-small%%
 ```
 
 ### User-delegated authentication
@@ -861,7 +863,7 @@ from agent_framework.openai import OpenAIChatClient
 from agent_framework.security import SecureAgentConfig
 
 security = SecureAgentConfig(
-    allow_untrusted_tools={"fetch_web_page"},   # tools whose output is treated as untrusted
+    allow_untrusted_tools={"fetch_web_page"},   # may still run once untrusted content is in context
     block_on_violation=True,
 )
 
@@ -873,7 +875,7 @@ agent = Agent(
 )
 ```
 
-It is marked experimental and may change between releases; read the docstrings in `agent_framework.security` before relying on it.
+Tool results are untrusted unless a tool declares otherwise (`@tool(additional_properties={"source_integrity": "trusted"})`), so here `send_email` is blocked once fetched web content is in context. It is marked experimental and may change between releases; the [Python comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides) has the options. .NET has no equivalent; use tool approval and Prompt Shields there.
 
 ---
 

@@ -892,7 +892,7 @@ SkillFrontmatter(name="my-cool-skill", description="…")  # OK — hyphens betw
 
 ## `SkillsProvider` reference
 
-```python
+```text
 SkillsProvider(
     source,                          # SkillsSource | Sequence[Skill] | Skill
     *,

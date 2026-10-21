@@ -448,7 +448,7 @@ print(result["answer"])
 | `heartbeat` | `() -> None` | Refresh `TimeoutPolicy(idle_timeout=...)` |
 | `previous` | `Any` | Functional API only: last return value for this thread |
 | `execution_info` | `ExecutionInfo \| None` | `checkpoint_id`, `thread_id`, `run_id`, `node_attempt` |
-| `server_info` | `ServerInfo \| None` | LangGraph Platform only |
+| `server_info` | `ServerInfo \| None` | Agent Server only |
 
 ---
 
@@ -782,7 +782,7 @@ for chunk in graph.stream(
 
 ### Pattern 14: `context_schema` and `Runtime[Context]` — complete injection example
 
-This pattern expands on Pattern 8 to show the minimal wiring needed for context injection from scratch, including the `configurable` key used by LangGraph Platform deployments.
+This pattern expands on Pattern 8 to show the minimal wiring needed for context injection from scratch.
 
 ```python
 from dataclasses import dataclass
@@ -861,7 +861,6 @@ print(result["result"])
 
 - The dataclass must be passed as `context=` at `invoke`/`stream` time, not embedded in state.
 - Context is immutable during a run — nodes can read it but cannot write back to it.
-- On LangGraph Platform, context can also arrive via `{"configurable": {"context": {...}}}` in the run config (the platform serialises/deserialises the dataclass automatically).
 - Any node that declares `runtime: Runtime[YourContext]` as a second parameter receives the injected context. Nodes that omit the second parameter are unaffected.
 
 ---

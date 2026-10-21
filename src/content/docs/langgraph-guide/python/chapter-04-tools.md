@@ -46,7 +46,7 @@ def get_stock_price(symbol: str) -> str:
 
 tools = [get_weather, get_stock_price]
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 model_with_tools = model.bind_tools(tools)
 
 
@@ -186,7 +186,7 @@ def lookup_order(order_id: str) -> str:
     return f"Order {order_id}: shipped"
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([lookup_order])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([lookup_order])
 
 
 def agent(state: CustomerState) -> dict:
@@ -241,7 +241,7 @@ def perform_action(
     return f"Action '{action}' executed for user {state['user_id']}."
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([perform_action])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([perform_action])
 
 
 def agent(state: AppState) -> dict:
@@ -316,7 +316,7 @@ memory_store = InMemoryStore(
     index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
 )
 
-model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools(
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools(
     [save_preference, recall_preferences]
 )
 
@@ -352,7 +352,7 @@ class ToolRuntime(Generic[ContextT, StateT]):
     store: BaseStore | None                    # store passed to compile(store=...)
     tools: list[BaseTool]                      # all tools registered with ToolNode
     execution_info: ExecutionInfo | None = None  # execution metadata
-    server_info: ServerInfo | None = None        # LangSmith Platform info (None in OSS)
+    server_info: ServerInfo | None = None        # Agent Server info (None outside the server)
 ```
 
 Use `ToolRuntime` when a single tool needs two or more of these values — it avoids stacking multiple `Annotated` parameters.
@@ -412,7 +412,7 @@ memory_store = InMemoryStore(
     index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
 )
 
-model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([smart_search])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([smart_search])
 
 
 def agent(state: WorkspaceState) -> dict:
@@ -512,7 +512,7 @@ def technical_agent(state: SupportState) -> dict:
     return {"messages": [("assistant", "Tech support here. Describe the issue.")]}
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools(
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools(
     [escalate_to_billing, escalate_to_technical]
 )
 

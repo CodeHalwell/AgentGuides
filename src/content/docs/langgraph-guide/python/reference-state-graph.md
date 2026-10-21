@@ -515,7 +515,7 @@ Runtime fields:
 | `heartbeat` | `() -> None` | Signals progress to reset an idle timeout (see `TimeoutPolicy`). No-op outside an idle-timed attempt. |
 | `previous` | `Any` | Functional API only — the last saved return value for this thread. |
 | `execution_info` | `ExecutionInfo \| None` | Read-only metadata for the current node run (see below). |
-| `server_info` | `ServerInfo \| None` | Set by LangGraph Platform only; `None` when running open-source. |
+| `server_info` | `ServerInfo \| None` | Set only in the LangGraph Agent Server; `None` otherwise. |
 | `control` | `RunControl \| None` | Run-scoped cooperative draining handle (see below). |
 
 To get the config instead, add `config: RunnableConfig` as a parameter or call `get_config()` from `langgraph.config`.

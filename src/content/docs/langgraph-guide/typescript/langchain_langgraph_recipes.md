@@ -171,42 +171,38 @@ export async function documentAnalysisAgent(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const graph = new StateGraph(DocumentStateAnnotation);
-
-  // Entity extraction node
-  graph.addNode('extractEntities', async (state) => {
-    const prompt = `Extract named entities (people, organisations, locations) from this text:\n\n${state.document}`;
-    const response = await model.invoke(prompt);
-    return {
-      extractedEntities: [response.content as string],
-    };
-  });
-
-  // Summarisation node
-  graph.addNode('summarise', async (state) => {
-    const prompt = `Summarise this document in 2-3 sentences:\n\n${state.document}`;
-    const response = await model.invoke(prompt);
-    return {
-      summary: response.content as string,
-    };
-  });
-
-  // Sentiment analysis node
-  graph.addNode('analyseSentiment', async (state) => {
-    const prompt = `Analyse the sentiment of this text. Respond with only: positive, negative, or neutral.\n\n${state.document}`;
-    const response = await model.invoke(prompt);
-    const sentiment = (response.content as string).toLowerCase().trim() as any;
-    return {
-      sentiment: ['positive', 'negative', 'neutral'].includes(sentiment) 
-        ? sentiment 
-        : 'neutral',
-    };
-  });
-
-  graph.addEdge(START, 'extractEntities');
-  graph.addEdge('extractEntities', 'summarise');
-  graph.addEdge('summarise', 'analyseSentiment');
-  graph.addEdge('analyseSentiment', END);
+  const graph = new StateGraph(DocumentStateAnnotation)
+    // Entity extraction node
+    .addNode('extractEntities', async (state) => {
+      const prompt = `Extract named entities (people, organisations, locations) from this text:\n\n${state.document}`;
+      const response = await model.invoke(prompt);
+      return {
+        extractedEntities: [response.content as string],
+      };
+    })
+    // Summarisation node
+    .addNode('summarise', async (state) => {
+      const prompt = `Summarise this document in 2-3 sentences:\n\n${state.document}`;
+      const response = await model.invoke(prompt);
+      return {
+        summary: response.content as string,
+      };
+    })
+    // Sentiment analysis node
+    .addNode('analyseSentiment', async (state) => {
+      const prompt = `Analyse the sentiment of this text. Respond with only: positive, negative, or neutral.\n\n${state.document}`;
+      const response = await model.invoke(prompt);
+      const sentiment = (response.content as string).toLowerCase().trim() as any;
+      return {
+        sentiment: ['positive', 'negative', 'neutral'].includes(sentiment) 
+          ? sentiment 
+          : 'neutral',
+      };
+    })
+    .addEdge(START, 'extractEntities')
+    .addEdge('extractEntities', 'summarise')
+    .addEdge('summarise', 'analyseSentiment')
+    .addEdge('analyseSentiment', END);
 
   const compiled = graph.compile();
 
@@ -263,85 +259,78 @@ export async function multiAgentSupervisor(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const graph = new StateGraph(SupervisorStateAnnotation);
-
-  // Supervisor node
-  graph.addNode('supervisor', async (state) => {
-    const coordinationPrompt = `
-      You are a supervisor managing multiple agents.
-      Task: ${state.task}
-      
-      Current agent results: ${JSON.stringify(state.agentResults)}
-      
-      Decide which agent should work next or if we should finish.
-      Respond with: AGENT_RESEARCH, AGENT_ANALYSIS, AGENT_WRITING, or COMPLETE
-    `;
-
-    const response = await model.invoke(coordinationPrompt);
-    return {
-      supervisorDecision: (response.content as string).trim(),
-    };
-  });
-
-  // Research agent node
-  graph.addNode('researchAgent', async (state) => {
-    const response = await model.invoke(`Research this topic: ${state.task}`);
-    return {
-      agentResults: {
-        research: response.content as string,
+  const graph = new StateGraph(SupervisorStateAnnotation)
+    // Supervisor node
+    .addNode('supervisor', async (state) => {
+      const coordinationPrompt = `
+        You are a supervisor managing multiple agents.
+        Task: ${state.task}
+        
+        Current agent results: ${JSON.stringify(state.agentResults)}
+        
+        Decide which agent should work next or if we should finish.
+        Respond with: AGENT_RESEARCH, AGENT_ANALYSIS, AGENT_WRITING, or COMPLETE
+      `;
+  
+      const response = await model.invoke(coordinationPrompt);
+      return {
+        supervisorDecision: (response.content as string).trim(),
+      };
+    })
+    // Research agent node
+    .addNode('researchAgent', async (state) => {
+      const response = await model.invoke(`Research this topic: ${state.task}`);
+      return {
+        agentResults: {
+          research: response.content as string,
+        },
+      };
+    })
+    // Analysis agent node
+    .addNode('analysisAgent', async (state) => {
+      const research = state.agentResults.research || '';
+      const response = await model.invoke(`Analyse this research: ${research}`);
+      return {
+        agentResults: {
+          analysis: response.content as string,
+        },
+      };
+    })
+    // Writing agent node
+    .addNode('writingAgent', async (state) => {
+      const research = state.agentResults.research || '';
+      const analysis = state.agentResults.analysis || '';
+      const response = await model.invoke(
+        `Write a summary combining this research and analysis:\nResearch: ${research}\nAnalysis: ${analysis}`
+      );
+      return {
+        finalOutput: response.content as string,
+      };
+    })
+    // Edge routing
+    .addEdge(START, 'supervisor')
+    .addConditionalEdges(
+      'supervisor',
+      (state) => {
+        if (state.supervisorDecision.includes('RESEARCH')) {
+          return 'researchAgent';
+        } else if (state.supervisorDecision.includes('ANALYSIS')) {
+          return 'analysisAgent';
+        } else if (state.supervisorDecision.includes('WRITING')) {
+          return 'writingAgent';
+        }
+        return 'END';
       },
-    };
-  });
-
-  // Analysis agent node
-  graph.addNode('analysisAgent', async (state) => {
-    const research = state.agentResults.research || '';
-    const response = await model.invoke(`Analyse this research: ${research}`);
-    return {
-      agentResults: {
-        analysis: response.content as string,
-      },
-    };
-  });
-
-  // Writing agent node
-  graph.addNode('writingAgent', async (state) => {
-    const research = state.agentResults.research || '';
-    const analysis = state.agentResults.analysis || '';
-    const response = await model.invoke(
-      `Write a summary combining this research and analysis:\nResearch: ${research}\nAnalysis: ${analysis}`
-    );
-    return {
-      finalOutput: response.content as string,
-    };
-  });
-
-  // Edge routing
-  graph.addEdge(START, 'supervisor');
-
-  graph.addConditionalEdges(
-    'supervisor',
-    (state) => {
-      if (state.supervisorDecision.includes('RESEARCH')) {
-        return 'researchAgent';
-      } else if (state.supervisorDecision.includes('ANALYSIS')) {
-        return 'analysisAgent';
-      } else if (state.supervisorDecision.includes('WRITING')) {
-        return 'writingAgent';
+      {
+        researchAgent: 'researchAgent',
+        analysisAgent: 'analysisAgent',
+        writingAgent: 'writingAgent',
+        END: END,
       }
-      return 'END';
-    },
-    {
-      researchAgent: 'researchAgent',
-      analysisAgent: 'analysisAgent',
-      writingAgent: 'writingAgent',
-      END: END,
-    }
-  );
-
-  graph.addEdge('researchAgent', 'supervisor');
-  graph.addEdge('analysisAgent', 'supervisor');
-  graph.addEdge('writingAgent', 'supervisor');
+    )
+    .addEdge('researchAgent', 'supervisor')
+    .addEdge('analysisAgent', 'supervisor')
+    .addEdge('writingAgent', 'supervisor');
 
   const compiled = graph.compile();
 
@@ -744,65 +733,61 @@ async function cacheEmbedding(text: string, embedding: number[]): Promise<void> 
   );
 }
 
-const ragGraph = new StateGraph(RAGStateAnnotation);
-
-// Cached embedding generation node
-ragGraph.addNode('generateEmbedding', async (state) => {
-  // Check cache first
-  const cached = await getCachedEmbedding(state.query);
-  if (cached) {
-    console.log('Using cached embedding');
-    return { embedding: cached };
-  }
-
-  console.log('Generating new embedding');
-  const embeddings = new OpenAIEmbeddings({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const embedding = await embeddings.embedQuery(state.query);
-
-  // Cache for future use
-  await cacheEmbedding(state.query, embedding);
-
-  return { embedding };
-});
-
-// Retrieve relevant documents
-ragGraph.addNode('retrieve', async (state) => {
-  // Illustrative only: in practice, build and populate the vector store once, outside the node
-  const vectorStore = new MemoryVectorStore(
-    new OpenAIEmbeddings({
+const ragGraph = new StateGraph(RAGStateAnnotation)
+  // Cached embedding generation node
+  .addNode('generateEmbedding', async (state) => {
+    // Check cache first
+    const cached = await getCachedEmbedding(state.query);
+    if (cached) {
+      console.log('Using cached embedding');
+      return { embedding: cached };
+    }
+  
+    console.log('Generating new embedding');
+    const embeddings = new OpenAIEmbeddings({
       apiKey: process.env.OPENAI_API_KEY,
-    })
-  );
-
-  const docs = await vectorStore.similaritySearch(state.query, 3);
-
-  return { retrievedDocs: docs };
-});
-
-// Generate answer
-ragGraph.addNode('generateAnswer', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const context = state.retrievedDocs
-    .map((doc) => doc.pageContent)
-    .join('\n\n');
-
-  const response = await model.invoke(
-    `Context:\n${context}\n\nQuestion: ${state.query}\n\nAnswer:`
-  );
-
-  return { answer: response.content as string };
-});
-
-ragGraph.addEdge(START, 'generateEmbedding');
-ragGraph.addEdge('generateEmbedding', 'retrieve');
-ragGraph.addEdge('retrieve', 'generateAnswer');
-ragGraph.addEdge('generateAnswer', END);
+    });
+  
+    const embedding = await embeddings.embedQuery(state.query);
+  
+    // Cache for future use
+    await cacheEmbedding(state.query, embedding);
+  
+    return { embedding };
+  })
+  // Retrieve relevant documents
+  .addNode('retrieve', async (state) => {
+    // Illustrative only: in practice, build and populate the vector store once, outside the node
+    const vectorStore = new MemoryVectorStore(
+      new OpenAIEmbeddings({
+        apiKey: process.env.OPENAI_API_KEY,
+      })
+    );
+  
+    const docs = await vectorStore.similaritySearch(state.query, 3);
+  
+    return { retrievedDocs: docs };
+  })
+  // Generate answer
+  .addNode('generateAnswer', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const context = state.retrievedDocs
+      .map((doc) => doc.pageContent)
+      .join('\n\n');
+  
+    const response = await model.invoke(
+      `Context:\n${context}\n\nQuestion: ${state.query}\n\nAnswer:`
+    );
+  
+    return { answer: response.content as string };
+  })
+  .addEdge(START, 'generateEmbedding')
+  .addEdge('generateEmbedding', 'retrieve')
+  .addEdge('retrieve', 'generateAnswer')
+  .addEdge('generateAnswer', END);
 
 export const cachedRAGWorkflow = ragGraph.compile();
 ```
@@ -966,79 +951,75 @@ const ModeratedStateAnnotation = Annotation.Root({
   }),
 });
 
-const moderatedGraph = new StateGraph(ModeratedStateAnnotation);
-
-// Pre-hook: Input moderation
-moderatedGraph.addNode('moderateInput', async (state) => {
-  const sensitivePatterns = [
-    /\b\d{3}-\d{2}-\d{4}\b/, // SSN
-    /\b\d{16}\b/, // Credit card
-    /\b(password|api[_-]?key)\s*[:=]/i,
-  ];
-
-  const flags: string[] = [];
-  let moderatedInput = state.userMessage;
-
-  for (const pattern of sensitivePatterns) {
-    if (pattern.test(state.userMessage)) {
-      flags.push('sensitive-data-detected');
-      moderatedInput = state.userMessage.replace(pattern, '[REDACTED]');
+const moderatedGraph = new StateGraph(ModeratedStateAnnotation)
+  // Pre-hook: Input moderation
+  .addNode('moderateInput', async (state) => {
+    const sensitivePatterns = [
+      /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+      /\b\d{16}\b/, // Credit card
+      /\b(password|api[_-]?key)\s*[:=]/i,
+    ];
+  
+    const flags: string[] = [];
+    let moderatedInput = state.userMessage;
+  
+    for (const pattern of sensitivePatterns) {
+      if (pattern.test(state.userMessage)) {
+        flags.push('sensitive-data-detected');
+        moderatedInput = state.userMessage.replace(pattern, '[REDACTED]');
+      }
     }
-  }
-
-  if (flags.length > 0) {
-    console.warn('Input moderation flags:', flags);
-  }
-
-  return {
-    moderatedInput,
-    flags,
-  };
-});
-
-// Model invocation
-moderatedGraph.addNode('generateResponse', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const response = await model.invoke(state.moderatedInput || state.userMessage);
-
-  return {
-    aiResponse: response.content as string,
-  };
-});
-
-// Post-hook: Output moderation
-moderatedGraph.addNode('moderateOutput', async (state) => {
-  let moderatedOutput = state.aiResponse || '';
-
-  // Check for leaked sensitive info
-  const sensitivePatterns = [
-    /\b\d{3}-\d{2}-\d{4}\b/,
-    /\b\d{16}\b/,
-  ];
-
-  const flags: string[] = [];
-
-  for (const pattern of sensitivePatterns) {
-    if (pattern.test(moderatedOutput)) {
-      flags.push('output-contains-sensitive-data');
-      moderatedOutput =
-        'I apologize, but I cannot provide that information as it may contain sensitive data.';
+  
+    if (flags.length > 0) {
+      console.warn('Input moderation flags:', flags);
     }
-  }
-
-  return {
-    moderatedOutput,
-    flags,
-  };
-});
-
-moderatedGraph.addEdge(START, 'moderateInput');
-moderatedGraph.addEdge('moderateInput', 'generateResponse');
-moderatedGraph.addEdge('generateResponse', 'moderateOutput');
-moderatedGraph.addEdge('moderateOutput', END);
+  
+    return {
+      moderatedInput,
+      flags,
+    };
+  })
+  // Model invocation
+  .addNode('generateResponse', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const response = await model.invoke(state.moderatedInput || state.userMessage);
+  
+    return {
+      aiResponse: response.content as string,
+    };
+  })
+  // Post-hook: Output moderation
+  .addNode('moderateOutput', async (state) => {
+    let moderatedOutput = state.aiResponse || '';
+  
+    // Check for leaked sensitive info
+    const sensitivePatterns = [
+      /\b\d{3}-\d{2}-\d{4}\b/,
+      /\b\d{16}\b/,
+    ];
+  
+    const flags: string[] = [];
+  
+    for (const pattern of sensitivePatterns) {
+      if (pattern.test(moderatedOutput)) {
+        flags.push('output-contains-sensitive-data');
+        moderatedOutput =
+          'I apologize, but I cannot provide that information as it may contain sensitive data.';
+      }
+    }
+  
+    return {
+      moderatedOutput,
+      flags,
+    };
+  })
+  .addEdge(START, 'moderateInput')
+  .addEdge('moderateInput', 'generateResponse')
+  .addEdge('generateResponse', 'moderateOutput')
+  .addEdge('moderateOutput', END);
 
 export const moderatedChatbot = moderatedGraph.compile();
 ```
@@ -1132,63 +1113,59 @@ class MultiUserMemorySystem {
 
 const memorySystem = new MultiUserMemorySystem(process.env.DATABASE_URL!);
 
-const conversationGraph = new StateGraph(UserConversationAnnotation);
-
-conversationGraph.addNode('loadUserContext', async (state) => {
-  const [profile, history] = await Promise.all([
-    memorySystem.getUserProfile(state.userId),
-    memorySystem.getConversationHistory(state.userId, state.threadId),
-  ]);
-
-  return {
-    userProfile: profile,
-    conversationHistory: history,
-  };
-});
-
-conversationGraph.addNode('generateResponse', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const context = `
-User Profile: ${JSON.stringify(state.userProfile, null, 2)}
-
-Previous Conversations:
-${state.conversationHistory.join('\n\n')}
-
-Current Message: ${state.message}
-  `.trim();
-
-  const response = await model.invoke(context);
-
-  return {
-    response: response.content as string,
-  };
-});
-
-conversationGraph.addNode('saveContext', async (state) => {
-  await memorySystem.saveConversation(
-    state.userId,
-    state.threadId,
-    state.message,
-    state.response!
-  );
-
-  // Extract and save preferences if mentioned
-  if (state.message.toLowerCase().includes('prefer')) {
-    await memorySystem.updateUserProfile(state.userId, {
-      lastPreferenceUpdate: new Date().toISOString(),
+const conversationGraph = new StateGraph(UserConversationAnnotation)
+  .addNode('loadUserContext', async (state) => {
+    const [profile, history] = await Promise.all([
+      memorySystem.getUserProfile(state.userId),
+      memorySystem.getConversationHistory(state.userId, state.threadId),
+    ]);
+  
+    return {
+      userProfile: profile,
+      conversationHistory: history,
+    };
+  })
+  .addNode('generateResponse', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
     });
-  }
-
-  return {};
-});
-
-conversationGraph.addEdge(START, 'loadUserContext');
-conversationGraph.addEdge('loadUserContext', 'generateResponse');
-conversationGraph.addEdge('generateResponse', 'saveContext');
-conversationGraph.addEdge('saveContext', END);
+  
+    const context = `
+  User Profile: ${JSON.stringify(state.userProfile, null, 2)}
+  
+  Previous Conversations:
+  ${state.conversationHistory.join('\n\n')}
+  
+  Current Message: ${state.message}
+    `.trim();
+  
+    const response = await model.invoke(context);
+  
+    return {
+      response: response.content as string,
+    };
+  })
+  .addNode('saveContext', async (state) => {
+    await memorySystem.saveConversation(
+      state.userId,
+      state.threadId,
+      state.message,
+      state.response!
+    );
+  
+    // Extract and save preferences if mentioned
+    if (state.message.toLowerCase().includes('prefer')) {
+      await memorySystem.updateUserProfile(state.userId, {
+        lastPreferenceUpdate: new Date().toISOString(),
+      });
+    }
+  
+    return {};
+  })
+  .addEdge(START, 'loadUserContext')
+  .addEdge('loadUserContext', 'generateResponse')
+  .addEdge('generateResponse', 'saveContext')
+  .addEdge('saveContext', END);
 
 export const multiUserConversation = conversationGraph.compile();
 ```

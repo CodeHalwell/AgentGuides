@@ -3,6 +3,8 @@ title: "Microsoft Agent Framework (Python) — Feature Tour"
 description: "Verified feature set across agent-framework-core and its stable and beta sub-packages: A2A, graph workflows, declarative agents, MCP, Magentic orchestration and custom executors."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Feature tour"
 ---
 
 ## Package status
@@ -93,7 +95,7 @@ kind: Prompt
 name: GreetingAgent
 instructions: You are a friendly assistant.
 model:
-  id: gpt-4o
+  id: %%model=openai%%
   provider: AzureOpenAI
 """
 agent = factory.create_agent_from_yaml(yaml_content)
@@ -108,7 +110,7 @@ If you've already constructed a chat client (shared connection pool, custom cred
 
 ### `WorkflowFactory` — load a multi-action workflow from YAML
 
-`WorkflowFactory` parses `kind: Workflow` YAML and returns a real `Workflow` object — every action becomes a node in the graph, so checkpointing, visualization, and pause/resume work the same as a code-built workflow.
+`WorkflowFactory` parses `kind: Workflow` YAML and returns a real `Workflow` object — every action becomes a node in the graph, so checkpointing, visualisation, and pause/resume work the same as a code-built workflow.
 
 ```python
 from agent_framework import FileCheckpointStorage

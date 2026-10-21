@@ -38,6 +38,14 @@ from typing import Annotated
 from langgraph.graph.message import add_messages
 import json
 
+
+def semantic_search(query: str, index: str, top_k: int = 5) -> list[dict]:
+    """Stand-in for your vector store (for example a Store with an index, or a retriever)."""
+    corpus = [{"id": "doc-1", "content": "Install LangGraph with pip install langgraph."},
+              {"id": "doc-2", "content": "Compile a StateGraph before invoking it."}]
+    return corpus[:top_k]
+
+
 class RAGState(TypedDict):
     question: str
     messages: Annotated[list, add_messages]
@@ -182,6 +190,7 @@ def escalate(state: RAGState) -> dict:
     
     return {
         "final_answer": "Unable to find relevant information. Escalating to human support.",
+        "source_citations": [],
         "messages": [{
             "role": "assistant",
             "content": "This question requires human expert review."
@@ -216,10 +225,10 @@ rag_builder.add_edge("refine", "retrieve")  # Loop back
 rag_graph = rag_builder.compile(checkpointer=InMemorySaver())
 
 # Usage
-result = rag_graph.invoke({
-    "question": "How do I set up LangGraph?",
-    "generation_attempt": 0
-})
+result = rag_graph.invoke(
+    {"question": "How do I set up LangGraph?", "generation_attempt": 0},
+    {"configurable": {"thread_id": "rag-1"}},
+)
 
 print(f"Answer: {result['final_answer']}")
 print(f"Sources: {result['source_citations']}")
@@ -433,12 +442,15 @@ support_builder.add_edge("escalate", END)
 support_graph = support_builder.compile(checkpointer=InMemorySaver())
 
 # Usage
-result = support_graph.invoke({
-    "ticket_id": "TKT-001",
-    "customer_email": "user@example.com",
-    "subject": "Billing charge issue",
-    "description": "I was charged twice this month. Please help!"
-})
+result = support_graph.invoke(
+    {
+        "ticket_id": "TKT-001",
+        "customer_email": "user@example.com",
+        "subject": "Billing charge issue",
+        "description": "I was charged twice this month. Please help!",
+    },
+    {"configurable": {"thread_id": "TKT-001"}},
+)
 
 print(f"Priority: {result['priority'].value}")
 print(f"Category: {result['category'].value}")
@@ -482,10 +494,10 @@ def generate_queries(state: ResearchState) -> dict:
     """
     
     response = model.invoke(prompt)
-    
-    import json
-    queries = json.loads(response.content)
-    
+    try:
+        queries = json.loads(response.content)
+    except json.JSONDecodeError:            # models sometimes wrap JSON in prose
+        queries = [state["topic"]]
     return {"research_queries": queries}
 
 def parallel_search(state: ResearchState) -> list[Send]:
@@ -647,8 +659,9 @@ from langchain_core.tools import tool
 @tool
 def search_knowledge_base(query: str) -> str:
     """Search internal knowledge base."""
-    results = db.search_documents(query, limit=3)
-    return "\n".join([r["content"] for r in results])
+    # Replace with your search backend
+    docs = {"returns": "Items can be returned within 30 days.", "shipping": "Orders ship in 2 days."}
+    return "\n".join(text for key, text in docs.items() if key in query.lower()) or "No matching articles."
 
 @tool
 def check_inventory(product_id: str) -> dict:
@@ -682,8 +695,8 @@ tools = [
     send_email
 ]
 
-# Create agent
-model = ChatAnthropic(model="claude-sonnet-5-5")
+# The model must be bound to the tools, or it can never call them
+model_with_tools = model.bind_tools(tools)
 
 # Build custom agent for more control
 class AgentState(TypedDict):
@@ -695,11 +708,11 @@ class AgentState(TypedDict):
 def agent_reasoning_node(state: AgentState) -> dict:
     """Agent reasons about what to do."""
     
-    system_prompt = """You are a helpful shopping assistant. 
-    Analyze user requests and decide what actions to take.
-    Use available tools to help the customer."""
-    
-    response = model.invoke(state["messages"])
+    system_prompt = (
+        "You are a helpful shopping assistant. Analyse user requests, decide what "
+        "actions to take, and use the available tools to help the customer."
+    )
+    response = model_with_tools.invoke([("system", system_prompt), *state["messages"]])
     
     # Capture reasoning
     reasoning = response.content
@@ -1338,7 +1351,6 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command, Send, RetryPolicy
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.cache.memory import InMemoryCache
 
 
 # ---------------------------------------------------------------------------
@@ -1366,10 +1378,10 @@ class TaskState(TypedDict):
 # Nodes
 # ---------------------------------------------------------------------------
 
-def coordinator(state: WorkflowState) -> Command[Literal["fan_out", "__end__"]]:
+def coordinator(state: WorkflowState) -> Command[Literal["run_task", "__end__"]]:
     """Decide whether to launch tasks or finish.
 
-    Returns Command(goto="fan_out") while there are pending tasks,
+    Returns Command(goto=[Send(...), ...]) while there are pending tasks,
     or Command(goto=END, update={"workflow_status": "complete"}) when done.
     """
     completed = state.get("completed", [])
@@ -1383,19 +1395,8 @@ def coordinator(state: WorkflowState) -> Command[Literal["fan_out", "__end__"]]:
             update={"workflow_status": f"done — {len(completed)} ok, {len(failed)} failed"},
         )
 
-    return Command(goto="fan_out")
-
-
-def fan_out(state: WorkflowState) -> list[Send]:
-    """Launch all pending tasks in parallel using Send."""
-    completed = state.get("completed", [])
-    failed = state.get("failed", [])
-    done = set(completed + failed)
-    return [
-        Send("run_task", {"task_id": t["id"], "task_type": t["type"]})
-        for t in state["tasks"]
-        if t["id"] not in done
-    ]
+    # goto accepts a list of Send objects: one parallel run_task per pending task
+    return Command(goto=[Send("run_task", {"task_id": t["id"], "task_type": t["type"]}) for t in pending])
 
 
 def run_task(state: TaskState) -> dict:
@@ -1408,8 +1409,7 @@ def run_task(state: TaskState) -> dict:
     task_type = state["task_type"]
 
     # Simulate work — replace with real logic
-    import random
-    success = random.random() > 0.1   # 10% artificial failure rate
+    success = task_type != "validation"   # pretend validation fails
 
     if success:
         print(f"  [task] {task_id} ({task_type}) OK")
@@ -1424,7 +1424,7 @@ def run_task(state: TaskState) -> dict:
 #
 # Key features demonstrated:
 #  - coordinator uses Command for dynamic routing (no static edges from it)
-#  - fan_out returns list[Send] for variable-width parallelism
+#  - coordinator returns Command(goto=[Send, ...]) for variable-width parallelism
 #  - run_task uses retry_policy so transient failures are retried automatically
 #  - defer=True on the aggregate node means it runs AFTER all parallel run_task
 #    instances in the same super-step finish
@@ -1444,7 +1444,6 @@ def aggregate(state: WorkflowState) -> dict:
 
 builder = StateGraph(WorkflowState)
 builder.add_node("coordinator", coordinator)
-builder.add_node("fan_out",     fan_out)
 builder.add_node(
     "run_task",
     run_task,
@@ -1457,8 +1456,7 @@ builder.add_node(
 )
 
 builder.add_edge(START, "coordinator")
-# fan_out and run_task edges come from coordinator's Command / fan_out's Sends
-builder.add_edge("fan_out",   "run_task")
+# coordinator -> run_task edges come from its Command(goto=[Send(...)])
 builder.add_edge("run_task",  "aggregate")
 builder.add_edge("aggregate", "coordinator")   # loop back — coordinator will exit via END
 
@@ -1466,11 +1464,7 @@ builder.add_edge("aggregate", "coordinator")   # loop back — coordinator will 
 # Usage
 # ---------------------------------------------------------------------------
 
-cache = InMemoryCache()
-graph = builder.compile(
-    checkpointer=InMemorySaver(),
-    cache=cache,
-)
+graph = builder.compile(checkpointer=InMemorySaver())
 
 cfg = {"configurable": {"thread_id": "workflow-001"}}
 result = graph.invoke(
@@ -1485,20 +1479,14 @@ result = graph.invoke(
         "failed": [],
         "workflow_status": "pending",
     },
-    cfg,
-    {"recursion_limit": 50},
+    {**cfg, "recursion_limit": 50},   # recursion_limit goes in the same config dict
 )
 
 print(f"Workflow Status: {result['workflow_status']}")
 print(f"Completed tasks: {result['completed']}")
 print(f"Failed tasks:    {result['failed']}")
+# Workflow Status: done — 2 ok, 1 failed
 ```
-
----
-
-This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph.
-
-Adapt and combine them for your specific use cases!
 
 ---
 
@@ -1518,14 +1506,14 @@ from typing import Annotated
 from typing_extensions import TypedDict
 from dataclasses import dataclass
 
-# Store with optional vector search
-store = InMemoryStore(
-    index={
-        "dims": 1536,
-        "embed": embed_fn,  # your embedding function
-        "fields": ["content"]
-    }
-)
+# Store with vector search. In production pass an embedding model, for example
+# {"dims": 1536, "embed": "openai:text-embedding-3-small"}. A toy embedding keeps
+# this example offline.
+def embed_fn(texts: list[str]) -> list[list[float]]:
+    return [[float(len(t)), float(t.count(" ")), 1.0] for t in texts]
+
+
+store = InMemoryStore(index={"dims": 3, "embed": embed_fn, "fields": ["content"]})
 
 # Typed context carried through the run
 @dataclass
@@ -1586,10 +1574,10 @@ builder.add_edge("save", END)
 
 graph = builder.compile(store=store)
 
-# Pass context via configurable
+# Pass run context with the context= keyword (not inside "configurable")
 result = graph.invoke(
     {"messages": [HumanMessage("I prefer dark mode")]},
-    {"configurable": {"context": UserContext(user_id="alice")}}
+    context=UserContext(user_id="alice"),
 )
 
 print(result["messages"][-1].content)
@@ -1602,7 +1590,7 @@ print(result["messages"][-1].content)
 Key points:
 - `InMemoryStore` accepts an `index` dict to enable semantic (vector) search via `store.search(..., query=...)`. Omit it for key-only lookup.
 - `Runtime[UserContext]` is injected automatically by LangGraph when declared as a node parameter; it exposes `.context`, `.store`, and `.stream_writer`.
-- `context_schema=UserContext` on `StateGraph` tells the compiler which dataclass to deserialise from `configurable["context"]`.
+- `context_schema=UserContext` on `StateGraph` declares the type of `runtime.context`; pass the value with `invoke(..., context=UserContext(...))`.
 
 ---
 
@@ -1736,7 +1724,7 @@ This recipe demonstrates how `InjectedState` and `InjectedStore` let tools acces
 from typing import Any, Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore, tools_condition, create_react_agent
+from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore, tools_condition
 from langgraph.store.memory import InMemoryStore
 from langchain_core.tools import tool
 from langchain_anthropic import ChatAnthropic
@@ -1806,7 +1794,7 @@ def get_preference(
 # ── Agent setup ───────────────────────────────────────────────────────────────
 
 tools = [add_to_cart, view_cart, save_preference, get_preference]
-model = ChatAnthropic(model="claude-haiku-5-5").bind_tools(tools)
+model = ChatAnthropic(model="%%model=anthropic-small%%").bind_tools(tools)
 persistent_store = InMemoryStore()
 
 def agent_node(state: ShopState) -> dict:
@@ -1899,12 +1887,13 @@ graph = builder.compile(checkpointer=InMemorySaver())
 
 # Run with a batch that will have an error, then reset
 # In practice you'd trigger the error condition via routing logic
+cfg = {"configurable": {"thread_id": "batch-007"}}   # required with a checkpointer
 result = graph.invoke({
     "batch_id": "batch-007",
     "events": ["initial"],
     "errors": [],
     "phase": "pending",
-})
+}, cfg)
 print(result["events"])   # depends on routing; after reset → ["reset:batch-007"]
 print(result["errors"])   # [] — overwritten by reset_state
 ```
@@ -2223,7 +2212,7 @@ def observability_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
             return ToolMessage(content=cached_content, tool_call_id=call_id)
 
     # ── 3. Execute and cache result ──────────────────────────────────────────
-    result: ToolMessage = execute()
+    result: ToolMessage = execute(request)   # the handler takes the (possibly modified) request
     _result_cache[cache_key] = (result.content, now)
     _call_log.append({
         "call_id": call_id,
@@ -2505,7 +2494,6 @@ app = graph.compile()
 result = app.invoke({
     "request_body": {"action": "create_order", "payload": {"item": "widget"}},
     "user_id": "alice",
-    "validation_barrier": "",
     "response_status": 0,
     "response_body": "",
 })

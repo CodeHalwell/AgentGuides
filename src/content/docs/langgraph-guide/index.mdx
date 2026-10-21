@@ -9,7 +9,7 @@ sidebar:
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-**Low-level orchestration for stateful, long-running LLM agents.** Explicit state, durable checkpoints, conditional routing, human-in-the-loop. Available in Python and TypeScript with identical mental models.
+**Low-level orchestration for stateful, long-running LLM agents.** Explicit state, durable checkpoints, conditional routing, human-in-the-loop. Available in Python and TypeScript with the same concepts.
 
 **Current versions:** Python `langgraph` %%version=langgraph%% · TypeScript `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
 
@@ -19,12 +19,12 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   <LinkCard
     title="🐍 Python"
     href="/langgraph-guide/python/"
-    description="Chaptered Zero → Hero tutorial in 10 paginated chapters, plus source-checked reference pages: v3 streaming, set_node_defaults, tools_condition, MessagesState, RetryPolicy, TimeoutPolicy, CachePolicy."
+    description="A ten-chapter tutorial from a first graph to production, create_agent and middleware, and source-checked reference pages for StateGraph, checkpointers, stores, streaming and node policies."
   />
   <LinkCard
     title="📘 TypeScript"
     href="/langgraph-guide/typescript/"
-    description="StateGraph with Annotation, Zod or StateSchema state; createAgent from langchain; node caching, deferred nodes, timeouts and error handlers."
+    description="StateGraph with Annotation, Zod or StateSchema state; createAgent from langchain; interrupts, Send, Command, subgraphs, the Functional API and time travel."
   />
 </CardGrid>
 
@@ -41,20 +41,20 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
     Checkpointers for short-term, Stores for cross-thread memory.
   </Card>
   <Card title="Middleware" icon="setting">
-    Agent middleware and model hooks for guardrails, rate limiting, logging.
+    Agent middleware on createAgent / create_agent for guardrails, approvals, limits and logging.
   </Card>
   <Card title="Human-in-the-loop" icon="approve-check">
     Interrupts, multi-stage approvals, time-travel debugging.
   </Card>
   <Card title="Production" icon="rocket">
-    Docker, Kubernetes, observability, LangGraph Cloud.
+    LangSmith Deployment and the langgraph CLI, durable checkpointers, testing, observability.
   </Card>
 </CardGrid>
 
 ## Not sure which language?
 
-- **Python** has the larger ecosystem, more recipes, and the tutorial has been split into 10 paginated chapters for a true zero-to-hero walkthrough.
-- **TypeScript** is best if your app is already Node/browser — identical primitives, full type safety.
+- **Python** has the larger ecosystem, more recipes, and a ten-chapter tutorial.
+- **TypeScript** suits apps that are already Node or browser based; the primitives are the same and the builder is fully typed.
 
 ---
 
@@ -62,6 +62,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 | Date | Version | Changes |
 |------|---------|--------|
+| 2026-10-21 | Py 1.2.16 / TS 1.5.2 | Python agent pages moved to `create_agent` and middleware; the comprehensive page became an API map; production, performance and error-recovery pages rewritten; behavioural errors corrected (recursion limit, `ToolNode` errors, interrupts, TTL, durability). TypeScript: interrupts, `Send`, `Command`, subgraphs, Functional API, time travel and testing added; examples type-check under `strict`. Validation report page removed. |
 | 2026-10-21 | Py 1.2.16 / TS 1.5.2 | Current versions now come from the site's version data. TypeScript guide brought up from 1.3.5 to 1.5.2 and its examples corrected (the `@langgraphjs/toolkit` recommendation removed; `createAgent` from `langchain` replaces `createReactAgent`). Python guide: invented production-patterns section replaced, `AgentExecutor` examples replaced, import paths and install advice corrected. |
 | 2026-09-14 | Py 1.2.11 / TS 1.3.5 | Source-verified rewrite: ch2 expanded to 6 patterns (MessagesState, create_react_agent, tools_condition, multi-mode streaming); ch8 completely rewritten — `langchain.agents.middleware` and `langchain.agents.create_agent` exist in the separate `langchain` package (not bundled with `langgraph`); ch8 documents the `pre_model_hook`/`post_model_hook` hooks available in `langgraph` standalone, plus per-node `error_handler`/`retry_policy`/`timeout`/`cache_policy`, `set_node_defaults`, and `ToolNode(handle_tool_errors=...)` — all verified against installed langgraph 1.2.11 source. Note: `create_react_agent` is deprecated per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent`. |
 | 2026-09-08 | Py 1.2.11 / TS 1.3.5 | Consistency sweep. TypeScript card corrected 1.3.0 → 1.3.5; the TypeScript observability and streaming pages moved off a stale 1.0.2 "Latest" stamp; every `Latest:` stamp now names its package. Tables of contents on the TypeScript pages trimmed to sections that exist. No package installation or symbol verification performed. |

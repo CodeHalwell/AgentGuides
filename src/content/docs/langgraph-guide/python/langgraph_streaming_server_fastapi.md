@@ -52,7 +52,7 @@ class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 def call_model(state: State) -> dict:
@@ -179,7 +179,7 @@ class State(TypedDict):
     query: str
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 async def research_agent(state: State, runtime: Runtime) -> dict:
@@ -319,7 +319,7 @@ class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 def call_model(state: State) -> dict:

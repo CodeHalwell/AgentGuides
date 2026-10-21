@@ -210,7 +210,7 @@ print(result["hits"])   # 0  — reset by Overwrite, not 6
 print(result["log"])    # []  — replaced, not appended
 ```
 
-`Overwrite` also works in JSON-serialized form when crossing an API boundary (e.g., LangGraph Platform):
+`Overwrite` also works in JSON-serialized form when crossing an API boundary (for example, the Agent Server API):
 
 ```python
 # These three forms are all equivalent; LangGraph recognises all of them:

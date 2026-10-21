@@ -436,18 +436,19 @@ agent = Agent(client=OpenAIChatClient(), tools=[fetcher])
 
 All parameters accepted by `FunctionTool.__init__` (and equivalently by `@tool(...)`):
 
-```python
+```text
 FunctionTool(
-    name: str,                              # tool name sent to the model
-    description: str,                       # tool description in the schema
-    func: Callable | None = None,           # None → declaration-only (model sees tool; no auto-invoke)
-    *,
-    input_model: type[BaseModel] | dict | None = None,  # override inferred Pydantic schema
-    approval_mode: Literal["always_require", "never_require"] = "never_require",
-    max_invocations: int | None = None,     # raise ToolException after N successful calls
+    *,                                       # every argument is keyword-only
+    name: str,                               # tool name sent to the model
+    description: str = "",                   # tool description in the schema
+    approval_mode: ApprovalMode | None = None,   # "always_require" | "never_require"; None = never
+    kind: str | None = None,                 # free-form classification label, e.g. "readonly"
+    max_invocations: int | None = None,      # raise ToolException after N successful calls
     max_invocation_exceptions: int | None = None,  # raise ToolException after N errors
-    additional_properties: dict | None = None,     # custom metadata attached to the FunctionTool object
-    kind: str = "function",                 # free-form classification label; use "readonly", "mutating", etc.
+    additional_properties: dict | None = None,     # custom metadata (e.g. FIDES source_integrity)
+    func: Callable | None = None,            # None = declaration-only (model sees the tool; no auto-invoke)
+    input_model: type[BaseModel] | Mapping | None = None,  # override the inferred schema
+    result_parser: Callable[[Any], str | list[Content]] | None = None,  # how the return value is sent back
 )
 ```
 

@@ -1,8 +1,10 @@
 ---
-title: "Microsoft Agent Framework (Python) — HARNESS Providers"
+title: "Microsoft Agent Framework (Python) — Agent Harness"
 description: "The agent harness: TodoProvider, AgentModeProvider, MemoryContextProvider, FileMemoryProvider, FileAccessProvider, BackgroundAgentsProvider, ToolApprovalMiddleware and AgentLoopMiddleware — task lists, modes, long-term memory, agent files, background sub-agents, standing approvals and run-until-done loops."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Agent harness"
 ---
 
 > **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider` and `AgentLoopMiddleware` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.
@@ -249,7 +251,7 @@ agent = Agent(
 
 ### `TodoProvider` constructor reference
 
-```python
+```text
 TodoProvider(
     source_id: str = "todo",          # key in session.state; change when stacking multiple providers
     *,
@@ -398,7 +400,7 @@ When you call `set_agent_mode` externally, the provider injects a `user`-role me
 
 ### `AgentModeProvider` constructor reference
 
-```python
+```text
 AgentModeProvider(
     source_id: str = "agent_mode",   # session.state partition key
     *,
@@ -906,7 +908,7 @@ The agent calls these autonomously — for example, searching transcripts before
 
 ### `MemoryContextProvider` constructor reference
 
-```python
+```text
 MemoryContextProvider(
     recent_turns: int = 0,               # inject last N turns from transcript into context
     load_tool_turns: bool = True,        # include tool-call turns in the recency window
@@ -964,14 +966,14 @@ store = MemoryFileStore(
 
 `FileMemoryProvider` gives the agent a small file system it can use as working memory: park a large API response, a research note or a draft plan in a file and read it back later, instead of keeping everything in the conversation. It registers seven tools (`file_memory_write`, `file_memory_read`, `file_memory_delete`, `file_memory_ls`, `file_memory_grep`, `file_memory_replace`, `file_memory_replace_lines`) and injects a `memories.md` index (file names plus the description the agent gave each file, capped at 50 entries) into every turn, so the model knows what it has stored.
 
-```python
+```text
 FileMemoryProvider(store: AgentFileStore, *, source_id="file_memory",
                    scope: str | None = None, instructions: str | None = None)
 ```
 
 - **Isolation.** With `scope=None` each session gets its own folder, derived from `session_id`. Pass `scope="user-alice"` to share one folder across all of that user's sessions. The scope is an opaque key mapped to a single folder, not a path.
 - **Flat namespace.** File names can't contain path separators (`"plan.md"` is fine, `"notes/plan.md"` is rejected).
-- **Concurrency.** Writes, deletes and index rebuilds are serialized through a per-provider `asyncio.Lock`.
+- **Concurrency.** Writes, deletes and index rebuilds are serialised through a per-provider `asyncio.Lock`.
 
 ```python
 import asyncio
@@ -1012,7 +1014,7 @@ Use `InMemoryAgentFileStore()` instead of `FileSystemAgentFileStore` in tests.
 
 `FileAccessProvider` is the counterpart for *shared, persistent* files: a workspace the agent reads and edits, such as a repo checkout, a folder of reports or a knowledge base other processes also write to. It exposes eight tools: the read-only `file_access_read`, `file_access_read_lines`, `file_access_ls` and `file_access_grep`, and the write tools `file_access_write`, `file_access_delete`, `file_access_replace` and `file_access_replace_lines`.
 
-```python
+```text
 FileAccessProvider(
     store: AgentFileStore,
     *,
@@ -1080,13 +1082,13 @@ Subclass `AgentFileStore` to put agent files in blob storage or a database.
 | `background_agents_continue_task` | Send a follow-up to a finished task's session |
 | `background_agents_clear_completed_task` | Free a finished task's session |
 
-```python
+```text
 BackgroundAgentsProvider(agents: Sequence[SupportsAgentRun], *, source_id="background_agents",
                          instructions: str | None = None,   # may contain {background_agents}
                          wait_timeout_seconds: int = 300)
 ```
 
-Each agent needs a unique, non-empty `name`, and its `description` is what the parent sees when choosing. Task state is serialized into the session, but the running `asyncio.Task` objects live in the provider. Call `await provider.release_session(session, cancel_running=True, timeout=30.0)` when a parent session ends so they don't leak. A task whose in-process handle was lost (for example after a restart) is reported as `LOST`.
+Each agent needs a unique, non-empty `name`, and its `description` is what the parent sees when choosing. Task state is serialised into the session, but the running `asyncio.Task` objects live in the provider. Call `await provider.release_session(session, cancel_running=True, timeout=30.0)` when a parent session ends so they don't leak. A task whose in-process handle was lost (for example after a restart) is reported as `LOST`.
 
 ```python
 import asyncio
@@ -1132,7 +1134,7 @@ asyncio.run(main())
 
 `@tool(approval_mode="always_require")` turns every call into a `function_approval_request` that the caller must answer (see [Tool approval](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval)). `ToolApprovalMiddleware` adds two things on top: **auto-approval rules** that answer some requests in code, and **standing approvals** ("always allow this tool") that are remembered in the session. It needs an `AgentSession` and raises `RuntimeError` without one.
 
-```python
+```text
 ToolApprovalMiddleware(*, source_id="tool_approval",
                        auto_approval_rules: Sequence[ToolApprovalRuleCallback] | None = None)
 ```
@@ -1190,7 +1192,7 @@ asyncio.run(main())
 
 `AgentLoopMiddleware` re-runs the agent after each response until a `should_continue` predicate says stop, or `max_iterations` is hit. It's the harness's answer to "the model stopped halfway".
 
-```python
+```text
 AgentLoopMiddleware(
     should_continue,                  # async (**loop_kwargs) -> bool | tuple[bool, str | None]
     *,

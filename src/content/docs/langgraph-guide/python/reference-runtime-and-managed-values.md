@@ -210,7 +210,7 @@ def my_node(state: State) -> dict:
 
 ## `ToolRuntime[ContextT, StateT]` — tool-level injection
 
-`ToolRuntime` is a separate dataclass for **tool functions** invoked by `ToolNode`. It is distinct from `Runtime` — it provides the tool with access to the current graph state, the triggering tool-call ID, the store, typed context, and (on LangSmith Platform) execution metadata.
+`ToolRuntime` is a separate dataclass for **tool functions** invoked by `ToolNode`. It is distinct from `Runtime` — it provides the tool with access to the current graph state, the triggering tool-call ID, the store, typed context, execution metadata and (in the Agent Server) server metadata.
 
 ### Class definition
 
@@ -227,7 +227,7 @@ class ToolRuntime(Generic[ContextT, StateT]):
     store: BaseStore | None                    # graph's persistent store
     tools: list[BaseTool]                      # all tools registered with ToolNode
     execution_info: ExecutionInfo | None = None  # execution metadata (always set)
-    server_info: ServerInfo | None = None        # LangSmith Platform metadata (None in OSS)
+    server_info: ServerInfo | None = None        # Agent Server metadata (None outside the server)
 ```
 
 ### Field reference
@@ -242,7 +242,7 @@ class ToolRuntime(Generic[ContextT, StateT]):
 | `store` | `BaseStore \| None` | The graph's persistent store (`None` if not compiled with one). |
 | `tools` | `list[BaseTool]` | All tools registered with the `ToolNode`. Lets one tool look up or delegate to another. |
 | `execution_info` | `ExecutionInfo \| None` | Execution metadata (checkpoint ID, task ID, attempt number, thread ID). |
-| `server_info` | `ServerInfo \| None` | LangSmith Platform metadata (assistant/graph IDs, authenticated user). `None` in OSS LangGraph. |
+| `server_info` | `ServerInfo \| None` | Agent Server metadata (assistant/graph IDs, authenticated user). `None` outside the server. |
 
 ### Usage example
 

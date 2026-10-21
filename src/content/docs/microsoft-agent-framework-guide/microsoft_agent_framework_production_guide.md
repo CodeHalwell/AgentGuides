@@ -1,458 +1,151 @@
 ---
-title: "Microsoft Agent Framework - Production & Deployment Guide"
-description: "Deploying Microsoft Agent Framework services — containers, Azure Container Apps and AKS, scaling, monitoring, security and disaster recovery."
+title: "Microsoft Agent Framework — Production & Deployment Guide"
+description: "Running Microsoft Agent Framework services in production: choosing a host (Foundry hosted agents, Azure Functions durable agents, Container Apps), scaling, observability, security, prompt-injection defence, evaluation in CI, resilience and cost."
 framework: "microsoft-agent-framework"
+sidebar:
+  label: "Production guide"
 ---
 
-**Target Audience:** DevOps, Infrastructure, and Senior Engineers  
-**First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
-**Focus:** Enterprise-grade deployment, scaling, monitoring, and security
+Reviewed %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET). Language-specific detail is in the [Python](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/) and [.NET](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/) production guides.
 
----
+## Choosing a host
 
-## Table of Contents
+| Host | Python | .NET | Choose it when |
+|---|---|---|---|
+| Microsoft Foundry hosted agent | `agent-framework-foundry-hosting`: `ResponsesHostServer` | `Microsoft.Agents.AI.Foundry.Hosting`: `AddFoundryResponses` | You want Foundry to run, scale and secure the agent, keep conversation state, and show traces and evaluations in the portal. |
+| Azure Functions durable agent | `agent-framework-azurefunctions`: `AgentFunctionApp` | `Microsoft.Agents.AI.Hosting.AzureFunctions`: `ConfigureDurableAgents` | Conversations and workflows must survive restarts and scale-in, or wait hours for a person; you want consumption billing. |
+| Your own service on Container Apps, App Service or AKS | FastAPI (or similar) over `agent-framework-core` | ASP.NET Core with `Microsoft.Agents.AI.Hosting` | You need full control of the HTTP surface, networking and state stores. |
 
-1. [Production Deployment](#production-deployment)
-2. [Scaling Strategies](#scaling-strategies)
-3. [Monitoring & Observability](#monitoring--observability)
-4. [Security Best Practices](#security-best-practices)
-5. [High Availability & Disaster Recovery](#high-availability--disaster-recovery)
-6. [Cost Optimisation](#cost-optimisation)
-7. [Performance Tuning](#performance-tuning)
-8. [Enterprise Governance](#enterprise-governance)
+The Foundry and Azure Functions host packages are preview (.NET) or beta (Python) at the time of writing. Container images, Bicep and Kubernetes manifests for your own service are standard practice and not specific to the framework; Microsoft's [Container Apps documentation](https://learn.microsoft.com/azure/container-apps/) covers them.
 
----
+### Foundry hosted agents
 
-## Production Deployment
+Python:
 
-### Azure Container Apps Deployment
+```python
+import os
 
-#### **Infrastructure as Code - Bicep**
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient, ResponsesHostServer
+from azure.identity import DefaultAzureCredential
 
-```bicep
-param environment string = 'prod'
-param location string = resourceGroup().location
-param agentImageUri string
-param replicaCount int = 3
+agent = Agent(
+    client=FoundryChatClient(
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ["FOUNDRY_MODEL"],
+        credential=DefaultAzureCredential(),
+    ),
+    instructions="You are a friendly assistant. Keep your answers brief.",
+    default_options={"store": False},     # the host keeps the conversation, not the model service
+)
 
-resource containerApp 'Microsoft.App/containerApps@2022-03-01' = {
-  name: 'agent-framework-${environment}'
-  location: location
-  properties: {
-    managedEnvironmentId: containerEnvironment.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8080
-        allowInsecure: false
-        traffic: [
-          {
-            latestRevision: true
-            weight: 100
-          }
-        ]
-      }
-      dapr: {
-        enabled: true
-        appId: 'agent-framework'
-      }
-      secrets: [
-        {
-          name: 'azure-openai-key'
-          value: listKeys(openaiAccount.id, '2023-05-01').keys[0].value
-        }
-        {
-          name: 'cosmos-connection'
-          value: 'AccountEndpoint=${cosmosAccount.properties.documentEndpoint};'
-        }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'agent-framework'
-          image: agentImageUri
-          resources: {
-            cpu: '1'
-            memory: '2Gi'
-          }
-          env: [
-            {
-              name: 'AZURE_OPENAI_ENDPOINT'
-              value: openaiAccount.properties.endpoint
-            }
-            {
-              name: 'AZURE_OPENAI_KEY'
-              secretRef: 'azure-openai-key'
-            }
-            {
-              name: 'COSMOS_CONNECTION'
-              secretRef: 'cosmos-connection'
-            }
-          ]
-          probes: [
-            {
-              type: 'liveness'
-              httpGet: {
-                path: '/health/live'
-                port: 8080
-              }
-              initialDelaySeconds: 30
-              periodSeconds: 10
-            }
-            {
-              type: 'readiness'
-              httpGet: {
-                path: '/health/ready'
-                port: 8080
-              }
-              initialDelaySeconds: 10
-              periodSeconds: 5
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: replicaCount
-        maxReplicas: replicaCount * 3
-        rules: [
-          {
-            name: 'cpu-scaling'
-            custom: {
-              type: 'cpu'
-              metadata: {
-                type: 'Utilization'
-                value: '70'
-              }
-            }
-          }
-          {
-            name: 'memory-scaling'
-            custom: {
-              type: 'memory'
-              metadata: {
-                type: 'Utilization'
-                value: '80'
-              }
-            }
-          }
-        ]
-      }
-    }
-  }
-}
+if __name__ == "__main__":
+    ResponsesHostServer(agent).run()      # POST /responses
 ```
 
-#### **Docker Configuration**
+.NET:
 
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 as base
-WORKDIR /app
-EXPOSE 8080
+```csharp
+using Azure.AI.Projects;
+using Azure.AI.AgentServer.Core;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Foundry.Hosting;
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 as build
-WORKDIR /src
-COPY ["AgentFramework.csproj", "./"]
-RUN dotnet restore "AgentFramework.csproj"
-COPY . .
-RUN dotnet build "AgentFramework.csproj" -c Release -o /app/build
+var projectEndpoint = new Uri(Environment.GetEnvironmentVariable("FOUNDRY_PROJECT_ENDPOINT")!);
 
-FROM build as publish
-RUN dotnet publish "AgentFramework.csproj" -c Release -o /app/publish
+AIAgent agent = new AIProjectClient(projectEndpoint, new DefaultAzureCredential())
+    .AsAIAgent(
+        model: Environment.GetEnvironmentVariable("FOUNDRY_MODEL") ?? "%%model=openai%%",
+        instructions: "You are a helpful assistant.",
+        name: "my-agent");
 
-FROM base as final
-WORKDIR /app
-COPY --from=publish /app/publish .
+var builder = AgentHost.CreateBuilder(args);
+builder.Services.AddFoundryResponses(agent);
+builder.RegisterProtocol("responses", endpoints => endpoints.MapFoundryResponses());
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8080/health/live || exit 1
-
-ENTRYPOINT ["dotnet", "AgentFramework.dll"]
+var app = builder.Build();
+app.Run();
 ```
 
-#### **Azure CLI Deployment**
+### Durable agents on Azure Functions
 
-```bash
-#!/bin/bash
+Python (`function_app.py`):
 
-# Variables
-RESOURCE_GROUP="rg-agent-framework"
-CONTAINER_APP_NAME="agent-framework-app"
-CONTAINER_APP_ENV="agent-env"
-IMAGE_URI="your-registry.azurecr.io/agent-framework:latest"
+```python
+import os
 
-# Create resource group
-az group create \
-  --name $RESOURCE_GROUP \
-  --location eastus
+from agent_framework import Agent
+from agent_framework.azure import AgentFunctionApp
+from agent_framework.foundry import FoundryChatClient
+from azure.identity import DefaultAzureCredential
 
-# Create container app environment
-az containerapp env create \
-  --name $CONTAINER_APP_ENV \
-  --resource-group $RESOURCE_GROUP \
-  --location eastus
+writer = Agent(
+    client=FoundryChatClient(
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ["FOUNDRY_MODEL"],
+        credential=DefaultAzureCredential(),
+    ),
+    name="DocumentPublisher",
+    instructions="You write well-structured documents on a given topic.",
+)
 
-# Create container app
-az containerapp create \
-  --name $CONTAINER_APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --environment $CONTAINER_APP_ENV \
-  --image $IMAGE_URI \
-  --target-port 8080 \
-  --ingress 'external' \
-  --min-replicas 3 \
-  --max-replicas 10 \
-  --cpu 1.0 \
-  --memory 2Gi \
-  --set-env-vars \
-    AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT \
-    ENVIRONMENT=production
-
-# Configure scaling rules
-az containerapp update \
-  --name $CONTAINER_APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --yaml - <<EOF
-apiVersion: apps/core.io/v1alpha1
-kind: ContainerApp
-metadata:
-  name: $CONTAINER_APP_NAME
-  namespace: $RESOURCE_GROUP
-spec:
-  template:
-    scale:
-      minReplicas: 3
-      maxReplicas: 10
-      rules:
-      - name: cpu-scaling
-        custom:
-          query: cpu
-          metadata:
-            type: Utilization
-            value: '70'
-      - name: http-scaling
-        http:
-          metadata:
-            concurrentRequests: '100'
-EOF
+app = AgentFunctionApp(agents=[writer])   # the Functions entry point (function_app.py)
 ```
 
-### Kubernetes Deployment
+.NET:
 
-#### **Helm Chart Values**
+```csharp
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting.AzureFunctions;
+using Microsoft.Azure.Functions.Worker.Builder;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Hosting;
 
-```yaml
-# helm values for Agent Framework
-replicaCount: 3
+AIAgent agent = new AzureOpenAIClient(
+        new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+        new DefaultAzureCredential())
+    .GetChatClient(Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "%%model=openai-small%%")
+    .AsIChatClient()
+    .AsAIAgent(instructions: "You write well-structured documents on a given topic.", name: "DocumentPublisher");
 
-image:
-  repository: your-registry.azurecr.io/agent-framework
-  pullPolicy: IfNotPresent
-  tag: "1.0.0"
+using IHost app = FunctionsApplication
+    .CreateBuilder(args)
+    .ConfigureFunctionsWebApplication()
+    .ConfigureDurableAgents(options => options.AddAIAgent(agent))
+    .Build();
 
-imagePullSecrets:
-  - name: acr-secret
-
-service:
-  type: LoadBalancer
-  port: 80
-  targetPort: 8080
-
-ingress:
-  enabled: true
-  className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/rate-limit: "100"
-  hosts:
-    - host: agent-framework.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: agent-framework-tls
-      hosts:
-        - agent-framework.example.com
-
-resources:
-  requests:
-    memory: "2Gi"
-    cpu: "1000m"
-  limits:
-    memory: "4Gi"
-    cpu: "2000m"
-
-autoscaling:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 10
-  targetCPUUtilisationPercentage: 70
-  targetMemoryUtilisationPercentage: 80
-
-healthChecks:
-  liveness:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-  readiness:
-    enabled: true
-    initialDelaySeconds: 10
-    periodSeconds: 5
-
-env:
-  - name: AZURE_OPENAI_ENDPOINT
-    valueFrom:
-      secretKeyRef:
-        name: agent-secrets
-        key: azure-openai-endpoint
-  - name: COSMOS_CONNECTION
-    valueFrom:
-      secretKeyRef:
-        name: agent-secrets
-        key: cosmos-connection
-
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-                  - agent-framework
-          topologyKey: kubernetes.io/hostname
+app.Run();
 ```
 
-#### **Kubernetes Manifest**
+In both, each agent becomes a durable entity with its own HTTP endpoint, and conversation state lives in Durable Functions storage. Workflows can be hosted as durable orchestrations (`AgentFunctionApp(workflow=...)` in Python, `ConfigureDurableWorkflows` in .NET), so a `request_info` / request-port pause can last as long as the person needs.
 
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: agent-framework
+### Your own service
 
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: agent-config
-  namespace: agent-framework
-data:
-  config.json: |
-    {
-      "environment": "production",
-      "logging": {
-        "level": "Information",
-        "format": "json"
-      }
-    }
+- One agent per role per process, built at start-up; one session per conversation.
+- A shared session or history store (Cosmos DB or Redis) once you run more than one replica.
+- Liveness probes that don't call the model.
+- Timeouts around workflow runs and a cap on concurrent model calls (below).
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: agent-secrets
-  namespace: agent-framework
-type: Opaque
-stringData:
-  azure-openai-endpoint: https://your-resource.openai.azure.com
-  cosmos-connection: AccountEndpoint=https://...;AccountKey=...
+## Prompt-injection defence
 
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: agent-framework
-  namespace: agent-framework
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: agent-framework
-  template:
-    metadata:
-      labels:
-        app: agent-framework
-    spec:
-      serviceAccountName: agent-framework
-      containers:
-      - name: agent-framework
-        image: your-registry.azurecr.io/agent-framework:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
-          name: http
-        env:
-        - name: AZURE_OPENAI_ENDPOINT
-          valueFrom:
-            secretKeyRef:
-              name: agent-secrets
-              key: azure-openai-endpoint
-        resources:
-          requests:
-            memory: "2Gi"
-            cpu: "1000m"
-          limits:
-            memory: "4Gi"
-            cpu: "2000m"
-        livenessProbe:
-          httpGet:
-            path: /health/live
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
+Untrusted text reaches the model through user input, retrieved documents, tool results and MCP servers. Layer the defences:
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: agent-framework-service
-  namespace: agent-framework
-spec:
-  type: LoadBalancer
-  selector:
-    app: agent-framework
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8080
+1. **Human approval for consequential tools.** Python: `@tool(approval_mode="always_require")`. .NET: wrap the function in `ApprovalRequiredAIFunction`. The run stops with an approval request and resumes when you answer on the same session.
+2. **Information-flow control (Python, experimental).** FIDES (`agent_framework.security.SecureAgentConfig`) labels tool output as trusted or untrusted, hides untrusted content behind variable references, and blocks privileged tools, or asks for approval, once untrusted data is in context. See the [Python comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides). There is no .NET equivalent.
+3. **Prompt Shields.** Azure AI Content Safety's [Prompt Shields](https://learn.microsoft.com/azure/ai-services/content-safety/concepts/jailbreak-detection) API detects jailbreaks and indirect injection in prompts and documents; call it from agent middleware, following the content-safety middleware on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#azure-ai-content-safety-integration).
+4. **Least privilege.** Scope each tool's credentials to what it needs; never put secrets or other users' data in instructions.
 
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: agent-framework-hpa
-  namespace: agent-framework
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: agent-framework
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilisation
-        averageUtilisation: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilisation
-        averageUtilisation: 80
-```
+## Evaluation in CI
+
+Both SDKs ship a local evaluator whose checks are plain functions, so a quality gate runs as an ordinary unit test:
+
+- Python: `evaluate_agent(agent=..., queries=[...], evaluators=LocalEvaluator(keyword_check(...), tool_called_check(...)))`, then `result.assert_no_failed_items()` ([evaluation page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/)).
+- .NET: `agent.EvaluateAsync(queries, new LocalEvaluator(EvalChecks.KeywordCheck(...), ...))`, then `results.AssertAllPassed()` ([.NET guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#evaluation)).
+
+Keep the pull-request gate deterministic and cheap; run model-graded and Foundry evaluators nightly against recorded production conversations, and alert on regressions.
 
 ---
 

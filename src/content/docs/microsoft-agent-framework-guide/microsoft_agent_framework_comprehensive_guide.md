@@ -1,7 +1,9 @@
 ---
-title: "Microsoft Agent Framework Comprehensive Guide"
+title: "Microsoft Agent Framework — Concepts and Architecture"
 description: "Language-neutral overview of the Microsoft Agent Framework — architecture, packages, authentication, simple agents, tools, execution models, testing and multi-agent systems — with verified Python and C# side by side."
 framework: "microsoft-agent-framework"
+sidebar:
+  label: "Concepts"
 ---
 
 **Current releases:** `agent-framework` %%version=agent-framework%% (Python) · `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET) — the two version independently. Reviewed %%versions-checked%%: every Python example was import- and signature-checked (and the agent logic run against a stub chat client), and every C# example compiled, against those releases.
@@ -139,10 +141,10 @@ The [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework
 ```bash
 # .env
 FOUNDRY_PROJECT_ENDPOINT=https://your-resource.services.ai.azure.com/api/projects/your-project
-FOUNDRY_MODEL=gpt-4o-mini
+FOUNDRY_MODEL=%%model=openai-small%%
 # or, for OpenAI / Azure OpenAI with OpenAIChatClient:
 OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=%%model=openai-small%%
 ```
 
 **.NET** uses the standard configuration system and DI:

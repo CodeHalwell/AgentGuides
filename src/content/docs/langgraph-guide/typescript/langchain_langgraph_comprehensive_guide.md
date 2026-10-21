@@ -52,7 +52,7 @@ cd my-langchain-project
 npm init -y
 
 # Install TypeScript and necessary tooling
-npm install --save-dev typescript @types/node ts-node
+npm install --save-dev typescript @types/node tsx
 
 # Initialise TypeScript configuration
 npx tsc --init
@@ -65,10 +65,10 @@ Create or update your `tsconfig.json` with appropriate settings for modern TypeS
 ```json
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "ES2022",
     "module": "ESNext",
-    "lib": ["ES2020"],
-    "moduleResolution": "node",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -85,6 +85,8 @@ Create or update your `tsconfig.json` with appropriate settings for modern TypeS
 }
 ```
 
+Add `"type": "module"` to `package.json` so top-level `await` works, and run files with `npx tsx src/index.ts`. Every TypeScript example in this guide type-checks with these settings (`strict` on).
+
 #### Step 3: Install Core Packages
 
 ```bash
@@ -93,9 +95,6 @@ npm install @langchain/langgraph@%%version=@langchain/langgraph%% @langchain/cor
 
 # LangChain.js v1: createAgent, tool(), middleware
 npm install langchain
-
-# Community integrations (optional)
-npm install @langchain/community
 
 # Popular LLM provider integrations
 npm install @langchain/openai
@@ -113,7 +112,7 @@ Create a `.env` file in your project root:
 ```env
 # OpenAI Configuration
 OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=%%model=openai%%
 
 # Anthropic Configuration
 ANTHROPIC_API_KEY=sk-ant-your-api-key-here
@@ -291,15 +290,13 @@ const MathState = Annotation.Root({
 });
 
 // LangGraph.js workflow using LangChain.js components
-const graph = new StateGraph(MathState);
-
-graph.addNode('solve', async (state) => {
-  // Use the LangChain.js model and tools here; return only what changed
-  return { steps: ['Solving: ' + state.problem] };
-});
-
-graph.addEdge(START, 'solve');
-graph.addEdge('solve', END);
+const graph = new StateGraph(MathState)
+  .addNode('solve', async (state) => {
+    // Use the LangChain.js model and tools here; return only what changed
+    return { steps: ['Solving: ' + state.problem] };
+  })
+  .addEdge(START, 'solve')
+  .addEdge('solve', END);
 
 const workflow = graph.compile();
 ```
@@ -327,7 +324,7 @@ const openaiModel = new ChatOpenAI({
 // Anthropic ChatModel
 const anthropicModel = new ChatAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-sonnet-5-5', // newer Claude models reject non-default sampling params, so no temperature
+  model: '%%model=anthropic%%', // newer Claude models reject non-default sampling params, so no temperature
 });
 
 // Invoke with message array
@@ -531,28 +528,25 @@ const StateAnnotation = Annotation.Root({
 });
 
 // Create graph with type-safe state
-const graph = new StateGraph(StateAnnotation);
-
-// Define nodes as TypeScript functions. Return only the keys that change:
-// intermediateSteps has a concat reducer, so returning the whole array would duplicate it.
-graph.addNode('validateInput', (state) => {
-  if (state.input.length === 0) {
-    return { output: 'Error: empty input' };
-  }
-  return { intermediateSteps: ['Input validated'] };
-});
-
-graph.addNode('processData', (state) => {
-  return {
-    intermediateSteps: ['Data processed'],
-    output: state.input.toUpperCase(),
-  };
-});
-
-// Connect nodes with edges
-graph.addEdge(START, 'validateInput');
-graph.addEdge('validateInput', 'processData');
-graph.addEdge('processData', END);
+const graph = new StateGraph(StateAnnotation)
+  // Define nodes as TypeScript functions. Return only the keys that change:
+  // intermediateSteps has a concat reducer, so returning the whole array would duplicate it.
+  .addNode('validateInput', (state) => {
+    if (state.input.length === 0) {
+      return { output: 'Error: empty input' };
+    }
+    return { intermediateSteps: ['Input validated'] };
+  })
+  .addNode('processData', (state) => {
+    return {
+      intermediateSteps: ['Data processed'],
+      output: state.input.toUpperCase(),
+    };
+  })
+  // Connect nodes with edges
+  .addEdge(START, 'validateInput')
+  .addEdge('validateInput', 'processData')
+  .addEdge('processData', END);
 
 // Compile and execute
 const runnable = graph.compile();
@@ -1483,25 +1477,28 @@ const longRunningTool = tool(
 );
 ```
 
-### LangChain Community Tools
+### Third-party tools
+
+`@langchain/community` is deprecated on npm, so this guide does not use it. Wrap the service you need with `tool()`, or use the provider's own package (for example `@langchain/tavily` for web search, or a provider's built-in server-side tools passed in `tools`):
 
 ```typescript
-// Using tools from @langchain/community (npm install @langchain/community)
-import { SerpAPI } from '@langchain/community/tools/serpapi';
-import { Calculator } from '@langchain/community/tools/calculator';
-import { createAgent } from 'langchain';
+import { tool } from '@langchain/core/tools';
+import { z } from 'zod';
 
-// SerpAPI for web search
-const searchTool = new SerpAPI(process.env.SERPAPI_API_KEY);
+const calculator = tool(
+  async ({ expression }) => {
+    // Accept only digits, whitespace and arithmetic operators before evaluating
+    if (!/^[\d\s+\-*/().]+$/.test(expression)) return 'Unsupported expression';
+    return String(Function(`"use strict"; return (${expression})`)());
+  },
+  {
+    name: 'calculator',
+    description: 'Evaluate an arithmetic expression such as "2 * (3 + 4)".',
+    schema: z.object({ expression: z.string() }),
+  },
+);
 
-// Calculator tool
-const calculatorTool = new Calculator();
-
-// Integrate into agent
-const agent = createAgent({
-  model,
-  tools: [searchTool, calculatorTool],
-});
+console.log(await calculator.invoke({ expression: '2 * (3 + 4)' }));   // 14
 ```
 
 ### Integration with External APIs
@@ -1779,37 +1776,33 @@ const WorkflowStateAnnotation = Annotation.Root({
 
 type WorkflowState = typeof WorkflowStateAnnotation.State;
 
-const graph = new StateGraph(WorkflowStateAnnotation);
-
-// Add processing nodes
-graph.addNode('preprocess', async (state: WorkflowState) => {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  return {
-    steps: ['Preprocessing completed'],
-    metadata: { preprocessed: true },
-  };
-});
-
-graph.addNode('analyze', async (state: WorkflowState) => {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  return {
-    steps: ['Analysis completed'],
-    metadata: { ...state.metadata, analyzed: true },
-  };
-});
-
-graph.addNode('generate', async (state: WorkflowState) => {
-  await new Promise((resolve) => setTimeout(resolve, 100));
-  return {
-    output: `Processed: ${state.input}`,
-    steps: ['Generation completed'],
-  };
-});
-
-graph.addEdge(START, 'preprocess');
-graph.addEdge('preprocess', 'analyze');
-graph.addEdge('analyze', 'generate');
-graph.addEdge('generate', END);
+const graph = new StateGraph(WorkflowStateAnnotation)
+  // Add processing nodes
+  .addNode('preprocess', async (state: WorkflowState) => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return {
+      steps: ['Preprocessing completed'],
+      metadata: { preprocessed: true },
+    };
+  })
+  .addNode('analyze', async (state: WorkflowState) => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return {
+      steps: ['Analysis completed'],
+      metadata: { ...state.metadata, analyzed: true },
+    };
+  })
+  .addNode('generate', async (state: WorkflowState) => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return {
+      output: `Processed: ${state.input}`,
+      steps: ['Generation completed'],
+    };
+  })
+  .addEdge(START, 'preprocess')
+  .addEdge('preprocess', 'analyze')
+  .addEdge('analyze', 'generate')
+  .addEdge('generate', END);
 
 const workflow = graph.compile();
 ```
@@ -1931,22 +1924,20 @@ const ChatStateAnnotation = Annotation.Root({
   }),
 });
 
-const chatGraph = new StateGraph(ChatStateAnnotation);
-
-chatGraph.addNode('chatbot', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const response = await model.invoke(state.messages);
-
-  return {
-    messages: [response],
-  };
-});
-
-chatGraph.addEdge(START, 'chatbot');
-chatGraph.addEdge('chatbot', END);
+const chatGraph = new StateGraph(ChatStateAnnotation)
+  .addNode('chatbot', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const response = await model.invoke(state.messages);
+  
+    return {
+      messages: [response],
+    };
+  })
+  .addEdge(START, 'chatbot')
+  .addEdge('chatbot', END);
 
 const chatWorkflow = chatGraph.compile();
 
@@ -2094,34 +2085,31 @@ const CustomStateAnnotation = Annotation.Root({
   }),
 });
 
-const customGraph = new StateGraph(CustomStateAnnotation);
-
-customGraph.addNode('validate', async (state) => {
-  return {
-    processingStages: [{
-      stage: 'validation',
-      status: 'complete' as const,
-      timestamp: Date.now(),
-    }],
-  };
-});
-
-customGraph.addNode('process', async (state) => {
-  return {
-    processingStages: [{
-      stage: 'processing',
-      status: 'complete' as const,
-      timestamp: Date.now(),
-    }],
-    results: {
-      processedData: 'Processed successfully',
-    },
-  };
-});
-
-customGraph.addEdge(START, 'validate');
-customGraph.addEdge('validate', 'process');
-customGraph.addEdge('process', END);
+const customGraph = new StateGraph(CustomStateAnnotation)
+  .addNode('validate', async (state) => {
+    return {
+      processingStages: [{
+        stage: 'validation',
+        status: 'complete' as const,
+        timestamp: Date.now(),
+      }],
+    };
+  })
+  .addNode('process', async (state) => {
+    return {
+      processingStages: [{
+        stage: 'processing',
+        status: 'complete' as const,
+        timestamp: Date.now(),
+      }],
+      results: {
+        processedData: 'Processed successfully',
+      },
+    };
+  })
+  .addEdge(START, 'validate')
+  .addEdge('validate', 'process')
+  .addEdge('process', END);
 
 const customWorkflow = customGraph.compile();
 
@@ -2320,55 +2308,52 @@ const PipelineStateAnnotation = Annotation.Root({
   finalOutput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const pipelineGraph = new StateGraph(PipelineStateAnnotation);
-
-// Traditional approach: manually adding nodes and edges
-pipelineGraph.addNode('stage1', (state) => ({
-  stage1Result: `Stage1: ${state.input}`,
-}));
-pipelineGraph.addNode('stage2', (state) => ({
-  stage2Result: `Stage2: ${state.stage1Result}`,
-}));
-pipelineGraph.addNode('stage3', (state) => ({
-  stage3Result: `Stage3: ${state.stage2Result}`,
-}));
-pipelineGraph.addEdge(START, 'stage1');
-pipelineGraph.addEdge('stage1', 'stage2');
-pipelineGraph.addEdge('stage2', 'stage3');
-pipelineGraph.addEdge('stage3', END);
+const pipelineGraph = new StateGraph(PipelineStateAnnotation)
+  // Traditional approach: manually adding nodes and edges
+  .addNode('stage1', (state) => ({
+    stage1Result: `Stage1: ${state.input}`,
+  }))
+  .addNode('stage2', (state) => ({
+    stage2Result: `Stage2: ${state.stage1Result}`,
+  }))
+  .addNode('stage3', (state) => ({
+    stage3Result: `Stage3: ${state.stage2Result}`,
+  }))
+  .addEdge(START, 'stage1')
+  .addEdge('stage1', 'stage2')
+  .addEdge('stage2', 'stage3')
+  .addEdge('stage3', END);
 
 // New .addSequence() approach (much cleaner)
-const sequenceGraph = new StateGraph(PipelineStateAnnotation);
-
-sequenceGraph.addSequence([
-  [
-    'stage1',
-    (state) => ({
-      stage1Result: `Stage1: ${state.input}`,
-    }),
-  ],
-  [
-    'stage2',
-    (state) => ({
-      stage2Result: `Stage2: ${state.stage1Result}`,
-    }),
-  ],
-  [
-    'stage3',
-    (state) => ({
-      stage3Result: `Stage3: ${state.stage2Result}`,
-    }),
-  ],
-  [
-    'finalize',
-    (state) => ({
-      finalOutput: state.stage3Result,
-    }),
-  ],
-]);
-
-sequenceGraph.addEdge(START, 'stage1');
-sequenceGraph.addEdge('finalize', END);
+const sequenceGraph = new StateGraph(PipelineStateAnnotation)
+  .addSequence([
+    [
+      'stage1',
+      (state) => ({
+        stage1Result: `Stage1: ${state.input}`,
+      }),
+    ],
+    [
+      'stage2',
+      (state) => ({
+        stage2Result: `Stage2: ${state.stage1Result}`,
+      }),
+    ],
+    [
+      'stage3',
+      (state) => ({
+        stage3Result: `Stage3: ${state.stage2Result}`,
+      }),
+    ],
+    [
+      'finalize',
+      (state) => ({
+        finalOutput: state.stage3Result,
+      }),
+    ],
+  ])
+  .addEdge(START, 'stage1')
+  .addEdge('finalize', END);
 
 const sequenceWorkflow = sequenceGraph.compile();
 ```
@@ -3261,10 +3246,9 @@ const MultiStageAnnotation = Annotation.Root({
   finalResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const multiStageGraph = new StateGraph(MultiStageAnnotation);
-
-// Router node (no state update)
-multiStageGraph.addNode('router', () => ({}));
+const multiStageGraph = new StateGraph(MultiStageAnnotation)
+  // Router node (no state update)
+  .addNode('router', () => ({}));
 
 // Parallel paths
 multiStageGraph
@@ -3795,24 +3779,22 @@ const ChatStateAnnotation = Annotation.Root({
   response: Annotation<any>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const chatGraph = new StateGraph(ChatStateAnnotation);
-
-chatGraph.addNode('chat', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  // Transform messages through pipeline
-  const transformedMessages = await pipeline.transform(state.messages);
-
-  // Invoke model with transformed messages
-  const response = await model.invoke(transformedMessages);
-
-  return { response };
-});
-
-chatGraph.addEdge(START, 'chat');
-chatGraph.addEdge('chat', END);
+const chatGraph = new StateGraph(ChatStateAnnotation)
+  .addNode('chat', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    // Transform messages through pipeline
+    const transformedMessages = await pipeline.transform(state.messages);
+  
+    // Invoke model with transformed messages
+    const response = await model.invoke(transformedMessages);
+  
+    return { response };
+  })
+  .addEdge(START, 'chat')
+  .addEdge('chat', END);
 
 const chatWorkflow = chatGraph.compile();
 ```
@@ -4301,56 +4283,52 @@ const ConversationStateAnnotation = Annotation.Root({
   response: Annotation<any>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const conversationGraph = new StateGraph(ConversationStateAnnotation);
-
-// Load user context from cross-thread memory
-conversationGraph.addNode('loadContext', async (state) => {
-  const context = crossThreadMemory.getContextForThread(
-    state.userId,
-    state.threadId
-  );
-
-  return { userContext: context };
-});
-
-// Process with context
-conversationGraph.addNode('processWithContext', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const systemMessage = {
-    role: 'system',
-    content: `You are a helpful assistant. Here is what we know about the user:\n\n${state.userContext}`,
-  };
-
-  const messages = [systemMessage, ...state.messages];
-  const response = await model.invoke(messages);
-
-  return { response };
-});
-
-// Extract and save learnings
-conversationGraph.addNode('saveLearnings', async (state) => {
-  // Extract user preferences from conversation
-  const responseText =
-    typeof state.response?.content === 'string' ? state.response.content : '';
-
-  // Simple preference extraction (in production, use a model for this)
-  if (responseText.toLowerCase().includes('prefer')) {
-    crossThreadMemory.addFact(
+const conversationGraph = new StateGraph(ConversationStateAnnotation)
+  // Load user context from cross-thread memory
+  .addNode('loadContext', async (state) => {
+    const context = crossThreadMemory.getContextForThread(
       state.userId,
-      `Expressed preference in conversation ${state.threadId}`
+      state.threadId
     );
-  }
-
-  return {}; // no state change (returning `state` would re-append messages via the reducer)
-});
-
-conversationGraph.addEdge(START, 'loadContext');
-conversationGraph.addEdge('loadContext', 'processWithContext');
-conversationGraph.addEdge('processWithContext', 'saveLearnings');
-conversationGraph.addEdge('saveLearnings', END);
+  
+    return { userContext: context };
+  })
+  // Process with context
+  .addNode('processWithContext', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const systemMessage = {
+      role: 'system',
+      content: `You are a helpful assistant. Here is what we know about the user:\n\n${state.userContext}`,
+    };
+  
+    const messages = [systemMessage, ...state.messages];
+    const response = await model.invoke(messages);
+  
+    return { response };
+  })
+  // Extract and save learnings
+  .addNode('saveLearnings', async (state) => {
+    // Extract user preferences from conversation
+    const responseText =
+      typeof state.response?.content === 'string' ? state.response.content : '';
+  
+    // Simple preference extraction (in production, use a model for this)
+    if (responseText.toLowerCase().includes('prefer')) {
+      crossThreadMemory.addFact(
+        state.userId,
+        `Expressed preference in conversation ${state.threadId}`
+      );
+    }
+  
+    return {}; // no state change (returning `state` would re-append messages via the reducer)
+  })
+  .addEdge(START, 'loadContext')
+  .addEdge('loadContext', 'processWithContext')
+  .addEdge('processWithContext', 'saveLearnings')
+  .addEdge('saveLearnings', END);
 
 const conversationWorkflow = conversationGraph.compile();
 

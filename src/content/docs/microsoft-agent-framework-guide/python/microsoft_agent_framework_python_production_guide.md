@@ -111,7 +111,7 @@ Treat tool output, retrieved documents and MCP results as untrusted. Agent Frame
    ```
 
    Constructor options and the MCP proxy are in the [comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides).
-3. **Content filtering.** Azure AI Content Safety Prompt Shields and Microsoft Purview policies run as middleware; both are shown on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/).
+3. **Content filtering.** Azure AI Content Safety (text moderation, and [Prompt Shields](https://learn.microsoft.com/azure/ai-services/content-safety/concepts/jailbreak-detection) for jailbreak and indirect-injection detection) and Microsoft Purview policies run as agent middleware; the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#azure-ai-content-safety-integration) shows the middleware pattern and the Purview integration.
 
 ## 5. Evaluation in CI
 

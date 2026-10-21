@@ -71,7 +71,7 @@ async def content_pipeline(topic: str) -> str: ...
 
 Decorator and build signatures:
 
-```python
+```text
 workflow(
     func=None,
     *,
@@ -290,14 +290,14 @@ async def stateful_pipeline(items: list[str], ctx: RunContext) -> str:
 
 State survives checkpoints — `get_state` / `set_state` values are persisted when a checkpoint is taken.
 
-> **Reserved key prefix.** Keys that start with `_` are reserved for framework bookkeeping (e.g. `_step_cache`, `_original_message`). Passing one to `set_state` raises `ValueError` immediately:
->
-> ```python
-> ctx.set_state("_my_key", value)  # ValueError: State key '_my_key' starts with '_' ...
-> ctx.set_state("my_key", value)   # ✓ correct
-> ```
->
-> Values stored under user keys must be JSON-serialisable when checkpoint storage is configured.
+**Reserved key prefix.** Keys that start with `_` are reserved for framework bookkeeping (e.g. `_step_cache`, `_original_message`). Passing one to `set_state` raises `ValueError` immediately:
+
+```python
+ctx.set_state("_my_key", value)  # ValueError: State key '_my_key' starts with '_' ...
+ctx.set_state("my_key", value)   # correct
+```
+
+Values stored under user keys must be JSON-serialisable when checkpoint storage is configured.
 
 ### `get_run_context()` — accessing RunContext from nested helpers
 
@@ -494,7 +494,7 @@ for e in result:
 
 ### `run()` parameters
 
-```python
+```text
 FunctionalWorkflow.run(
     message,                                      # workflow input (first arg of your function)
     *,

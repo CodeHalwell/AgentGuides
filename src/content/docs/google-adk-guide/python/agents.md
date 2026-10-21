@@ -799,27 +799,27 @@ Source: `planners/built_in_planner.py`.
 ```python
 from google.adk.planners import BuiltInPlanner
 from google.adk.agents import LlmAgent
+from google.adk.tools import google_search
 from google.genai import types
 
-# ── Minimal — enable thinking, no token budget ────────────────────────────────
+# ── Minimal — return the model's thoughts ─────────────────────────────────────
 agent = LlmAgent(
     name="thoughtful",
     model="%%model=gemini-flagship%%",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(include_thoughts=True)
     ),
-    tools=[...],
 )
 
-# ── Cap thinking tokens (reduces latency / cost) ──────────────────────────────
-agent_capped = LlmAgent(
-    name="budgeted",
+# ── Less thinking (reduces latency / cost) ────────────────────────────────────
+agent_light = LlmAgent(
+    name="light_thinker",
     model="%%model=gemini%%",
     instruction="Research and summarise the topic.",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(
             include_thoughts=True,
-            thinking_budget=4096,   # max thinking tokens; 0 disables thinking
+            thinking_level=types.ThinkingLevel.LOW,   # Gemini 3; older models used thinking_budget
         )
     ),
     tools=[google_search],

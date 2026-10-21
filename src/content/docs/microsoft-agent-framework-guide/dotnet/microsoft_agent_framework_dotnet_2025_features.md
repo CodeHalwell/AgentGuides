@@ -1,8 +1,10 @@
 ---
-title: "Microsoft Agent Framework - .NET Feature Tour"
+title: "Microsoft Agent Framework (.NET) — Feature Tour"
 description: "Tour of the .NET A2A, workflow, checkpointing, human-in-the-loop, declarative agent, OpenTelemetry, content-safety and dependency-injection features, with compiled examples."
 framework: "microsoft-agent-framework"
 language: "dotnet"
+sidebar:
+  label: "Feature tour"
 ---
 
 **First written:** November 2025, for the October 2025 public preview

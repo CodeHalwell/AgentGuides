@@ -1,6 +1,6 @@
 ---
 title: "RemoteGraph — API reference"
-description: "Call a deployed LangGraph Platform graph as if it were a local CompiledStateGraph — same invoke/stream/get_state surface, works as a subgraph node, supports interrupt/resume and state inspection."
+description: "Call a deployed LangGraph graph (LangSmith Deployment or Agent Server) as if it were a local CompiledStateGraph — same invoke/stream/get_state surface, works as a subgraph node, supports interrupt/resume and state inspection."
 framework: "langgraph"
 language: "python"
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 Verified against **`langgraph==%%version=langgraph%%`** / **`langgraph-sdk==%%version=langgraph-sdk%%`** (module: `langgraph.pregel.remote`).
 
-`RemoteGraph` is a drop-in replacement for a compiled `StateGraph` that calls a **LangGraph Platform deployment** (LangSmith, self-hosted server, or any API that speaks the LangGraph Server spec) over HTTP. It exposes the same `invoke`, `stream`, `get_state`, `update_state`, `get_state_history` surface as a local graph, so you can swap a local graph for a remote one without changing the calling code.
+`RemoteGraph` is a drop-in replacement for a compiled `StateGraph` that calls a graph running in the **LangGraph Agent Server** (a LangSmith Deployment, a standalone server, or `langgraph dev`) (LangSmith, self-hosted server, or any API that speaks the LangGraph Server spec) over HTTP. It exposes the same `invoke`, `stream`, `get_state`, `update_state`, `get_state_history` surface as a local graph, so you can swap a local graph for a remote one without changing the calling code.
 
 `RemoteGraph` is also a valid LangGraph **node**: you can add it to a parent `StateGraph` with `add_node(remote_graph)`, enabling local-remote hybrid architectures.
 

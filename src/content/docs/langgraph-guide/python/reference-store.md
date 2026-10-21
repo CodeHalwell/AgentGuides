@@ -818,7 +818,7 @@ Supported path selector syntax (from `PutOp.index` source):
 - **Namespace rules.** Each segment must be a non-empty string and must not contain `"."`. `("", "x")` raises `InvalidNamespaceError`. The root segment `"langgraph"` is reserved and also raises.
 - **`query=` is ignored without an index.** You will get filter-only results without any warning — always assert `store` was built with `index=IndexConfig(...)` when you rely on semantic search.
 - **`fields=["$"]`** means the entire value is stringified and embedded. Pick explicit fields for better recall and smaller embedding costs.
-- **`InMemoryStore` is not Platform-safe.** LangGraph Platform provides a managed store — don't pass one when deploying there.
+- **Don't pass a store when deploying to the Agent Server.** LangSmith Deployment and `langgraph dev`/`up` provide a managed store.
 - **TTL is in minutes, not seconds.** `ttl=30` means 30 minutes, not 30 seconds.
 - **`store.search` returns `list[SearchItem]`, not an iterator.** Always bounded by `limit` (default 10). Paginate with `offset`.
 - **`delete` uses `PutOp(...value=None)` internally.** If you subclass `BaseStore`, `PutOp.value is None` is the delete signal.

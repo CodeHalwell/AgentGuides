@@ -109,7 +109,7 @@ from langgraph.graph.message import add_messages
 class ChatState(TypedDict):
     messages: Annotated[list, add_messages]
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 def call_model(state: ChatState) -> dict:
     response = model.invoke(state["messages"])
@@ -526,7 +526,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 class ChatState(TypedDict):
     messages: Annotated[list, add_messages]
 
-model = ChatAnthropic(model="claude-sonnet-5-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 def call_model(state: ChatState) -> dict:
     return {"messages": [model.invoke(state["messages"])]}
