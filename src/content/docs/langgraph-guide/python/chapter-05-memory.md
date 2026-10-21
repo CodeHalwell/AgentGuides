@@ -73,7 +73,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 
 conn_str = "postgresql://user:password@localhost/langgraph_db"
 
-# Sync — run setup_tables() once before first use
+# Sync — run setup() once before first use
 with PostgresSaver.from_conn_string(conn_str) as checkpointer:
     checkpointer.setup()
     graph = builder.compile(checkpointer=checkpointer)
@@ -519,17 +519,26 @@ async def async_memory_node(state: AppState, runtime: Runtime[AppContext]) -> di
 
 ## Store TTL (Time to Live)
 
-Some store implementations support TTL per item. With `InMemoryStore`, pass `ttl=` (in minutes) per put operation:
+`InMemoryStore` does not support TTL: `store.supports_ttl` is `False`, and `put(..., ttl=...)` raises `NotImplementedError`. Use `PostgresStore` (or `AsyncPostgresStore`) from `langgraph-checkpoint-postgres`, configure a default TTL in **minutes**, and start the background sweeper that deletes expired items:
 
 ```python
-# Data expires after 60 minutes
-store.put(("sessions",), "token_xyz", {"data": "..."}, ttl=60)
+from langgraph.store.postgres import PostgresStore
 
-# Check if a store supports TTL
-print(store.supports_ttl)   # True for InMemoryStore (with index or explicit ttl_config)
+DB_URI = "postgresql://user:pass@localhost:5432/app"
+
+with PostgresStore.from_conn_string(
+    DB_URI,
+    ttl={"default_ttl": 60 * 24, "refresh_on_read": True, "sweep_interval_minutes": 60},
+) as store:
+    store.setup()
+    store.start_ttl_sweeper()          # background thread; store.sweep_ttl() runs one pass
+    store.put(("sessions",), "token_xyz", {"data": "..."})           # expires after the default
+    store.put(("sessions",), "short", {"data": "..."}, ttl=30)        # per-item override, minutes
+    ...
+    store.stop_ttl_sweeper()
 ```
 
-For `PostgresStore`, configure TTL at the store level and sweep expired rows with `abackground_tasks()`.
+With `refresh_on_read=True`, reading an item restarts its clock. On the LangGraph Agent Server, set `store.ttl` in `langgraph.json` instead; the server runs the sweeper ([production guide](/langgraph-guide/python/langgraph_production_guide/#project-layout-and-langgraphjson)).
 
 ---
 
@@ -543,4 +552,4 @@ For `PostgresStore`, configure TTL at the store level and sweep expired rows wit
 | History | Yes — `get_state_history()` | No |
 | Semantic search | No | Yes (with `index=` config) |
 | Cross-thread | No | Yes |
-| Required for `interrupt()` | Yes | No |
+| Required to resume after `interrupt()` | Yes | No |

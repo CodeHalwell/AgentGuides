@@ -180,7 +180,7 @@ export const frameworks: Framework[] = [
     id: 'bedrock',
     symbol: 'Br',
     name: 'Amazon Bedrock Agents',
-    tagline: 'Multi-agent collaboration GA, AgentCore, AWS-native.',
+    tagline: 'AgentCore Runtime and Harness, Strands, AWS-native.',
     href: '/amazon-bedrock-agents-guide/',
     languages: ['Python', 'TypeScript'],
     category: 'Cloud-Native',

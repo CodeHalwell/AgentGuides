@@ -195,7 +195,7 @@ async def files_agent(model_client) -> None:
         print(result.messages[-1].content)
 ```
 
-`StreamableHttpServerParams` and `SseServerParams` connect to remote servers. Only connect to MCP servers you trust. Remember the `mcp<2` pin above.
+The stdio subprocess gets a minimal environment; pass `env=dict(os.environ)` (or just the variables it needs) to `StdioServerParams` if `npx` has to reach a registry through a proxy. `StreamableHttpServerParams` and `SseServerParams` connect to remote servers. Only connect to MCP servers you trust. Remember the `mcp<2` pin above.
 
 ## Saving and restoring state
 

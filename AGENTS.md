@@ -1,6 +1,6 @@
 # AgentGuides
 
-Astro + Starlight documentation site. Guides live in `src/content/docs/<framework>-guide/`, with `python/`, `typescript/`, `dotnet/` or `go/` subfolders where a framework has several languages. Sidebar is in `astro.config.mjs`; home-page framework cards are in `src/data/frameworks.ts`.
+Astro + Starlight documentation site. Guides live in `src/content/docs/<framework>-guide/`, with `python/`, `typescript/`, `dotnet/` or `go/` subfolders where a framework has several languages. Sidebar groups are generated from each guide's folder by `src/data/sidebar.mjs` (labels and order via frontmatter `sidebar`); home-page framework cards are in `src/data/frameworks.ts`.
 
 ## Versions: one source of truth
 

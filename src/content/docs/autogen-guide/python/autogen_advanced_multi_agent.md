@@ -127,4 +127,4 @@ def build_editor_in_chief(model_client) -> AssistantAgent:
 
 - Put a `UserProxyAgent` in the team, or stop on `HandoffTermination`, wherever a policy or low-confidence decision needs a human.
 - `ExternalTermination` lets a UI stop a running team; `CancellationToken` aborts an in-flight `run()`.
-- Approve risky tool calls: `CodeExecutorAgent(approval_func=...)` gates code execution. Run generated code in `DockerCommandLineCodeExecutor` (from `autogen_ext.code_executors.docker`), not locally.
+- Approve risky tool calls: `CodeExecutorAgent(approval_func=...)` gates code execution. Run generated code in `DockerCommandLineCodeExecutor` (from `autogen_ext.code_executors.docker`, extra `autogen-ext[docker]`), not locally.
