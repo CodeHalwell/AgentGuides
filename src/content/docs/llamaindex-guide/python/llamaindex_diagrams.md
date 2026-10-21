@@ -559,7 +559,7 @@ LLM Decomposition
 └──────────────────────────────────────────────┘
 ```
 
-`ChatMemoryBuffer` (a plain token-bounded buffer) still exists; `Memory` is the current default for agents.
+If you pass no memory, agents use a plain token-bounded `ChatMemoryBuffer`. Pass `memory=Memory.from_defaults(...)` to `run()` for the long-term blocks shown above.
 
 ---
 

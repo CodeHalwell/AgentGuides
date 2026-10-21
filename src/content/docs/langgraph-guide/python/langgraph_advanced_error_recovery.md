@@ -119,7 +119,7 @@ print(asyncio.run(graph.ainvoke({"query": "weather"})))
 # {'query': 'weather', 'result': '[fallback response]', 'error': "fetch: ConnectionError('api.example.com unreachable')"}
 ```
 
-Handlers do not catch failures from tasks that run in parallel with others in the same super-step (parallel branches or `Send` fan-out): the exception propagates and fails the run. In fan-out workers, catch exceptions inside the worker and write them to state, as in [Recipe: map-reduce with error collection](/langgraph-guide/python/langgraph_recipes/).
+Handlers do not catch failures from tasks that run in parallel with others in the same super-step (parallel branches or `Send` fan-out): the exception propagates and fails the run. In fan-out workers, catch exceptions inside the worker and write them to a state key with a list reducer (for example `errors: Annotated[list, operator.add]`).
 
 If `set_node_defaults(timeout=...)` is also set, the handler gets the timeout too and must be `async def`.
 

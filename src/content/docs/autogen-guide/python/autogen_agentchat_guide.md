@@ -44,7 +44,7 @@ async def get_weather(city: str) -> str:
 
 
 async def main() -> None:
-    model_client = OpenAIChatCompletionClient(model="%%model=openai-small%%")  # reads OPENAI_API_KEY
+    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # 0.7.5 knows models released before it; newer IDs need model_info=  # reads OPENAI_API_KEY
     agent = AssistantAgent(
         "assistant",
         model_client=model_client,
@@ -269,7 +269,7 @@ from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 
 async def main() -> None:
-    model_client = OpenAIChatCompletionClient(model="%%model=openai-small%%")
+    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # 0.7.5 knows models released before it; newer IDs need model_info=
 
     memory = ListMemory()
     await memory.add(MemoryContent(content="The user prefers metric units.", mime_type=MemoryMimeType.TEXT))

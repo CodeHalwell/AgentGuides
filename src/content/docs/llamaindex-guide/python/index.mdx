@@ -32,34 +32,42 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## Zero → Hero
 
+Numbers are the comprehensive guide's section numbers; the last two steps are separate pages.
+
 <CardGrid>
-  <LinkCard title="1 · Installation & setup" href="./llamaindex_comprehensive_guide/#1-installation-and-setup" description="Install, configure LLM + embedding · 15 min" />
-  <LinkCard title="2 · Architecture overview" href="./llamaindex_comprehensive_guide/#2-architecture-overview" description="Stack layers, core abstractions · 15 min" />
-  <LinkCard title="3 · Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts-deep-dive" description="Documents, nodes, indices, retrievers · 25 min" />
-  <LinkCard title="4 · Agent classes" href="./llamaindex_comprehensive_guide/#4-agent-classes-and-types" description="FunctionAgent, ReActAgent, CodeActAgent, AgentWorkflow · 20 min" />
-  <LinkCard title="5 · LLM & embedding config" href="./llamaindex_comprehensive_guide/#5-llm-and-embedding-configuration" description="Providers, Settings · 15 min" />
-  <LinkCard title="6 · Basic agents" href="./llamaindex_comprehensive_guide/#6-creating-basic-agents" description="First agent walkthrough · 20 min" />
-  <LinkCard title="7 · Tool integration" href="./llamaindex_comprehensive_guide/#7-tool-integration-with-agents" description="FunctionTool, QueryEngineTool · 20 min" />
-  <LinkCard title="8 · Query engine tools" href="./llamaindex_comprehensive_guide/#8-query-engine-tools" description="RAG as a tool · 20 min" />
-  <LinkCard title="9 · Context, state & memory" href="./llamaindex_comprehensive_guide/#9-context-state-and-memory" description="Multi-turn, shared state · 15 min" />
-  <LinkCard title="10 · Streaming" href="./llamaindex_comprehensive_guide/#11-streaming-responses" description="Token and event streaming · 10 min" />
-  <LinkCard title="11 · Multi-agent" href="./llamaindex_comprehensive_guide/#12-multi-agent-systems-with-agentworkflow" description="AgentWorkflow hand-off, orchestrators · 25 min" />
-  <LinkCard title="12 · Custom workflows" href="./llamaindex_comprehensive_guide/#13-custom-workflows" description="Steps, events, fan-out · 25 min" />
-  <LinkCard title="13 · Advanced agents" href="./llamaindex_advanced_agents_python/" description="Human-in-the-loop, persistence, routing · 30 min" />
-  <LinkCard title="14 · Production" href="./llamaindex_production_guide/" description="Deployment, scaling, cost · 30 min" />
+  <LinkCard title="§1 · Installation & setup" href="./llamaindex_comprehensive_guide/#1-installation-and-setup" description="Install, configure LLM + embedding · 15 min" />
+  <LinkCard title="§2 · Architecture overview" href="./llamaindex_comprehensive_guide/#2-architecture-overview" description="Stack layers, core abstractions · 15 min" />
+  <LinkCard title="§3 · Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts" description="Documents, nodes, indexes, retrievers, query engines · 25 min" />
+  <LinkCard title="§4 · Agent classes" href="./llamaindex_comprehensive_guide/#4-agent-classes-and-types" description="FunctionAgent, ReActAgent, CodeActAgent, AgentWorkflow · 20 min" />
+  <LinkCard title="§5 · LLM & embedding config" href="./llamaindex_comprehensive_guide/#5-llm-and-embedding-configuration" description="Providers, Settings, mock models · 15 min" />
+  <LinkCard title="§6 · Basic agents" href="./llamaindex_comprehensive_guide/#6-creating-basic-agents" description="First agent walkthrough · 20 min" />
+  <LinkCard title="§7 · Tool integration" href="./llamaindex_comprehensive_guide/#7-tool-integration-with-agents" description="FunctionTool, chaining, parallel calls · 20 min" />
+  <LinkCard title="§8 · Query engine tools" href="./llamaindex_comprehensive_guide/#8-query-engine-tools" description="RAG as a tool · 20 min" />
+  <LinkCard title="§9 · Context, state & memory" href="./llamaindex_comprehensive_guide/#9-context-state-and-memory" description="Multi-turn, shared state · 15 min" />
+  <LinkCard title="§10 · Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" description="Pydantic output from agents and LLMs · 10 min" />
+  <LinkCard title="§11 · Streaming" href="./llamaindex_comprehensive_guide/#11-streaming-responses" description="Token and event streaming · 10 min" />
+  <LinkCard title="§12 · Multi-agent" href="./llamaindex_comprehensive_guide/#12-multi-agent-systems-with-agentworkflow" description="AgentWorkflow hand-off, orchestrators · 25 min" />
+  <LinkCard title="§13 · Custom workflows" href="./llamaindex_comprehensive_guide/#13-custom-workflows" description="Steps, events, fan-out · 25 min" />
+  <LinkCard title="§14 · Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" description="WorkflowServer, WorkflowClient, llamactl · 15 min" />
+  <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" description="Human-in-the-loop, persistence, routing · 30 min" />
+  <LinkCard title="Production" href="./llamaindex_production_guide/" description="Ingestion jobs, serving, evaluation, testing · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts-deep-dive" />
+  <LinkCard title="Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts" />
+  <LinkCard title="Property graphs" href="./llamaindex_comprehensive_guide/#39-property-graphs" />
+  <LinkCard title="Multimodal" href="./llamaindex_comprehensive_guide/#310-multimodal-documents-and-queries" />
+  <LinkCard title="LlamaParse" href="./llamaindex_comprehensive_guide/#182-llamaparse-and-llamacloud" />
   <LinkCard title="Agent classes" href="./llamaindex_comprehensive_guide/#4-agent-classes-and-types" />
   <LinkCard title="FunctionTool" href="./llamaindex_comprehensive_guide/#16-functiontool-in-detail" />
   <LinkCard title="QueryEngineTool" href="./llamaindex_comprehensive_guide/#8-query-engine-tools" />
   <LinkCard title="LlamaHub tools & MCP" href="./llamaindex_comprehensive_guide/#17-llamahub-tools-and-mcp" />
   <LinkCard title="Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" />
   <LinkCard title="Advanced retrieval" href="./llamaindex_comprehensive_guide/#19-advanced-retrieval" />
-  <LinkCard title="Deploying workflows" href="./llamaindex_comprehensive_guide/#14-deploying-workflows-llamaagents" />
+  <LinkCard title="Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" />
+  <LinkCard title="Evaluation datasets" href="./llamaindex_comprehensive_guide/#212-evaluation-datasets" />
   <LinkCard title="Observability" href="./llamaindex_observability_python/" />
   <LinkCard title="Streaming server" href="./llamaindex_streaming_server_fastapi/" />
 </CardGrid>
@@ -73,7 +81,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Observability" href="./llamaindex_observability_python/" />
   <LinkCard title="Recipes" href="./llamaindex_recipes/" />
   <LinkCard title="Diagrams" href="./llamaindex_diagrams/" />
-  <LinkCard title="Production guide" href="./llamaindex_production_guide/" />
+  <LinkCard title="Production guide" href="./llamaindex_production_guide/" description="Ingestion, vector stores, serving, evaluation gates, tests." />
   <LinkCard title="Streaming server (FastAPI)" href="./llamaindex_streaming_server_fastapi/" />
 </CardGrid>
 
@@ -123,6 +131,7 @@ Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/python/llamaindex_co
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | 0.14.25 | Zero → Hero cards now carry the comprehensive guide's section numbers; links added for the new property graph, multimodal, LlamaParse, serving and evaluation-dataset sections; production guide rewritten. |
 | 2026-10-21 | 0.14.25 | Version now read from the site's version registry. Minimal example rewritten for `FunctionAgent` (the previous one used the removed `ReActAgent.from_tools` / `.chat()` API). `llama-agents` references replaced with `AgentWorkflow` and LlamaAgents/`llamactl`. Comprehensive guide, advanced pages and recipes re-verified against an installed copy. |
 | 2026-05-19 | 0.14.22 | Version bump. |
 | 2026-04-21 | 0.14.20 | Index redesigned with Zero → Hero + Jump-to-topic grid. |

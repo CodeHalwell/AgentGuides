@@ -750,7 +750,7 @@ A bare `"claude-…"` model string resolves to `Claude` in `LLMRegistry`, so `mo
 
 ### OpenAI: `OpenAILlm` and `OpenAIResponsesLlm`
 
-Since 2.10.0 ADK has native OpenAI model classes in `google.adk.integrations.openai` (`pip install "google-adk[openai]"`): `OpenAILlm` (Chat Completions), `OpenAIResponsesLlm` (Responses API) and `AzureOpenAIResponsesLlm`. `OpenAILlm` is registered for `gpt-*` and `o<N>-*` names, so a bare model string works. The old `google.adk.labs.openai` path only re-exports these classes.
+Since 2.10.0 the OpenAI model classes live in `google.adk.integrations.openai` (`pip install "google-adk[openai]"`): `OpenAILlm` (Chat Completions), `OpenAIResponsesLlm` (Responses API) and `AzureOpenAIResponsesLlm`. `OpenAILlm` is registered for `gpt-*` and `o<N>-*` names, so a bare model string works. The old `google.adk.labs.openai` path only re-exports these classes.
 
 ```python
 from google.adk.agents import LlmAgent

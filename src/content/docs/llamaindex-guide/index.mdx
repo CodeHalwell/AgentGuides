@@ -9,7 +9,7 @@ sidebar:
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-**The data framework for LLM apps.** Turn unstructured data into agent-queryable knowledge — document loaders, vector indices, query engines, tools, and multi-agent orchestration.
+**The data framework for LLM apps.** LlamaIndex turns documents into indexes that query engines and agents can use: loaders, parsers, vector and graph indexes, query engines, tools, workflows and multi-agent orchestration.
 
 Current release: **`llama-index` %%version=llama-index%%** (Python) · `llamaindex` %%version=llamaindex%% (TypeScript, final release — the TypeScript project is deprecated upstream) · checked %%versions-checked%%.
 
@@ -28,26 +28,16 @@ Current release: **`llama-index` %%version=llama-index%%** (Python) · `llamaind
   />
 </CardGrid>
 
-## What you'll find in both guides
+## What each guide covers
+
+The two guides do not cover the same ground. The Python guide covers the whole framework; the TypeScript guide covers the workflow runtime and agents of the final LlamaIndex.TS release.
 
 <CardGrid>
-  <Card title="Data ingestion" icon="document">
-    Document loaders, chunking, embeddings.
+  <Card title="Python" icon="document">
+    Readers, LlamaParse and ingestion pipelines; vector, summary, property-graph and multimodal indexes; query and chat engines (router, sub-question, hybrid retrieval); `FunctionAgent`, `ReActAgent`, `CodeActAgent` and `AgentWorkflow`; custom workflows; memory; evaluation; serving with `WorkflowServer` and `llamactl`; observability and production deployment.
   </Card>
-  <Card title="Vector indices" icon="list-format">
-    Summary, tree, vector store, list indices.
-  </Card>
-  <Card title="Query engines" icon="magnifier">
-    RAG, subquestion, multi-step, router engines.
-  </Card>
-  <Card title="Agents" icon="rocket">
-    FunctionAgent, ReActAgent, CodeActAgent, tool use.
-  </Card>
-  <Card title="Multi-agent" icon="random">
-    `AgentWorkflow` hand-off (Python) / `multiAgent` (TypeScript).
-  </Card>
-  <Card title="Production" icon="setting">
-    Observability, caching, scaling strategies.
+  <Card title="TypeScript" icon="random">
+    The functional workflow API (`createWorkflow`, `workflowEvent`, `run`), stateful middleware, `agent(...)` / `multiAgent(...)` with tools, streaming, one vector-index RAG example from the `llamaindex` package, and a production guide for existing deployments.
   </Card>
 </CardGrid>
 
@@ -57,9 +47,10 @@ Current release: **`llama-index` %%version=llama-index%%** (Python) · `llamaind
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-10-21 | Py 0.14.25 / TS 0.12.1 | Coverage section rewritten: it claimed both guides covered the same ground, which was not true of the TypeScript guide. |
 | 2026-10-21 | Py 0.14.25 / TS 0.12.1 | Versions now read from the site's version registry. Python agent examples moved to the workflow-based agents (the legacy `ReActAgent.from_tools` API and `llama-agents` were removed upstream); TypeScript marked as deprecated upstream. |
 | 2026-09-08 | llama-index-core 0.14.22 | Consistency sweep. Python card corrected 0.14.21 → 0.14.22; observability and streaming pages moved off a stale 0.14.20; the production requirements block no longer pins an impossible `llama-index-core==0.2.1`. No package installation or symbol verification performed. |
-| 2026-05-04 | Py 0.14.21 / TS 1.1.25 | TS bumped 1.1.24 → 1.1.25; Python card corrected from 0.14.20 to 0.14.21 (stale reference). | Claude routine |
+| 2026-05-04 | Py 0.14.21 / TS 1.1.25 | TS bumped 1.1.24 → 1.1.25; Python card corrected from 0.14.20 to 0.14.21 (stale reference). |
 | 2026-04-21 | Py 0.14.21 / TS 1.1.24 | Versions corrected against installed packages; TS minimal example rewritten to real functional API (`createWorkflow`/`workflowEvent`). |
 | 2026-04-21 | Py 0.14.20 / TS 1.1.4 | Parent index redesigned as language selector. |
 | April 2026 | Py 0.14.20 / TS 1.1.4 | llama-agents stabilisation; scoped TS packages. |

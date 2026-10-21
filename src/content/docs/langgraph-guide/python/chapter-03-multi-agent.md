@@ -165,9 +165,7 @@ builder.add_conditional_edges("math_agent", tools_condition,
                                {"tools": "math_tools", "__end__": "supervisor"})
 builder.add_edge("math_tools", "supervisor")
 
-# `supervisor` uses Command(goto=...) — no outgoing edges needed.
-# Add `destinations=` only for diagram accuracy:
-builder.add_node.__self__  # no-op; destinations set via add_node kwargs above
+# `supervisor` uses Command(goto=...), so it needs no outgoing edges.
 
 supervisor_graph = builder.compile(checkpointer=InMemorySaver())
 
@@ -188,7 +186,7 @@ Key design decisions:
 
 - `supervisor` returns `Command(goto=...)` — no `add_edge` from `supervisor` to the workers needed.
 - Specialists loop back through their `ToolNode` when they emit tool calls, then return to `supervisor`.
-- Adding `destinations=("research_agent", "math_agent", END)` to `add_node("supervisor", ...)` makes the Mermaid diagram accurate without affecting execution.
+- Annotating the supervisor's return type as `Command[Literal["research_agent", "math_agent", "__end__"]]` (or passing `destinations=` to `add_node`) makes the Mermaid diagram show those edges. LangGraph checks at compile time that the targets exist.
 
 ---
 
@@ -375,7 +373,7 @@ print("Escalation reason:", result2["escalation_reason"])
 Key differences from Example 1:
 
 - `tier1_agent` and `tier2_agent` **both** use `Command(goto=...)` — no routing function, no conditional edges.
-- `destinations=` on `add_node` is a diagram hint only; execution is driven by `Command.goto`.
+- `destinations=` on `add_node` adds the edges to the diagram; execution is still driven by `Command.goto`. The targets must be nodes in the same graph: `compile()` raises `Found edge ending at unknown node` otherwise.
 - The `update=` field inside `Command` replaces returning a plain dict — same reducers apply.
 
 ---
@@ -648,7 +646,7 @@ def child_worker(state: ChildState) -> Command[str]:
 
 
 child_builder = StateGraph(ChildState)
-child_builder.add_node("worker", child_worker, destinations={"escalation_handler"})
+child_builder.add_node("worker", child_worker)   # no destinations=: the target is in the parent
 child_builder.add_edge(START, "worker")
 child_builder.add_edge("worker", END)
 
@@ -706,15 +704,15 @@ Rules for `Command.PARENT`:
 
 - The state keys in `Command(update=...)` must exist in the **parent's** state schema. Writing to a key the parent doesn't have raises `InvalidUpdateError`.
 - `Command.PARENT` navigates the **closest** parent — if graphs are nested 3 levels deep, it targets level 2, not level 1.
-- Use `destinations={"node_name"}` on the child node's `add_node` call to make the Mermaid diagram show the edge correctly.
+- Do not list the parent's nodes in the child's `destinations=`: the child graph is validated on its own, so `child_builder.compile()` would fail with `Found edge ending at unknown node`.
 
 ---
 
 ## Gotchas
 
-- **`Command(goto=END)` vs `add_edge(node, END)`:** A node that returns `Command(goto=...)` bypasses all explicit edges from that node. Pick one style per node — never mix `add_edge` and `Command` routing for the same node.
+- **`Command(goto=...)` adds to static edges; it does not replace them.** If a node has `add_edge("a", "c")` and returns `Command(goto="b")`, both `b` and `c` run. Pick one style per node.
 - **Reducers are required for parallel writes.** When multiple workers write to the same state key in the same super-step, the key must have a reducer (e.g., `Annotated[list, operator.add]`). Without one, LangGraph raises `InvalidUpdateError`.
 - **`Send` arg is the entire snapshot for the target node.** Workers see only what you passed in `Send("worker", {...})`, not the full `WorkflowState`. Include every key the worker reads.
 - **`checkpointer=True` is only for subgraphs.** Passing `checkpointer=True` to a root graph raises `RuntimeError`. Only compiled subgraphs can inherit a parent's checkpointer.
-- **`destinations=` is diagram-only.** It does not change execution — its sole purpose is to make the Mermaid visualization show the correct edges for nodes that use `Command`.
+- **`destinations=` does not route, but it is validated.** It adds the `Command` targets to the diagram, and `compile()` checks they exist in the same graph.
 - **`as_tool()` is beta.** The API is functional but may change in future LangGraph releases. Pin your `langgraph` version if relying on it in production.
