@@ -251,15 +251,31 @@ public static class ParallelChecks
         var spelling = ((Func<string, string>)(t => $"spelling: ok ({t.Length} chars)")).BindAsExecutor("spelling");
         var tone = ((Func<string, string>)(t => "tone: neutral")).BindAsExecutor("tone");
 
-        // Collects one result per branch, then emits the combined report.
-        var report = new AggregatingExecutor<string, string>(
-            "report", (acc, next) => acc is null ? next : $"{acc}; {next}");
+        var report = new ReportExecutor(expectedBranches: 2);
 
         return new WorkflowBuilder(start)
             .AddFanOutEdge(start, [spelling, tone])
             .AddFanInBarrierEdge([spelling, tone], report)
             .WithOutputFrom(report)
             .Build();
+    }
+}
+
+/// Collects one result per branch (in workflow state, so it survives checkpoints) and yields once all have arrived.
+/// [YieldsOutput] declares the output type; an executor may only yield types it declares.
+[YieldsOutput(typeof(string))]
+public sealed class ReportExecutor(int expectedBranches) : Executor<string>("report")
+{
+    public override async ValueTask HandleAsync(string result, IWorkflowContext context, CancellationToken cancellationToken = default)
+    {
+        List<string> results = await context.ReadOrInitStateAsync("results", () => new List<string>(), cancellationToken: cancellationToken);
+        results.Add(result);
+        await context.QueueStateUpdateAsync("results", results, cancellationToken: cancellationToken);
+
+        if (results.Count == expectedBranches)
+        {
+            await context.YieldOutputAsync(string.Join("; ", results), cancellationToken);
+        }
     }
 }
 ```
@@ -280,22 +296,25 @@ public static class CheckpointDemo
         CheckpointManager checkpoints = CheckpointManager.CreateJson(store);
         Workflow workflow = ContentPipeline.Build();
 
-        CheckpointInfo? last = null;
+        CheckpointInfo? resumeFrom = null;
         await using (StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, "durable workflows", checkpoints))
         {
             await foreach (WorkflowEvent evt in run.WatchStreamAsync())
             {
                 if (evt is SuperStepCompletedEvent step && step.CompletionInfo?.Checkpoint is { } cp)
                 {
-                    last = cp;   // persist cp.SessionId / cp.CheckpointId somewhere durable
+                    // In production, persist cp.SessionId / cp.CheckpointId after every step.
+                    // For the demo, keep the checkpoint taken after the first superstep (the draft).
+                    resumeFrom ??= cp;
                 }
             }
         }
 
         // Later, possibly in another process: resume from the saved checkpoint.
-        if (last is not null)
+        // The review step runs again from the stored state; the draft step does not.
+        if (resumeFrom is not null)
         {
-            await using StreamingRun resumed = await InProcessExecution.ResumeStreamingAsync(workflow, last, checkpoints);
+            await using StreamingRun resumed = await InProcessExecution.ResumeStreamingAsync(workflow, resumeFrom, checkpoints);
             await foreach (WorkflowEvent evt in resumed.WatchStreamAsync())
             {
                 if (evt is WorkflowOutputEvent output) Console.WriteLine(output.As<string>());
@@ -304,6 +323,8 @@ public static class CheckpointDemo
     }
 }
 ```
+
+Resuming from a checkpoint taken after the workflow has already finished leaves nothing to run; resume from the latest checkpoint of a run that did **not** complete.
 
 ### Human-in-the-loop
 
