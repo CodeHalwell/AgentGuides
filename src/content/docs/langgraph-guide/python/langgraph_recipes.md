@@ -3,6 +3,8 @@ title: "LangGraph: Advanced Recipes & Real-World Patterns"
 description: "Real-world LangGraph recipes: RAG with quality control, support routing, research fan-out, memory, map-reduce, tool interceptors, channels, the Functional API, tracing and per-tool streaming."
 framework: "langgraph"
 language: "python"
+sidebar:
+  label: "Recipes"
 ---
 
 Checked against `langgraph` %%version=langgraph%% and `langchain` %%version=langchain%% (%%versions-checked%%). Each recipe is a complete program unless it says otherwise. Recipes 1–6 share the setup block below; the later recipes define their own imports.
@@ -2816,7 +2818,7 @@ print(result2["result"])   # Processed: [REDACTED]
 
 **When to use `TracePolicy`:**
 - High-volume nodes where storing full payloads in LangSmith is expensive (e.g. long message histories).
-- Keeping a single node's span readable by summarizing or omitting bulky inputs/outputs.
+- Keeping a single node's span readable by summarising or omitting bulky inputs/outputs.
 - As a defence-in-depth measure on nodes that touch PII — **not** as your redaction mechanism.
 
 > **Not a secrets/PII redaction tool.** Per the `TracePolicy` docstring in 1.2.11, it only transforms the annotated node's own run and is "not intended to redact secrets". To redact inputs/outputs across every run (root graph run and child runs included), configure the LangSmith client instead — `Client(hide_inputs=..., hide_outputs=..., anonymizer=...)` (or the `LANGSMITH_HIDE_INPUTS` / `LANGSMITH_HIDE_OUTPUTS` environment variables).
@@ -3057,7 +3059,7 @@ print(type(snap.values))   # TurnResult — the value= output from the last entr
 - `value=` controls what `invoke`/`stream` returns to the caller. It is **also checkpointed** — it is the entrypoint's output (`__end__` channel) and what `get_state().values` returns.
 - `save=` controls what is stored in the `__previous__` channel and surfaced as `previous` on the next call.
 - The two can be completely different types. `entrypoint.final` does **not** shrink the checkpoint — both values are persisted — so keep large or sensitive data out of `value=` if checkpoint size matters.
-- Both values go through the checkpointer's serializer. Custom classes defined in `__main__` (like the dataclasses above) currently log a "Deserializing unregistered type" warning on reload, which a future release will turn into an error. Use plain dicts / TypedDicts, define the classes in an importable module, or allow them explicitly via the serializer's `allowed_msgpack_modules`.
+- Both values go through the checkpointer's serialiser. Custom classes defined in `__main__` (like the dataclasses above) currently log a "Deserializing unregistered type" warning on reload, which a future release will turn into an error. Use plain dicts / TypedDicts, define the classes in an importable module, or allow them explicitly via the serialiser's `allowed_msgpack_modules`.
 
 ---
 

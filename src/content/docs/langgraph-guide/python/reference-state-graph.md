@@ -120,7 +120,7 @@ All overloads accept the same keyword options:
 
 | Option | Type | Effect |
 |---|---|---|
-| `defer` | `bool` | Run this node **only when the graph is about to finish** (after all other tasks drain). Useful for summarization/finalization. |
+| `defer` | `bool` | Run this node **only when the graph is about to finish** (after all other tasks drain). Useful for summarisation/finalization. |
 | `metadata` | `dict` | Attached to the node; surfaces in tracing/streaming metadata. |
 | `input_schema` | `type` | Node receives a narrower shape. Channels outside this schema are not visible. |
 | `retry_policy` | `RetryPolicy \| Sequence[RetryPolicy]` | Controls retries on exceptions. First matching policy in a sequence wins. |

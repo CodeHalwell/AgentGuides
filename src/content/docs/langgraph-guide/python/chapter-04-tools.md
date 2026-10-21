@@ -630,7 +630,7 @@ tool_node = ToolNode(
 )
 ```
 
-> **Note:** `wrap_tool_call` overrides are not serialized to checkpoints and are not re-applied on resume. Put any stateful side effects in graph nodes rather than interceptors.
+> **Note:** `wrap_tool_call` overrides are not serialised to checkpoints and are not re-applied on resume. Put any stateful side effects in graph nodes rather than interceptors.
 
 ---
 

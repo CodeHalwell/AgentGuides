@@ -1,8 +1,10 @@
 ---
 title: "LangChain.js and LangGraph.js Recipes"
-description: "Production-Ready Code Examples and Practical Implementations"
+description: "LangGraph.js recipes: RAG chatbot, multi-agent supervisor, document analysis, streaming chat API, cached RAG, content moderation, cross-thread memory and deferred aggregation."
 framework: "langgraph"
 language: "typescript"
+sidebar:
+  label: "Recipes"
 ---
 
 **Production-Ready Code Examples and Practical Implementations**
@@ -657,8 +659,7 @@ app.post('/analyze', async (req, res) => {
     );
 
     for await (const update of stream) {
-      const nodeName = Object.keys(update)[0];
-      const nodeData = update[nodeName];
+      const [nodeName, nodeData] = Object.entries(update)[0];
 
       res.write(
         `data: ${JSON.stringify({
@@ -866,7 +867,7 @@ function createProcessingGraph() {
       .addNode(
       'aggregate',
       async (state) => {
-        const allProcessed = Object.values(state.processedBatches).flat();
+        const allProcessed = Object.values(state.processedBatches as Record<string, Array<{ processed?: boolean }>>).flat();
   
         return {
           aggregatedResult: {

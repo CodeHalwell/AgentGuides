@@ -3,6 +3,8 @@ title: "LangGraph Streaming Server (Express)"
 description: "Stream LangGraph events over SSE using Express."
 framework: "langgraph"
 language: "typescript"
+sidebar:
+  label: "Streaming server (Express)"
 ---
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).

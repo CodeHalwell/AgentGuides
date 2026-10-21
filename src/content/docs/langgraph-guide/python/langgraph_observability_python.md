@@ -3,6 +3,8 @@ title: "LangGraph Observability and Monitoring (Python)"
 description: "Runtime.stream_writer for custom events, ExecutionInfo for structured logging, state history inspection, LangSmith tracing, and OpenTelemetry — source-verified."
 framework: "langgraph"
 language: "python"
+sidebar:
+  label: "Observability"
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.types`, `langgraph.graph.state`).

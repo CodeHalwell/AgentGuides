@@ -3,6 +3,8 @@ title: "LangGraph Observability and Monitoring (TypeScript)"
 description: "Tracing and metrics for LangGraph TypeScript with OpenTelemetry."
 framework: "langgraph"
 language: "typescript"
+sidebar:
+  label: "Observability"
 ---
 
 

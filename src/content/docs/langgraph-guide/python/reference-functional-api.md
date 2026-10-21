@@ -66,7 +66,7 @@ def fetch(url: str) -> str: ...
 
 Rules:
 
-- Inputs and outputs must be **serializable** (JSON-plus via `JsonPlusSerializer`) when the entrypoint has a checkpointer — tasks are the unit the checkpointer caches.
+- Inputs and outputs must be **serialisable** (JSON-plus via `JsonPlusSerializer`) when the entrypoint has a checkpointer — tasks are the unit the checkpointer caches.
 - Async tasks require Python 3.11+.
 - Using `retry_policy=<policy>` or `cache_policy=<policy>` turns on the same retry/cache machinery that `StateGraph` nodes use. Pass a sequence to `retry_policy` for ordered fallbacks.
 - Calling `fetch("x")` inside an entrypoint returns a future (`SyncAsyncFuture[T]`). Outside an entrypoint it raises.
@@ -531,7 +531,7 @@ pipeline.invoke(["https://example.com/", "http://example.com"], cfg)
 
 ### 10. Typed `context_schema` on `@entrypoint`
 
-Use `context_schema=` to pass typed, read-only run context (user ID, feature flags, DB connections) without putting it in the serializable input:
+Use `context_schema=` to pass typed, read-only run context (user ID, feature flags, DB connections) without putting it in the serialisable input:
 
 ```python
 from dataclasses import dataclass
@@ -644,13 +644,13 @@ print(result)  # ['hello world', 'langgraph']
 
 ## Gotchas
 
-- **Tasks are futures, not values.** A very common bug: `return tasks` instead of `return [t.result() for t in tasks]`. The future object serializes fine but the caller can't use it outside the graph.
+- **Tasks are futures, not values.** A very common bug: `return tasks` instead of `return [t.result() for t in tasks]`. The future object serialises fine but the caller can't use it outside the graph.
 - **Generators aren't allowed.** Authoring `yield` inside an entrypoint raises at decoration time. Use `stream_writer` + `stream_mode="custom"` instead.
 - **`interrupt()` requires a checkpointer.** Pass `checkpointer=InMemorySaver()` even in tests — otherwise the raised `GraphInterrupt` escapes unhandled.
 - **Resuming replays the whole entrypoint.** Any side effects outside `@task` (print, counters, file writes) run again. Put side effects in tasks, which are cached by the checkpointer.
 - **`previous` is only available with a checkpointer.** Without one it defaults to `None` and does not update.
 - **Don't `await` a sync task.** A `@task` on a sync function returns `SyncAsyncFuture`; call `.result()`.
-- **Serializable I/O.** `JsonPlusSerializer` handles most dataclasses, Pydantic models, `datetime`, `UUID`, and LangChain messages. Avoid live connections, file handles, and locks in task outputs.
+- **Serialisable I/O.** `JsonPlusSerializer` handles most dataclasses, Pydantic models, `datetime`, `UUID`, and LangChain messages. Avoid live connections, file handles, and locks in task outputs.
 - **`context_schema=` data is NOT checkpointed.** Context is injected fresh at each `invoke`/`stream` call. The same `context=` must be passed on every call that resumes from an interrupt.
 - **Calling a task outside an entrypoint raises `RuntimeError`.** Tasks are only valid inside `@entrypoint`-decorated functions or other graph nodes. Do not call them from test code, scripts, or top-level module scope without an active entrypoint.
 

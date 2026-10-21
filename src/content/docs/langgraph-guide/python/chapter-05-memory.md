@@ -173,7 +173,7 @@ A `Store` provides **cross-thread, cross-session** key/value storage with option
 |---|---|
 | `namespace: tuple[str, ...]` | Hierarchical path, e.g. `("users", "alice", "prefs")` |
 | `key: str` | Unique identifier within the namespace |
-| `value: dict[str, Any]` | JSON-serializable payload |
+| `value: dict[str, Any]` | JSON-serialisable payload |
 | `Item` | Returned by `get`/`search`. Fields: `value`, `key`, `namespace`, `created_at`, `updated_at` |
 | `SearchItem(Item)` | Returned by `search`. Adds `score: float | None` |
 

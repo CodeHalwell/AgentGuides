@@ -41,6 +41,9 @@ export default defineConfig({
   trailingSlash: 'ignore',
   // Retired "class deep dive" pages; their content now lives in the guide pages.
   redirects: {
+    '/langgraph-guide/python/langgraph_advanced_implementations': '/AgentGuides/langgraph-guide/python/langgraph_recipes/',
+    '/langgraph-guide/python/reference-managed-values': '/AgentGuides/langgraph-guide/python/reference-runtime-and-managed-values/',
+    '/langgraph-guide/langgraph_validation_report': '/AgentGuides/langgraph-guide/',
     '/mistral-agents-api-guide/may_2025_launch_updates': '/AgentGuides/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/',
     '/semantic-kernel-guide/python/semantic_kernel_diagrams_python': '/AgentGuides/semantic-kernel-guide/semantic_kernel_diagrams/',
     '/semantic-kernel-guide/dotnet/semantic_kernel_diagrams_dotnet': '/AgentGuides/semantic-kernel-guide/semantic_kernel_diagrams/',

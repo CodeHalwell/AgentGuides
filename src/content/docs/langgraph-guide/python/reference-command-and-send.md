@@ -254,7 +254,7 @@ When one node calls `interrupt()` several times, the graph pauses at each call i
 - **A JSON Schema `dict`**: metadata only. It is surfaced to callers, but the resume value is returned as-is with no validation.
 - **A Python type** (Pydantic model, `TypedDict`, or dataclass): LangGraph validates the resume value with a pydantic `TypeAdapter`, raises `pydantic.ValidationError` on a mismatch, and returns the constructed instance. Type checkers also infer the return type from it.
 
-Either way, the `Interrupt` stored in the snapshot carries `response_schema` as a JSON Schema `dict`, so it serializes with any checkpointer.
+Either way, the `Interrupt` stored in the snapshot carries `response_schema` as a JSON Schema `dict`, so it serialises with any checkpointer.
 
 ```python
 from pydantic import BaseModel

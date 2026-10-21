@@ -150,7 +150,7 @@ async for chunk, metadata in graph.astream(
 
 ## Mode 4: `"custom"` — write your own events
 
-Declare `writer: StreamWriter` as a keyword argument in any node — LangGraph injects the writer automatically. Call `writer(data)` to push any JSON-serializable value downstream.
+Declare `writer: StreamWriter` as a keyword argument in any node — LangGraph injects the writer automatically. Call `writer(data)` to push any JSON-serialisable value downstream.
 
 ```python
 from langgraph.types import StreamWriter

@@ -185,7 +185,7 @@ cache.clear()
 
 ## `InMemoryCache` internals
 
-`InMemoryCache` stores entries as `(encoding, bytes, expiry_timestamp)` tuples, serialized with `JsonPlusSerializer`. The `RLock` makes it safe to call from multiple threads (e.g. when `ToolNode` runs tool calls in parallel).
+`InMemoryCache` stores entries as `(encoding, bytes, expiry_timestamp)` tuples, serialised with `JsonPlusSerializer`. The `RLock` makes it safe to call from multiple threads (e.g. when `ToolNode` runs tool calls in parallel).
 
 TTL expiry is lazy: expired entries are detected and removed on the next `get()` rather than on a background timer.
 
@@ -493,7 +493,7 @@ LangGraph constructs these automatically. You only need them when building a cus
 - **TTL is wall-clock, not access-time.** `InMemoryCache` uses absolute expiry timestamps, not LRU/LFU. An entry set with `ttl=60` expires 60 seconds after insertion regardless of access pattern.
 - **Expired entries are evicted lazily.** They are removed on the next `get()` for their key, not on a background timer.
 - **`InMemoryCache` is process-local.** It does not survive process restarts and is not shared between workers. Use a networked backend (Redis, Memcached) for multi-worker deployments.
-- **Pickle fallback is disabled** in the default `JsonPlusSerializer`. If your node returns a non-JSON-serializable value, you'll get a serialization error. Pass a custom `serde` to enable pickle: `InMemoryCache(serde=JsonPlusSerializer(pickle_fallback=True))`.
+- **Pickle fallback is disabled** in the default `JsonPlusSerializer`. If your node returns a non-JSON-serialisable value, you'll get a serialisation error. Pass a custom `serde` to enable pickle: `InMemoryCache(serde=JsonPlusSerializer(pickle_fallback=True))`.
 - **`cache_policy` without `compile(cache=...)` is silently ignored.** The node will execute on every call.
 
 ---

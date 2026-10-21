@@ -1,6 +1,6 @@
 ---
 title: "LangGraph (TypeScript)"
-description: "Stateful, graph-based agents for TypeScript — type-safe streaming, node caching, cross-thread memory, and middleware hooks."
+description: "Stateful, graph-based agents for TypeScript — StateGraph, createAgent and middleware, interrupts, Send and Command, streaming, persistence and production."
 framework: "langgraph"
 language: "typescript"
 sidebar:
@@ -12,7 +12,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 **TypeScript port of LangGraph.** Same graph-based mental model as the Python version — explicit state, durable checkpoints, conditional routing — with type-safe streaming, Zod/Standard Schema state, and `ReducedValue`/`UntrackedValue` field types. Ready-made agents come from `createAgent` in the `langchain` package.
 
-**Current version: `@langchain/langgraph` %%version=@langchain/langgraph%%** (checked %%versions-checked%%). Node 18+.
+**Current version: `@langchain/langgraph` %%version=@langchain/langgraph%%** (checked %%versions-checked%%). Node 20+.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
@@ -26,7 +26,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  New? Follow Zero → Hero. Coming from the Python guide? The primitives are identical; jump to **TypeScript-specific features** to catch the TS extras.
+  New? Follow Zero → Hero. Coming from the Python guide? The primitives are the same; use **Jump to a topic**.
 </Aside>
 
 ## Zero → Hero
@@ -41,10 +41,11 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="7 · Type-safe streaming" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#type-safe-stream-method" description="Stream modes, typed events · 20 min" />
   <LinkCard title="8 · Node caching" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#node-caching" description="Skip redundant work · 15 min" />
   <LinkCard title="9 · Deferred nodes" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#deferred-nodes" description="Fan-in aggregation · 15 min" />
-  <LinkCard title="10 · Middleware (hooks)" href="/langgraph-guide/typescript/langgraph_middleware_typescript/" description="Agent middleware and guardrails · 20 min" />
-  <LinkCard title="11 · Cross-thread memory" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#cross-thread-memory-support" description="Shared memory across sessions · 15 min" />
-  <LinkCard title="12 · Streaming (Express)" href="/langgraph-guide/typescript/langgraph_streaming_server_express/" description="SSE streaming server · 20 min" />
-  <LinkCard title="13 · Production" href="/langgraph-guide/typescript/langchain_langgraph_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+  <LinkCard title="10 · Interrupts, Command, Send, subgraphs" href="/langgraph-guide/typescript/langgraph_control_flow_typescript/" description="Human-in-the-loop, routing, fan-out, Functional API, time travel · 30 min" />
+  <LinkCard title="11 · Middleware" href="/langgraph-guide/typescript/langgraph_middleware_typescript/" description="Agent middleware and guardrails · 20 min" />
+  <LinkCard title="12 · Cross-thread memory" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#cross-thread-memory-support" description="Shared memory across sessions · 15 min" />
+  <LinkCard title="13 · Streaming (Express)" href="/langgraph-guide/typescript/langgraph_streaming_server_express/" description="SSE streaming server · 20 min" />
+  <LinkCard title="14 · Production" href="/langgraph-guide/typescript/langchain_langgraph_production_guide/" description="Checkpointers, node policies, testing, deployment · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -56,11 +57,15 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="addNode / addSequence" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#addnode-and-addsequence-methods" />
   <LinkCard title="Node caching" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#node-caching" />
   <LinkCard title="Deferred nodes" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#deferred-nodes" />
-  <LinkCard title="Pre/post model hooks" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#prepost-model-hooks" />
+  <LinkCard title="Interrupts (human-in-the-loop)" href="/langgraph-guide/typescript/langgraph_control_flow_typescript/#human-in-the-loop-with-interrupt" />
+  <LinkCard title="Send fan-out" href="/langgraph-guide/typescript/langgraph_control_flow_typescript/#fan-out-with-send" />
+  <LinkCard title="Functional API" href="/langgraph-guide/typescript/langgraph_control_flow_typescript/#functional-api-entrypoint-and-task" />
+  <LinkCard title="Time travel" href="/langgraph-guide/typescript/langgraph_control_flow_typescript/#time-travel-history-replay-and-forks" />
+  <LinkCard title="Testing with fakeModel" href="/langgraph-guide/typescript/langchain_langgraph_production_guide/#testing" />
   <LinkCard title="Middleware (dedicated)" href="/langgraph-guide/typescript/langgraph_middleware_typescript/" />
   <LinkCard title="Cross-thread memory" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#cross-thread-memory-support" />
   <LinkCard title="StateSchema and value types" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#stateschema-reducedvalue-and-untrackedvalue" />
-  <LinkCard title="1.4 – 1.5 additions" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#later-additions-14--15" />
+  <LinkCard title="Node policies and recent features" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#node-policies-draining-and-other-recent-features" />
   <LinkCard title="Observability" href="/langgraph-guide/typescript/langgraph_observability_typescript/" />
 </CardGrid>
 
@@ -68,6 +73,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard title="Comprehensive guide" href="/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Interrupts, Command, Send, subgraphs" href="/langgraph-guide/typescript/langgraph_control_flow_typescript/" />
   <LinkCard title="Middleware" href="/langgraph-guide/typescript/langgraph_middleware_typescript/" />
   <LinkCard title="Observability" href="/langgraph-guide/typescript/langgraph_observability_typescript/" />
   <LinkCard title="Recipes" href="/langgraph-guide/typescript/langchain_langgraph_recipes/" />
@@ -83,7 +89,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 - **1.3.0** — `MessagesZodState`/`MessagesZodMeta`; `STREAM_EVENTS_V3_MODES`; `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream`; stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`); schema utilities (`isSerializableSchema`, `isStandardSchema`, `getJsonSchemaFromSchema`, `getSchemaDefaultGetter`); `pushMessage`.
 - **1.2.x** — Standard JSON Schema state (Zod 4, Valibot, ArkType), `StateSchema`, `ReducedValue`, `UntrackedValue`.
 
-See the [comprehensive guide](/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#later-additions-14--15) for details.
+See the [comprehensive guide](/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#node-policies-draining-and-other-recent-features) for details.
 
 <Aside type="caution" title="Where did createReactAgent go?">
   `createReactAgent` in `@langchain/langgraph/prebuilt` still works but is deprecated in favour of `createAgent` from the `langchain` package (`npm install langchain`). Do not install `@langgraphjs/toolkit`: earlier revisions of this guide recommended it, but that npm name is a security placeholder, not a LangGraph package.
@@ -122,12 +128,8 @@ Ready? **[Start Zero → Hero Step 1 →](/langgraph-guide/typescript/langchain_
 
 | Date | Version | Changes |
 |------|---------|--------|
+| 2026-10-21 | 1.5.2 | Examples type-check under `strict` (chained builders, typed `addSequence` steps); recommended `tsconfig` fixed; `@langchain/community` removed. New page for interrupts, `Command`, `Send`, subgraphs, the Functional API and time travel; production guide rewritten around checkpointers, node policies, testing with `fakeModel` and the LangGraph CLI; invented type-hierarchy diagram replaced. |
 | 2026-10-21 | 1.5.2 | Brought up to date with `@langchain/langgraph` 1.5.2 (from 1.3.5); current version now comes from the site's version data. Removed the `@langgraphjs/toolkit` recommendation (that package is an npm security placeholder); agents now use `createAgent` from `langchain`. Fixed invented APIs and broken examples across the comprehensive guide, recipes, production guide, middleware and streaming pages (see the comprehensive guide's revision history). Symbols and examples checked by installing the packages and running the key snippets. |
-| 2026-06-05 | 1.3.5 | Version bumped 1.3.4 → 1.3.5 (one patch release); "What's new" heading updated to v1.3.5; patch bullet added; comprehensive guide header updated; revision history entry added. `@langchain/langgraph 1.3.5` confirmed latest stable via npm registry (2026-06-05). Export count: 82 — PASS. | Claude routine |
-| 2026-06-03 | 1.3.4 | Version bumped 1.3.3 → 1.3.4 (one patch release); "What's new" updated; revision history entry added. All key symbols (`StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, `Command`, `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `createGraphRunStream`) verified against installed `@langchain/langgraph 1.3.4` (`/tmp/npm-0603`). Export count: 82 — PASS. | Claude routine |
-| 2026-06-02 | 1.3.3 | Version bumped 1.3.2 → 1.3.3 (one patch release); "What's new" updated; comprehensive guide header updated; revision history entry added. All key symbols verified against installed `@langchain/langgraph 1.3.3` (`/tmp/npm-0602`). Export count: 82 — PASS. | Claude routine |
-| 2026-05-19 | 1.3.2 | Version bumped 1.3.0 → 1.3.2 (two patch releases: 1.3.1, 1.3.2); "What's new" updated; comprehensive guide header updated; revision history entry added. All key symbols verified against installed `@langchain/langgraph 1.3.2` (`.routine-envs/check-0519-node`). | Claude routine |
-| 2026-05-05 | 1.3.0 | Version bumped 1.2.9 → 1.3.0; "What's new" updated for 1.3.0 (MessagesZodState/Meta, STREAM_EVENTS_V3_MODES, createGraphRunStream, stream transformers, schema utilities, pushMessage). All new symbols verified against installed `@langchain/langgraph 1.3.0` (`.routine-envs/check-0505-node`). Comprehensive guide header and revision history updated. | Claude routine |
 | 2026-04-21 | 1.2.9 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | April 19, 2026 | 1.2.9 | Standard JSON Schema; new type utilities. |
 | November 2025 | 1.0.2 | Initial TypeScript guide. |

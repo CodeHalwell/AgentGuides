@@ -527,7 +527,7 @@ from langgraph.types import Durability
 # Durability = Literal["sync", "async", "exit"]
 ```
 
-| Value | Behavior |
+| Value | Behaviour |
 |---|---|
 | `"sync"` | Checkpoint is persisted **synchronously** before the next step begins. Safest, slowest. |
 | `"async"` (default) | Checkpoint is persisted **in the background** while the next step executes. Best throughput. |
@@ -634,7 +634,7 @@ await graph.adelete_thread("user-42")
 
 > **Deleting a thread is permanent.** There is no soft-delete or recycle bin — the data is gone immediately. Call `get_state_history` to archive thread content before deletion if you need an audit trail.
 
-## Serializers
+## Serialisers
 
 Default: `JsonPlusSerializer` from `langgraph.checkpoint.serde.jsonplus` — handles Pydantic models, dataclasses, `datetime`, `uuid`, `Decimal`, LangChain `BaseMessage`, and plain JSON.
 
@@ -670,7 +670,7 @@ encrypted_serde = EncryptedSerializer.from_pycryptodome_aes()
 
 All savers accept `serde=...` in their constructor. `InMemorySaver` accepts it too, via kwarg only.
 
-`EncryptedSerializer` appends the cipher name to the inner serializer's type tag (`"msgpack+aes"`), and blobs whose type has no `+` suffix are passed straight to the inner `serde`. So you can turn encryption on for an existing deployment and still read the unencrypted checkpoints written before. AES-EAX is authenticated: tampered ciphertext fails to decrypt with a `ValueError`.
+`EncryptedSerializer` appends the cipher name to the inner serialiser's type tag (`"msgpack+aes"`), and blobs whose type has no `+` suffix are passed straight to the inner `serde`. So you can turn encryption on for an existing deployment and still read the unencrypted checkpoints written before. AES-EAX is authenticated: tampered ciphertext fails to decrypt with a `ValueError`.
 
 For KMS-backed keys or another cipher, implement `CipherProtocol` (from `langgraph.checkpoint.serde.base`) and pass it to the constructor:
 

@@ -59,7 +59,7 @@ graph = (
 
 - **`namespace: tuple[str, ...]`** — hierarchical path (e.g., `("users", "123", "memories")`). The prefix is used for listing and scoped searches.
 - **`key: str`** — unique within a namespace.
-- **`value: dict[str, Any]`** — JSON-serializable payload. Keys are filterable.
+- **`value: dict[str, Any]`** — JSON-serialisable payload. Keys are filterable.
 - **`Item`** — returned by `get` / `list_namespaces`. Fields: `value`, `key`, `namespace`, `created_at`, `updated_at`.
 - **`SearchItem(Item)`** — returned by `search`. Adds `score: float | None`.
 
@@ -211,7 +211,7 @@ results = store.search(
 | `$lt` | Less than | `{"age": {"$lt": 30}}` |
 | `$lte` | Less than or equal | `{"age": {"$lte": 30}}` |
 
-Numeric comparisons use `float()` coercion internally, matching PostgreSQL JSONB behavior. Nested dict filters require the stored value to also be a dict with matching keys. Filtering is applied before semantic ranking, so `filter=` does not require an index.
+Numeric comparisons use `float()` coercion internally, matching PostgreSQL JSONB behaviour. Nested dict filters require the stored value to also be a dict with matching keys. Filtering is applied before semantic ranking, so `filter=` does not require an index.
 
 ### Semantic (vector) search
 
@@ -624,7 +624,7 @@ hit = await store.aget(("cache", "bing"), query, refresh_ttl=True)
 
 ### 6. Filter operators — comparison-based search
 
-`filter=` on `search()` supports exact equality and six comparison operators, matching PostgreSQL JSONB behavior. No index required — filtering is applied before semantic ranking.
+`filter=` on `search()` supports exact equality and six comparison operators, matching PostgreSQL JSONB behaviour. No index required — filtering is applied before semantic ranking.
 
 ```python
 from langgraph.store.memory import InMemoryStore

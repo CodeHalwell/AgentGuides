@@ -1,13 +1,14 @@
 ---
 title: "LangChain.js and LangGraph.js Comprehensive Technical Guide"
-description: "Beginner to Expert Level Production-Ready Patterns"
+description: "LangChain.js and LangGraph.js in TypeScript: createAgent, StateGraph and state schemas, tools, structured output, streaming, addSequence, node caching, deferred nodes, middleware and cross-thread memory."
 framework: "langgraph"
 language: "typescript"
+sidebar:
+  label: "Comprehensive guide"
+  order: 10
 ---
 
-> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%). First written for 1.0.
-
-**Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` %%version=langchainjs%% (checked %%versions-checked%%). Every TypeScript block type-checks under `strict` with the tsconfig below (fragments that continue an earlier block assume its imports and variables).
 
 ---
 
@@ -23,13 +24,13 @@ language: "typescript"
 8. [`.addNode()` and `.addSequence()` Methods](#addnode-and-addsequence-methods)
 9. [Node Caching](#node-caching)
 10. [Deferred Nodes](#deferred-nodes)
-11. [Pre/Post Model Hooks](#prepost-model-hooks)
+11. [Model hooks and agent middleware](#model-hooks-and-agent-middleware)
 12. [Cross-Thread Memory Support](#cross-thread-memory-support)
 13. [StateSchema, ReducedValue and UntrackedValue](#stateschema-reducedvalue-and-untrackedvalue)
-14. [New APIs in v1.3.0](#new-apis-in-v130)
-15. [Later additions (1.4 – 1.5)](#later-additions-14--15)
+14. [Zod message state, v3 stream modes and pushMessage](#zod-message-state-v3-stream-modes-and-pushmessage)
+15. [Node policies, draining and other recent features](#node-policies-draining-and-other-recent-features)
 
-**Continue elsewhere in this guide:** [Middleware](/langgraph-guide/typescript/langgraph_middleware_typescript/) · [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/) for tracing and metrics · [Streaming server (Express)](/langgraph-guide/typescript/langgraph_streaming_server_express/) · [Production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/) for deployment, security and persistence · [Recipes](/langgraph-guide/typescript/langchain_langgraph_recipes/) for RAG, supervisors and human-in-the-loop.
+**Continue elsewhere in this guide:** [Interrupts, Send, Command, subgraphs, Functional API and time travel](/langgraph-guide/typescript/langgraph_control_flow_typescript/) · [Middleware](/langgraph-guide/typescript/langgraph_middleware_typescript/) · [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/) for tracing and metrics · [Streaming server (Express)](/langgraph-guide/typescript/langgraph_streaming_server_express/) · [Production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/) for deployment, security and persistence · [Recipes](/langgraph-guide/typescript/langchain_langgraph_recipes/) for RAG, supervisors and human-in-the-loop.
 
 ---
 
@@ -2182,16 +2183,10 @@ async function streamWithErrorHandling(): Promise<void> {
 
 ### .addNode() Method
 
-The `.addNode()` method simplifies node creation with support for inline function definitions and automatic edge management.
+`.addNode(name, fn, options?)` registers a node. `fn` can be a named function or an inline arrow function; it receives the current state and returns only the keys it changes. Node names must be unique (adding `'process'` twice throws `Node 'process' already present`), and `.addNode` does not add edges.
 
 ```typescript
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-
-interface SimpleState {
-  input: string;
-  count: number;
-  messages: string[];
-}
 
 const StateAnnotation = Annotation.Root({
   input: Annotation<string>,
@@ -2202,27 +2197,23 @@ const StateAnnotation = Annotation.Root({
   }),
 });
 
+type State = typeof StateAnnotation.State;
 
-// Traditional approach (verbose)
-function processNodeOld(state: SimpleState): Partial<SimpleState> {
-  return {
-    count: state.count + 1,
-    messages: [`Processed: ${state.input}`],
-  };
+// A named function works as well as an inline one
+function process(state: State) {
+  return { count: state.count + 1, messages: [`Processed: ${state.input}`] };
 }
+
 const graph = new StateGraph(StateAnnotation)
-  .addNode('process', processNodeOld)
-  // New .addNode() approach (concise)
-  .addNode('process', (state) => ({
-      count: state.count + 1,
-      messages: [`Processed: ${state.input}`],
-    }))
-  .addNode('validate', (state) => ({
-      messages: state.count > 0 ? ['Valid'] : ['Invalid'],
-    }))
-  .addNode('finalize', (state) => ({
-      messages: [`Final count: ${state.count}`],
-    }));
+  .addNode('process', process)
+  .addNode('validate', (state) => ({ messages: state.count > 0 ? ['Valid'] : ['Invalid'] }))
+  .addEdge(START, 'process')
+  .addEdge('process', 'validate')
+  .addEdge('validate', END)
+  .compile();
+
+console.log(await graph.invoke({ input: 'hello' }));
+// { input: 'hello', count: 1, messages: [ 'Processed: hello', 'Valid' ] }
 ```
 
 ### Chaining .addNode() Calls
@@ -3262,7 +3253,7 @@ const State = new StateSchema({
 
 ---
 
-## New APIs in v1.3.0
+## Zod message state, v3 stream modes and pushMessage
 
 ### MessagesZodState — Zod-Based Message State
 
@@ -3318,11 +3309,11 @@ async function myNode(state: { messages: BaseMessage[] }, config: LangGraphRunna
 
 ---
 
-## Later additions (1.4 – 1.5)
+## Node policies, draining and other recent features
 
 Features added to `@langchain/langgraph` since 1.3, all present in %%version=@langchain/langgraph%%:
 
-- **Node policies** (1.4.0): per-node `timeout` (milliseconds or a `TimeoutPolicy` with `runTimeout` / `idleTimeout`) raising `NodeTimeoutError`; per-node `errorHandler` that runs after `retryPolicy` is exhausted and may return an update or a `Command`; `StateGraph.setNodeDefaults({ retryPolicy, cachePolicy })` for graph-wide defaults.
+- **Node policies** (1.4.0): per-node `timeout` (milliseconds or a `TimeoutPolicy` with `runTimeout` / `idleTimeout`) raising `NodeTimeoutError`; per-node `errorHandler` that runs after `retryPolicy` is exhausted and may return an update or a `Command`; `StateGraph.setNodeDefaults({ retryPolicy, cachePolicy, timeout, errorHandler })` for graph-wide defaults. Example in the [production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/#durability-recursion-limits-and-node-policies).
 - **`RunControl` / `GraphDrained`** (1.4.0): cooperative draining of a run between supersteps, for graceful shutdown.
 - **`DeltaChannel`** (1.4.0, beta): channels that checkpoint only the writes since the last snapshot, for large append-only state.
 - **`GraphCallbackHandler`** (1.4.17): typed callback handler for graph lifecycle events.
@@ -3335,12 +3326,8 @@ Features added to `@langchain/langgraph` since 1.3, all present in %%version=@la
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.5.2 | 2026-10-21 | Verified against `@langchain/langgraph` 1.5.2 and `langchain` 1.5.18. Replaced invented or removed APIs (`AgentExecutor`, `createOpenAIFunctionsAgent`, `createStructuredChatAgent`, `@langgraphjs/toolkit`, `value_type` channels, `cache`/`cacheKey`/`cacheTTL`/`deferred` node options, `ZodOutputParser`, `SerpAPITool`) with real ones (`createAgent`, `cachePolicy`, `defer`, `timeout`/`errorHandler`, `StructuredOutputParser`, `SerpAPI`); fixed `tool()` argument order; added `await` to `.stream()` calls and corrected multi-mode/messages/debug chunk shapes; fixed `Annotation` fields that had a default but no reducer; added store-based cross-thread memory, agent middleware and 1.4–1.5 notes. |
-| 1.3.5 | June 5, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.4 → 1.3.5; revision history entry added. `@langchain/langgraph 1.3.5` confirmed latest stable via npm registry (2026-06-05). Export count: 82 — PASS. | Claude routine |
-| 1.3.4 | June 3, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.3 → 1.3.4; revision history entry added. All key symbols (`StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, `Command`, `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `createGraphRunStream`) verified against installed `@langchain/langgraph 1.3.4` (`/tmp/npm-0603`). Export count: 82 — PASS. | Claude routine |
-| 1.3.3 | June 2, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.2 → 1.3.3; revision history entry added. All key symbols (`StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, `Command`, `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `createGraphRunStream`) verified against installed `@langchain/langgraph 1.3.3` (`/tmp/npm-0602`). Export count: 82 — PASS. | Claude routine |
-| 1.3.2 | May 19, 2026 | Patch releases 1.3.1 and 1.3.2; stability and dependency updates. All key symbols verified against installed `@langchain/langgraph 1.3.2` (`.routine-envs/check-0519-node`). | Claude routine |
-| 1.3.0 | May 5, 2026 | Minor release: `MessagesZodState`/`MessagesZodMeta` (Zod-based message state), `STREAM_EVENTS_V3_MODES` constant, `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream` streaming API, stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`), schema type guards (`isSerializableSchema`, `isStandardSchema`), `pushMessage` helper. All new symbols verified against installed `@langchain/langgraph 1.3.0` (`.routine-envs/check-0505-node`, Node 22). `STREAM_EVENTS_V3_MODES = ["values","updates","messages","tools","custom","tasks"]`. |
-| 1.2.9 | April 19, 2026 | Stability improvements and bug fixes following 1.2.8 |
-| 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type. (This entry previously said `createReactAgent` moved to `@langgraphjs/toolkit`; that was wrong — it is deprecated in favour of `createAgent` in `langchain`.) |
-| 1.0.2 | November 2025 | Previous documented version |
+| 1.5.2 | 2026-10-21 | All examples now type-check under `strict`: builders are chained so node names are tracked, `addSequence` steps are typed, a subclassed tool that used `this` before `super()` replaced with a `tool()` factory, `config.writer` replaced with `getWriter()`, a duplicate `addNode` removed. Recommended `tsconfig` updated (ES2022, bundler resolution, `tsx`). `@langchain/community` (deprecated) removed. Hand-rolled hook, cache and memory frameworks cut in favour of middleware, `cachePolicy` and the Store. Interrupts, `Command`, `Send`, subgraphs, Functional API and time travel added on [their own page](/langgraph-guide/typescript/langgraph_control_flow_typescript/). |
+| 1.5.2 | 2026-10-21 | Replaced invented or removed APIs (`AgentExecutor`, `createOpenAIFunctionsAgent`, `@langgraphjs/toolkit`, `value_type` channels, `cache`/`cacheKey`/`cacheTTL`/`deferred` node options, `ZodOutputParser`) with real ones; fixed `tool()` argument order and `.stream()` chunk shapes. |
+| 1.3.0 | 2026-05-05 | `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `pushMessage`. |
+| 1.2.8 | 2026-04-11 | Standard Schema support, `ReducedValue`, `UntrackedValue`. |
+| 1.0.2 | 2025-11 | Initial guide. |

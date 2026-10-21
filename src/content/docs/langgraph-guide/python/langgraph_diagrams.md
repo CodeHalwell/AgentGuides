@@ -2,6 +2,8 @@
 title: "LangGraph: Visual Architectures & Diagrams"
 framework: "langgraph"
 language: "python"
+sidebar:
+  label: "Diagrams"
 ---
 
 ## Basic State Machine

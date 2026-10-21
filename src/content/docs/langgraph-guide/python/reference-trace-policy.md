@@ -185,7 +185,7 @@ builder.add_node(
 )
 ```
 
-### Pattern 4: Summarize outputs for large embeddings
+### Pattern 4: Summarise outputs for large embeddings
 
 Embedding nodes produce large float arrays. Record metadata only:
 

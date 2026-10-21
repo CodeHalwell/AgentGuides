@@ -3,6 +3,8 @@ title: "LangChain.js and LangGraph.js Diagrams and Visualisations"
 description: "Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications."
 framework: "langgraph"
 language: "typescript"
+sidebar:
+  label: "Diagrams"
 ---
 
 Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications.
@@ -31,9 +33,9 @@ Comprehensive visual representations of architectures, workflows, and patterns f
 │                                                                   │
 │  ┌──────────────────┐  ┌──────────────┐  ┌─────────────────────┐ │
 │  │  Tools           │  │  Retrievers  │  │  Memory Systems     │ │
-│  │  - Structured    │  │  - Vector DB │  │  - Buffer Memory    │ │
-│  │  - Dynamic       │  │  - Document  │  │  - Window Memory    │ │
-│  │  - Custom        │  │  - Search    │  │  - Summary Memory   │ │
+│  │  - Structured    │  │  - Vector DB │  │  - Checkpointers    │ │
+│  │  - Dynamic       │  │  - Document  │  │    (thread state)   │ │
+│  │  - Custom        │  │  - Search    │  │  - Stores (long-term)│ │
 │  └──────────────────┘  └──────────────┘  └─────────────────────┘ │
 │                                                                   │
 │  LCEL (LangChain Expression Language)                             │
@@ -424,51 +426,27 @@ Start Task
 
 ### Memory System Architecture
 
+LangGraph has two memory layers. (The older LangChain `BufferMemory` / `ConversationSummaryMemory` classes are legacy and are not part of `@langchain/core`.)
+
 ```
-┌─────────────────────────────────────────────────────┐
-│        Application / Conversation Layer             │
-└──────────────────────┬──────────────────────────────┘
-                       │
-         ┌─────────────┼──────────────┐
-         │             │              │
-         ▼             ▼              ▼
-    ┌──────────┐  ┌──────────┐  ┌────────────┐
-    │ Buffer   │  │ Window   │  │ Summary    │
-    │ Memory   │  │ Memory   │  │ Memory     │
-    │          │  │          │  │            │
-    │ Stores   │  │ Stores   │  │ Stores     │
-    │ all msgs │  │ last N   │  │ compressed │
-    │          │  │ messages │  │ version    │
-    └────┬─────┘  └────┬─────┘  └─────┬──────┘
-         │             │              │
-         └─────────────┼──────────────┘
-                       │
-         ┌─────────────┼──────────────────┐
-         │             │                  │
-         ▼             ▼                  ▼
-    ┌──────────┐  ┌──────────────┐  ┌─────────────┐
-    │ Entity   │  │ Vector Store │  │ Custom      │
-    │ Memory   │  │ Memory       │  │ Memory      │
-    │          │  │              │  │             │
-    │ Tracks  │  │ Stores       │  │ User-defined│
-    │ entities │  │ embeddings   │  │ storage     │
-    │ across   │  │ for semantic │  │ logic       │
-    │ convs   │  │ search       │  │             │
-    └──────────┘  └──────────────┘  └─────────────┘
-         │              │                  │
-         └──────────────┼──────────────────┘
-                        │
-         ┌──────────────┼──────────────────┐
-         │              │                  │
-         ▼              ▼                  ▼
-    ┌──────────┐  ┌──────────┐  ┌────────────┐
-    │ In-Memory│  │ LangSmith│  │ Persistent │
-    │ Storage  │  │ Backend  │  │ Database   │
-    │          │  │          │  │            │
-    │ Fast but │  │ Observable│  │ Durable    │
-    │ volatile │  │ via API   │  │ storage    │
-    └──────────┘  └──────────┘  └────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                 Your graph / createAgent agent             │
+└───────────────┬──────────────────────────────┬─────────────┘
+                │                              │
+                ▼                              ▼
+   ┌────────────────────────────┐  ┌─────────────────────────────┐
+   │ Checkpointer (short-term)  │  │ Store (long-term)           │
+   │ state of one thread,       │  │ JSON documents by namespace │
+   │ saved every super-step     │  │ shared across threads,      │
+   │ keyed by thread_id         │  │ optional vector search      │
+   │                            │  │                             │
+   │ MemorySaver (tests)        │  │ InMemoryStore (dev)         │
+   │ SqliteSaver / PostgresSaver│  │ Postgres-backed store       │
+   └────────────────────────────┘  └─────────────────────────────┘
+        compile({ checkpointer })        compile({ store })
 ```
+
+Trimming or summarising long histories is done in the graph (a node, or `summarizationMiddleware` on `createAgent`), not by a memory class.
 
 ### Checkpoint Persistence Architecture
 
@@ -888,35 +866,21 @@ Application Request
 
 ## Type System Diagrams
 
-### TypeScript Type Hierarchy for Agents
+### Main types
 
 ```
-Agent<InputType, OutputType>
-│
-├── SimpleAgent
-│   └── Extends: Agent<string, string>
-│
-├── StructuredAgent<TInput, TOutput>
-│   ├── Extends: Agent<TInput, TOutput>
-│   └── Uses: Zod schemas for validation
-│
-└── MultiAgentOrchestrator<TState>
-    ├── Extends: Agent<TState, TState>
-    ├── Manages: Agent[]
-    └── Routes: Conditional logic
+StateGraph<State, Update, Nodes>            (builder; node names are tracked in the type)
+│   .addNode / .addEdge / .addConditionalEdges / .addSequence
+│   .compile({ checkpointer?, store?, cache? })
+└── CompiledStateGraph                       (a Pregel runnable)
+        invoke / stream / getState / getStateHistory / updateState
 
-ToolSpecification<TInput, TOutput>
-│
-├── Tool<TInput, TOutput>
-│   ├── name: string
-│   ├── description: string
-│   ├── schema: ZodSchema<TInput>
-│   └── func: (input: TInput) => Promise<TOutput>
-│
-└── DynamicStructuredTool<TInput, TOutput>
-    ├── Extends: Tool<TInput, TOutput>
-    ├── Callbacks: RunManager
-    └── Error handling: Comprehensive
+createAgent({ model, tools, middleware })    (from "langchain")
+└── ReactAgent                               (wraps a compiled LangGraph graph)
+        invoke / stream
+
+tool(fn, { name, description, schema })      (from "@langchain/core/tools")
+└── StructuredTool / DynamicStructuredTool
 
 State definitions (any one of)
 │
@@ -933,7 +897,4 @@ State definitions (any one of)
     └── MessagesValue
 ```
 
----
-
-This diagrams document provides visual reference for all major architectural patterns, workflows, and system designs in LangChain.js and LangGraph.js applications. Use these diagrams alongside the comprehensive guide for a complete understanding of the system architecture.
 

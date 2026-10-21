@@ -132,7 +132,7 @@ export const frameworks: Framework[] = [
     id: 'langgraph-py',
     symbol: 'Lg',
     name: 'LangGraph (Python)',
-    tagline: 'Graph-based state machines with type-safe v2 API.',
+    tagline: 'Graph-based agents and workflows: state, checkpoints, interrupts and middleware.',
     href: '/langgraph-guide/python/',
     languages: ['Python'],
     category: 'Multi-Agent',

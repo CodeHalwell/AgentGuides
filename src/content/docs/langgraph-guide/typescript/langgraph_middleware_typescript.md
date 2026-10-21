@@ -3,11 +3,13 @@ title: "LangGraph Middleware and Guardrails (TypeScript)"
 description: "Implement request/response middlewares, guardrails, and tracing in LangGraph TypeScript."
 framework: "langgraph"
 language: "typescript"
+sidebar:
+  label: "Middleware & guardrails"
 ---
 
-> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%).
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` %%version=langchainjs%% (checked %%versions-checked%%).
 
-LangGraph itself has no middleware layer: a node is a function, so a guardrail is code that runs before or after the work inside that function. There are two common shapes.
+Middleware belongs to `createAgent`; a hand-written `StateGraph` has none, because each node is your own function. There are two common shapes.
 
 - **Agents built with `createAgent`** (from `langchain`) take `middleware: [...]`. Use `createMiddleware` for your own, or the built-ins (`piiMiddleware`, `modelCallLimitMiddleware`, `toolCallLimitMiddleware`, `humanInTheLoopMiddleware`, `modelRetryMiddleware`, `summarizationMiddleware`, `openAIModerationMiddleware` and others).
 - **Hand-written graphs** compose plain wrapper functions around the model call, as below.
@@ -38,9 +40,13 @@ const agent = createAgent({
 });
 ```
 
+For approvals before a tool runs, use `humanInTheLoopMiddleware`; a complete example is in [Interrupts, Send, Command and subgraphs](/langgraph-guide/typescript/langgraph_control_flow_typescript/#approvals-in-createagent-agents).
+
 ## Wrapper pattern for your own nodes
 
 ```ts
+import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
+
 type Next = (input: string) => Promise<string>;
 type Middleware = (input: string, next: Next) => Promise<string>;
 
@@ -57,12 +63,8 @@ const redactMw: Middleware = async (input, next) => {
 function chain(mws: Middleware[], handler: Next): Next {
   return mws.reduceRight<Next>((acc, mw) => (input) => mw(input, acc), handler);
 }
-```
 
-### Integrate with nodes
-
-```ts
-import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
+// Use the wrapped handler inside a node
 
 const State = Annotation.Root({
   input: Annotation<string>,
@@ -82,7 +84,7 @@ const graph = new StateGraph(State)
   .addEdge("n1", END)
   .compile();
 
-// await graph.invoke({ input: "hello" }) -> { input: "hello", output: "OK: hello" }
+console.log(await graph.invoke({ input: "hello" }));   // { input: 'hello', output: 'OK: hello' }
 ```
 
 ## Tracing

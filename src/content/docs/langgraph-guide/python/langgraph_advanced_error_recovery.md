@@ -3,6 +3,8 @@ title: "LangGraph Advanced Error Handling and Recovery (Python)"
 description: "Native RetryPolicy, TimeoutPolicy, node-level error_handler, dead-letter patterns, checkpoint-based resumption, and structured error types (NodeError, NodeTimeoutError, NodeCancelledError, GraphRecursionError, ErrorCode) — source-verified."
 framework: "langgraph"
 language: "python"
+sidebar:
+  label: "Error handling & recovery"
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`, `langgraph.errors`).

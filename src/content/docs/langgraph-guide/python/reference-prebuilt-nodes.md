@@ -1083,7 +1083,7 @@ Mapping of the old arguments (`prompt`, `pre_model_hook`, `post_model_hook`, `st
 - **Direct attribute assignment on `ToolCallRequest` is deprecated.** Always use `request.override(...)` to produce a modified copy.
 - **`wrap_tool_call` runs synchronously even in async mode** unless you also provide `awrap_tool_call`. Synchronous wrappers that do I/O in an async context will block the event loop.
 - **`handle_tool_errors=False` means zero protection.** Any exception raised by a tool propagates directly into the graph and can halt execution. Use this only when you handle errors in the tool itself or upstream.
-- **`ToolNode` runs all tool calls in the last AIMessage in parallel.** Tool ordering is not guaranteed. If your tools have side effects that must be sequenced, fan them out to separate nodes or serialize them in a custom wrapper.
+- **`ToolNode` runs all tool calls in the last AIMessage in parallel.** Tool ordering is not guaranteed. If your tools have side effects that must be sequenced, fan them out to separate nodes or serialise them in a custom wrapper.
 - **`messages_key` must match your state schema.** If your messages key is not `"messages"`, set `messages_key=` on `ToolNode` and also pass `messages_key=` to `tools_condition`.
 
 ## Breaking changes
