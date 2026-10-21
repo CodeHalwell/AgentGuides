@@ -1,6 +1,6 @@
 ---
 title: "Semantic Kernel"
-description: "Microsoft Semantic Kernel — enterprise SDK with plugins, planners, vector stores, MCP, and A2A. Pick your language."
+description: "Microsoft Semantic Kernel — SDK for AI apps and agents with plugins, function calling, orchestrations, vector stores and MCP. Pick your language."
 framework: semantic-kernel
 sidebar:
   label: "Overview"
@@ -9,19 +9,23 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Microsoft's enterprise SDK for integrating LLMs** with plugins, planners, and vector stores. Deep Azure AI integration, MCP, A2A, and a bridge into the newer Microsoft Agent Framework.
+**Microsoft's SDK for integrating LLMs into applications** — a kernel of AI services and plugins, native function calling, agents and multi-agent orchestrations, vector stores and MCP, with deep Azure integration.
 
 <CardGrid>
   <Card title="Languages" icon="puzzle">
-    Python 3.10+ · .NET 6.0+
+    Python 3.10+ · .NET 8 / .NET 10 (and .NET Standard 2.0) · Java (not covered)
   </Card>
-  <Card title="Latest" icon="information">
-    Python **v1.43.0** · .NET **v1.74.0** · June 2026
+  <Card title="Current release" icon="information">
+    Python **%%version=semantic-kernel%%** · .NET **%%version=Microsoft.SemanticKernel%%** · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="rocket">
-    Enterprise plugin-based agents, Microsoft 365 integrations, Azure-native apps.
+    Existing SK codebases, Azure-native apps, plugin-based agents.
   </Card>
 </CardGrid>
+
+<Aside type="caution" title="Semantic Kernel and Microsoft Agent Framework">
+  [Microsoft Agent Framework](/microsoft-agent-framework-guide/) is the successor to Semantic Kernel (and AutoGen), built by the same team, and has been generally available since April 2026. Microsoft continues to support Semantic Kernel 1.x — critical bug and security fixes, for at least a year after Agent Framework's GA — but most new features go to Agent Framework. **New agent projects: start on Agent Framework. Existing SK code: keep it updated and migrate gradually** — SK functions convert to Agent Framework tools (Python) and SK agents wrap as Agent Framework agents (.NET).
+</Aside>
 
 ## Choose your language
 
@@ -29,12 +33,12 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard
     title="🐍 Python"
     href="/semantic-kernel-guide/python/"
-    description="v1.43.0 · asyncio, FastAPI, MCP client+server, A2A integration."
+    description="asyncio, agents and orchestrations, vector stores, MCP client and server, FastAPI."
   />
   <LinkCard
     title="C# .NET"
     href="/semantic-kernel-guide/dotnet/"
-    description="v1.74.0 · DI, Polly resilience, Application Insights, ASP.NET Core."
+    description="Dependency injection, ASP.NET Core, Microsoft.Extensions.VectorData, OpenTelemetry."
   />
 </CardGrid>
 
@@ -42,37 +46,33 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard
-    title="Comprehensive"
+    title="Concepts"
     href="./semantic_kernel_comprehensive_guide/"
-    description="Architecture + concepts reference."
+    description="Architecture and concepts, Python and C# side by side."
   />
   <LinkCard
     title="Production"
     href="./semantic_kernel_production_guide/"
-    description="Deployment, scaling, monitoring."
+    description="Deployment, resilience, observability, security, cost."
   />
   <LinkCard
     title="Diagrams"
     href="./semantic_kernel_diagrams/"
-    description="Architecture + flow diagrams."
+    description="Architecture and flow diagrams."
   />
   <LinkCard
     title="Recipes"
     href="./semantic_kernel_recipes/"
-    description="Copy-paste patterns for common scenarios."
+    description="Common patterns in both languages."
   />
 </CardGrid>
 
-<Aside type="tip" title="Agent Framework or Semantic Kernel?">
-  Microsoft Agent Framework unifies SK + AutoGen. For new projects, consider [Agent Framework](/microsoft-agent-framework-guide/). Semantic Kernel remains fully supported and has the richer plugin/planner ecosystem.
-</Aside>
+## Things that changed since older tutorials
 
-## What's new (April 2026)
-
-- **Vector stores v1.34** — new abstractions with pluggable providers.
-- **MCP client + server** (March 2025).
-- **Google A2A protocol** integration.
-- **Microsoft Agent Framework bridge** for gradual migration.
+- **Planners are gone** — removed from Python in 1.33.0 and deprecated in .NET. Use function calling.
+- **Memory stores became vector stores** — Python redesigned the API in 1.34.0; .NET uses `Microsoft.Extensions.VectorData` with `CommunityToolkit.VectorData.*` connectors.
+- **Agents use threads** — `get_response(messages=..., thread=...)` / `InvokeAsync(message, thread)`; `AgentGroupChat` is superseded by orchestrations (sequential, concurrent, group chat, hand-off, Magentic).
+- **MCP** — Python has MCP plugins and `kernel.as_mcp_server()`; .NET uses the official MCP C# SDK with `AsKernelFunction()`.
 
 ---
 
@@ -80,8 +80,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 | Date | Framework version (installed) | Summary of changes | Reviewer |
 |------|-------------------------------|--------------------|----------|
-| 2026-09-08 | Py 1.43.0 / .NET 1.74.0 | Consistency sweep. Python version corrected from a stale 1.41.3 to 1.43.0 on the overview card and language card; the language-neutral comprehensive guide's header and frontmatter description now match. No package installation or symbol verification performed. |
-| 2026-04-28 | semantic-kernel 1.41.3 | Version bumped 1.41.2 → 1.41.3 (patch release); version card and Python sub-index updated. PyPI confirms 1.41.3 as latest stable. | Claude routine |
-| 2026-04-22 | semantic-kernel 1.41.2 | Python version corrected from stale 1.36.0 to 1.41.2 across this overview and the Python sub-index. PyPI confirms 1.41.2. frameworks.ts updated. | Claude routine |
-| 2026-04-21 | Py 1.36.0 / .NET 1.74 | Version corrected against installed pip package; parent index as language selector + cross-cutting guides. | — |
-| April 2026 | Py 1.36.0 / .NET 1.74 | Vector stores v1.34; MCP; A2A; Agent Framework bridge. | — |
+| 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Versions now read from the site's version registry (were Py 1.43.0 / .NET 1.74.0). Agent Framework relationship restated per Microsoft's published support policy (MAF GA April 2026). "What's new" replaced with verified changes. All guides under this folder re-verified; the language-neutral pages rewritten. | Claude |
+| 2026-09-08 | Py 1.43.0 / .NET 1.74.0 | Consistency sweep (no verification). | |
+| 2026-04-28 | semantic-kernel 1.41.3 | Version bump. | Claude routine |
+| 2026-04-21 | Py 1.36.0 / .NET 1.74 | Parent index as language selector + cross-cutting guides. | — |

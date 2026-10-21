@@ -1,21 +1,19 @@
 ---
 title: "Semantic Kernel Diagrams (Python)"
-description: "Visual Architecture and Flow Diagrams for Python Implementation"
+description: "Visual architecture and flow diagrams for Semantic Kernel in Python — async execution, FastAPI integration and agent flows."
 framework: semantic-kernel
 language: python
 ---
 
 # Semantic Kernel Diagrams (Python)
 
-**Visual Architecture and Flow Diagrams for Python Implementation**
-
-Last Updated: April 2026
+**Visual architecture and flow diagrams for the Python SDK** (`semantic-kernel` %%version=semantic-kernel%%)
 
 ---
 
 ## Overview
 
-This document provides Python-specific architecture diagrams and visual representations. For general SK architecture diagrams, see [../semantic_kernel_diagrams.md](/semantic-kernel-guide/semantic_kernel_diagrams/).
+This document provides Python-specific architecture diagrams and visual representations. For general SK architecture diagrams, see the [language-neutral diagrams](/semantic-kernel-guide/semantic_kernel_diagrams/).
 
 ---
 
@@ -36,7 +34,7 @@ This document provides Python-specific architecture diagrams and visual represen
             │  └────────┘    │ (OpenAI/Az)  │  │
             │      ↓          └──────────────┘  │
             │  ┌────────┐    ┌──────────────┐  │
-            │  │Plugins │    │   Memory     │  │
+            │  │Plugins │    │ Vector store │  │
             │  └────────┘    └──────────────┘  │
             └─────────────────┬────────────────┘
                               ↓
@@ -206,7 +204,7 @@ Message Format:
 
 ---
 
-For more diagrams, see [../semantic_kernel_diagrams.md](/semantic-kernel-guide/semantic_kernel_diagrams/)
+For more diagrams, see the [language-neutral diagrams](/semantic-kernel-guide/semantic_kernel_diagrams/).
 
-**[Back to Python README](/semantic-kernel-guide/python/semantic_kernel_diagrams_python/)** | **[Overview](/semantic-kernel-guide/python/semantic_kernel_diagrams_python/)**
+**[Back to Python overview](/semantic-kernel-guide/python/)**
 

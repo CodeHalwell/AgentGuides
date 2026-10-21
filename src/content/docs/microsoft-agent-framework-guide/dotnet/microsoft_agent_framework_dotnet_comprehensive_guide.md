@@ -305,11 +305,9 @@ public static class TriageGraph
         var classify = ((Func<string, Ticket>)(text =>
             new Ticket(text, text.Contains("outage", StringComparison.OrdinalIgnoreCase)))).BindAsExecutor("classify");
 
-        var page = ((Func<Ticket, IWorkflowContext, CancellationToken, ValueTask>)((t, ctx, ct) =>
-            ctx.YieldOutputAsync($"PAGED ON-CALL: {t.Text}", ct))).BindAsExecutor("page");
-
-        var queue = ((Func<Ticket, IWorkflowContext, CancellationToken, ValueTask>)((t, ctx, ct) =>
-            ctx.YieldOutputAsync($"Queued: {t.Text}", ct))).BindAsExecutor("queue");
+        // An executor's return value is its output message; on an output executor it becomes a workflow output.
+        var page = ((Func<Ticket, string>)(t => $"PAGED ON-CALL: {t.Text}")).BindAsExecutor("page");
+        var queue = ((Func<Ticket, string>)(t => $"Queued: {t.Text}")).BindAsExecutor("queue");
 
         Workflow workflow = new WorkflowBuilder(classify)
             .AddEdge<Ticket>(classify, page, condition: t => t!.IsUrgent)
@@ -378,7 +376,46 @@ Some providers run tools server-side. `Microsoft.Extensions.AI` models these as 
 
 ### Tool approval
 
-Wrap a function in `ApprovalRequiredAIFunction` to make the agent stop and ask before calling it; the response then contains a `ToolApprovalRequestContent` you answer on the next run. The [.NET production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/) shows the round trip.
+Wrap a function in `ApprovalRequiredAIFunction` to make the agent stop and ask before calling it. The run then returns a `ToolApprovalRequestContent` instead of executing the tool; you answer it on the next run in the same session.
+
+```csharp
+using System.ComponentModel;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+
+public static class ApprovalFlow
+{
+    [Description("Transfer money between two accounts.")]
+    public static string Transfer(string from, string to, decimal amount) => $"Moved {amount} from {from} to {to}.";
+
+    public static async Task RunAsync(IChatClient chatClient)
+    {
+        AIAgent agent = new ChatClientAgent(chatClient,
+            instructions: "You are a banking assistant.",
+            tools: [new ApprovalRequiredAIFunction(AIFunctionFactory.Create(Transfer))]);
+
+        AgentSession session = await agent.CreateSessionAsync();
+        AgentResponse response = await agent.RunAsync("Move 50 from ACC-1 to ACC-2", session);
+
+        var requests = response.Messages.SelectMany(m => m.Contents).OfType<ToolApprovalRequestContent>().ToList();
+        while (requests.Count > 0)
+        {
+            var answers = requests.Select(r =>
+            {
+                var call = (FunctionCallContent)r.ToolCall;
+                Console.Write($"Approve {call.Name}? [y/N] ");
+                bool approved = Console.ReadLine()?.Trim().ToLowerInvariant() == "y";
+                return new ChatMessage(ChatRole.User, [r.CreateResponse(approved)]);
+            });
+
+            response = await agent.RunAsync(answers, session);
+            requests = response.Messages.SelectMany(m => m.Contents).OfType<ToolApprovalRequestContent>().ToList();
+        }
+
+        Console.WriteLine(response.Text);
+    }
+}
+```
 
 ### Errors in tools
 

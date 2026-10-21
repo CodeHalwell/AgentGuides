@@ -1,973 +1,257 @@
 ---
 title: "Semantic Kernel: Practical Recipes and Code Examples"
-description: "Version: 1.0 Purpose: Ready-to-use code examples for common Semantic Kernel patterns"
+description: "Cross-language Semantic Kernel recipes — Q&A, structured summaries, translation, plugins, RAG, multi-agent debate and tool-using agents, in Python and C#."
 framework: semantic-kernel
 ---
 
 # Semantic Kernel: Practical Recipes and Code Examples
 
-**Version:** 1.0  
-**Purpose:** Ready-to-use code examples for common Semantic Kernel patterns
+> Targets `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. Each recipe shows both languages briefly; fuller versions are in the [Python recipes](/semantic-kernel-guide/python/semantic_kernel_recipes_python/) and [.NET recipes](/semantic-kernel-guide/dotnet/semantic_kernel_recipes_dotnet/). Model names are examples.
 
----
-
-## Table of Contents
-
-1. [Basic Recipes](#1-basic-recipes)
-2. [Plugin Recipes](#2-plugin-recipes)
-3. [Memory and Retrieval](#3-memory-and-retrieval)
-4. [Multi-Agent Recipes](#4-multi-agent-recipes)
-5. [Advanced Patterns](#5-advanced-patterns)
-
----
-
-## 1. Basic Recipes
-
-### 1.1 Simple Question-Answering System
-
-**Problem:** Build a basic Q&A system that answers user questions.
-
-**.NET Implementation:**
-
-
-```csharp
-
-using Microsoft.SemanticKernel;
-
-public class SimpleQASystem
-{
-    private readonly Kernel _kernel;
-
-    public SimpleQASystem(Kernel kernel)
-    {
-        _kernel = kernel;
-    }
-
-    public async Task<string> AnswerQuestionAsync(string question)
-    {
-        var qaFunction = _kernel.CreateFunctionFromPrompt(
-            @"You are a helpful assistant. Answer the following question concisely.
-Question: {{$input}}
-Answer:",
-            functionName: "AnswerQuestion"
-        );
-
-        var result = await _kernel.InvokeAsync(qaFunction, new() { ["input"] = question });
-        return result.ToString() ?? "No answer generated";
-    }
-
-    // Usage
-    public static async Task Main()
-    {
-        var kernel = Kernel.CreateBuilder()
-            .AddOpenAIChatCompletion("gpt-4", "YOUR_API_KEY")
-            .Build();
-
-        var qaSystem = new SimpleQASystem(kernel);
-        var answer = await qaSystem.AnswerQuestionAsync("What is machine learning?");
-        Console.WriteLine(answer);
-    }
-}
-
-```
-
-
-**Python Implementation:**
-
+All Python snippets assume:
 
 ```python
-
 from semantic_kernel import Kernel
-from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
-import asyncio
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion, OpenAIChatPromptExecutionSettings
+from semantic_kernel.functions import KernelArguments
 
-class SimpleQASystem:
-    def __init__(self, kernel: Kernel):
-        self.kernel = kernel
-    
-    async def answer_question_async(self, question: str) -> str:
-        """Answer a user question"""
-        qa_function = self.kernel.create_function_from_prompt(
-            prompt="""You are a helpful assistant. Answer the following question concisely.
-Question: {{$input}}
-Answer:""",
-            function_name="AnswerQuestion"
-        )
-        
-        result = await self.kernel.invoke_async(qa_function, input=question)
-        return str(result) if result else "No answer generated"
-
-# Usage
-async def main():
-    kernel = Kernel()
-    kernel.add_service(
-        OpenAIChatCompletion(
-            model_id="gpt-4",
-            api_key="YOUR_API_KEY"
-        )
-    )
-    
-    qa_system = SimpleQASystem(kernel)
-    answer = await qa_system.answer_question_async("What is machine learning?")
-    print(answer)
-
-asyncio.run(main())
-
+kernel = Kernel()
+kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-5-mini"))   # OPENAI_API_KEY from env
 ```
 
-
-### 1.2 Content Summariser
-
-**Problem:** Summarise long content into concise summaries.
-
-**.NET Implementation:**
-
+All C# snippets assume:
 
 ```csharp
-
 using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
 
-public class ContentSummariser
-{
-    private readonly Kernel _kernel;
-
-    public ContentSummariser(Kernel kernel)
-    {
-        _kernel = kernel;
-    }
-
-    public async Task<string> SummariseAsync(
-        string content,
-        int sentenceCount = 3)
-    {
-        var summaryFunction = _kernel.CreateFunctionFromPrompt(
-            @"Summarise the following content in {{$sentenceCount}} sentences:
-{{$content}}
-
-Summary:",
-            functionName: "Summarise"
-        );
-
-        var arguments = new KernelArguments
-        {
-            ["content"] = content,
-            ["sentenceCount"] = sentenceCount.ToString()
-        };
-
-        var result = await _kernel.InvokeAsync(summaryFunction, arguments);
-        return result.ToString() ?? "";
-    }
-
-    public async Task<string> SummariseWithBulletPointsAsync(string content)
-    {
-        var bulletFunction = _kernel.CreateFunctionFromPrompt(
-            @"Create bullet points summarising this content:
-{{$content}}
-
-Bullet points:",
-            functionName: "BulletPoints"
-        );
-
-        var result = await _kernel.InvokeAsync(bulletFunction, new() { ["content"] = content });
-        return result.ToString() ?? "";
-    }
-}
-
+var builder = Kernel.CreateBuilder();
+builder.AddOpenAIChatCompletion("gpt-5-mini", Environment.GetEnvironmentVariable("OPENAI_API_KEY")!);
+Kernel kernel = builder.Build();
 ```
-
-
-**Python Implementation:**
-
-
-```python
-
-from semantic_kernel import Kernel
-
-class ContentSummariser:
-    def __init__(self, kernel: Kernel):
-        self.kernel = kernel
-    
-    async def summarise_async(
-        self,
-        content: str,
-        sentence_count: int = 3
-    ) -> str:
-        """Summarise content"""
-        summary_function = self.kernel.create_function_from_prompt(
-            prompt="""Summarise the following content in {{$sentence_count}} sentences:
-{{$content}}
-
-Summary:""",
-            function_name="Summarise"
-        )
-        
-        result = await self.kernel.invoke_async(
-            summary_function,
-            content=content,
-            sentence_count=str(sentence_count)
-        )
-        return str(result) if result else ""
-    
-    async def summarise_with_bullet_points_async(self, content: str) -> str:
-        """Create bullet point summary"""
-        bullet_function = self.kernel.create_function_from_prompt(
-            prompt="""Create bullet points summarising this content:
-{{$content}}
-
-Bullet points:""",
-            function_name="BulletPoints"
-        )
-        
-        result = await self.kernel.invoke_async(bullet_function, content=content)
-        return str(result) if result else ""
-
-```
-
-
-### 1.3 Translation Service
-
-**Problem:** Translate text between languages.
-
-**.NET Implementation:**
-
-
-```csharp
-
-using Microsoft.SemanticKernel;
-
-public class TranslationService
-{
-    private readonly Kernel _kernel;
-
-    public TranslationService(Kernel kernel)
-    {
-        _kernel = kernel;
-    }
-
-    public async Task<string> TranslateAsync(
-        string text,
-        string sourceLanguage,
-        string targetLanguage)
-    {
-        var translateFunction = _kernel.CreateFunctionFromPrompt(
-            @"Translate the following text from {{$sourceLanguage}} to {{$targetLanguage}}.
-Keep the meaning but adapt to natural expression in the target language.
-
-Text: {{$text}}
-
-Translation:",
-            functionName: "Translate"
-        );
-
-        var arguments = new KernelArguments
-        {
-            ["text"] = text,
-            ["sourceLanguage"] = sourceLanguage,
-            ["targetLanguage"] = targetLanguage
-        };
-
-        var result = await _kernel.InvokeAsync(translateFunction, arguments);
-        return result.ToString() ?? "";
-    }
-
-    public async Task<Dictionary<string, string>> TranslateToBulkAsync(
-        string text,
-        params string[] targetLanguages)
-    {
-        var results = new Dictionary<string, string>();
-
-        foreach (var language in targetLanguages)
-        {
-            var translation = await TranslateAsync(text, "English", language);
-            results[language] = translation;
-        }
-
-        return results;
-    }
-}
-
-```
-
 
 ---
 
-## 2. Plugin Recipes
+## Table of contents
 
-### 2.1 Custom Calculator Plugin
+1. [Question answering](#1-question-answering)
+2. [Structured summary](#2-structured-summary)
+3. [Translation with a reusable prompt function](#3-translation-with-a-reusable-prompt-function)
+4. [Calculator plugin with function calling](#4-calculator-plugin-with-function-calling)
+5. [RAG over your documents](#5-rag-over-your-documents)
+6. [Two-agent debate](#6-two-agent-debate)
+7. [Reason-and-act agent](#7-reason-and-act-agent)
 
-**Problem:** Create a reusable calculator plugin with multiple operations.
+---
 
-**.NET Implementation:**
-
-```csharp
-using Microsoft.SemanticKernel;
-using System.ComponentModel;
-
-public class CalculatorPlugin
-{
-    [KernelFunction]
-    [Description("Adds two numbers together")]
-    public static double Add(
-        [Description("The first number")] double a,
-        [Description("The second number")] double b)
-    {
-        return a + b;
-    }
-
-    [KernelFunction]
-    [Description("Subtracts the second number from the first")]
-    public static double Subtract(double a, double b)
-    {
-        return a - b;
-    }
-
-    [KernelFunction]
-    [Description("Multiplies two numbers")]
-    public static double Multiply(double a, double b)
-    {
-        return a * b;
-    }
-
-    [KernelFunction]
-    [Description("Divides the first number by the second")]
-    public static double Divide(double a, double b)
-    {
-        if (b == 0)
-            throw new ArgumentException("Cannot divide by zero");
-        return a / b;
-    }
-
-    [KernelFunction]
-    [Description("Calculates the power of a number")]
-    public static double Power(double baseNumber, double exponent)
-    {
-        return Math.Pow(baseNumber, exponent);
-    }
-
-    [KernelFunction]
-    [Description("Calculates the square root")]
-    public static double SquareRoot(double number)
-    {
-        if (number < 0)
-            throw new ArgumentException("Cannot calculate square root of negative number");
-        return Math.Sqrt(number);
-    }
-}
-
-// Usage
-var kernel = Kernel.CreateBuilder()
-    .AddOpenAIChatCompletion("gpt-4", "YOUR_API_KEY")
-    .Build();
-
-kernel.ImportPluginFromType<CalculatorPlugin>("Calculator");
-
-var result = await kernel.InvokeAsync<double>(
-    "Calculator",
-    "Add",
-    new { a = 10.0, b = 5.0 }
-);
-Console.WriteLine($"10 + 5 = {result}");
-```
-
-**Python Implementation:**
+## 1. Question answering
 
 ```python
+answer = await kernel.invoke_prompt(
+    "Answer concisely; say if you are unsure.\n\nQuestion: {{$q}}",
+    arguments=KernelArguments(q="What is Semantic Kernel?"),
+)
+print(answer)
+```
+
+```csharp
+var answer = await kernel.InvokePromptAsync(
+    "Answer concisely; say if you are unsure.\n\nQuestion: {{$q}}",
+    new() { ["q"] = "What is Semantic Kernel?" });
+Console.WriteLine(answer);
+```
+
+---
+
+## 2. Structured summary
+
+```python
+from pydantic import BaseModel
+
+class Summary(BaseModel):
+    title: str
+    bullets: list[str]
+
+result = await kernel.invoke_prompt(
+    "Summarise:\n{{$text}}",
+    arguments=KernelArguments(text=article, settings=OpenAIChatPromptExecutionSettings(response_format=Summary)),
+)
+summary = Summary.model_validate_json(str(result))
+```
+
+```csharp
+public sealed record Summary(string Title, string[] Bullets);
+
+var settings = new OpenAIPromptExecutionSettings { ResponseFormat = typeof(Summary) };
+var result = await kernel.InvokePromptAsync("Summarise:\n{{$text}}", new(settings) { ["text"] = article });
+var summary = System.Text.Json.JsonSerializer.Deserialize<Summary>(result.ToString());
+```
+
+---
+
+## 3. Translation with a reusable prompt function
+
+```python
+translate = kernel.add_function(
+    plugin_name="lang", function_name="translate",
+    prompt="Translate into {{$language}}. Keep formatting. Return only the translation.\n\n{{$text}}",
+)
+french = await kernel.invoke(translate, KernelArguments(text="Good morning", language="French"))
+```
+
+```csharp
+var translate = kernel.CreateFunctionFromPrompt(
+    "Translate into {{$language}}. Keep formatting. Return only the translation.\n\n{{$text}}",
+    functionName: "translate");
+var french = await kernel.InvokeAsync(translate, new() { ["text"] = "Good morning", ["language"] = "French" });
+```
+
+Registering the function in a plugin (`plugin_name="lang"` / `kernel.Plugins.AddFromFunctions("lang", [translate])`) also lets agents call it as a tool.
+
+---
+
+## 4. Calculator plugin with function calling
+
+```python
+from typing import Annotated
+from semantic_kernel.connectors.ai.function_choice_behavior import FunctionChoiceBehavior
 from semantic_kernel.functions import kernel_function
 
-class CalculatorPlugin:
-    @kernel_function(description="Adds two numbers together")
+class Calculator:
+    @kernel_function(description="Add two numbers.")
     def add(self, a: float, b: float) -> float:
-        """Add two numbers"""
         return a + b
-    
-    @kernel_function(description="Subtracts the second number from the first")
-    def subtract(self, a: float, b: float) -> float:
-        """Subtract two numbers"""
-        return a - b
-    
-    @kernel_function(description="Multiplies two numbers")
-    def multiply(self, a: float, b: float) -> float:
-        """Multiply two numbers"""
-        return a * b
-    
-    @kernel_function(description="Divides the first number by the second")
-    def divide(self, a: float, b: float) -> float:
-        """Divide two numbers"""
-        if b == 0:
-            raise ValueError("Cannot divide by zero")
-        return a / b
-    
-    @kernel_function(description="Calculates the power")
-    def power(self, base: float, exponent: float) -> float:
-        """Calculate power"""
+
+    @kernel_function(description="Raise a number to a power.")
+    def power(self, base: float, exponent: Annotated[float, "The exponent"]) -> float:
         return base ** exponent
-    
-    @kernel_function(description="Calculates square root")
-    def square_root(self, number: float) -> float:
-        """Calculate square root"""
-        if number < 0:
-            raise ValueError("Cannot calculate square root of negative number")
-        return number ** 0.5
 
-# Usage
-kernel = Kernel()
-kernel.add_service(
-    OpenAIChatCompletion(model_id="gpt-4", api_key="YOUR_API_KEY")
-)
-
-kernel.add_plugin(CalculatorPlugin(), plugin_name="Calculator")
-
-result = await kernel.invoke_async("Calculator", "add", a=10.0, b=5.0)
-print(f"10 + 5 = {result}")
+kernel.add_plugin(Calculator(), plugin_name="calc")
+settings = OpenAIChatPromptExecutionSettings(function_choice_behavior=FunctionChoiceBehavior.Auto())
+print(await kernel.invoke_prompt("What is (2^10) + 24?", arguments=KernelArguments(settings=settings)))
 ```
-
-### 2.2 HTTP Request Plugin
-
-**Problem:** Create a plugin for making HTTP requests to external APIs.
-
-**.NET Implementation:**
 
 ```csharp
-using Microsoft.SemanticKernel;
-using System.ComponentModel;
-using System.Net.Http;
-
-public class HttpPlugin
+public sealed class Calculator
 {
-    private readonly HttpClient _httpClient;
+    [KernelFunction, Description("Add two numbers.")]
+    public double Add(double a, double b) => a + b;
 
-    public HttpPlugin()
-    {
-        _httpClient = new HttpClient();
-    }
-
-    [KernelFunction]
-    [Description("Makes a GET request to a URL")]
-    public async Task<string> GetAsync(
-        [Description("The URL to request")] string url)
-    {
-        try
-        {
-            var response = await _httpClient.GetAsync(url);
-            return await response.Content.ReadAsStringAsync();
-        }
-        catch (Exception ex)
-        {
-            return $"Error: {ex.Message}";
-        }
-    }
-
-    [KernelFunction]
-    [Description("Makes a POST request with JSON data")]
-    public async Task<string> PostJsonAsync(
-        [Description("The URL")] string url,
-        [Description("JSON body")] string jsonBody)
-    {
-        try
-        {
-            var content = new StringContent(jsonBody, System.Text.Encoding.UTF8, "application/json");
-            var response = await _httpClient.PostAsync(url, content);
-            return await response.Content.ReadAsStringAsync();
-        }
-        catch (Exception ex)
-        {
-            return $"Error: {ex.Message}";
-        }
-    }
+    [KernelFunction, Description("Raise a number to a power.")]
+    public double Power(double @base, [Description("The exponent")] double exponent) => Math.Pow(@base, exponent);
 }
+
+kernel.ImportPluginFromType<Calculator>("calc");
+var settings = new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() };
+Console.WriteLine(await kernel.InvokePromptAsync("What is (2^10) + 24?", new(settings)));
 ```
+
+Arithmetic is a good first tool precisely because models are unreliable at it — the result shows clearly whether the tool was used.
 
 ---
 
-## 3. Memory and Retrieval
+## 5. RAG over your documents
 
-### 3.1 Document-Based QA with Memory
+The recipe is the same in both languages: define a record type, put it in a vector store collection with an embedding generator, expose search as a function, and let an agent call it.
 
-**Problem:** Store documents in memory and answer questions based on them.
+- Python: `@vectorstoremodel` record + `InMemoryCollection(record_type=..., embedding_generator=...)` + `collection.create_search_function(...)` — see [Python recipe 4](/semantic-kernel-guide/python/semantic_kernel_recipes_python/#4-document-qa-with-rag).
+- C#: `[VectorStoreKey]`/`[VectorStoreData]`/`[VectorStoreVector]` record + `InMemoryVectorStore` (`CommunityToolkit.VectorData.InMemory`) + `VectorStoreTextSearch<T>` — see [.NET recipe 5](/semantic-kernel-guide/dotnet/semantic_kernel_recipes_dotnet/#5-rag-tool-from-a-vector-store).
 
-**.NET Implementation:**
+Production stores (Azure AI Search, Qdrant, Postgres, Redis ...) are drop-in replacements for the in-memory collection.
 
+---
 
-```csharp
+## 6. Two-agent debate
 
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Memory;
-
-public class DocumentQASystem
-{
-    private readonly Kernel _kernel;
-    private readonly ISemanticTextMemory _memory;
-    private const string DocumentCollection = "documents";
-
-    public DocumentQASystem(Kernel kernel, ISemanticTextMemory memory)
-    {
-        _kernel = kernel;
-        _memory = memory;
-    }
-
-    public async Task StoreDocumentAsync(string documentId, string content)
-    {
-        await _memory.SaveInformationAsync(
-            collection: DocumentCollection,
-            id: documentId,
-            text: content
-        );
-        Console.WriteLine($"Stored document: {documentId}");
-    }
-
-    public async Task<string> AnswerQuestionAsync(string question)
-    {
-        // Search for relevant documents
-        var results = await _memory.SearchAsync(
-            collection: DocumentCollection,
-            query: question,
-            limit: 3,
-            minRelevanceScore: 0.5
-        );
-
-        var relevantContext = string.Join("\n", results.Select(r => r.Text));
-
-        // Generate answer using context
-        var qaFunction = _kernel.CreateFunctionFromPrompt(
-            @"Based on the following documents, answer the question.
-Documents:
-{{$context}}
-
-Question: {{$question}}
-
-Answer:",
-            functionName: "AnswerFromDocs"
-        );
-
-        var arguments = new KernelArguments
-        {
-            ["context"] = relevantContext,
-            ["question"] = question
-        };
-
-        var result = await _kernel.InvokeAsync(qaFunction, arguments);
-        return result.ToString() ?? "No answer found";
-    }
-
-    // Usage
-    public static async Task Main()
-    {
-        var kernel = Kernel.CreateBuilder()
-            .AddOpenAIChatCompletion("gpt-4", "YOUR_API_KEY")
-            .AddOpenAITextEmbeddingGeneration("text-embedding-3-small", "YOUR_API_KEY")
-            .Build();
-
-        var memory = new MemoryBuilder()
-            .WithOpenAITextEmbeddingGeneration("text-embedding-3-small", "YOUR_API_KEY")
-            .WithMemoryStore(new VolatileMemoryStore())
-            .Build();
-
-        var qaSystem = new DocumentQASystem(kernel, memory);
-
-        // Store documents
-        await qaSystem.StoreDocumentAsync(
-            "doc1",
-            "Machine learning is a subset of artificial intelligence..."
-        );
-
-        // Ask questions
-        var answer = await qaSystem.AnswerQuestionAsync("What is machine learning?");
-        Console.WriteLine(answer);
-    }
-}
-
-```
-
-
-**Python Implementation:**
-
+A group chat between two agents with a round limit:
 
 ```python
+from semantic_kernel.agents import ChatCompletionAgent, GroupChatOrchestration, RoundRobinGroupChatManager
+from semantic_kernel.agents.runtime import InProcessRuntime
 
-from semantic_kernel import Kernel
-from semantic_kernel.memory import VolatileMemoryStore
-from semantic_kernel.connectors.ai.open_ai import OpenAITextEmbedding
+svc = OpenAIChatCompletion(ai_model_id="gpt-5-mini")
+pro = ChatCompletionAgent(name="Pro", description="Argues for", service=svc,
+                          instructions="Argue FOR the motion in under 80 words. Rebut the last point.")
+con = ChatCompletionAgent(name="Con", description="Argues against", service=svc,
+                          instructions="Argue AGAINST the motion in under 80 words. Rebut the last point.")
 
-class DocumentQASystem:
-    def __init__(self, kernel: Kernel, memory_store):
-        self.kernel = kernel
-        self.memory_store = memory_store
-        self.collection_name = "documents"
-    
-    async def store_document_async(self, document_id: str, content: str):
-        """Store a document in memory"""
-        await self.memory_store.upsert_async(
-            collection_name=self.collection_name,
-            key=document_id,
-            text=content
-        )
-        print(f"Stored document: {document_id}")
-    
-    async def answer_question_async(self, question: str) -> str:
-        """Answer question based on stored documents"""
-        # Search for relevant documents
-        results = await self.memory_store.search_async(
-            collection_name=self.collection_name,
-            text=question,
-            limit=3
-        )
-        
-        relevant_context = "\n".join([r.text for r in results])
-        
-        # Generate answer
-        qa_function = self.kernel.create_function_from_prompt(
-            prompt="""Based on the following documents, answer the question.
-Documents:
-{{$context}}
-
-Question: {{$question}}
-
-Answer:""",
-            function_name="AnswerFromDocs"
-        )
-        
-        result = await self.kernel.invoke_async(
-            qa_function,
-            context=relevant_context,
-            question=question
-        )
-        
-        return str(result) if result else "No answer found"
-
-# Usage
-async def main():
-    kernel = Kernel()
-    kernel.add_service(
-        OpenAIChatCompletion(model_id="gpt-4", api_key="YOUR_API_KEY")
-    )
-    
-    memory_store = VolatileMemoryStore()
-    
-    qa_system = DocumentQASystem(kernel, memory_store)
-    
-    # Store documents
-    await qa_system.store_document_async(
-        "doc1",
-        "Machine learning is a subset of artificial intelligence..."
-    )
-    
-    # Ask questions
-    answer = await qa_system.answer_question_async("What is machine learning?")
-    print(answer)
-
-asyncio.run(main())
-
+debate = GroupChatOrchestration(members=[pro, con], manager=RoundRobinGroupChatManager(max_rounds=4),
+                                agent_response_callback=lambda m: print(f"{m.name}: {m.content}\n"))
+runtime = InProcessRuntime(); runtime.start()
+result = await debate.invoke(task="Motion: remote work is better for software teams.", runtime=runtime)
+await result.get(timeout=300)
+await runtime.stop_when_idle()
 ```
 
+```csharp
+using Microsoft.SemanticKernel.Agents;
+using Microsoft.SemanticKernel.Agents.Orchestration.GroupChat;
+using Microsoft.SemanticKernel.Agents.Runtime.InProcess;
+
+ChatCompletionAgent pro = new() { Name = "Pro", Description = "Argues for", Kernel = kernel,
+    Instructions = "Argue FOR the motion in under 80 words. Rebut the last point." };
+ChatCompletionAgent con = new() { Name = "Con", Description = "Argues against", Kernel = kernel,
+    Instructions = "Argue AGAINST the motion in under 80 words. Rebut the last point." };
+
+GroupChatOrchestration debate = new(new RoundRobinGroupChatManager { MaximumInvocationCount = 4 }, pro, con)
+{
+    ResponseCallback = m => { Console.WriteLine($"{m.AuthorName}: {m.Content}\n"); return ValueTask.CompletedTask; },
+};
+InProcessRuntime runtime = new();
+await runtime.StartAsync();
+var result = await debate.InvokeAsync("Motion: remote work is better for software teams.", runtime);
+await result.GetValueAsync(TimeSpan.FromMinutes(5));
+await runtime.RunUntilIdleAsync();
+```
+
+(.NET orchestrations are in preview packages and need `SKEXP0110` suppressed.)
 
 ---
 
-## 4. Multi-Agent Recipes
+## 7. Reason-and-act agent
 
-### 4.1 Debate Agent System
+There is no special "ReAct agent" class: a `ChatCompletionAgent` with plugins and automatic function calling already alternates between reasoning and tool use. Ask it to show its plan if you want the trace:
 
-**Problem:** Create multiple agents that debate a topic.
+```python
+from semantic_kernel.agents import ChatCompletionAgent
 
-**.NET Implementation:**
+agent = ChatCompletionAgent(
+    service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+    name="Analyst",
+    instructions="Before each tool call, state in one line what you are checking and why.",
+    plugins=[Calculator()],
+)
+
+async def on_step(message):
+    for item in message.items:
+        print("step:", type(item).__name__, getattr(item, "name", ""))
+
+async for reply in agent.invoke(messages="If I invest 1000 at 5% for 10 years, what do I end up with?",
+                                on_intermediate_message=on_step):
+    print(reply.content)
+```
 
 ```csharp
-using Microsoft.SemanticKernel;
-
-public class DebateAgent
+ChatCompletionAgent agent = new()
 {
-    private readonly Kernel _kernel;
-    public string Name { get; }
-    public string Position { get; }
+    Name = "Analyst",
+    Instructions = "Before each tool call, state in one line what you are checking and why.",
+    Kernel = kernel,   // with the Calculator plugin imported
+    Arguments = new KernelArguments(new OpenAIPromptExecutionSettings { FunctionChoiceBehavior = FunctionChoiceBehavior.Auto() }),
+};
 
-    public DebateAgent(Kernel kernel, string name, string position)
-    {
-        _kernel = kernel;
-        Name = name;
-        Position = position;
-    }
-
-    public async Task<string> MakeArgumentAsync(string topic, string opposingArgument = "")
-    {
-        var prompt = opposingArgument == ""
-            ? $"You are {Name}, arguing for {Position} on the topic: {topic}. Make a compelling argument."
-            : $"You are {Name}, arguing for {Position}. Respond to this argument: {opposingArgument}";
-
-        var function = _kernel.CreateFunctionFromPrompt(prompt);
-        var result = await _kernel.InvokeAsync(function);
-        return result.ToString() ?? "";
-    }
-}
-
-public class DebateSystem
+var options = new AgentInvokeOptions
 {
-    private readonly Kernel _kernel;
-    private readonly List<DebateAgent> _agents;
-
-    public DebateSystem(Kernel kernel)
-    {
-        _kernel = kernel;
-        _agents = new List<DebateAgent>();
-    }
-
-    public void AddAgent(string name, string position)
-    {
-        _agents.Add(new DebateAgent(_kernel, name, position));
-    }
-
-    public async Task<string> RunDebateAsync(string topic, int rounds = 2)
-    {
-        var debateLog = $"Topic: {topic}\n\n";
-
-        for (int round = 0; round < rounds; round++)
-        {
-            debateLog += $"=== Round {round + 1} ===\n";
-
-            string lastArgument = "";
-            foreach (var agent in _agents)
-            {
-                var argument = await agent.MakeArgumentAsync(topic, lastArgument);
-                debateLog += $"{agent.Name}: {argument}\n\n";
-                lastArgument = argument;
-            }
-        }
-
-        return debateLog;
-    }
-}
-
-// Usage
-var kernel = Kernel.CreateBuilder()
-    .AddOpenAIChatCompletion("gpt-4", "YOUR_API_KEY")
-    .Build();
-
-var debateSystem = new DebateSystem(kernel);
-debateSystem.AddAgent("Alice", "Remote Work");
-debateSystem.AddAgent("Bob", "Office Work");
-
-var result = await debateSystem.RunDebateAsync("Should companies adopt remote work?", rounds: 2);
-Console.WriteLine(result);
+    OnIntermediateMessage = m => { Console.WriteLine($"step: {m.Items.Count} item(s)"); return Task.CompletedTask; },
+};
+await foreach (var reply in agent.InvokeAsync("If I invest 1000 at 5% for 10 years, what do I end up with?", options: options))
+    Console.WriteLine(reply.Message.Content);
 ```
 
 ---
 
-## 5. Advanced Patterns
+## Revision history
 
-### 5.1 RAG (Retrieval-Augmented Generation) Implementation
-
-**Problem:** Implement a complete RAG system with embedding, storage, and retrieval.
-
-**.NET Implementation:**
-
-
-```csharp
-
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Memory;
-using Microsoft.SemanticKernel.Embeddings;
-
-public class RAGSystem
-{
-    private readonly Kernel _kernel;
-    private readonly ISemanticTextMemory _memory;
-    private const string CollectionName = "knowledge_base";
-
-    public RAGSystem(
-        Kernel kernel,
-        ITextEmbeddingGenerationService embeddingService)
-    {
-        _kernel = kernel;
-
-        var memoryBuilder = new MemoryBuilder()
-            .WithTextEmbeddingGeneration(embeddingService)
-            .WithMemoryStore(new VolatileMemoryStore());
-
-        _memory = memoryBuilder.Build();
-    }
-
-    public async Task IndexDocumentsAsync(List<(string id, string content)> documents)
-    {
-        Console.WriteLine($"Indexing {documents.Count} documents...");
-
-        foreach (var (id, content) in documents)
-        {
-            // Split content into chunks if necessary
-            var chunks = ChunkContent(content, chunkSize: 500);
-
-            for (int i = 0; i < chunks.Count; i++)
-            {
-                await _memory.SaveInformationAsync(
-                    collection: CollectionName,
-                    id: $"{id}_chunk_{i}",
-                    text: chunks[i]
-                );
-            }
-        }
-
-        Console.WriteLine("Indexing complete");
-    }
-
-    public async Task<string> QueryAsync(string query)
-    {
-        // Retrieve relevant documents
-        var relevantDocs = await _memory.SearchAsync(
-            collection: CollectionName,
-            query: query,
-            limit: 5,
-            minRelevanceScore: 0.5
-        );
-
-        var context = string.Join("\n", relevantDocs.Select(d => d.Text));
-
-        // Generate answer with context
-        var ragFunction = _kernel.CreateFunctionFromPrompt(
-            @"Context:
-{{$context}}
-
-Query: {{$query}}
-
-Answer based on the provided context:",
-            functionName: "RAGQuery"
-        );
-
-        var arguments = new KernelArguments
-        {
-            ["context"] = context,
-            ["query"] = query
-        };
-
-        var result = await _kernel.InvokeAsync(ragFunction, arguments);
-        return result.ToString() ?? "No answer found";
-    }
-
-    private List<string> ChunkContent(string content, int chunkSize)
-    {
-        var chunks = new List<string>();
-        var sentences = content.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
-
-        var currentChunk = "";
-        foreach (var sentence in sentences)
-        {
-            if ((currentChunk + sentence).Length > chunkSize && currentChunk.Length > 0)
-            {
-                chunks.Add(currentChunk.Trim());
-                currentChunk = sentence;
-            }
-            else
-            {
-                currentChunk += sentence + ". ";
-            }
-        }
-
-        if (currentChunk.Length > 0)
-            chunks.Add(currentChunk.Trim());
-
-        return chunks;
-    }
-}
-
-```
-
-
-### 5.2 ReAct Agent (Reasoning and Acting)
-
-**Problem:** Implement a ReAct agent that reasons about problems before acting.
-
-**.NET Implementation:**
-
-```csharp
-using Microsoft.SemanticKernel;
-using System.Text.RegularExpressions;
-
-public class ReactAgent
-{
-    private readonly Kernel _kernel;
-    private const int MaxIterations = 10;
-
-    public ReactAgent(Kernel kernel)
-    {
-        _kernel = kernel;
-    }
-
-    public async Task<string> SolveAsync(string problem)
-    {
-        Console.WriteLine($"Problem: {problem}\n");
-
-        var conversationHistory = "";
-        var iteration = 0;
-
-        while (iteration < MaxIterations)
-        {
-            iteration++;
-
-            // Generate next step
-            var thinkFunction = _kernel.CreateFunctionFromPrompt(
-                $@"You are solving this problem: {problem}
-
-{conversationHistory}
-
-Think about the next step. Respond with:
-Thought: [your reasoning]
-Action: [action to take - use one of: Calculate, Lookup, Analyze]
-Action Input: [input for the action]
-
-If you have a final answer, use:
-Thought: [final reasoning]
-Final Answer: [the answer]",
-                functionName: "Think"
-            );
-
-            var thinkResult = await _kernel.InvokeAsync(thinkFunction);
-            var thinkText = thinkResult.ToString() ?? "";
-            conversationHistory += thinkText + "\n";
-
-            Console.WriteLine(thinkText);
-
-            // Check if we have a final answer
-            if (thinkText.Contains("Final Answer"))
-            {
-                return ExtractFinalAnswer(thinkText);
-            }
-
-            // Execute action
-            var actionMatch = Regex.Match(thinkText, @"Action:\s*(.+)");
-            if (actionMatch.Success)
-            {
-                var action = actionMatch.Groups[1].Value.Trim();
-                var inputMatch = Regex.Match(thinkText, @"Action Input:\s*(.+)");
-                var input = inputMatch.Success ? inputMatch.Groups[1].Value.Trim() : "";
-
-                var observation = await ExecuteActionAsync(action, input);
-                conversationHistory += $"Observation: {observation}\n";
-                Console.WriteLine($"Observation: {observation}\n");
-            }
-        }
-
-        return "Max iterations reached without solution";
-    }
-
-    private async Task<string> ExecuteActionAsync(string action, string input)
-    {
-        // Execute the requested action
-        var actionFunction = _kernel.CreateFunctionFromPrompt(
-            $"Perform this action: {action} with input: {input}",
-            functionName: action
-        );
-
-        var result = await _kernel.InvokeAsync(actionFunction);
-        return result.ToString() ?? "Action completed";
-    }
-
-    private string ExtractFinalAnswer(string text)
-    {
-        var match = Regex.Match(text, @"Final Answer:\s*(.+)", RegexOptions.Singleline);
-        return match.Success ? match.Groups[1].Value.Trim() : text;
-    }
-}
-```
-
-These recipes provide practical, production-ready code examples for common Semantic Kernel patterns across .NET and Python platforms.
-
-
-
-
-
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | Py 1.45.0 / .NET 1.81.0 | Rewritten. Previous recipes used pre-1.0 Python APIs (`invoke_async`, `create_function_from_prompt`, `model_id=`), the legacy memory-store API (`VolatileMemoryStore`, `ISemanticTextMemory`, `WithMemoryStore`) and placeholder API keys in code. All snippets now use current APIs; versions read from the site's version registry. |
