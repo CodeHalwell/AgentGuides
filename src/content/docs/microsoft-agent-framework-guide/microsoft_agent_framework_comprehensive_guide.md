@@ -1,16 +1,13 @@
 ---
 title: "Microsoft Agent Framework Comprehensive Guide"
-description: "Language-neutral overview of the Microsoft Agent Framework — architecture, agent lifecycle, simple agents and multi-agent systems — with pointers to the verified Python and .NET guides."
+description: "Language-neutral overview of the Microsoft Agent Framework — architecture, packages, authentication, simple agents, tools, execution models, testing and multi-agent systems — with verified Python and C# side by side."
 framework: microsoft-agent-framework
 ---
 
 # Microsoft Agent Framework Comprehensive Guide
 
-**Current releases:** `agent-framework` %%version=agent-framework%% (Python) · `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET) — the two version independently. Reviewed %%versions-checked%%.
-**Target Audience:** Developers from beginner to expert level
-**Coverage:** Unified SDK and Azure Ecosystem Integration
-
-> The code on this page dates from the April 2026 GA and is illustrative. For examples checked against the current packages, use the [Python guide](/microsoft-agent-framework-guide/python/) and the [.NET guide](/microsoft-agent-framework-guide/dotnet/).
+**Current releases:** `agent-framework` %%version=agent-framework%% (Python) · `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET) — the two version independently. Reviewed %%versions-checked%%: every Python example was import- and signature-checked (and the agent logic run against a stub chat client), and every C# example compiled, against those releases.
+**Target audience:** developers from beginner to expert level
 
 ---
 
@@ -21,260 +18,152 @@ framework: microsoft-agent-framework
 3. [Simple Agents](#simple-agents)
 4. [Multi-Agent Systems](#multi-agent-systems)
 
-This page is the language-neutral overview. Tools, structured output, MCP, memory, context engineering and the Azure/Copilot Studio integrations are covered per language in the [Python guide](/microsoft-agent-framework-guide/python/) and the [.NET guide](/microsoft-agent-framework-guide/dotnet/), and across both in the [A2A protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/), [graph workflows & declarative agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) and [enterprise](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/) pages.
+This page is the language-neutral overview. Tools, structured output, MCP, memory, context engineering and the Azure/Copilot Studio integrations are covered in depth per language in the [Python guide](/microsoft-agent-framework-guide/python/) and the [.NET guide](/microsoft-agent-framework-guide/dotnet/), and across both in the [A2A protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/), [graph workflows & declarative agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) and [enterprise](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/) pages.
 
 ---
 
 ## Introduction
 
-The Microsoft Agent Framework (generally available since April 2026) represents a unified, open-source development kit designed to facilitate the creation, orchestration, and deployment of AI agents and multi-agent workflows across .NET and Python platforms. This framework directly unifies **Semantic Kernel** and **AutoGen** into a single production-ready SDK, providing a comprehensive foundation for building sophisticated AI agents.
+The Microsoft Agent Framework (generally available since April 2026) is the open-source SDK that unifies **Semantic Kernel**'s agent features and **AutoGen** into one framework for building agents and multi-agent workflows in .NET and Python.
 
-> **Note (GA 1.0):** `ChatClientAgentOptions.Instructions` was removed in GA 1.0. On .NET, pass `instructions:` to the `ChatClientAgent` constructor (or to `AsAIAgent(...)`); on Python, pass `instructions=` to `Agent`.
+### Key objectives
 
-### Key Objectives
+- **One programming model across languages:** the same concepts — agents, sessions, tools, middleware, context providers, workflows — in Python and .NET.
+- **Provider choice:** Azure OpenAI, OpenAI, Microsoft Foundry, Anthropic, Ollama and others behind one chat-client abstraction.
+- **Production readiness:** OpenTelemetry instrumentation, checkpointed workflows, human-in-the-loop, and hosting integrations.
+- **Open protocols:** MCP for tools, A2A for agent-to-agent calls, AG-UI for front ends.
 
-The framework addresses several critical objectives:
-- **Unified Development Experience:** Single SDK across multiple programming languages (.NET, Python)
-- **Azure Ecosystem Integration:** Seamless integration with Azure AI services, Copilot Studio, and Semantic Kernel
-- **Enterprise Readiness:** Built-in observability, security features, and compliance tools
-- **Scalability:** Support for both simple single-purpose agents and complex multi-agent systems
-- **Production-Grade Quality:** Observability, monitoring, and deployment capabilities for production environments
+### Target use cases
 
-### Target Use Cases
-
-- **Conversational AI:** Building sophisticated conversational agents with tool integration
-- **Autonomous Task Execution:** Agents that can independently make decisions and execute complex workflows
-- **Multi-Agent Systems:** Orchestrating multiple specialised agents to solve complex problems
-- **Enterprise Integration:** Connecting agents to enterprise systems, APIs, and data sources
-- **Knowledge Assistance:** Building AI assistants that leverage organisation knowledge bases
+- **Conversational AI** with tools and memory
+- **Autonomous task execution** with planning and approvals
+- **Multi-agent systems** — sequential, concurrent, handoff, group chat, Magentic, or custom graphs
+- **Enterprise integration** with business systems through tools and MCP servers
+- **Knowledge assistance** grounded in organisational content (RAG)
 
 ---
 
 ## Core Fundamentals
 
-### Framework Architecture and Design Principles
+### Architecture
 
-The Microsoft Agent Framework is built on several foundational architectural principles:
+The framework is layered, and each layer is replaceable:
 
-#### **Modularity and Composition**
-The framework uses a modular architecture where components are designed as interchangeable modules. This allows developers to:
-- Choose between different model clients (Azure OpenAI, OpenAI, Anthropic, etc.)
-- Plug in various memory backends (Azure Cosmos DB, in-memory, custom implementations)
-- Select appropriate tool providers (built-in Azure tools, custom functions, MCP servers)
+```
+┌──────────────────────────────────────────────────────────────┐
+│ Workflows: graphs of executors, orchestrations, checkpoints  │
+├──────────────────────────────────────────────────────────────┤
+│ Agents: Agent / ChatClientAgent, sessions, middleware,       │
+│         context providers (memory, RAG), tools               │
+├──────────────────────────────────────────────────────────────┤
+│ Chat clients: OpenAI, Azure OpenAI, Foundry, Anthropic, ...  │
+│ (.NET: Microsoft.Extensions.AI IChatClient)                  │
+├──────────────────────────────────────────────────────────────┤
+│ Cross-cutting: OpenTelemetry, hosting (HTTP, A2A, AG-UI),    │
+│                MCP, Azure Functions / durable agents         │
+└──────────────────────────────────────────────────────────────┘
+```
 
-#### **Unified API Surface**
-Across .NET and Python, the framework provides a consistent API that abstracts underlying implementation details, enabling code portability and consistent developer experience.
+| Concept | Python | .NET |
+| --- | --- | --- |
+| Agent | `agent_framework.Agent` | `AIAgent` (abstract), `ChatClientAgent` |
+| Model client | `OpenAIChatClient`, `FoundryChatClient`, ... | `IChatClient` (`Microsoft.Extensions.AI`) |
+| Conversation state | `AgentSession` (`agent.create_session()`) | `AgentSession` (`agent.CreateSessionAsync()`) |
+| Tools | `@tool` functions, MCP tools | `AIFunctionFactory.Create(...)`, MCP tools |
+| Middleware | `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware` | `agent.AsBuilder().Use(...)`, `ChatClientBuilder.Use(...)` |
+| Memory / RAG | `ContextProvider`, history providers | `AIContextProvider`, `ChatHistoryProvider` |
+| Workflows | `WorkflowBuilder`, `SequentialBuilder`, ... | `WorkflowBuilder`, `AgentWorkflowBuilder` |
+| Telemetry | `agent_framework.observability` | `.UseOpenTelemetry()` |
 
-#### **Azure-First Design**
-The framework is designed with Azure as a first-class citizen, providing native integration with Azure AI services whilst maintaining compatibility with other providers.
+### Installation
 
-#### **Observability Built-In**
-Every framework component includes OpenTelemetry instrumentation, enabling comprehensive monitoring and diagnostics without additional configuration.
-
-### Installation Across Platforms
-
-#### **.NET Installation**
+**Python** (3.10+):
 
 ```bash
-# Core installation
-dotnet add package Microsoft.Agents.AI
+pip install agent-framework==%%version=agent-framework%%   # core plus the common integrations
+```
 
-# With Azure support
-dotnet add package Microsoft.Agents.AI.Azuredotnet add package Azure.AI.OpenAI
+`agent-framework` is a meta-package that pulls in `agent-framework-core` and the provider packages (`agent-framework-openai`, `agent-framework-foundry`, `agent-framework-orchestrations`, ...). To keep the dependency set small, install `agent-framework-core` plus only the provider packages you use.
+
+**.NET** (8.0+):
+
+```bash
+dotnet add package Microsoft.Agents.AI --version %%version=Microsoft.Agents.AI%%
+dotnet add package Microsoft.Agents.AI.OpenAI --version %%version=Microsoft.Agents.AI%%   # AsAIAgent() for the OpenAI SDK
+dotnet add package Azure.AI.OpenAI --prerelease
 dotnet add package Azure.Identity
-
-# With OpenAI support
-dotnet add package Microsoft.Agents.AI.OpenAI```
-
-**System Requirements:**
-- .NET 8.0 SDK or later
-- Visual Studio 2022 or Visual Studio Code
-- Azure CLI for authentication (recommended)
-
-#### **Python Installation**
-
-```bash
-# Core installation
-pip install agent-framework
-
-# Selective component installation
-pip install agent-framework-core
-
-# With Azure AI integration
-pip install agent-framework-azure-ai
-
-# With Copilot Studio integration
-pip install agent-framework-copilotstudio
-
-# With Microsoft integration
-pip install agent-framework-microsoft agent-framework-azure-ai
+dotnet add package Microsoft.Agents.AI.Workflows --version %%version=Microsoft.Agents.AI%%  # multi-agent workflows
 ```
 
-**System Requirements:**
-- Python 3.10 or later
-- Virtual environment recommended
-- Poetry or pip for package management
+### Integration with Azure AI, Copilot Studio and Semantic Kernel
 
+- **Microsoft Foundry / Azure OpenAI** — model hosting, Foundry Agent Service (server-side agents and hosted tools), evaluation. Python: `agent_framework.foundry.FoundryChatClient`; .NET: `Microsoft.Agents.AI.Foundry` and `Azure.AI.OpenAI`.
+- **Azure AI Search** — retrieval through context providers (`agent_framework.azure.AzureAISearchContextProvider`; .NET `TextSearchProvider`).
+- **Copilot Studio** — call a Copilot Studio agent as a framework agent (`agent_framework.microsoft.CopilotStudioAgent`; .NET `Microsoft.Agents.AI.CopilotStudio`), or expose your tools to Copilot Studio as an MCP server.
+- **Semantic Kernel** — the framework is SK's successor for agents; SK plugins convert to framework tools (`KernelFunction.AsAIFunction()` in .NET). See the [migration notice](/microsoft-agent-framework-guide/migration_notice/).
 
+### Authentication
 
-### Unified SDK Structure
-
-The unified SDK provides three main component layers:
-
-#### **Layer 1: Core Agent APIs**
-```
-┌─────────────────────────────────────┐
-│  Agent Execution Engine             │
-│  - ChatAgent, AIAgent               │
-│  - Thread Management                │
-│  - Response Handling                │
-└─────────────────────────────────────┘
-```
-
-#### **Layer 2: Supporting Services**
-```
-┌──────────────────────────────────────────────────┐
-│  Tools         │ Memory    │ Observability │ Auth  │
-│  - Functions   │ - Vector  │ - Telemetry   │ - AAD │
-│  - Custom      │ - Persist │ - Tracing     │ - MSI │
-│  - MCP         │ - Session │ - Logging     │       │
-└──────────────────────────────────────────────────┘
-```
-
-#### **Layer 3: Integration Providers**
-```
-┌──────────────────────────────────────────────────────────┐
-│  Azure AI  │ OpenAI  │ Anthropic │ Copilot │ Custom      │
-│  Foundry   │ Direct  │ API       │ Studio  │ Providers   │
-└──────────────────────────────────────────────────────────┘
-```
-
-### Integration with Azure AI, Copilot Studio, Semantic Kernel
-
-#### **Azure AI Integration**
-
-Azure AI provides several integration points:
-
-1. **Azure AI Foundry**
-   - Hosting and management of agents
-   - Project workspace configuration
-   - Connection management for data sources
-
-2. **Azure OpenAI Service**
-   - LLM endpoints (GPT-4, GPT-4 Turbo, GPT-4o, GPT-4o-mini)
-   - Embeddings (Text-Embedding-3-large, 3-small)
-   - Deployment management
-
-3. **Azure AI Search**
-   - Vector search capabilities
-   - RAG (Retrieval-Augmented Generation) support
-   - Full-text and semantic search
-
-#### **Copilot Studio Integration**
-
-Copilot Studio provides:
-- Conversational design tools
-- Agent orchestration capabilities
-- Multi-channel publishing (Teams, Slack, web)
-- Analytics and monitoring dashboard
-
-#### **Semantic Kernel Integration**
-
-Semantic Kernel compatibility enables:
-- Plugin reusability
-- Function importing and exporting
-- Planner integration with agents
-- Memory and skill sharing
-
-### Authentication and Authorization
-
-#### **Azure Active Directory (AAD) Authentication**
-
-The framework implements Azure Active Directory for secure authentication:
+Authentication belongs to the **chat client**. Use Microsoft Entra ID credentials from `azure-identity` / `Azure.Identity`: Azure CLI sign-in for local development, managed identity in Azure.
 
 ```python
-from azure.identity import AzureCliCredential, DefaultAzureCredential
-from azure.identity.aio import AzureCliCredential as AsyncAzureCliCredential
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.openai import OpenAIChatClient
+from azure.identity.aio import AzureCliCredential, ManagedIdentityCredential
 
-# CLI-based authentication (development)
-credential = AzureCliCredential()
+# Local development: uses your `az login` session.
+dev_client = FoundryChatClient(credential=AzureCliCredential())   # FOUNDRY_PROJECT_ENDPOINT, FOUNDRY_MODEL
 
-# Default chain authentication (production)
-# Tries: EnvironmentCredential, ManagedIdentityCredential, AzureCliCredential, etc.
-credential = DefaultAzureCredential()
-
-# Asynchronous variant for async contexts
-async_credential = AsyncAzureCliCredential()
+# In Azure: the app's managed identity, against an Azure OpenAI resource.
+prod_client = OpenAIChatClient(
+    model="gpt-4o-mini",                                   # the deployment name
+    azure_endpoint="https://your-resource.openai.azure.com",
+    credential=ManagedIdentityCredential(),
+)
 ```
-
-
-async with AzureCliCredential() as credential:
-    async with AIProjectClient(
-        endpoint="https://your-project.eastus.ai.azure.com",
-        credential=credential
-    ) as client:
-        # Client operations are authenticated and authorised
-        # by the user's AAD role assignments
-        pass
-```
-
-#### **Managed Identity**
-
-In Azure services, use Managed Identity for secure authentication:
 
 ```csharp
-using Azure.Identity;
 using Azure.AI.OpenAI;
+using Azure.Identity;
 
-// System-assigned Managed Identity (Azure service)
-var credential = new ManagedIdentityCredential();
+// System-assigned managed identity (in Azure); use AzureCliCredential locally.
 var client = new AzureOpenAIClient(
     new Uri("https://your-resource.openai.azure.com/"),
-    credential
-);
+    new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned));
 ```
 
-### Environment Setup and Configuration
+The [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#microsoft-entra-id-authentication-patterns) covers workload identity, multi-tenant apps and government clouds.
 
-#### **.NET Environment Setup**
+### Environment and configuration
 
-**Step 1: Project Configuration**
+**Python** clients read their settings from environment variables (or a `.env` file via `env_file_path=`), so code stays free of endpoints:
+
 ```bash
-dotnet new console -n MyAgentApp
-cd MyAgentApp
-dotnet add package Microsoft.Agents.AIdotnet add package Microsoft.Agents.AI.Azuredotnet add package Azure.AI.OpenAI
-dotnet add package Azure.Identity
+# .env
+FOUNDRY_PROJECT_ENDPOINT=https://your-resource.services.ai.azure.com/api/projects/your-project
+FOUNDRY_MODEL=gpt-4o-mini
+# or, for OpenAI / Azure OpenAI with OpenAIChatClient:
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4o-mini
 ```
 
-**Step 2: Environment Variables**
-```bash
-# .env file or environment variables
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o-mini
-AZURE_OPENAI_API_KEY=your-api-key
-# Or use DefaultAzureCredential (no key needed)
-```
+**.NET** uses the standard configuration system and DI:
 
-**Step 3: Configuration in appsettings.json**
 ```json
 {
   "AzureOpenAI": {
     "Endpoint": "https://your-resource.openai.azure.com",
-    "DeploymentName": "gpt-4o-mini",
-    "ApiVersion": "2024-08-01-preview"
-  },
-  "Observability": {
-    "ApplicationInsightsConnectionString": "InstrumentationKey=..."
+    "DeploymentName": "gpt-4o-mini"
   }
 }
 ```
 
-**Step 4: Dependency Injection Setup**
 ```csharp
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Azure.Identity;
-using Azure.AI.OpenAI;
 
 var config = new ConfigurationBuilder()
     .AddJsonFile("appsettings.json")
@@ -282,179 +171,107 @@ var config = new ConfigurationBuilder()
     .Build();
 
 var services = new ServiceCollection();
-services.AddSingleton(sp => new AzureOpenAIClient(
-    new Uri(config["AzureOpenAI:Endpoint"]!),
-    new DefaultAzureCredential()
-));
+services.AddChatClient(
+    new AzureOpenAIClient(new Uri(config["AzureOpenAI:Endpoint"]!), new DefaultAzureCredential())
+        .GetChatClient(config["AzureOpenAI:DeploymentName"]!)
+        .AsIChatClient());
 ```
 
-#### **Python Environment Setup**
+### Development tools
 
-**Step 1: Virtual Environment**
-```bash
-python -m venv agent_env
-
-# Activate
-# Windows:
-agent_env\Scripts\activate
-# macOS/Linux:
-source agent_env/bin/activate
-```
-
-**Step 2: Dependencies Installation**
-```bash
-pip install agent-framework
-pip install agent-framework-azure-ai
-pip install python-dotenv
-```
-
-**Step 3: Environment Variables**
-```bash
-# .env file
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-4o-mini
-AZURE_AI_PROJECT_ENDPOINT=https://your-project.eastus.ai.azure.com
-```
-
-**Step 4: Configuration Module**
-```python
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-class Config:
-    AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-    AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
-    AZURE_AI_PROJECT_ENDPOINT = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
-```
-
-#### **Development Tools and Extensions**
-
-1. **Visual Studio Code AI Toolkit Extension**
-   - Scaffolding for agent projects
-   - Local testing capabilities
-   - Integrated debugging
-
-2. **Visual Studio Agent Scaffolding**
-   - Project templates
-   - Configuration wizards
-
-3. **Azure CLI with Extensions**
-   ```bash
-   az extension add --name ai
-   az ai foundry agent list
-   ```
+- **DevUI** (`agent-framework-devui`, `Microsoft.Agents.AI.DevUI`) — a local web UI for chatting with agents and stepping through workflows.
+- **AI Toolkit for VS Code** — model playground, tracing viewer (`configure_otel_providers(vs_code_extension_port=...)` sends traces to it) and agent scaffolding.
+- **Azure Developer CLI templates** for deploying agents to Container Apps or Foundry.
 
 ---
 
 ## Simple Agents
 
-### Creating Basic Agents with Unified SDK
+### Creating a basic agent
 
-#### **Chat Agent - Python**
-
-The most common agent type is `Agent` (Python) / `ChatClientAgent` (.NET), designed for conversational interactions:
+**Python** — `Agent` wraps a chat client with instructions:
 
 ```python
 import asyncio
+
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
-async def main():
-    # Create credentials (uses Azure CLI or environment variables)
-    async with AzureCliCredential() as credential:
-        # Initialize Azure AI agent client
-        client = FoundryChatClient(credential=credential)
-        # Create a chat agent with system instructions
-        agent = Agent(
-            client=client,
-            instructions="You are a helpful assistant specialising in Python programming. "
-                        "Provide clear, concise explanations with code examples when appropriate."
-        )
 
-        # Run agent with a user query
+async def main() -> None:
+    async with AzureCliCredential() as credential:
+        agent = Agent(
+            client=FoundryChatClient(credential=credential),
+            name="python-helper",
+            instructions=(
+                "You are a helpful assistant specialising in Python programming. "
+                "Give clear, concise explanations with code examples when appropriate."
+            ),
+        )
         response = await agent.run("How do I implement async/await in Python?")
         print(f"Assistant: {response.text}")
 
-# Execute
+
 asyncio.run(main())
 ```
 
-**Key Features:**
-- **Async-first design:** All operations are asynchronous for scalability
-- **Context management:** Uses async context managers for resource cleanup
-- **Streaming support:** Can stream responses token-by-token
-- **Thread management:** Maintains conversation history across messages
-
-#### **AI Agent (Stateless) - .NET**
-
-For simpler, stateless interactions:
+**.NET** — `AsAIAgent` on the OpenAI SDK's `ChatClient` returns a `ChatClientAgent`:
 
 ```csharp
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
+using OpenAI.Chat;
 
-// Create Azure OpenAI client
-var client = new AzureOpenAIClient(
-    new Uri("https://your-resource.openai.azure.com/"),
-    new DefaultAzureCredential()
-);
+var client = new AzureOpenAIClient(new Uri("https://your-resource.openai.azure.com/"), new DefaultAzureCredential());
 
-// Create an AI agent from the chat client
-var chatClient = client.GetChatClient("gpt-4o-mini");
-var agent = chatClient.AsAIAgent(
-    instructions: "You are a helpful assistant that explains concepts clearly."
-);
+AIAgent agent = client.GetChatClient("gpt-4o-mini")
+    .AsAIAgent(instructions: "You are a helpful assistant that explains concepts clearly.");
 
-// Execute query
-var result = await agent.RunAsync("Explain machine learning to a beginner.");
-Console.WriteLine(result);
+AgentResponse result = await agent.RunAsync("Explain machine learning to a beginner.");
+Console.WriteLine(result.Text);
 ```
 
-#### **Chat Agent with Tools - Python**
+Both agents are stateless between calls unless you pass a **session** (below). In .NET, `AIAgent` is the abstract base type; `ChatClientAgent` is the implementation over any `IChatClient`. There is no separate "stateless" agent class.
 
-Agents become more powerful when equipped with tools:
+### Agents with tools
+
+**Python** — decorate a function with `@tool`; type hints and `Annotated` descriptions become the schema:
 
 ```python
 import asyncio
 from typing import Annotated
+
 from agent_framework import Agent, tool
 from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
+
 @tool(description="Get the current weather for a specified location")
-async def get_weather(location: Annotated[str, "City name, e.g., 'London'"],
-                      unit: Annotated[str, "Temperature unit: 'celsius' or 'fahrenheit'"] = "celsius") -> str:
-    """Fetch weather information for a location."""
-    # In a real scenario, this would call a weather API
-    weather_data = {
-        "London": "15°C, Cloudy",
-        "Paris": "16°C, Sunny",
-        "Amsterdam": "14°C, Rainy"
-    }
-    return f"Weather in {location}: {weather_data.get(location, 'Unknown')}"
+async def get_weather(
+    location: Annotated[str, "City name, e.g. 'London'"],
+    unit: Annotated[str, "Temperature unit: 'celsius' or 'fahrenheit'"] = "celsius",
+) -> str:
+    weather_data = {"London": "15°C, cloudy", "Paris": "16°C, sunny", "Amsterdam": "14°C, rainy"}
+    return f"Weather in {location}: {weather_data.get(location, 'unknown')}"
 
-async def main():
+
+async def main() -> None:
     async with AzureCliCredential() as credential:
-        client = FoundryChatClient(credential=credential)
-        # Create agent with integrated tool
         agent = Agent(
-            client=client,
+            client=FoundryChatClient(credential=credential),
             tools=[get_weather],
-            instructions="You are a weather assistant. Help users check weather in different cities."
+            instructions="You are a weather assistant.",
         )
-
-        # Agent will automatically use the tool when appropriate
         response = await agent.run("What's the weather in London and Paris?")
-        print(response.text)
+        print(response.text)   # the agent called get_weather twice
+
 
 asyncio.run(main())
 ```
 
-#### **Function Tool Registration - .NET**
+**.NET** — `AIFunctionFactory.Create` turns a method into a tool:
 
 ```csharp
 using System.ComponentModel;
@@ -462,874 +279,502 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using OpenAI.Chat;
 
-[Description("Get current weather for a location")]
-static string GetWeather(
-    [Description("The city name")] string location,
-    [Description("Temperature unit: celsius or fahrenheit")] string unit = "celsius")
+public static class WeatherExample
 {
-    var weatherData = new Dictionary<string, string>
+    [Description("Get current weather for a location")]
+    public static string GetWeather(
+        [Description("The city name")] string location,
+        [Description("Temperature unit: celsius or fahrenheit")] string unit = "celsius")
     {
-        { "London", "15°C, Cloudy" },
-        { "Paris", "16°C, Sunny" },
-        { "Amsterdam", "14°C, Rainy" }
-    };
-    return $"Weather in {location}: {weatherData.GetValueOrDefault(location, "Unknown")}";
-}
+        var weatherData = new Dictionary<string, string>
+        {
+            ["London"] = "15°C, cloudy",
+            ["Paris"] = "16°C, sunny",
+            ["Amsterdam"] = "14°C, rainy",
+        };
+        return $"Weather in {location}: {weatherData.GetValueOrDefault(location, "unknown")}";
+    }
 
-async Task Main()
-{
-    var client = new AzureOpenAIClient(
-        new Uri("https://your-resource.openai.azure.com/"),
-        new DefaultAzureCredential()
-    );
-    
-    var chatClient = client.GetChatClient("gpt-4o-mini");
-    
-    // Create agent with function tool
-    var agent = chatClient.AsAIAgent(
-        instructions: "You are a weather assistant.",
-        tools: [AIFunctionFactory.Create(GetWeather)]
-    );
-    
-    // Query agent
-    var result = await agent.RunAsync("What's the weather in London?");
-    Console.WriteLine(result);
+    public static async Task RunAsync()
+    {
+        var client = new AzureOpenAIClient(new Uri("https://your-resource.openai.azure.com/"), new DefaultAzureCredential());
+
+        AIAgent agent = client.GetChatClient("gpt-4o-mini").AsAIAgent(
+            instructions: "You are a weather assistant.",
+            tools: [AIFunctionFactory.Create(GetWeather)]);
+
+        AgentResponse result = await agent.RunAsync("What's the weather in London?");
+        Console.WriteLine(result.Text);
+    }
 }
 ```
 
-### Agent Registration and Lifecycle
-
-#### **Agent Lifecycle Stages**
+### Agent lifecycle
 
 ```
-Initialisation → Configuration → Execution → Termination
-     ↓                ↓              ↓           ↓
-  Create        Setup Tools    Process      Cleanup
-  Instance      Configure      Messages     Resources
-               Memory Backend
+Create client  →  Create agent  →  Create session(s)  →  Run  →  Persist / close
+(once per app)    (cheap; share)   (one per conversation)        (sessions; MCP tools)
 ```
 
-#### **Lifecycle Management - Python**
+- Create the **chat client** once and share it; it owns the HTTP connection pool.
+- **Agents** are cheap and safe to share across requests; they hold configuration, not conversation state.
+- **Sessions** hold the conversation. Create one per conversation, pass it to every run, and persist it (`session.to_dict()` / `AgentSession.from_dict(...)` in Python; `SerializeSessionAsync` / `DeserializeSessionAsync` in .NET) if the conversation spans requests.
+- In Python, use `async with agent:` when the agent owns resources that need opening and closing — MCP tools and some context providers. The agent opens them on entry and closes them on exit.
 
 ```python
-from agent_framework import Agent
-from agent_framework.foundry import FoundryChatClient
-from azure.identity.aio import AzureCliCredential
+from agent_framework import Agent, AgentSession, MCPStreamableHTTPTool
+from agent_framework.openai import OpenAIChatClient
 
-class ManagedChatAgent:
-    def __init__(self, instructions: str):
-        self.instructions = instructions
-        self.agent = None
-        self.client = None
-        self.credential = None
-    
-    async def __aenter__(self):
-        """Initialisation phase"""
-        self.credential = AzureCliCredential()
-        self.client = FoundryChatClient(credential=self.credential)
-        
-        # Configure agent
-        self.agent = Agent(
-            client=self.client,
-            instructions=self.instructions
-        )
-        return self
-    
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Termination phase - cleanup resources"""
-        if self.agent:
-            await self.agent.close()   # releases MCP tools / context providers the agent owns
-        # FoundryChatClient has no close(); its project client is released with the credential.
-        if self.credential:
-            await self.credential.close()
-    
-    async def execute(self, query: str):
-        """Execution phase"""
-        return await self.agent.run(query)
 
-# Usage with automatic lifecycle management
-async def main():
-    async with ManagedChatAgent("You are a helpful assistant.") as agent:
-        response = await agent.execute("Hello, how are you?")
-        print(response.text)
+async def conversation() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You answer questions about Microsoft Learn content.",
+        tools=[MCPStreamableHTTPTool(name="learn", url="https://learn.microsoft.com/api/mcp")],
+    )
+    async with agent:                                   # connects the MCP tool; closes it afterwards
+        session = agent.create_session()
+        await agent.run("What is Azure Container Apps?", session=session)
+        follow_up = await agent.run("How does it scale?", session=session)   # remembers the topic
+        print(follow_up.text)
+
+        saved = session.to_dict()                       # store it (Redis, Cosmos DB, ...)
+        restored = AgentSession.from_dict(saved)        # ...and resume later
+        await agent.run("Summarise our conversation.", session=restored)
 ```
 
-#### **Agent Registration in Azure AI Foundry**
+### Execution models
 
-```python
-from azure.ai.projects.aio import AIProjectClient
-from azure.identity.aio import DefaultAzureCredential
-import json
+Every agent call is asynchronous. There are three shapes: one awaited response, many concurrent calls, and streaming.
 
-async def register_agent():
-    async with DefaultAzureCredential() as credential:
-        async with AIProjectClient(
-            endpoint="https://your-project.eastus.ai.azure.com",
-            credential=credential
-        ) as client:
-            # Define agent
-            agent_definition = {
-                "name": "CustomerSupportAgent",
-                "instructions": "You help customers with their enquiries.",
-                "model": "gpt-4o-mini",
-                "tools": [
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "lookup_order",
-                            "description": "Look up a customer order"
-                        }
-                    }
-                ]
-            }
-            
-            # Register in Azure AI Foundry
-            response = await client.agents.create_agent(**agent_definition)
-            print(f"Agent created: {response.id}")
-```
-
-### Task Execution Models
-
-#### **Synchronous Execution - .NET**
-
-```csharp
-// Simple synchronous execution
-var result = await agent.RunAsync("Tell me a joke.");
-Console.WriteLine(result);
-
-// Batch processing with synchronous tasks
-var queries = new[] { "Joke 1", "Joke 2", "Joke 3" };
-var results = new List<string>();
-
-foreach (var query in queries)
-{
-    var result = await agent.RunAsync(query);
-    results.Add(result);
-}
-```
-
-#### **Asynchronous Execution - Python**
+**Python**
 
 ```python
 import asyncio
 
-async def execute_multiple_tasks():
-    async with ManagedChatAgent("Tell jokes") as agent:
-        # Sequential execution
-        tasks = [
-            agent.execute("Tell a joke about AI"),
-            agent.execute("Tell a joke about Python"),
-            agent.execute("Tell a joke about Azure")
-        ]
-        
-        # Concurrent execution (all at once)
-        results = await asyncio.gather(*tasks)
-        for result in results:
-            print(result.text)
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
 
-asyncio.run(execute_multiple_tasks())
+agent = Agent(client=OpenAIChatClient(), instructions="You tell short, clean jokes.")
+
+
+async def single() -> None:
+    response = await agent.run("Tell a joke about AI")
+    print(response.text)
+
+
+async def concurrent() -> None:
+    # Independent calls run concurrently; no session is shared between them.
+    results = await asyncio.gather(
+        agent.run("Tell a joke about AI"),
+        agent.run("Tell a joke about Python"),
+        agent.run("Tell a joke about Azure"),
+    )
+    for result in results:
+        print(result.text)
+
+
+async def streaming() -> None:
+    async for update in agent.run("Write a short story about AI", stream=True):
+        print(update.text, end="", flush=True)
+    print()
 ```
 
-#### **Streaming Execution - Python**
-
-```python
-async def stream_response():
-    async with ManagedChatAgent("You are helpful") as agent:
-        # Stream tokens as they arrive
-        async for update in agent.agent.run_stream("Write a short story about AI"):
-            if update.text:
-                print(update.text, end="", flush=True)
-        print()  # Newline
-
-asyncio.run(stream_response())
-```
-
-### Synchronous vs Asynchronous Patterns
-
-#### **Comparison Matrix**
-
-| Aspect | Synchronous | Asynchronous |
-|--------|-------------|--------------|
-| **Blocking** | Yes (thread blocks) | No (yields control) |
-| **Scalability** | Limited (threads) | High (event loop) |
-| **Use Case** | Simple scripts | APIs, servers |
-| **Learning Curve** | Easier | Steeper |
-| **Performance** | Lower throughput | Higher throughput |
-| **Error Handling** | Traditional try-catch | try-except + await |
-
-#### **Synchronous Implementation (.NET)**
+**.NET**
 
 ```csharp
-public class SyncAgent
+using Microsoft.Agents.AI;
+
+public static class ExecutionModels
 {
-    private readonly AIAgent _agent;
-    
-    public SyncAgent(AIAgent agent)
+    public static async Task RunAsync(AIAgent agent)
     {
-        _agent = agent;
-    }
-    
-    public string ExecuteQuery(string query)
-    {
-        // Blocking call - thread waits for completion
-        var result = _agent.RunAsync(query).Result;
-        return result;
-    }
-    
-    public List<string> ExecuteBatch(string[] queries)
-    {
-        var results = new List<string>();
-        foreach (var query in queries)
+        // One awaited response.
+        AgentResponse joke = await agent.RunAsync("Tell me a joke.");
+        Console.WriteLine(joke.Text);
+
+        // Concurrent independent calls.
+        string[] prompts = ["Joke about AI", "Joke about C#", "Joke about Azure"];
+        AgentResponse[] results = await Task.WhenAll(prompts.Select(p => agent.RunAsync(p)));
+        foreach (var r in results) Console.WriteLine(r.Text);
+
+        // Streaming.
+        await foreach (AgentResponseUpdate update in agent.RunStreamingAsync("Write a short story about AI"))
         {
-            // Sequential execution
-            results.Add(ExecuteQuery(query));
+            Console.Write(update.Text);
         }
-        return results;
+        Console.WriteLine();
     }
 }
-
-// Usage
-var agent = new SyncAgent(aiAgent);
-var result = agent.ExecuteQuery("Hello");
 ```
 
-#### **Asynchronous Implementation (Python)**
+Do not block on async calls (`.Result`, `.Wait()` in .NET; `asyncio.run` inside a running loop in Python). There is no synchronous agent API, and wrapping the async one in a blocking call costs threads and risks deadlocks. If a synchronous caller must use an agent, give it its own entry point (`asyncio.run(main())` at the top of a script, or `GetAwaiter().GetResult()` in a console `Main` that has no synchronisation context).
+
+### Single-purpose agent design
+
+Small agents with one job, precise instructions and only the tools they need are easier to test and cheaper to run than one agent that does everything. You don't need a class hierarchy for this; a factory function per role is enough.
 
 ```python
-class AsyncAgent:
-    def __init__(self, chat_agent):
-        self.agent = chat_agent
-    
-    async def execute_query(self, query: str):
-        """Non-blocking call - coroutine"""
-        return await self.agent.run(query)
-    
-    async def execute_batch(self, queries: list):
-        """Concurrent execution"""
-        # Create all coroutines
-        tasks = [self.execute_query(q) for q in queries]
-        # Run all concurrently
-        return await asyncio.gather(*tasks)
+from agent_framework import Agent, SupportsChatGetResponse
 
-# Usage
-async def main():
-    async_agent = AsyncAgent(agent)
-    # Concurrent execution - all queries run in parallel
-    results = await async_agent.execute_batch([
-        "Query 1",
-        "Query 2",
-        "Query 3"
-    ])
+
+def data_analyst(client: SupportsChatGetResponse) -> Agent:
+    return Agent(
+        client=client,
+        name="data_analyst",
+        instructions="You analyse data. Report trends, outliers and one recommendation. Be concise.",
+    )
+
+
+def code_reviewer(client: SupportsChatGetResponse) -> Agent:
+    return Agent(
+        client=client,
+        name="code_reviewer",
+        instructions="You review code for correctness, security and readability. List issues by severity.",
+    )
+
+
+# reviewer = code_reviewer(OpenAIChatClient())
+# print((await reviewer.run("def hello(): print('hi')")).text)
 ```
 
-### Single-Purpose Agent Design
+### Testing agents
 
-Single-purpose agents excel at focused tasks, improving maintainability and reusability:
+The seam for unit tests is the chat client: substitute one that returns canned responses, and test your instructions wiring, tools, middleware and parsing without calling a model.
 
-#### **Specialised Agent Patterns**
-
-```python
-from abc import ABC, abstractmethod
-from agent_framework import Agent
-
-class SpecialisedAgent(ABC):
-    """Base class for single-purpose agents"""
-    
-    def __init__(self, client, instructions: str):
-        self.agent = Agent(
-            client=client,
-            instructions=instructions
-        )
-    
-    @abstractmethod
-    async def execute(self, query: str):
-        pass
-
-class DataAnalysisAgent(SpecialisedAgent):
-    """Agent specialised in data analysis"""
-    
-    def __init__(self, client):
-        super().__init__(
-            client,
-            "You are a data analysis expert. Analyse data and provide insights."
-        )
-    
-    async def execute(self, data: str):
-        return await self.agent.run(f"Analyse this data:\n{data}")
-
-class CodeReviewAgent(SpecialisedAgent):
-    """Agent specialised in code review"""
-    
-    def __init__(self, client):
-        super().__init__(
-            client,
-            "You are an expert code reviewer. Review code for quality, security, and best practices."
-        )
-    
-    async def execute(self, code: str):
-        return await self.agent.run(f"Review this code:\n{code}")
-
-# Usage
-async def main():
-    async with AzureCliCredential() as credential:
-        client = FoundryChatClient(credential=credential)
-        # Use specialised agents
-        analysis_agent = DataAnalysisAgent(client)
-        result = await analysis_agent.execute("sales_data.csv")
-
-        review_agent = CodeReviewAgent(client)
-        result = await review_agent.execute("def hello(): print('hi')")
-```
-
-### Testing Individual Agents
-
-#### **Unit Testing - Python**
+**Python** — a minimal stub client:
 
 ```python
 import pytest
-from unittest.mock import AsyncMock, MagicMock
-from agent_framework import Agent
 
-@pytest.fixture
-async def mock_agent():
-    """Fixture providing a mock agent"""
-    mock_client = AsyncMock()
-    agent = Agent(client=mock_client, instructions="Test agent")
-    return agent
+from agent_framework import (
+    Agent,
+    BaseChatClient,
+    ChatMiddlewareLayer,
+    ChatResponse,
+    Content,
+    FunctionInvocationLayer,
+    Message,
+)
+
+
+class StubChatClient(FunctionInvocationLayer, ChatMiddlewareLayer, BaseChatClient):
+    """Returns a fixed reply and records what the agent sent."""
+
+    def __init__(self, reply: str) -> None:
+        super().__init__()
+        self.reply = reply
+        self.calls: list[list[Message]] = []
+
+    async def _respond(self, messages) -> ChatResponse:
+        self.calls.append(list(messages))
+        return ChatResponse(messages=[Message(role="assistant", contents=[Content.from_text(self.reply)])])
+
+    def _inner_get_response(self, *, messages, stream, options, **kwargs):
+        return self._respond(messages)
+
 
 @pytest.mark.asyncio
-async def test_agent_execution(mock_agent):
-    """Test basic agent execution"""
-    # Setup mock response
-    mock_response = MagicMock()
-    mock_response.text = "Mocked response"
-    mock_agent.run = AsyncMock(return_value=mock_response)
-    
-    # Execute
-    result = await mock_agent.run("Test query")
-    
-    # Assert
-    assert result.text == "Mocked response"
-    mock_agent.run.assert_called_once_with("Test query")
+async def test_agent_returns_model_reply() -> None:
+    client = StubChatClient("Hello! How can I help?")
+    agent = Agent(client=client, instructions="You are helpful.")
+
+    response = await agent.run("Hello")
+
+    assert response.text == "Hello! How can I help?"
+    assert client.calls[0][-1].text == "Hello"
+
 
 @pytest.mark.asyncio
-async def test_agent_tool_usage(mock_agent):
-    """Test agent uses tools correctly"""
-    # Define test tool
-    async def test_tool():
-        return "Tool result"
-    
-    # Mock the tool invocation
-    mock_agent.run = AsyncMock()
-    
-    # Execute and verify
-    await mock_agent.run("Use tool")
-    mock_agent.run.assert_called_once()
+async def test_session_carries_history() -> None:
+    client = StubChatClient("ok")
+    agent = Agent(client=client, instructions="You are helpful.")
+    session = agent.create_session()
+
+    await agent.run("My name is Alice", session=session)
+    await agent.run("What is my name?", session=session)
+
+    sent = [m.text for m in client.calls[1]]
+    assert "My name is Alice" in sent      # the second call included the first turn
 ```
 
-#### **Integration Testing - Python**
+**.NET** — mock `IChatClient` (here with Moq):
 
-```python
-import pytest
-from agent_framework import Agent
-from agent_framework.foundry import FoundryChatClient
-from azure.identity.aio import DefaultAzureCredential
-import os
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using Moq;
+using Xunit;
 
-@pytest.fixture(scope="session")
-async def real_agent():
-    """Fixture providing a real agent for integration tests"""
-    async with DefaultAzureCredential() as credential:
-        client = FoundryChatClient(credential=credential)
-        agent = Agent(
-            client=client,
-            instructions="You are a helpful assistant."
-        )
-        yield agent
+public class AgentTests
+{
+    [Fact]
+    public async Task Agent_returns_the_model_reply()
+    {
+        var chatClient = new Mock<IChatClient>();
+        chatClient
+            .Setup(c => c.GetResponseAsync(It.IsAny<IEnumerable<ChatMessage>>(), It.IsAny<ChatOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChatResponse(new ChatMessage(ChatRole.Assistant, "Hello! How can I help?")));
 
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_agent_responds_to_query(real_agent):
-    """Integration test: agent responds to user query"""
-    response = await real_agent.run("What is 2+2?")
-    assert response.text is not None
-    assert len(response.text) > 0
-    assert "4" in response.text
+        var agent = new ChatClientAgent(chatClient.Object, instructions: "You are helpful.");
 
-@pytest.mark.asyncio
-@pytest.mark.integration
-async def test_agent_conversation_context(real_agent):
-    """Integration test: agent maintains conversation context"""
-    session = real_agent.create_session()
-    
-    # First message
-    response1 = await real_agent.run("My name is Alice", session=session)
-    
-    # Second message - agent should remember the context
-    response2 = await real_agent.run("What's my name?", session=session)
-    
-    assert response1.text is not None
-    assert "Alice" in response2.text
+        AgentResponse response = await agent.RunAsync("Hello");
+
+        Assert.Equal("Hello! How can I help?", response.Text);
+    }
+}
 ```
+
+For **integration tests** against a real model, assert on properties of the answer (it mentions a fact, it called a tool, it returned valid structured output) rather than exact text, and keep them out of the fast unit-test run. The evaluation pages ([Python](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/)) cover scoring answers systematically.
 
 ---
 
 ## Multi-Agent Systems
 
-### Multi-Agent Orchestration
+### Orchestration patterns
 
-Multi-agent orchestration involves coordinating multiple specialised agents to solve complex problems collaboratively.
-
-#### **Agent Orchestration Architecture**
+| Pattern | Python (`agent_framework.orchestrations`) | .NET (`Microsoft.Agents.AI.Workflows`) |
+| --- | --- | --- |
+| Sequential | `SequentialBuilder(participants=[...])` | `AgentWorkflowBuilder.BuildSequential(...)` |
+| Concurrent | `ConcurrentBuilder(participants=[...])` | `AgentWorkflowBuilder.BuildConcurrent(...)` |
+| Handoff | `HandoffBuilder` | `AgentWorkflowBuilder.CreateHandoffBuilderWith(...)` |
+| Group chat | `GroupChatBuilder` | `AgentWorkflowBuilder.CreateGroupChatBuilderWith(...)` |
+| Magentic (planner-led) | `MagenticBuilder` | `AgentWorkflowBuilder.CreateMagenticBuilderWith(...)` |
+| Custom graph | `WorkflowBuilder(start_executor=...)` | `new WorkflowBuilder(start)` |
 
 ```
-┌─────────────────────────────────────────────────────┐
-│         Orchestration Layer                         │
-│  (Workflow, Routing, State Management)              │
-└─────────────────────────────────────────────────────┘
-    ↓                   ↓                    ↓
-┌─────────────┐  ┌──────────────┐  ┌─────────────────┐
-│Agent 1      │  │Agent 2       │  │Agent 3          │
-│(Analysis)   │  │(Planning)    │  │(Execution)      │
-└─────────────┘  └──────────────┘  └─────────────────┘
-    ↓                   ↓                    ↓
-┌─────────────────────────────────────────────────────┐
-│         Tool/Resource Layer                         │
-│  (APIs, Databases, External Services)               │
-└─────────────────────────────────────────────────────┘
+            ┌──────────────┐
+  input ──▶ │  researcher  │──┐
+            └──────────────┘  │   sequential: each agent sees the conversation so far
+            ┌──────────────┐  │
+            │   analyst    │◀─┘──┐
+            └──────────────┘     │
+            ┌──────────────┐     │
+            │    writer    │◀────┘──▶ output
+            └──────────────┘
 ```
 
-#### **Simple Multi-Agent System - Python**
+### A sequential pipeline
+
+**Python**
 
 ```python
-import asyncio
 from agent_framework import Agent
-from agent_framework.foundry import FoundryChatClient
-from azure.identity.aio import AzureCliCredential
+from agent_framework.openai import OpenAIChatClient
+from agent_framework.orchestrations import SequentialBuilder
 
-class MultiAgentSystem:
-    def __init__(self, client):
-        self.client = client
-        
-        # Create specialised agents
-        self.research_agent = Agent(
-            client=client,
-            instructions="You are a research specialist. Gather and summarise information."
-        )
-        
-        self.analysis_agent = Agent(
-            client=client,
-            instructions="You are a data analyst. Analyse findings and extract insights."
-        )
-        
-        self.recommendation_agent = Agent(
-            client=client,
-            instructions="You are a strategist. Provide recommendations based on analysis."
-        )
-    
-    async def orchestrate(self, topic: str):
-        """Orchestrate multi-agent workflow"""
-        # Stage 1: Research
-        research_result = await self.research_agent.run(
-            f"Research and provide detailed information about: {topic}"
-        )
-        
-        # Stage 2: Analysis
-        analysis_result = await self.analysis_agent.run(
-            f"Analyse these findings:\n{research_result.text}"
-        )
-        
-        # Stage 3: Recommendations
-        recommendations = await self.recommendation_agent.run(
-            f"Based on this analysis:\n{analysis_result.text}\n"
-            "Provide strategic recommendations."
-        )
-        
-        return {
-            "research": research_result.text,
-            "analysis": analysis_result.text,
-            "recommendations": recommendations.text
-        }
+client = OpenAIChatClient()
+researcher = Agent(client=client, name="researcher", instructions="Research the topic. List key facts.")
+analyst = Agent(client=client, name="analyst", instructions="Analyse the research. Identify the main insights.")
+writer = Agent(client=client, name="writer", instructions="Write a concise summary of the analysis.")
 
-# Usage
-async def main():
-    async with AzureCliCredential() as credential:
-        client = FoundryChatClient(credential=credential)
-        multi_agent = MultiAgentSystem(client)
-        result = await multi_agent.orchestrate("Market trends in AI")
-        print("Research:", result["research"])
-        print("Analysis:", result["analysis"])
-        print("Recommendations:", result["recommendations"])
+workflow = SequentialBuilder(participants=[researcher, analyst, writer]).build()
 
-asyncio.run(main())
+
+async def orchestrate(topic: str) -> str:
+    result = await workflow.run(topic)
+    conversation = result.get_outputs()[-1]      # the full conversation, ending with the writer
+    return conversation[-1].text
 ```
 
-### Communication Patterns Between Agents
+**.NET**
 
-#### **Direct Agent-to-Agent Communication**
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
 
-```python
-class DirectCommunicationPattern:
-    """Agents communicate directly with results"""
-    
-    async def execute_workflow(self):
-        # Agent A produces output
-        output_a = await self.agent_a.run("Task A")
-        
-        # Agent B consumes Agent A's output
-        output_b = await self.agent_b.run(
-            f"Process this result: {output_a.text}"
-        )
-        
-        return output_b
-```
+public static class Pipeline
+{
+    public static async Task<string> OrchestrateAsync(IChatClient chatClient, string topic)
+    {
+        AIAgent researcher = new ChatClientAgent(chatClient, instructions: "Research the topic. List key facts.", name: "researcher");
+        AIAgent analyst = new ChatClientAgent(chatClient, instructions: "Analyse the research. Identify the main insights.", name: "analyst");
+        AIAgent writer = new ChatClientAgent(chatClient, instructions: "Write a concise summary of the analysis.", name: "writer");
 
-#### **Message Queue Pattern**
+        Workflow workflow = AgentWorkflowBuilder.BuildSequential(researcher, analyst, writer);
 
-```python
-import asyncio
-from typing import Any
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(
+            workflow, new List<ChatMessage> { new(ChatRole.User, topic) });
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-class MessageQueuePattern:
-    """Agents communicate through message queues"""
-    
-    def __init__(self):
-        self.message_queue = asyncio.Queue()
-    
-    async def producer_agent(self):
-        """Producer agent sends messages"""
-        result = await self.agent_a.run("Generate task")
-        await self.message_queue.put(result)
-    
-    async def consumer_agent(self):
-        """Consumer agent receives messages"""
-        message = await self.message_queue.get()
-        return await self.agent_b.run(f"Process: {message.text}")
-```
-
-### Shared State Management
-
-#### **Centralised State Store - Python**
-
-```python
-from dataclasses import dataclass, field
-from typing import Dict, Any
-
-@dataclass
-class SharedState:
-    """Centralised state shared by agents"""
-    data: Dict[str, Any] = field(default_factory=dict)
-    
-    def set(self, key: str, value: Any):
-        self.data[key] = value
-    
-    def get(self, key: str, default=None):
-        return self.data.get(key, default)
-    
-    def update(self, updates: Dict[str, Any]):
-        self.data.update(updates)
-
-class StatefulMultiAgentSystem:
-    def __init__(self, client):
-        self.client = client
-        self.shared_state = SharedState()
-        self.agents = self._create_agents()
-    
-    def _create_agents(self):
-        return {
-            "research": Agent(client=self.client, instructions="Research"),
-            "analysis": Agent(client=self.client, instructions="Analyse"),
-            "planning": Agent(client=self.client, instructions="Plan")
-        }
-    
-    async def execute_with_state(self):
-        # Step 1: Research and store results
-        research = await self.agents["research"].run("Research topic X")
-        self.shared_state.set("research_findings", research.text)
-        
-        # Step 2: Analysis uses research findings
-        findings = self.shared_state.get("research_findings")
-        analysis = await self.agents["analysis"].run(
-            f"Analyse: {findings}"
-        )
-        self.shared_state.set("analysis_results", analysis.text)
-        
-        # Step 3: Planning uses both
-        plan = await self.agents["planning"].run(
-            f"Plan based on:\n"
-            f"Research: {self.shared_state.get('research_findings')}\n"
-            f"Analysis: {self.shared_state.get('analysis_results')}"
-        )
-        self.shared_state.set("final_plan", plan.text)
-        
-        return self.shared_state.data
-```
-
-#### **Azure Cosmos DB State Backend**
-
-```python
-from azure.cosmos.aio import CosmosClient
-
-class CosmosDBStateStore:
-    """Persistent shared state using Azure Cosmos DB"""
-    
-    def __init__(self, connection_string: str):
-        self.client = CosmosClient.from_connection_string(connection_string)
-        self.database = None
-        self.container = None
-    
-    async def initialize(self):
-        self.database = self.client.get_database_client("agent_state")
-        self.container = self.database.get_container_client("state")
-    
-    async def save_state(self, agent_id: str, state: dict):
-        """Persist agent state"""
-        item = {
-            "id": agent_id,
-            "state": state,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        await self.container.upsert_item(item)
-    
-    async def load_state(self, agent_id: str):
-        """Retrieve agent state"""
-        try:
-            response = await self.container.read_item(agent_id, agent_id)
-            return response.get("state")
-        except:
-            return {}
-    
-    async def close(self):
-        await self.client.close()
-```
-
-### Workflow Coordination
-
-#### **Graph-Based Workflow - Python**
-
-```python
-from enum import Enum
-from typing import Optional
-
-class AgentType(Enum):
-    RESEARCH = "research"
-    ANALYSIS = "analysis"
-    PLANNING = "planning"
-    EXECUTION = "execution"
-
-class WorkflowNode:
-    def __init__(self, agent_type: AgentType, instructions: str):
-        self.agent_type = agent_type
-        self.instructions = instructions
-        self.next_nodes: Dict[str, WorkflowNode] = {}
-    
-    def add_next(self, condition: str, node: 'WorkflowNode'):
-        """Add conditional next node"""
-        self.next_nodes[condition] = node
-
-class MultiAgentWorkflow:
-    def __init__(self):
-        # Create nodes
-        research = WorkflowNode(AgentType.RESEARCH, "Research instructions")
-        analysis = WorkflowNode(AgentType.ANALYSIS, "Analysis instructions")
-        execution = WorkflowNode(AgentType.EXECUTION, "Execute plan")
-        
-        # Define workflow graph
-        research.add_next("success", analysis)
-        analysis.add_next("high_confidence", execution)
-        analysis.add_next("low_confidence", research)  # Loop back
-        
-        self.start_node = research
-        self.results = {}
-    
-    async def execute(self, client, initial_query: str):
-        """Execute workflow through graph"""
-        current_node = self.start_node
-        context = initial_query
-        
-        while current_node:
-            # Create agent for current node
-            agent = Agent(
-                client=client,
-                instructions=current_node.instructions
-            )
-            
-            # Execute
-            result = await agent.run(context)
-            self.results[current_node.agent_type.value] = result.text
-            
-            # Determine next node (simplified logic)
-            next_key = "success"  # Could be dynamic based on result
-            current_node = current_node.next_nodes.get(next_key)
-        
-        return self.results
-```
-
-### Agent Discovery Mechanisms
-
-#### **Agent Registry - Python**
-
-```python
-from typing import Dict, List
-
-class AgentRegistry:
-    """Central registry for agent discovery"""
-    
-    def __init__(self):
-        self._agents: Dict[str, Dict] = {}
-    
-    def register(self, agent_id: str, agent_info: Dict):
-        """Register agent"""
-        self._agents[agent_id] = {
-            **agent_info,
-            "registered_at": datetime.utcnow().isoformat()
-        }
-    
-    def discover(self, capability: str) -> List[str]:
-        """Find agents by capability"""
-        return [
-            agent_id 
-            for agent_id, info in self._agents.items()
-            if capability in info.get("capabilities", [])
-        ]
-    
-    def get_agent(self, agent_id: str) -> Optional[Dict]:
-        """Retrieve agent information"""
-        return self._agents.get(agent_id)
-    
-    def list_all(self) -> Dict:
-        """List all registered agents"""
-        return self._agents
-
-# Usage
-registry = AgentRegistry()
-
-# Register agents
-registry.register("weather_agent", {
-    "name": "Weather Agent",
-    "capabilities": ["weather", "forecasting"],
-    "endpoint": "weather-agent.azurewebsites.net"
-})
-
-registry.register("data_agent", {
-    "name": "Data Analysis Agent",
-    "capabilities": ["data_analysis", "reporting"],
-    "endpoint": "data-agent.azurewebsites.net"
-})
-
-# Discover agents by capability
-weather_agents = registry.discover("weather")
-analysis_agents = registry.discover("data_analysis")
-```
-
-### Scalability Architecture
-
-#### **Horizontal Scaling Pattern**
-
-```python
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-
-class ScalableMultiAgentSystem:
-    """Horizontally scalable multi-agent system"""
-    
-    def __init__(self, num_workers: int = 4):
-        self.num_workers = num_workers
-        self.worker_pool = ThreadPoolExecutor(max_workers=num_workers)
-        self.task_queue = asyncio.Queue()
-    
-    async def scale_to_load(self, tasks: List[str]):
-        """Scale agent execution to workload"""
-        # Add tasks to queue
-        for task in tasks:
-            await self.task_queue.put(task)
-        
-        # Create worker coroutines
-        workers = [
-            self._worker(i) for i in range(self.num_workers)
-        ]
-        
-        # Run concurrently
-        results = await asyncio.gather(*workers)
-        return results
-    
-    async def _worker(self, worker_id: int):
-        """Worker coroutine processes tasks"""
-        results = []
-        
-        while not self.task_queue.empty():
-            try:
-                task = self.task_queue.get_nowait()
-                # Process task
-                result = await self._process_task(task, worker_id)
-                results.append(result)
-                self.task_queue.task_done()
-            except asyncio.QueueEmpty:
-                break
-        
-        return results
-    
-    async def _process_task(self, task: str, worker_id: int):
-        """Process individual task"""
-        # Implementation: delegate to appropriate agent
-        return {"worker": worker_id, "task": task, "status": "completed"}
-```
-
-#### **Load Balancing Configuration**
-
-```python
-# Deploy agents to multiple Azure Container Instances
-deployment_config = {
-    "agents": [
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
         {
-            "name": "agent-1",
-            "container_group": "agent-pool-1",
-            "replicas": 3,
-            "resources": {"cpu": 1, "memory": "1Gi"}
-        },
-        {
-            "name": "agent-2",
-            "container_group": "agent-pool-2",
-            "replicas": 2,
-            "resources": {"cpu": 2, "memory": "2Gi"}
+            if (evt is WorkflowOutputEvent output && output.Is<List<ChatMessage>>(out var conversation))
+            {
+                return conversation.Last().Text;
+            }
         }
-    ],
-    "load_balancer": {
-        "type": "Azure Load Balancer",
-        "distribution": "round_robin"
+        return "";
     }
 }
 ```
 
+### Communication between agents
+
+There are three ways for agents to work together, from loosest to most structured:
+
+1. **Pass outputs explicitly** — run agent A, put its text in agent B's prompt. Simple and transparent; fine for two steps.
+2. **Agent as a tool** — give a coordinating agent other agents as tools, and let the model decide when to call them.
+3. **A workflow** — an explicit graph with typed messages, checkpointing and events (above, and below).
+
+Agent-as-tool:
+
+```python
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient()
+researcher = Agent(client=client, name="researcher", description="Researches a topic and lists key facts.",
+                   instructions="Research the topic thoroughly.")
+writer = Agent(client=client, name="writer", description="Writes polished prose from notes.",
+               instructions="Write clearly and concisely.")
+
+coordinator = Agent(
+    client=client,
+    name="coordinator",
+    instructions="Produce briefs. Use the researcher for facts and the writer for the final text.",
+    tools=[researcher.as_tool(), writer.as_tool()],
+)
+
+# brief = await coordinator.run("A one-paragraph brief on solid-state batteries")
+```
+
+In .NET the same is `researcher.AsAIFunction()`, passed in `tools:`.
+
+For agents in **different processes or organisations**, use A2A: each agent publishes an agent card, and the caller wraps the remote agent as a local one (`agent_framework.a2a.A2AAgent`; .NET `A2ACardResolver.GetAIAgentAsync()`). A message queue between services is ordinary distributed-systems plumbing — the framework does not need its own.
+
+### Shared state
+
+Within a workflow, executors share state through the workflow context, which is checkpointed with the run — not through a global object.
+
+```python
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
+
+
+@executor(id="collect")
+async def collect(topic: str, ctx: WorkflowContext[str]) -> None:
+    ctx.set_state("topic", topic)                    # visible to later executors, saved in checkpoints
+    await ctx.send_message(f"Notes on {topic}")
+
+
+@executor(id="report")
+async def report(notes: str, ctx: WorkflowContext[str, str]) -> None:
+    topic = ctx.get_state("topic")
+    await ctx.yield_output(f"Report on {topic}: {notes}")
+
+
+workflow = WorkflowBuilder(start_executor=collect).add_edge(collect, report).build()
+
+# result = await workflow.run("tidal energy"); result.get_outputs() == ["Report on tidal energy: Notes on tidal energy"]
+```
+
+Between *agents*, the equivalent is a shared `AgentSession` (Python `AgentExecutor(agent, session=shared)`) whose `state` dictionary tools and context providers can read and write; see the [Python orchestration page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/).
+
+### Persisting conversation state
+
+To keep history outside the process, attach a history provider. Cosmos DB is built in (`agent-framework-azure-cosmos`; .NET `Microsoft.Agents.AI.CosmosNoSql`):
+
+```python
+from agent_framework import Agent
+from agent_framework.azure import CosmosHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+from azure.identity.aio import DefaultAzureCredential
+
+history = CosmosHistoryProvider(
+    endpoint="https://contoso.documents.azure.com:443/",
+    database_name="agents",
+    container_name="chat-history",
+    credential=DefaultAzureCredential(),
+)
+
+agent = Agent(client=OpenAIChatClient(), instructions="You are a support assistant.", context_providers=[history])
+
+# Messages for session "customer-42" are loaded from and written to Cosmos DB on every run:
+#   await agent.run("Where is my order?", session=agent.create_session(session_id="customer-42"))
+```
+
+Workflow checkpoints are persisted separately, with a checkpoint store (`FileCheckpointStorage`, Cosmos DB, or your own).
+
+### Graph workflows
+
+When the flow has branches, loops or non-agent steps, build the graph directly. Edges can carry conditions.
+
+```python
+from dataclasses import dataclass
+
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
+
+
+@dataclass
+class Ticket:
+    text: str
+    urgent: bool
+
+
+@executor(id="classify")
+async def classify(text: str, ctx: WorkflowContext[Ticket]) -> None:
+    await ctx.send_message(Ticket(text, urgent="outage" in text.lower()))
+
+
+@executor(id="page_on_call")
+async def page_on_call(ticket: Ticket, ctx: WorkflowContext[str, str]) -> None:
+    await ctx.yield_output(f"Paged on-call: {ticket.text}")
+
+
+@executor(id="queue")
+async def queue(ticket: Ticket, ctx: WorkflowContext[str, str]) -> None:
+    await ctx.yield_output(f"Queued: {ticket.text}")
+
+
+workflow = (
+    WorkflowBuilder(start_executor=classify)
+    .add_edge(classify, page_on_call, condition=lambda t: t.urgent)
+    .add_edge(classify, queue, condition=lambda t: not t.urgent)
+    .build()
+)
+
+# (await workflow.run("Total outage in EU-West")).get_outputs() == ["Paged on-call: Total outage in EU-West"]
+```
+
+The [graph workflows & declarative agents page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) covers fan-out/fan-in, switch-case edges, checkpointing, human-in-the-loop and YAML-defined workflows, and the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#graph-based-workflows---net) the C# equivalents.
+
+### Agent discovery
+
+The framework has no agent registry. For agents inside one application, a dictionary of named agents (or .NET keyed DI services via `builder.AddAIAgent(name, ...)`) is all you need. Across services, A2A **agent cards** are the discovery mechanism: each agent serves a card at `/.well-known/agent-card.json` describing its skills and endpoint, and callers resolve the card to get a usable agent. Foundry Agent Service also lists the agents in a project.
+
+### Scaling
+
+Agents are I/O-bound — they spend their time waiting for the model — so scale with concurrency, not threads:
+
+- In one process, run independent requests concurrently (`asyncio.gather`, `Task.WhenAll`) and bound concurrency with a semaphore sized to your model quota.
+- Across processes, keep the service stateless (sessions and checkpoints in external stores) and scale out horizontally: Container Apps or AKS with KEDA, or Azure Functions with durable agents.
+- Watch the model's tokens-per-minute quota; it is usually the real limit before CPU or memory.
+
+```python
+import asyncio
+
+from agent_framework import Agent
+
+
+async def run_bounded(agent: Agent, prompts: list[str], max_concurrency: int = 8) -> list[str]:
+    gate = asyncio.Semaphore(max_concurrency)
+
+    async def one(prompt: str) -> str:
+        async with gate:
+            return (await agent.run(prompt)).text
+
+    return await asyncio.gather(*(one(p) for p in prompts))
+```
+
+The [production guide](/microsoft-agent-framework-guide/microsoft_agent_framework_production_guide/) goes into deployment, scaling and monitoring.
+
 ---
 
-**[Document continues with Tools Integration, Structured Output, MCP, Agentic Patterns, Memory Systems, Context Engineering, Copilot Studio Integration, and Azure AI Integration sections...]**
+## Further reading
 
-*Due to length constraints, this is Part 1 of the comprehensive guide. The complete document includes approximately 15,000+ words with extensive code examples, diagrams descriptions, production patterns, and enterprise-grade implementations.*
-
----
-
-## Where to go next
-
-Tools, structured output, MCP, agentic patterns, memory and context engineering are documented per language:
-
-- **Python** — [guide overview](/microsoft-agent-framework-guide/python/), [tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/), [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/), [orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/), [sessions](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/)
-- **.NET** — [guide overview](/microsoft-agent-framework-guide/dotnet/), [comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/)
-
-Cross-cutting, language-neutral material lives in:
-
-- [Architecture diagrams](/microsoft-agent-framework-guide/microsoft_agent_framework_diagrams/)
-- [Production guide](/microsoft-agent-framework-guide/microsoft_agent_framework_production_guide/) — deployment and scaling
-- [Recipes](/microsoft-agent-framework-guide/microsoft_agent_framework_recipes/) — production code patterns
+- [Python guide](/microsoft-agent-framework-guide/python/) · [.NET guide](/microsoft-agent-framework-guide/dotnet/)
 - [A2A protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/) · [Graph workflows & declarative agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) · [Enterprise](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/)
-
----
-
-## Revision History
-
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 GA | April 3, 2026 | **Production-ready GA release**; `ChatClientAgentOptions.Instructions` removed; Azure App Service deployment; LTS designation; first-party connectors: Azure OpenAI, OpenAI, Anthropic, Bedrock, Gemini, Ollama |
-| 1.0 Preview | November 2025 | Initial documented version |
-
+- [Recipes](/microsoft-agent-framework-guide/microsoft_agent_framework_recipes/) · [Production guide](/microsoft-agent-framework-guide/microsoft_agent_framework_production_guide/)
