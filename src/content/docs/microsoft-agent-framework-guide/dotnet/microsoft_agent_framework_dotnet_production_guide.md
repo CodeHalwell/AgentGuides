@@ -227,18 +227,19 @@ builder.Logging.AddApplicationInsights(
 **Log with context in your agents:**
 
 ```csharp
-// Inside an agent or tool
-private readonly ILogger<MyTool> _logger;
+using Microsoft.Extensions.Logging;
 
-public MyTool(ILogger<MyTool> logger) { _logger = logger; }
-
-public void DoWork(string threadId)
+// Inside a tool class
+public class MyTool(ILogger<MyTool> logger)
 {
-    using (_logger.BeginScope(new Dictionary<string, object> { ["ThreadId"] = threadId }))
+    public void DoWork(string sessionId)
     {
-        _logger.LogInformation("Starting work for thread.");
-        // ...
-        _logger.LogWarning("An issue occurred but was handled.");
+        using (logger.BeginScope(new Dictionary<string, object> { ["SessionId"] = sessionId }))
+        {
+            logger.LogInformation("Starting work for session.");
+            // ...
+            logger.LogWarning("An issue occurred but was handled.");
+        }
     }
 }
 ```

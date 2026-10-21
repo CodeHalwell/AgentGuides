@@ -769,6 +769,21 @@ agent = Agent(
 )
 ```
 
+## Deferring from inside a tool — `ApprovalRequired` and `CallDeferred`
+
+The wrappers above defer whole toolsets. For a per-call decision, raise from the tool itself:
+
+- `ApprovalRequired(metadata=...)` pauses the call until a human approves it. On the resumed run `ctx.tool_call_approved` is `True`, so the same code path proceeds.
+- `CallDeferred(metadata=...)` hands the call to something outside the run (a job queue, a browser); you supply its result later.
+
+Either way the run ends with a `DeferredToolRequests` output (it must be in `output_type`): approval-type calls are in `.approvals`, external ones in `.calls`, and per-call metadata in `.metadata`. Resume with `deferred_tool_results=requests.build_results(approvals=..., calls=...)` (or `approve_all=True`).
+
+```python
+{code}
+```
+
+To resolve deferrals *inside* the run instead of returning them — auto-approve low-risk calls, deny others, call a policy service — add the `HandleDeferredToolCalls(handler)` capability (or a `@hooks.on.deferred_tool_calls` hook). The handler receives the pending `DeferredToolRequests` and returns `DeferredToolResults` for the calls it decides, or `None`; whatever is left unresolved still ends the run as `DeferredToolRequests`. See [Recipe 13](/pydanticai-guide/pydantic_ai_recipes/#recipe-13-inline-hitl-with-handledeferredtoolcalls) for a full example.
+
 ## Gotchas
 
 - **Enter before use**: toolsets may hold resources (processes, HTTP clients, MCP sessions). Using an agent as an async context manager (`async with agent: ...`) enters every toolset.
@@ -994,7 +1009,7 @@ asyncio.run(main())
 
 ---
 
-## Deep dives — source-verified class details
+## Toolset wrappers in detail
 
 ### `PrefixedToolset` — namespace isolation
 

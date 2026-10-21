@@ -67,12 +67,14 @@ app = App(
 
 | Field | Default | Purpose |
 |---|---|---|
-| `name` | required | Must be a valid Python identifier; reserved word `"user"` is forbidden |
+| `name` | required | Must match `^[a-zA-Z][a-zA-Z0-9_-]*$` (a letter first; letters, digits, `_`, `-`); `"user"` is reserved. Violations raise `ValueError` |
 | `root_agent` | required | `BaseAgent` or `BaseNode` (e.g. a `Workflow`) |
 | `plugins` | `[]` | App-wide plugins (ordered) |
 | `events_compaction_config` | `None` | Sliding-window event compaction |
 | `context_cache_config` | `None` | Gemini context cache config, applied to every LLM call |
 | `resumability_config` | `None` | Enables pause/resume around long-running tools |
+
+Put plugins on the `App`: `Runner(plugins=...)` still works but emits a `DeprecationWarning`. Likewise `LlmAgent.global_instruction` is deprecated in favour of `App(plugins=[GlobalInstructionPlugin(...)])`.
 
 ## Runner constructor
 
@@ -381,11 +383,13 @@ svc = VertexAiSessionService(
 )
 ```
 
+`VertexAiSessionService` validates session IDs against `^[A-Za-z0-9_-]+$` and raises `ValueError` otherwise (this blocks path injection into the resource URL); it also accepts a full `projects/.../reasoningEngines/{id}/sessions/{sid}` resource name as `session_id` and checks that the engine ID matches. `express_mode_api_key` is only for Vertex AI Express Mode.
+
 `DatabaseSessionService.create_session`/`get_session` run the underlying SQL inside an async session factory; Postgres and MySQL use row-level locking for concurrent `append_event` (`database_session_service.py`).
 
 ---
 
-## `DatabaseSessionService` deep dive
+## `DatabaseSessionService`
 
 `DatabaseSessionService(db_url, **kwargs)` is the recommended persistent session backend for self-hosted deployments. It uses **SQLAlchemy 2.x async** with a per-session asyncio lock to serialise concurrent `append_event` calls within the same process.
 
@@ -582,7 +586,7 @@ async with runner:
 
 ---
 
-## `SqliteSessionService` deep dive
+## `SqliteSessionService`
 
 `SqliteSessionService(db_path)` is a lighter-weight alternative to `DatabaseSessionService` for pure SQLite use. It uses **aiosqlite** directly (bundled with `google-adk`) instead of SQLAlchemy, making it a zero-extra-dependency choice.
 
@@ -838,7 +842,7 @@ The `pydantic` `extra="forbid"` config on the class means typos (`ttl_secs=`, `c
 
 Non-partial events are persisted via `session_service.append_event` before being yielded.
 
-## `Event` and `EventActions` deep-dive
+## `Event` and `EventActions`
 
 `Event` (defined in `events/event.py`) extends `LlmResponse` and is the single unit of communication between agents, tools, and the runner.
 
@@ -879,11 +883,14 @@ for fr in event.get_function_responses():
 text_parts = [p.text for p in (event.message.parts or []) if p.text]
 ```
 
-`is_final_response()` returns `True` when:
-- No function calls or responses are present, AND
-- The event is not partial (`partial=False`), AND
-- There is no trailing code execution result, OR
-- `actions.skip_summarization` is set (long-running tool response pattern)
+`is_final_response()` checks, in order:
+1. `actions.skip_summarization` is set or `long_running_tool_ids` is non-empty → `True` (even with function calls present, so a client can show progress for a long-running call).
+2. The event has an `error_code`, is not partial and has no function calls → `True`. Error events count as final, so don't assume every final event is a successful text reply.
+3. Otherwise `True` only when there are no function calls or responses, the event is not partial, and there's no trailing code-execution result.
+
+When several agents take part in one invocation, each can produce its own final event.
+
+`Event(...)` accepts shorthand keywords that it routes to nested fields: `message=` → `content` (text or parts are converted), `state=` → `actions.state_delta`, `route=` → `actions.route`, `node_path=` → `node_info.path`. So `Event(author="my_agent", message="Done.", state={"ready": True})` is a complete event.
 
 ### `EventActions` fields
 
@@ -902,7 +909,12 @@ text_parts = [p.text for p in (event.message.parts or []) if p.text]
 | `end_of_agent` | `bool \| None` | Marks that the originating agent has finished its run |
 | `route` | `str \| bool \| int \| list \| None` | Workflow routing value |
 | `render_ui_widgets` | `list[UiWidget] \| None` | Rich UI widgets for ADK Web UI hosts |
-| `rewind_before_invocation_id` | `str \| None` | Rewind anchor (set by `runner.rewind_async`) |
+| `rewind_before_invocation_id` | `str \| None` | Rewind anchor (set by `runner.rewind_async`); the target invocation and everything after it are discarded |
+| `transfer_reason` | `str \| None` | Why `transfer_to_agent` was set (shows in telemetry) |
+| `agent_state` | `dict \| None` | Checkpoint state for resumable agents and workflow nodes |
+| `set_model_response` | `Any \| None` | Overrides the structured output for the model response |
+
+Tools set these through `tool_context`: `tool_context.state[...] = ...` becomes `state_delta`, and `tool_context.actions.transfer_to_agent = "billing_agent"` (with an optional `transfer_reason`) or `tool_context.actions.escalate = True` steer control. A compaction event's `actions.compaction` is an `EventCompaction(start_timestamp, end_timestamp, compacted_content)` covering the summarised window.
 
 ### Emitting custom events from tools
 
@@ -965,35 +977,23 @@ Each call to `runner.run_async` creates one `InvocationContext`. Callbacks and p
 
 ### Early termination with `end_invocation`
 
-Set `invocation_context.end_invocation = True` inside any callback to stop the invocation after the current step. Useful for hard budget/safety gates:
+Set `invocation_context.end_invocation = True` inside any callback to stop the invocation after the current step. Useful for hard budget/safety gates. Here a `before_agent_callback` ends the run and returns the reply the user sees:
 
 ```python
+from google.genai import types
 from google.adk.agents import LlmAgent
-from google.adk.plugins import BasePlugin
-from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+from google.adk.agents.callback_context import CallbackContext
 
-class SafetyPlugin(BasePlugin):
-    """Terminates the invocation if a forbidden phrase is detected."""
+def safety_gate(callback_context: CallbackContext) -> types.Content | None:
+    ctx = callback_context._invocation_context
+    user_text = " ".join(p.text or "" for p in (ctx.user_content.parts if ctx.user_content else []))
+    if "forbidden" in user_text.lower():
+        ctx.end_invocation = True            # stop the whole invocation, not just this agent
+        return types.Content(role="model", parts=[types.Part(text="I cannot help with that request.")])
+    return None
 
-    def __init__(self, forbidden: set[str]):
-        super().__init__(name="safety")
-        self._forbidden = forbidden
-
-    async def before_model_callback(self, *, callback_context, llm_request):
-        from google.genai import types
-
-        # Inspect the last user message
-        user_text = ""
-        if callback_context.user_content and callback_context.user_content.parts:
-            user_text = " ".join(
-                p.text or "" for p in callback_context.user_content.parts
-            ).lower()
-
-        if any(f in user_text for f in self._forbidden):
-            # Abort the whole invocation, not just skip this model call
-            callback_context._invocation_context.end_invocation = True
-            return types.Content.__class__  # won't be reached; invocation stops
-        return None
+agent = LlmAgent(name="guarded", model="gemini-2.5-flash", instruction="Answer the user.",
+                 before_agent_callback=safety_gate)
 ```
 
 ### `LlmCallsLimitExceededError`

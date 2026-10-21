@@ -56,7 +56,7 @@ These apply to both languages and cover protocols/features that span the framewo
   <LinkCard
     title="Enterprise patterns"
     href="./microsoft_agent_framework_enterprise_2025/"
-    description="OpenTelemetry, Entra ID, Content Safety and compliance considerations — partly design sketches; read the caution at the top."
+    description="OpenTelemetry, Entra ID, Content Safety, PII redaction, Purview, governance and audit — built from the framework's middleware and the Azure SDKs."
   />
   <LinkCard
     title="Comprehensive (language-agnostic)"
@@ -106,7 +106,7 @@ These apply to both languages and cover protocols/features that span the framewo
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-10-21 | Py 1.22.0 / .NET 1.25.0 | Version sweep. The status card now reads both current versions from the site's version data rather than hard-coding them. Python examples across the guide re-checked against an installed `agent-framework` 1.22.0; .NET examples checked against the `Microsoft.Agents.AI` 1.25.0 assemblies (thread API → `AgentSession` / `CreateSessionAsync`, `CreateAIAgent` → `AsAIAgent`). Language-neutral pages gained accuracy notes. |
+| 2026-10-21 | Py 1.22.0 / .NET 1.25.0 | Version sweep. The status card now reads both current versions from the site's version data rather than hard-coding them. Python examples across the guide re-checked against an installed `agent-framework` 1.22.0; .NET examples checked against the `Microsoft.Agents.AI` 1.25.0 assemblies (thread API → `AgentSession` / `CreateSessionAsync`, `CreateAIAgent` → `AsAIAgent`). Enterprise, comprehensive, recipes and production pages rewritten against the real APIs (Python examples run against a stub chat client; C# compiled). |
 | 2026-09-08 | Py 1.17.0 / .NET 1.1.0 | Consistency sweep. Status card corrected from a stale `Core 1.4.0` to the versions the language guides actually document (`agent-framework` 1.17.0, `Microsoft.Agents.AI` 1.1.0); language cards now name their package and version. Table of contents on the language-neutral comprehensive guide trimmed to the sections that exist, with per-language pointers for the rest. No package installation or symbol verification performed. |
 | 2026-04-21 | 1.0.1 | Parent index redesigned as language selector + cross-cutting guides. |
 | April 10, 2026 | 1.0.1 | Patch release. |

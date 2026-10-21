@@ -25,6 +25,7 @@ using System.Text.Json;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
+using OpenAI.Chat;
 
 var builder = WebApplication.CreateBuilder(args);
 

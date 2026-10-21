@@ -41,12 +41,12 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="5 · Tools integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#tools-integration" description="Function tools, built-ins · 20 min" />
   <LinkCard title="6 · Structured output" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#structured-output" description="Typed responses, validation · 15 min" />
   <LinkCard title="7 · MCP" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#model-context-protocol-mcp" description="MCP client + server · 20 min" />
-  <LinkCard title="8 · Agentic patterns" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="ReAct, planning, reflection · 20 min" />
-  <LinkCard title="9 · Memory systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" description="Cosmos DB, SQL, Azure Search · 20 min" />
+  <LinkCard title="8 · Agentic patterns" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="Planning, routing, reflection · 20 min" />
+  <LinkCard title="9 · Memory systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" description="Sessions, Cosmos DB history, RAG · 20 min" />
   <LinkCard title="10 · Azure AI integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#azure-ai-integration" description="Azure OpenAI, Content Safety · 15 min" />
   <LinkCard title="11 · Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" description="Managed Identity, Entra ID · 20 min" />
   <LinkCard title="12 · Semantic Kernel bridge" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" description="SK plugin compat · 15 min" />
-  <LinkCard title="13 · Feature tour (2025 preview)" href="./microsoft_agent_framework_dotnet_2025_features/" description="A2A, workflows, declarative — preview-era, read the caution · 25 min" />
+  <LinkCard title="13 · Feature tour" href="./microsoft_agent_framework_dotnet_2025_features/" description="A2A, workflows, checkpoints, HITL, declarative agents · 25 min" />
   <LinkCard title="14 · Advanced" href="./microsoft_agent_framework_dotnet_advanced/" description="Complex patterns, customisation · 30 min" />
   <LinkCard title="15 · Streaming (SSE)" href="./microsoft_agent_streaming_server_dotnet/" description=".NET streaming server · 20 min" />
   <LinkCard title="16 · Production" href="./microsoft_agent_framework_dotnet_production_guide/" description="Deployment, scaling · 30 min" />
@@ -95,6 +95,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
+using OpenAI.Chat;
 
 var client = new AzureOpenAIClient(
     new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
@@ -113,8 +114,8 @@ Console.WriteLine(response.Text);
 
 If you already have an `IChatClient` (from `Microsoft.Extensions.AI`), construct the agent directly: `new ChatClientAgent(chatClient, instructions: "...")`. Earlier previews used `AgentThread` / `GetNewThread()` and `CreateAIAgent(...)`; the GA names are `AgentSession` / `CreateSessionAsync()` and `AsAIAgent(...)`.
 
-<Aside type="caution" title="Some pages in this guide still use illustrative helpers">
-  Several older .NET pages register agents through helpers such as `AddAgentFactory`, `UseAzureOpenAI`, `AddCosmosDBState`, `AddAzureAISearchMemory` or `MapAgents`, and build workflows with `AddConditionalEdge` / `AddHITLCheckpoint`. None of these are part of the `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% packages (checked against the published assemblies on %%versions-checked%%) — treat those snippets as architecture sketches. The real building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `AgentWorkflowBuilder` and `InProcessExecution` (workflows), and `MapA2A` (A2A hosting).
+<Aside type="note" title="Compiled against the current packages">
+  The comprehensive guide, recipes and feature tour were rewritten on %%versions-checked%% so that every C# example compiles against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% and its companion packages. Earlier drafts used helpers that never shipped (`AddAgentFactory`, `UseAzureOpenAI`, `AddCosmosDBState`, `MapAgents`, `AddConditionalEdge`, `AgentGraph`); the real building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `WorkflowBuilder` / `AgentWorkflowBuilder` / `InProcessExecution` (workflows) and `MapA2AJsonRpc` (A2A hosting).
 </Aside>
 
 Ready? **[Start Zero → Hero Step 1 →](./microsoft_agent_framework_dotnet_comprehensive_guide/#introduction)**
@@ -125,7 +126,7 @@ Ready? **[Start Zero → Hero Step 1 →](./microsoft_agent_framework_dotnet_com
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-10-21 | 1.25.0 | Version sweep. Install card pins and version card now read `Microsoft.Agents.AI` from the site's version data. Minimal example fixed (`GetChatClient(...)` returns an OpenAI SDK client, not an `IChatClient` — use `AsAIAgent`); thread API updated to `AgentSession` / `CreateSessionAsync` across the .NET pages; caution added for helper APIs that do not exist in the published assemblies. |
+| 2026-10-21 | 1.25.0 | Version sweep. Install card pins and version card now read `Microsoft.Agents.AI` from the site's version data. Minimal example fixed (`GetChatClient(...)` returns an OpenAI SDK client, not an `IChatClient` — use `AsAIAgent`); thread API updated to `AgentSession` / `CreateSessionAsync` across the .NET pages. Comprehensive guide, recipes and feature tour rewritten against the real hosting, DI and workflow APIs; every C# block compiled against 1.25.0 and the workflow examples run against a stub chat client. |
 | 2026-09-08 | 1.1.0 | Consistency sweep. Version card moved 1.0.1 → 1.1.0 to match the `Latest:` stamps already carried by the .NET pages; those stamps now name the package (`Microsoft.Agents.AI`). No package installation or symbol verification performed. |
 | 2026-04-21 | 1.0.1 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
 | April 10, 2026 | 1.0.1 | Patch release. |

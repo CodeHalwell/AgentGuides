@@ -456,30 +456,33 @@ from google.adk.apps import App
 
 plugin = ReflectAndRetryToolPlugin(
     max_retries=3,
-    throw_exception_if_retry_exceeded=True,   # raises after max_retries; default False
+    throw_exception_if_retry_exceeded=True,   # default: re-raise once max_retries is used up; False returns guidance to the model instead
     tracking_scope=TrackingScope.INVOCATION,  # reset counter per invocation (default)
     # tracking_scope=TrackingScope.GLOBAL,    # global counter across all invocations
 )
 app = App(name="resilient", root_agent=agent, plugins=[plugin])
 ```
 
-**Custom failure detection** — by default any tool that raises an exception is retried. Override `extract_error_from_result` to treat semantic failures (e.g. `{"status": "error"}`) as retryable:
+`max_retries` counts consecutive failures per tool (`0` disables retrying). `TrackingScope.GLOBAL` shares one counter per tool across all concurrent invocations, which suits a tool that hits the same rate-limited API everywhere.
+
+**Custom failure detection** — by default only exceptions are retried. Some APIs return HTTP 200 with an error body; override the async `extract_error_from_result` hook and return the error dict to trigger reflection and retry, or `None` for success:
 
 ```python
-from google.adk.plugins import ReflectAndRetryToolPlugin
 from typing import Any, Optional
+from google.adk.plugins import ReflectAndRetryToolPlugin
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
 
-class StrictRetryPlugin(ReflectAndRetryToolPlugin):
-    def extract_error_from_result(self, result: Any) -> Optional[str]:
-        # Parent handles exceptions; we also handle dict error patterns
-        parent_error = super().extract_error_from_result(result)
-        if parent_error:
-            return parent_error
+class QuotaAwareRetryPlugin(ReflectAndRetryToolPlugin):
+    async def extract_error_from_result(
+        self, *, tool: BaseTool, tool_args: dict[str, Any],
+        tool_context: ToolContext, result: Any,
+    ) -> Optional[dict[str, Any]]:
         if isinstance(result, dict) and result.get("status") == "error":
-            return result.get("message", "tool returned error status")
+            return result
         return None
 
-plugin = StrictRetryPlugin(max_retries=2)
+plugin = QuotaAwareRetryPlugin(max_retries=2)
 ```
 
 ### `GlobalInstructionPlugin`
@@ -568,6 +571,29 @@ plugin = ContextFilterPlugin(
 )
 app = App(name="long_session", root_agent=agent, plugins=[plugin])
 ```
+
+`custom_filter` receives and returns the `list[types.Content]` about to be sent, so it can do more than drop turns, such as shrinking oversized tool outputs:
+
+```python
+from google.genai import types
+
+def trim_tool_outputs(contents: list[types.Content], limit: int = 500) -> list[types.Content]:
+    out = []
+    for content in contents:
+        parts = []
+        for part in content.parts or []:
+            fr = part.function_response
+            if fr and len(str(fr.response)) > limit:
+                part = types.Part(function_response=types.FunctionResponse(
+                    id=fr.id, name=fr.name, response={"output": str(fr.response)[:limit] + "…[truncated]"}))
+            parts.append(part)
+        out.append(types.Content(role=content.role, parts=parts))
+    return out
+
+plugin = ContextFilterPlugin(num_invocations_to_keep=20, custom_filter=trim_tool_outputs)
+```
+
+The plugin only trims the outgoing request; the stored session is untouched. Pair it with `EventsCompactionConfig` on the `App` to also bound the stored history.
 
 ### `MultimodalToolResultsPlugin`
 

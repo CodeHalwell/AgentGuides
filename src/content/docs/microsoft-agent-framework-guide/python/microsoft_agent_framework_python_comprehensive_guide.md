@@ -13,7 +13,7 @@ language: python
 
 ---
 
-> **API reference (first written against 1.14.0; examples re-checked against %%version=agent-framework%%; 90 further APIs are covered in depth in [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/), [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/), [Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/), [Vol. 5](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v5/), [Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v6/), [Vol. 7](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v7/), [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v8/), and [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/)).**
+> **API reference (first written against 1.14.0; examples re-checked against %%version=agent-framework%%). Usage guides for the newer APIs live on the topic pages: [HARNESS providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_harness/), [Middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/), [Sessions](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/), [Compaction](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/), [Orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/), [Checkpointing](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/), [Skills](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) and [Vector Stores](#vector-stores--collections-search-and-filters) below.**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
@@ -2037,6 +2037,125 @@ Wire it up exactly like `MemoryFileStore` — pass it as the `store=` argument t
 
 ---
 
+## Vector Stores — collections, search, and filters
+
+> **Experimental** (`ExperimentalFeature.VECTOR_STORES`): first use emits an `ExperimentalWarning`. The model/collection/filter layer arrived in 1.18.0; `VectorStoreHistoryProvider`, `VectorCollectionContextProvider` and the `create_get_tool` / `create_upsert_tool` / `create_delete_tool` factories followed in 1.19.0.
+
+`agent_framework` has a provider-neutral vector-store layer for retrieval-augmented agents. You describe a record type once, get a collection for it from a store (the dependency-free `InMemoryStore` here; the `agent-framework-azure-ai-search`, `agent-framework-redis` and `agent-framework-azure-cosmos` packages ship stores behind the same `BaseVectorStore` / `BaseVectorCollection` interface), and either query it from code or hand it to the agent as tools.
+
+### Describing records — `@vectorstoremodel` + `VectorStoreField`
+
+Annotate a dataclass or Pydantic model. Every model needs exactly one `"key"` field, and everything else is `"data"` (the default) unless you mark it `"vector"`. Vector fields need `dimensions` and, with the default decoder, a default value (`= None`), because `get()` and `search()` leave vectors out unless you pass `include_vectors=True`.
+
+```python
+from dataclasses import dataclass
+from typing import Annotated
+from agent_framework import VectorStoreField, vectorstoremodel
+
+
+@vectorstoremodel(collection_name="products")
+@dataclass
+class Product:
+    sku: Annotated[str, VectorStoreField("key")]
+    name: Annotated[str, VectorStoreField("data", is_full_text_indexed=True)]
+    category: Annotated[str, VectorStoreField("data", is_indexed=True)]
+    price: Annotated[float, VectorStoreField("data")]
+    # Vector fields need a default: reads skip vectors unless include_vectors=True.
+    embedding: Annotated[list[float] | None, VectorStoreField(
+        "vector", dimensions=3, distance_function="cosine_similarity", index_kind="hnsw",
+    )] = None
+
+
+defn = Product.__vectorstoremodel_definition__     # a VectorStoreCollectionDefinition
+print(defn.key_name, defn.vector_field_names, defn.data_field_names)
+# sku ['embedding'] ['name', 'category', 'price']
+```
+
+Other `VectorStoreField` options: `storage_name` (a different column name in the store), `is_auto_generated` (store-generated keys), a per-field `embedding_generator`, and `provider_annotations` (connector-specific knobs such as `{"ef_construction": 400}`). For schema-less `dict` records, build the definition yourself with `VectorStoreCollectionDefinition(fields=[...], collection_name=...)` and pass `definition=` when you create the collection.
+
+### CRUD and search — `InMemoryStore` / `InMemoryCollection`
+
+```python
+import asyncio
+from agent_framework import Filter, FilterGroup, InMemoryStore
+
+
+async def main() -> None:
+    store = InMemoryStore()                       # embedding_generator=... to embed text automatically
+    products = store.get_collection(Product)      # handles for the same name share state
+    await products.ensure_collection_exists()
+
+    await products.upsert([
+        Product("A1", "Noise-cancelling headphones", "electronics", 299.0, [1.0, 0.0, 0.0]),
+        Product("B2", "USB-C cable", "electronics", 9.99, [0.9, 0.1, 0.0]),
+        Product("C3", "Field guide to birds", "books", 24.5, [0.0, 0.0, 1.0]),
+    ], generate_vectors=False)                    # vectors supplied, no generator needed
+
+    print([p.name for p in await products.get(["A1"])])
+
+    cheap_electronics = FilterGroup("and", [
+        Filter("category", "eq", "electronics"),
+        Filter("price", "lt", 50.0),
+    ])
+    print([p.sku for p in await products.get(filter=cheap_electronics, top=10)])   # ['B2']
+
+    results = await products.search(vector=[1.0, 0.0, 0.0], top=2)
+    async for hit in results.results:             # SearchResponse(record=..., score=...)
+        print(hit["record"].sku, round(hit["score"], 3))
+
+
+asyncio.run(main())
+```
+
+`get(keys=None, *, filter=None, top=10, skip=0, order_by=None, include_vectors=False)` reads by key or lists a filtered page. `search(values=None, *, vector=None, filter=None, top=3, score_threshold=None, ...)` takes a pre-computed `vector`, or text `values` that the collection's embedding generator embeds for you. `delete(keys)` and `ensure_collection_deleted()` remove data. `InMemoryCollection` supports `cosine_similarity`, `cosine_distance` (the default), `dot_prod`, `negative_dot_prod`, `euclidean_distance`, `euclidean_squared_distance`, `manhattan` and `hamming`. It isn't thread-safe or persistent, so use it for tests and prototypes.
+
+### Portable filters — `Filter` / `FilterGroup` / `Param`
+
+`Filter(field_name, operator, value)` is one leaf. Operators: `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `between` (value `(low, high)`), `in`, `not_in`, `is_null`, `is_not_null`, `exists` (no value), `contains`, `contains_any`, `contains_all`, `starts_with`, `ends_with` and `contains_text`. Provider-namespaced strings such as `"azure.…"` are passed through. `FilterGroup("and" | "or" | "not", [...])` composes leaves and groups (`"not"` takes exactly one child). Connectors translate the same expression into their native query language.
+
+Use `Param(...)` in place of a value to let the **model** fill it in when the filter is attached to a tool. The parameter shows up in the tool's JSON schema:
+
+```python
+from agent_framework import Filter, Param, create_vector_search_tool
+
+search_tool = create_vector_search_tool(
+    products,                                      # any collection that supports vector search
+    name="search_products",
+    description="Semantic product search; optionally cap the price.",
+    filter=Filter("price", "lte", Param("max_price", float | None, default=None, omit_if_none=True)),
+    top=5,
+)
+# Agent(client=..., tools=[search_tool])
+```
+
+`omit_if_none=True` drops the leaf when the model leaves `max_price` out. The companion factories `create_get_tool`, `create_upsert_tool` and `create_delete_tool` expose the other operations. Upsert and delete default to `approval_mode="always_require"`.
+
+### Giving an agent the whole collection — `VectorCollectionContextProvider`
+
+`VectorCollectionContextProvider` wraps a collection you own and generates up to four tools (`get`, `search`, `upsert`, `delete`) plus usage instructions for each run:
+
+```python
+from agent_framework import Agent, Filter, VectorCollectionContextProvider
+from agent_framework.openai import OpenAIChatClient
+
+catalogue = VectorCollectionContextProvider(
+    products,
+    scope_filter=Filter("category", "eq", "electronics"),   # required keyword; None for no scoping
+    include_upsert_tool=False,                               # read-only for this agent
+    include_delete_tool=False,
+    # approval_mode defaults: get/search "never_require", upsert/delete "always_require"
+)
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Help customers find electronics. Use the search tool.",
+    context_providers=[catalogue],
+)
+```
+
+`scope_filter` is ANDed into every generated tool. It separates data logically, but it's not an authorization boundary. Semantic search needs an embedding generator on the store or collection so the model's text query can be embedded. To keep the agent's **own conversation** in a vector store, use [`VectorStoreHistoryProvider`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/#vectorstorehistoryprovider--history-in-a-vector-store) instead.
+
+---
+
 ## Agent Todo List — `TodoProvider` (Experimental HARNESS)
 
 > **Stable since 1.12.0.** `TodoProvider` and `TodoSessionStore` graduated from `ExperimentalFeature.HARNESS` in 1.12.0; `TodoFileStore` is still experimental in %%version=agent-framework%%.
@@ -2452,9 +2571,9 @@ asyncio.run(main())
 
 ## Class & API Reference
 
-> Consolidated from the full "class deep dive" volume series that used to ship as 49 separate pages (the base volume plus `_v2`–`_v44` of the main series, and `microsoft_agent_framework_python_sdk_class_deep_dives` plus `_v3`–`_v6` covering the `azure-ai-agents` add-on). Two independent verification passes checked every symbol below against an installed `agent-framework` 1.14.0 venv with `inspect.signature()` / `inspect.getsource()`; the `azure-ai-agents` appendix at the end was checked only for internal consistency across its five source volumes — no fresh `pip install` of `azure-ai-agents` was available for that pass, so treat it as best-effort rather than independently re-verified.
+> Short entries for the public classes, checked against an installed `agent-framework` 1.14.0 with `inspect.signature()` / `inspect.getsource()` and re-checked against %%version=agent-framework%% where a section says so. For worked examples, follow the links to the topic pages. The `azure-ai-agents` appendix at the end was only checked for internal consistency (no fresh `pip install` of `azure-ai-agents` was available), so treat it as best-effort.
 >
-> Several older per-volume pages invented methods or parameters that never existed on any released version of the package. Rather than silently drop those, the corrections are called out inline as **Correction** notes — useful if you're migrating code that was written against one of the old pages.
+> Earlier versions of this guide documented some methods or parameters that never existed on any released version of the package. Rather than silently drop those, the corrections are called out inline as **Correction** notes — useful if you're migrating code that was written against one of the old pages.
 
 ### Workflows & Execution
 
@@ -2498,7 +2617,7 @@ result = await workflow.run("  Hello World  ")
 print(result.get_outputs())
 ```
 
-> **Correction — fabricated methods:** several old per-volume pages (source volumes 5, 11, 16, 19) invented `add_node`, `add_executor`, `connect`, `set_output_from`, `fan_in`, and `fan_out` methods on `WorkflowBuilder`. None of these exist on any version of the installed package — the verified method set is exactly the seven shown above (`add_edge`, `add_chain`, `add_fan_out_edges`, `add_fan_in_edges`, `add_switch_case_edge_group`, `add_multi_selection_edge_group`, `build`). Discard any example using the fabricated names.
+> **Correction — fabricated methods:** earlier versions of this guide invented `add_node`, `add_executor`, `connect`, `set_output_from`, `fan_in`, and `fan_out` methods on `WorkflowBuilder`. None of these exist on any version of the installed package — the verified method set is exactly the seven shown above (`add_edge`, `add_chain`, `add_fan_out_edges`, `add_fan_in_edges`, `add_switch_case_edge_group`, `add_multi_selection_edge_group`, `build`). Discard any example using the fabricated names.
 
 #### `Workflow` + `WorkflowRunResult`
 **Module:** `agent_framework._workflows._workflow`
@@ -2515,7 +2634,7 @@ async for event in workflow.run("hello", stream=True):
         print(event.data)
 ```
 
-HITL resume: `workflow.run(responses={request_id: value}, checkpoint_id=...)` — `message` and `checkpoint_id` are mutually exclusive; **there is no `workflow.respond()` method and no `workflow.run_from_checkpoint()` method** (an older per-volume page showed `await workflow.run_from_checkpoint(checkpoint_id, checkpoint_storage=...)` — that method does not exist on the installed 1.14.0 `Workflow` class; resume through `workflow.run(checkpoint_id=...)` instead, as the rest of this guide's "Workflow checkpointing" section already does).
+HITL resume: `workflow.run(responses={request_id: value}, checkpoint_id=...)` — `message` and `checkpoint_id` are mutually exclusive; **there is no `workflow.respond()` method and no `workflow.run_from_checkpoint()` method** (an earlier version of this guide showed `await workflow.run_from_checkpoint(checkpoint_id, checkpoint_storage=...)` — that method does not exist on the installed 1.14.0 `Workflow` class; resume through `workflow.run(checkpoint_id=...)` instead, as the rest of this guide's "Workflow checkpointing" section already does).
 
 Every `Workflow` also exposes `.as_agent(name=..., description=..., context_providers=...)` (wraps the graph as a `SupportsAgentRun`-compatible agent) and `.as_tool(name=..., description=...)` (wraps it as a callable `FunctionTool` for use inside another agent's `tools=[...]`) — see this guide's "Exposing a workflow as an agent" section above for a full example.
 
@@ -2571,7 +2690,7 @@ builder.add_switch_case_edge_group(
 ```
 
 #### EdgeGroup / EdgeRunner hierarchy (overview)
-Internal representation of every edge type the builder methods create: `SingleEdgeGroup` (plain `add_edge`), `FanOutEdgeGroup`, `FanInEdgeGroup`, `SwitchCaseEdgeGroup`, `MultiSelectionEdgeGroup`. Each has a matching `EdgeRunner` that the runner invokes at execution time. Useful when reading stack traces from workflow errors — the class name in the trace maps directly to which builder call produced that edge.
+Internal representation of every edge type the builder methods create: `SingleEdgeGroup(source_id, target_id, condition=None, *, id=None)` (plain `add_edge`), `FanOutEdgeGroup`, `FanInEdgeGroup`, `SwitchCaseEdgeGroup`, `MultiSelectionEdgeGroup`. Each has a matching `EdgeRunner` that the runner invokes at execution time. Useful when reading stack traces from workflow errors — the class name in the trace maps directly to which builder call produced that edge.
 
 #### `Executor`, `@executor`, `@handler`
 Base unit of work in a workflow graph. `@executor` decorates a plain async function into an `Executor`; `@handler` marks a method inside a class-based `Executor` subclass as the entry point for a given message type (supports overloads for multiple input types on one executor class — see "Custom executors with `@handler`" above for the full pattern, including the explicit-types decorator form).
@@ -2600,6 +2719,11 @@ Internal Pregel-style engine that drives workflow execution: each "superstep" de
 **Module:** `agent_framework._workflows._runner_context`
 
 The concrete execution context behind a local `workflow.run()`. Handles inter-executor message routing (`send_message`/`drain_messages`), event streaming with **lazy `asyncio.Queue` binding** (so one context can be reused across separate `asyncio.run()` calls), HITL request/response correlation (`add_request_info_event`/`send_request_info_response`/`get_pending_request_info_events`), and per-run checkpoint-storage override (`set_runtime_checkpoint_storage` / `clear_runtime_checkpoint_storage`, the latter called automatically after each run).
+
+#### `WorkflowMessage`
+**Module:** `agent_framework._workflows._runner_context`
+
+The envelope the runner routes between executors (handlers receive only its `data`). It's a dataclass, `WorkflowMessage(data, source_id, target_id=None, type=MessageType.STANDARD, trace_contexts=None, source_span_ids=None, original_request_info_event=None)`. `type` is `STANDARD` or `RESPONSE` (an answer to a `request_info`, carrying `original_request_info_event`). `trace_contexts` / `source_span_ids` hold one W3C trace context and span id per contributing source, so a fan-in message links back to every upstream span. `trace_context` / `source_span_id` return the first entry. `to_dict()` / `from_dict()` round-trip it. You meet it in pending messages inside a `WorkflowCheckpoint` and when unit-testing a custom `RunnerContext`.
 
 #### `RequestInfoExecutor` / `request_info`
 Pauses a workflow superstep to solicit external (typically human) input mid-graph, then resumes once a response is supplied — used to build human-in-the-loop approval steps inside otherwise automated graphs. See "Workflow human-in-the-loop" above for the `@response_handler` pattern used to receive the reply.
@@ -2669,7 +2793,7 @@ response = agent.run("Summarise the latest earnings report.")   # returns synchr
 
 ### Agents, Modes & Orchestration
 
-> **Reconciled naming:** an older per-volume page described this layer's base class as `ChatAgent`. The installed 1.14.0 API — and every other section of this guide — uses `Agent` / `RawAgent`; `ChatAgent` is not the current class name. Likewise `AgentRunResponse` / `AgentRunResponseUpdate` are the pre-rename names for what 1.14.0 ships as `AgentResponse` / `AgentResponseUpdate` (used throughout this guide already).
+> **Reconciled naming:** an earlier version of this guide described this layer's base class as `ChatAgent`. The installed 1.14.0 API — and every other section of this guide — uses `Agent` / `RawAgent`; `ChatAgent` is not the current class name. Likewise `AgentRunResponse` / `AgentRunResponseUpdate` are the pre-rename names for what 1.14.0 ships as `AgentResponse` / `AgentResponseUpdate` (used throughout this guide already).
 
 #### `Agent` + `RawAgent`
 **Module:** `agent_framework._agents`
@@ -2703,7 +2827,7 @@ response = await agent.run("What is 2 + 2?")
 
 Batteries-included factory that assembles a fully-wired `Agent`: function invocation, per-service-call history persistence, compaction (when token budgets given), `TodoProvider`, `AgentModeProvider`, `FileMemoryProvider`, `FileAccessProvider`, `SkillsProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, optional `AgentLoopMiddleware`, and OTel tracing.
 
-> **Correction vs. earlier docs:** the installed 1.14.0 signature has **no `disable_file_access` parameter** (present in older docs) — instead pass `file_access_store=None` to skip it. It gained `before_compaction_strategy` / `after_compaction_strategy` (replacing a single `compaction_strategy` shortcut), `file_access_disable_readonly_tool_approval` / `file_access_disable_write_tool_approval` (mirroring `FileAccessProvider`'s own new flags), and an entirely new **`shell_executor` / `shell_environment_provider_options`** pair not documented in any prior per-volume page.
+> **Correction vs. earlier docs:** the installed 1.14.0 signature has **no `disable_file_access` parameter** (present in older docs) — instead pass `file_access_store=None` to skip it. It gained `before_compaction_strategy` / `after_compaction_strategy` (replacing a single `compaction_strategy` shortcut), `file_access_disable_readonly_tool_approval` / `file_access_disable_write_tool_approval` (mirroring `FileAccessProvider`'s own new flags), and an entirely new **`shell_executor` / `shell_environment_provider_options`** pair not documented in earlier versions of this guide.
 
 ```python
 agent = create_harness_agent(
@@ -2728,7 +2852,7 @@ get_agent_mode(session: AgentSession, *, source_id="agent_mode", default_mode=No
 set_agent_mode(session: AgentSession, mode: str, *, source_id="agent_mode", available_modes=None) -> str
 ```
 
-> **Correction:** the constructor keyword is `mode_instructions` (not `mode_descriptions`, as several older per-volume pages named it). The "Agent Mode Provider" section above has been updated to match the installed signature.
+> **Correction:** the constructor keyword is `mode_instructions` (not `mode_descriptions`, as earlier versions of this guide named it). The "Agent Mode Provider" section above has been updated to match the installed signature.
 
 #### `AgentLoopMiddleware` + `JudgeVerdict`
 **Module:** `agent_framework._harness._loop`
@@ -2755,16 +2879,16 @@ Lets a parent agent delegate to named sub-agents running concurrently in separat
 
 ```python
 BackgroundAgentsProvider(agents: Sequence[SupportsAgentRun], *, source_id="background_agents",
-                          instructions: str | None = None)
+                          instructions: str | None = None, wait_timeout_seconds: int = 300)
 BackgroundTaskInfo(id: int, agent_name: str, description: str,
                    status: BackgroundTaskStatus = RUNNING, result_text=None, error_text=None)
 ```
-`BackgroundTaskStatus`: `RUNNING, COMPLETED, FAILED, LOST` (`LOST` = the in-process `asyncio.Task` reference was lost, e.g. process restart). Each agent needs a unique, non-empty `name`.
+`BackgroundTaskStatus`: `RUNNING, COMPLETED, FAILED, LOST` (`LOST` = the in-process `asyncio.Task` reference was lost, e.g. process restart). Each agent needs a unique, non-empty `name`. Call `await provider.release_session(session, cancel_running=True, timeout=30.0)` when a parent session ends. Usage: [HARNESS providers → `BackgroundAgentsProvider`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_harness/#backgroundagentsprovider--delegate-to-concurrent-sub-agents).
 
 #### Orchestration builders — `MagenticBuilder`, `GroupChatBuilder`, `SequentialBuilder`, `ConcurrentBuilder`, `HandoffBuilder`
 **Package:** `agent-framework-orchestrations` (`agent_framework.orchestrations`)
 
-> **Correction:** an older per-volume page documented `SequentialBuilder`/`ConcurrentBuilder`/`GroupChatBuilder`/`HandoffBuilder`/`MagenticBuilder` as taking a positional `agents: list[Agent]` constructor argument, with a `SequentialBuilder.with_request_info()` method and `WorkflowBuilder.add_group_chat()` / `.add_agent_based_group_chat()` helpers. None of that is real: `WorkflowBuilder` has no group-chat methods at all, and every orchestration builder's actual constructor takes agents via the **keyword-only `participants=`** argument (confirmed live against the installed 1.14.0 `agent_framework_orchestrations` package with `inspect.signature()`). Each builder is fully independent and produces its own `Workflow` via `.build()` — see the "Multi-Agent Orchestration Patterns" section above for the current, verified `participants=` usage.
+> **Correction:** an earlier version of this guide documented `SequentialBuilder`/`ConcurrentBuilder`/`GroupChatBuilder`/`HandoffBuilder`/`MagenticBuilder` as taking a positional `agents: list[Agent]` constructor argument, with a `SequentialBuilder.with_request_info()` method and `WorkflowBuilder.add_group_chat()` / `.add_agent_based_group_chat()` helpers. None of that is real: `WorkflowBuilder` has no group-chat methods at all, and every orchestration builder's actual constructor takes agents via the **keyword-only `participants=`** argument (confirmed live against the installed 1.14.0 `agent_framework_orchestrations` package with `inspect.signature()`). Each builder is fully independent and produces its own `Workflow` via `.build()` — see the "Multi-Agent Orchestration Patterns" section above for the current, verified `participants=` usage.
 
 - **`MagenticOrchestrator`** drives Magentic-One's two-level loop (outer replan / inner coordinate): `MagenticOrchestrator(manager: MagenticManagerBase, participant_registry, *, require_plan_signoff=False)`. `MagenticContext` (`@dataclass`) holds `task, chat_history, participant_descriptions, round_count, stall_count, reset_count` — always cloned before being passed to manager calls. `MagenticResetSignal` is a no-field sentinel used only by custom `BaseGroupChatOrchestrator` subclasses. When `require_plan_signoff=True`, the workflow suspends with a `MagenticPlanReviewRequest(plan, current_progress, is_stalled)`; answer with `.approve()` or `.revise(feedback)` → `MagenticPlanReviewResponse(review: list[Message])` (empty = approved). `StandardMagenticManager(agent, *, max_stall_count=3, max_reset_count=None, max_round_count=None, progress_ledger_retry_count=None, ...8 prompt overrides)` wraps an `Agent` for every orchestration LLM call. `MagenticProgressLedger` is a 5-field structured output — `is_request_satisfied, is_in_loop, is_progress_being_made, next_speaker, instruction_or_question`, each a `MagenticProgressLedgerItem(reason: str, answer: str | bool)` (bool for yes/no fields, str for `next_speaker`/`instruction_or_question`) — access as attributes, not by iterating. `MagenticOrchestratorEvent(event_type: MagenticOrchestratorEventType, content: Message | MagenticProgressLedger)`; `MagenticOrchestratorEventType`: `PLAN_CREATED, REPLANNED, PROGRESS_LEDGER_UPDATED`.
 
@@ -2877,14 +3001,14 @@ FileMemoryProvider(store: AgentFileStore, *, source_id="file_memory", scope: str
 ```
 `scope=None` isolates per session (keyed by `session_id`); pass a user ID to share across sessions. All write/delete ops serialize through an `asyncio.Lock` so the `memories.md` index stays consistent.
 
-`FileAccessProvider` is the analogous **shared, persistent** CRUD+grep provider (7 tools: `file_access_write/read/delete/ls/grep/replace/replace_lines`):
+`FileAccessProvider` is the analogous **shared, persistent** CRUD+grep provider (8 tools: `file_access_write/read/read_lines/delete/ls/grep/replace/replace_lines`):
 
 ```python
 FileAccessProvider(store: AgentFileStore, *, source_id="file_access", instructions=None,
                     disable_write_tools=False, disable_readonly_tool_approval=False,
-                    disable_write_tool_approval=False)
+                    disable_write_tool_approval=False, session_scoped=False, scope: str | None = None)
 ```
-Every tool defaults to `approval_mode="always_require"`; two static helpers produce standing `ToolApprovalRule`s for `ToolApprovalMiddleware`: `FileAccessProvider.read_only_tools_auto_approval_rule` and `.all_tools_auto_approval_rule`.
+Every tool defaults to `approval_mode="always_require"`. `FileAccessProvider.read_only_tools_auto_approval_rule` and `.all_tools_auto_approval_rule` are static `(function_call) -> bool` callbacks: pass them, uncalled, in `ToolApprovalMiddleware(auto_approval_rules=[...])`. `session_scoped=True` / `scope=` confine the tools to a per-session or named folder. Usage for both providers: [HARNESS providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_harness/#filememoryprovider--session-scoped-scratch-files).
 
 `AgentFileStore` (ABC): `async write(path, content, *, overwrite=True)`, `read(path) -> str | None`, `delete(path) -> bool`, `list_children(directory="") -> list[FileStoreEntry]`, `search(pattern, *, glob=None, base_dir="") -> list[FileSearchResult]`. Paths are always relative; implementations must reject `..` traversal and make `overwrite=False` an atomic exclusive create. `FileStoreEntry(name: str, type: str)` — class constants `FILE="file"` / `DIRECTORY="directory"`. `InMemoryAgentFileStore()` is dict-backed (lower-cased keys, single `asyncio.Lock`). `FileSystemAgentFileStore(root_directory: str | os.PathLike)` is disk-backed with symlink rejection (`O_NOFOLLOW` on POSIX) and lazy root creation. `FileSearchMatch(line_number, line)` / `FileSearchResult(file_name, snippet="", matching_lines=None)` are the search DTOs.
 
@@ -2900,7 +3024,7 @@ TodoFileStore(base_path: str | Path, *, kind="todos", owner_prefix="", owner_sta
               state_filename="todos.json")
 ```
 
-> **Correction vs. earlier docs:** several older per-volume pages documented `TodoProvider`'s default `source_id` as `"todos"` — the installed default is **`"todo"`** (singular), matching this guide's own "Agent Todo List" section above.
+> **Correction vs. earlier docs:** earlier versions of this guide documented `TodoProvider`'s default `source_id` as `"todos"` — the installed default is **`"todo"`** (singular), matching this guide's own "Agent Todo List" section above.
 
 `TodoInput(title, description=None)` / `TodoCompleteInput(id, reason)` are the tool argument schemas. `TodoSessionStore()` (default backing store) keeps state in `session.state[source_id]`; `TodoFileStore` persists per-session JSON, sanitizing owner/session path segments against traversal and Windows-reserved names. A `WeakKeyDictionary[AgentSession, asyncio.Lock]` guards concurrent read-modify-write.
 
@@ -2910,7 +3034,7 @@ TodoFileStore(base_path: str | Path, *, kind="todos", owner_prefix="", owner_sta
 - **`ConversationStore` / `InMemoryConversationStore` / `CheckpointConversationManager`** (`agent_framework_devui._conversations`) back the DevUI's OpenAI-compatible `/v1/conversations` surface; `CheckpointConversationManager` hands each conversation its own isolated `InMemoryCheckpointStorage` so `FunctionalWorkflow` HITL state survives across multiple HTTP turns in the same DevUI session.
 - **`AGUIThreadSnapshot` / `AGUIThreadSnapshotStore` / `InMemoryAGUIThreadSnapshotStore`** (`agent-framework-ag-ui`, `agent_framework.ag_ui`) persist replayable AG-UI thread state: `AGUIThreadSnapshot(messages: list[dict], state: dict | None, interrupt: list[dict] | None, session_state: dict | None)` — `session_state` is **private** and must never be replayed to the client. `AGUIThreadSnapshotStore` is a `@runtime_checkable` Protocol (`save`/`get`/`delete`/`clear`, all keyed by `(scope, thread_id)`). `InMemoryAGUIThreadSnapshotStore(*, max_snapshots=100)` LRU-evicts the oldest entry when full; raises `ValueError` if `max_snapshots < 1`.
 
-**`FileMemoryProvider`, `FileSessionStore`, `SessionStore`** postdate the source volumes that only went up to ~1.9.0 — the fully documented `FileMemoryProvider` above is the current 1.14.0 shape. `SessionStore` is the general abstract persistence interface for conversation/session state; `FileSessionStore` is its local-disk implementation.
+**`FileMemoryProvider`, `FileSessionStore`, `SessionStore`** postdate the earlier reference pages, which only went up to ~1.9.0 — the fully documented `FileMemoryProvider` above is the current 1.14.0 shape. `SessionStore` is the general abstract persistence interface for conversation/session state; `FileSessionStore` is its local-disk implementation.
 
 ### Tools & MCP
 
@@ -2924,7 +3048,7 @@ FunctionTool(*, name: str, description: str = "", approval_mode: ApprovalMode | 
              func: Callable[..., Any] | None = None, input_model: type[BaseModel] | Mapping | None = None,
              result_parser: Callable[[Any], str | list[Content]] | _SkipParsingSentinel | None = None)
 ```
-`max_invocations` is a **lifetime** counter on the instance (accumulates across all requests — reset it manually via `tool.invocation_count = 0`). `func=None` creates a **declaration-only** tool: it appears in the schema but is never executed server-side (the call short-circuits into `response.user_input_requests`). `result_parser` (or the sentinel `SKIP_PARSING`) controls how the return value is serialized back to the model. `FunctionTool` is the object the `@tool` decorator used throughout this guide builds under the hood (an older per-volume page called this wrapper `AIFunction` / `@ai_function` — that name predates the current release; `@tool` / `FunctionTool` is what 1.14.0 actually ships).
+`max_invocations` is a **lifetime** counter on the instance (accumulates across all requests — reset it manually via `tool.invocation_count = 0`). `func=None` creates a **declaration-only** tool: it appears in the schema but is never executed server-side (the call short-circuits into `response.user_input_requests`). `result_parser` (or the sentinel `SKIP_PARSING`) controls how the return value is serialized back to the model. `FunctionTool` is the object the `@tool` decorator used throughout this guide builds under the hood (an earlier version of this guide called this wrapper `AIFunction` / `@ai_function` — that name predates the current release; `@tool` / `FunctionTool` is what 1.14.0 actually ships).
 
 `FunctionInvocationLayer` is the MRO mixin every concrete chat client inherits, adding the tool-execution loop:
 
@@ -2952,7 +3076,7 @@ async with fs_tool:
     agent = Agent(client=client, tools=[fs_tool])
 ```
 
-> **Correction:** MCP sampling (an MCP server itself requesting an LLM completion from the connecting client — the "confused deputy" mitigation surface) is configured via `sampling_approval_callback` on the tool constructor above, not a `sampling_handler=` parameter as an older per-volume page named it.
+> **Correction:** MCP sampling (an MCP server itself requesting an LLM completion from the connecting client — the "confused deputy" mitigation surface) is configured via `sampling_approval_callback` on the tool constructor above, not a `sampling_handler=` parameter as an earlier version of this guide named it.
 
 #### MCP error taxonomy — `ToolExecutionException` / `_MCPTaskAbandoned` / `_MCPDeadlineExpired`
 **Module:** `agent_framework.exceptions` / `agent_framework._mcp`
@@ -2991,7 +3115,7 @@ FoundryToolbox(credential: TokenCredential, *, url: str | None = None, name: str
                token_scope: str = "https://ai.azure.com/.default", load_prompts: bool = False,
                load_tools: bool = True, timeout: float = 120.0)
 ```
-> **Correction vs. earlier docs:** an older per-volume page documented `timeout: float = 30.0` — the installed default is **`120.0`**. Endpoint resolves from `TOOLBOX_ENDPOINT`, or `FOUNDRY_PROJECT_ENDPOINT` + `TOOLBOX_NAME`.
+> **Correction vs. earlier docs:** an earlier version of this guide documented `timeout: float = 30.0` — the installed default is **`120.0`**. Endpoint resolves from `TOOLBOX_ENDPOINT`, or `FOUNDRY_PROJECT_ENDPOINT` + `TOOLBOX_NAME`.
 
 #### `MessageInjectionMiddleware` + `enqueue_messages`
 **Module:** `agent_framework._middleware` (top-level `agent_framework`)
@@ -3003,7 +3127,7 @@ MessageInjectionMiddleware()
 enqueue_messages(session: AgentSession, messages: AgentRunInputs) -> None   # module-level free function
 middleware.get_pending_messages(session) -> list[Message]                   # point-in-time snapshot
 ```
-If the middleware drains new messages and the last model response had no pending tool calls, it loops internally with the model until nothing new is queued. `MiddlewareBundle` (also new relative to the older per-volume pages) groups multiple middleware instances so they can be attached to an agent as a single named unit.
+If the middleware drains new messages and the last model response had no pending tool calls, it loops internally with the model until nothing new is queued. `MiddlewareBundle([...])` groups agent/chat/function middleware into one all-or-nothing unit (bundles can't nest); `create_agent_hooks_middleware(...)` returns one. Usage: [Middleware → injecting messages](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#injecting-messages-into-a-running-session--messageinjectionmiddleware).
 
 #### Declarative-workflow tool executors
 **Package:** `agent-framework-declarative` (see also **A2A Protocol & Declarative Graphs** below) — `FunctionTool` / `OpenApiTool` / `WebSearchTool` / `FileSearchTool` / `CodeInterpreterTool` (the YAML-driven declarative-model subclasses, distinct from the harness `FunctionTool` above) and `BaseToolExecutor` / `InvokeFunctionToolExecutor` / `ToolApprovalRequest` / `ToolApprovalResponse` / `ToolInvocationResult` (the declarative-workflow HITL/tool executor pair) are covered under **A2A Protocol & Declarative Graphs** to keep the two `ToolApprovalRule` namespaces (harness vs. declarative) from being conflated.
@@ -3049,7 +3173,7 @@ SecureAgentConfig(auto_hide_untrusted: bool = True, default_integrity: Integrity
                    source_id: str | None = None)
 ```
 
-> **Correction — re-verified live against the installed 1.14.0 signature (`inspect.signature(SecureAgentConfig.__init__)`):** `auto_hide_untrusted` and `enable_audit_log` both default to **`True`**, not `False` as several older per-volume pages showed — the "Prompt Injection Defense" section's constructor-reference table above has been corrected to match.
+> **Correction — re-verified live against the installed 1.14.0 signature (`inspect.signature(SecureAgentConfig.__init__)`):** `auto_hide_untrusted` and `enable_audit_log` both default to **`True`**, not `False` as earlier versions of this guide showed — the "Prompt Injection Defense" section's constructor-reference table above has been corrected to match.
 
 After construction: `security.label_tracker: LabelTrackingFunctionMiddleware`, `security.policy_enforcer: PolicyEnforcementFunctionMiddleware | None`. The `quarantined_llm` tool it injects reads a **process-global** quarantine-client slot (set via `set_quarantine_client()`) — the most-recently-constructed `SecureAgentConfig`'s client wins process-wide if you build more than one with different `quarantine_chat_client` values.
 
@@ -3081,7 +3205,7 @@ ContentVariableStore()                       # dict-backed; store()/retrieve()/e
 VariableReferenceContent(variable_id: str, label: ContentLabel, description: str | None = None)
 InspectVariableInput(variable_id: str, reason: str | None = None)   # tool-arg schema for inspect_variable
 ```
-`store(content, label) -> str` returns a `var_{16hex}` ID; the LLM only ever sees a `VariableReferenceContent` placeholder. The `inspect_variable` tool taints the calling context to `UNTRUSTED` when used — call sparingly. `store_untrusted_content(content, label=None, description=None)` always writes to the module-level `_global_variable_store` singleton; **when `LabelTrackingFunctionMiddleware` is active, `inspect_variable`/`quarantined_llm` look up the *middleware's own* store instead** — a variable ID from `store_untrusted_content` will `KeyError` there. Use `middleware.get_variable_store().store(...)` directly when middleware is running (an older per-volume page described this indirection as free-standing `get_variable_store()`/`set_variable_store()` functions — the real accessor is scoped to the middleware instance, as shown here). `get_security_tools() -> [quarantined_llm, inspect_variable]` returns the two `FunctionTool`s for `Agent(tools=[..., *get_security_tools()])`. `quarantined_llm` sends the raw content of a variable to a separate chat client (registered via `set_quarantine_client()` / read via `get_quarantine_client()`) isolated from the main context; if none is registered it logs a warning and returns a placeholder string rather than raising.
+`store(content, label) -> str` returns a `var_{16hex}` ID; the LLM only ever sees a `VariableReferenceContent` placeholder. The `inspect_variable` tool taints the calling context to `UNTRUSTED` when used — call sparingly. `store_untrusted_content(content, label=None, description=None)` always writes to the module-level `_global_variable_store` singleton; **when `LabelTrackingFunctionMiddleware` is active, `inspect_variable`/`quarantined_llm` look up the *middleware's own* store instead** — a variable ID from `store_untrusted_content` will `KeyError` there. Use `middleware.get_variable_store().store(...)` directly when middleware is running (an earlier version of this guide described this indirection as free-standing `get_variable_store()`/`set_variable_store()` functions — the real accessor is scoped to the middleware instance, as shown here). `get_security_tools() -> [quarantined_llm, inspect_variable]` returns the two `FunctionTool`s for `Agent(tools=[..., *get_security_tools()])`. `quarantined_llm` sends the raw content of a variable to a separate chat client (registered via `set_quarantine_client()` / read via `get_quarantine_client()`) isolated from the main context; if none is registered it logs a warning and returns a placeholder string rather than raising.
 
 #### Microsoft Purview compliance
 **Package:** `agent-framework-purview` (`agent_framework.microsoft`)
@@ -3104,7 +3228,7 @@ FileSkillsSource(skill_paths: str | Path | Sequence[str | Path], *, script_runne
                   script_filter: Callable[[str, str], bool] | None = None,
                   resource_filter: Callable[[str, str], bool] | None = None)
 ```
-`InlineSkill` requires a `SkillFrontmatter(*, name, description, license=None, compatibility=None, allowed_tools=None, metadata=None)` built first — an older per-volume page constructed it directly as `InlineSkill(name=..., description=..., instructions=...)`, which is not a valid call; the frontmatter object is mandatory. `ClassSkill` lets a skill be defined as a Python class instead of a filesystem directory — `@ClassSkill.resource(name=...)` / `@ClassSkill.script(name=...)` decorate methods for auto-discovery. `search_depth` (default 2) / `script_filter` / `resource_filter` are 1.10.0-era additions controlling how deep `FileSkillsSource` scans and which files it includes.
+`InlineSkill` requires a `SkillFrontmatter(*, name, description, license=None, compatibility=None, allowed_tools=None, metadata=None)` built first — an earlier version of this guide constructed it directly as `InlineSkill(name=..., description=..., instructions=...)`, which is not a valid call; the frontmatter object is mandatory. `ClassSkill` lets a skill be defined as a Python class instead of a filesystem directory — `@ClassSkill.resource(name=...)` / `@ClassSkill.script(name=...)` decorate methods for auto-discovery. `search_depth` (default 2) / `script_filter` / `resource_filter` are 1.10.0-era additions controlling how deep `FileSkillsSource` scans and which files it includes.
 
 ```python
 frontmatter = SkillFrontmatter(name="pdf_summarizer", description="Summarize PDF documents.")
@@ -3120,7 +3244,7 @@ SkillsProvider(source: SkillsSource | Sequence[Skill] | Skill, *, instruction_te
                disable_run_skill_script_approval=False, source_id: str | None = None)
 ```
 
-> **Correction:** an older per-volume page documented a `require_script_approval` parameter and a plain `skills: list[Skill]` first argument — neither matches the installed signature. The first argument accepts a `SkillsSource`, a single `Skill`, or a sequence of them, and approval is controlled by the three separate `disable_*_approval` flags shown above (plus the newer `disable_caching`/`cache_refresh_interval`/`instruction_template`/`source_id`).
+> **Correction:** an earlier version of this guide documented a `require_script_approval` parameter and a plain `skills: list[Skill]` first argument — neither matches the installed signature. The first argument accepts a `SkillsSource`, a single `Skill`, or a sequence of them, and approval is controlled by the three separate `disable_*_approval` flags shown above (plus the newer `disable_caching`/`cache_refresh_interval`/`instruction_template`/`source_id`).
 
 `SkillsProvider.from_paths([...], **FileSkillsSource kwargs)` is the convenience wrapper. The decorator-pattern composition classes each wrap another `SkillsSource`:
 
@@ -3179,7 +3303,7 @@ ContextWindowCompactionStrategy(*, max_context_window_tokens: int, max_output_to
 CharacterEstimatorTokenizer()   # count_tokens = max(1, len(text) // 4); the zero-dependency default
 ```
 
-> **Correction:** an older per-volume page gave `SummarizationStrategy`'s constructor as `SummarizationStrategy(summarizer_client: ChatClient, *, max_n: int, compact_to: int)` — those parameter names (`summarizer_client`, `max_n`, `compact_to`) actually belong to a different class (`TruncationStrategy`). The verified `SummarizationStrategy` signature is the one shown above (`client`, `target_count`, `threshold`, `prompt`, `max_summary_input_tokens`, `tokenizer`) — re-checked live via `inspect.signature()`. `TruncationStrategy`'s own signature (also shown above, `max_n`/`compact_to`) is correct as documented in older pages and matches live.
+> **Correction:** an earlier version of this guide gave `SummarizationStrategy`'s constructor as `SummarizationStrategy(summarizer_client: ChatClient, *, max_n: int, compact_to: int)` — those parameter names (`summarizer_client`, `max_n`, `compact_to`) actually belong to a different class (`TruncationStrategy`). The verified `SummarizationStrategy` signature is the one shown above (`client`, `target_count`, `threshold`, `prompt`, `max_summary_input_tokens`, `tokenizer`) — re-checked live via `inspect.signature()`. `TruncationStrategy`'s own signature (also shown above, `max_n`/`compact_to`) is correct as documented in older pages and matches live.
 
 `ContextWindowCompactionStrategy` composes two independent budget phases sized to `max_context_window_tokens - max_output_tokens`: tool eviction fires at 50% of that budget, truncation at 80%. `SummarizationStrategy` triggers when `included_non_system_count > target_count + threshold`; its LLM output becomes a **trusted** part of history going forward — only point `client` at a summarizer you trust as much as the primary model (a compromised one is a persistent indirect-prompt-injection vector). `TokenBudgetComposedStrategy` runs its `strategies` in order until the included-token count is within budget (`early_stop=True` stops as soon as it is); if none succeed, a deterministic fallback excludes oldest groups, then system groups.
 
@@ -3295,7 +3419,7 @@ EvalItem(conversation: list[Message], tools: list[FunctionTool] | None = None, c
 ```
 `.query` / `.response` are computed properties derived by splitting `conversation` (default `ConversationSplit.LAST_TURN`). `.split_messages(split=None) -> (query_msgs, response_msgs)`. `EvalItem.per_turn_items(conversation, *, tools=None, context=None)` splits a multi-turn conversation into one cumulative `EvalItem` per user turn.
 
-> **Correction:** `ConversationSplit` (`str, Enum`) has exactly **two** members in the installed version — `LAST_TURN` and `FULL`. A `FIRST_TURN` member documented in an older per-volume page does not exist on 1.14.0. Also note that `EvalItem` takes a `conversation: list[Message]` rather than the flat `input=`/`output=` keyword shape shown in an older per-volume's usage example.
+> **Correction:** `ConversationSplit` (`str, Enum`) has exactly **two** members in the installed version — `LAST_TURN` and `FULL`. A `FIRST_TURN` member documented in an earlier version of this guide does not exist on 1.14.0. Also note that `EvalItem` takes a `conversation: list[Message]` rather than the flat `input=`/`output=` keyword shape shown in an earlier version of this guide.
 
 #### `EvalResults` + `EvalItemResult` + `EvalScoreResult` + `RubricScore` + `ExpectedToolCall`
 
@@ -3318,7 +3442,7 @@ evaluate_workflow(*, workflow, workflow_result=None, queries=None, expected_outp
 
 `AgentEvalConverter` (all `@staticmethod`) bridges internal `Message`/`Content`/`FunctionTool` types to the Foundry evaluation-service schema:
 
-> **Correction:** the actual method set is `convert_message(message) -> list[dict]`, `convert_messages(messages) -> list[dict]`, `extract_tools(...)`, `to_eval_item(...)`. A `convert_tool` / `convert_tools` pair documented in an older per-volume page does **not** exist on the installed version — use `extract_tools` for tool-schema conversion instead.
+> **Correction:** the actual method set is `convert_message(message) -> list[dict]`, `convert_messages(messages) -> list[dict]`, `extract_tools(...)`, `to_eval_item(...)`. A `convert_tool` / `convert_tools` pair documented in an earlier version of this guide does **not** exist on the installed version — use `extract_tools` for tool-schema conversion instead.
 
 `function_result` content items each produce a **separate** output dict (one per tool result); unparseable `function_call` arguments are sanitized to `{"_raw_arguments": "[unparseable]"}` before being sent to an external evaluator.
 
@@ -3396,7 +3520,7 @@ A2AAgentSession(*, context_id: str | None = None, task_id: str | None = None, ta
 ```
 `context_id` maps to A2A's `contextId`; stored via `service_session_id`. When `task_state == "input-required"`, the next `agent.run()` sends a **task continuation**; otherwise a new task starts. `A2AContinuationToken(ContinuationToken)` (fields `task_id, context_id`) surfaces on a long-running task's `AgentResponseUpdate.continuation_token` — resume with `agent.run(None, session=session, continuation_token=token)` in a loop until it's `None`.
 
-> **Reconciled naming:** an older per-volume page named this integration's classes `A2AServer`/`A2AClientAgent`. Neither name exists in the installed `agent_framework.a2a` module (confirmed via `dir(agent_framework.a2a)`) — the real, importable names are `A2AAgent` / `A2AAgentSession` / `A2AExecutor` / `A2AServiceSessionId`, as shown above.
+> **Reconciled naming:** an earlier version of this guide named this integration's classes `A2AServer`/`A2AClientAgent`. Neither name exists in the installed `agent_framework.a2a` module (confirmed via `dir(agent_framework.a2a)`) — the real, importable names are `A2AAgent` / `A2AAgentSession` / `A2AExecutor` / `A2AServiceSessionId`, as shown above.
 
 #### Declarative agents/workflows (YAML-driven)
 **Package:** `agent-framework-declarative` (`agent_framework.declarative`) — a separate package that lets a workflow (or agent) graph be authored as YAML/JSON rather than Python code, with expressions evaluated via embedded PowerFx rather than arbitrary Python for safety/portability.
@@ -3439,7 +3563,7 @@ result = await workflow.run({"topic": "Quantum computing"})
 
 ## Appendix: azure-ai-agents Add-on (separate package)
 
-> `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — a distinct package from `agent-framework`, not a replacement for it (see [the migration notice page](./microsoft_agent_framework_python_sdk_migration_notice/) for when to reach for it alongside the framework). Condensed from five source-verified per-volume pages claiming `azure-ai-agents==1.1.0`; **not** independently re-installed/re-verified in this consolidation pass (no network access was used to `pip install` it fresh) — best-effort cross-checked only for internal consistency across the five source pages, which largely repeated the same ~10 core classes with increasing depth (the later volume in particular re-covered the first volume's classes almost entirely, which is folded in here rather than duplicated).
+> `azure-ai-agents` is an **optional integration add-on** for the Azure AI Agents service — a distinct package from `agent-framework`, not a replacement for it (see [the migration notice page](./microsoft_agent_framework_python_sdk_migration_notice/) for when to reach for it alongside the framework). Condensed from five earlier reference pages claiming `azure-ai-agents==1.1.0`; **not** independently re-installed/re-verified in this consolidation pass (no network access was used to `pip install` it fresh) — best-effort cross-checked only for internal consistency across the five source pages, which largely repeated the same ~10 core classes with increasing depth (the later volume in particular re-covered the first volume's classes almost entirely, which is folded in here rather than duplicated).
 
 ```bash
 pip install azure-ai-agents azure-identity

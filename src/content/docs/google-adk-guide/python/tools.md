@@ -980,7 +980,9 @@ toolset = ToolboxToolset(
 | `credentials` | `None` | `CredentialConfig` from `toolbox_adk` |
 | `additional_headers` | `None` | Static headers for every toolbox request |
 
-> When both `toolset_name` and `tool_names` are omitted, **all** registered tools are loaded.
+> When both `toolset_name` and `tool_names` are omitted, **all** registered tools are loaded; when both are set, you get the union.
+
+Callables in `bound_params` take no arguments and are evaluated on every call; bound parameters are hidden from the model's schema. Tools load lazily, so an unreachable server only fails at the first invocation. The runner closes the toolset on `runner.close()` (or `async with runner:`); call `await toolset.close()` yourself if you manage it outside a runner. Without the extra installed, construction raises `ImportError`.
 
 ## Custom `BaseTool`
 
@@ -1431,6 +1433,14 @@ agent = LlmAgent(
 )
 ```
 
+| Tool | Key arguments | Returns |
+|---|---|---|
+| `publish_message` | `topic_name`, `message`, `attributes?`, `ordering_key?` | `{"message_id": ...}` |
+| `pull_messages` | `subscription_name`, `max_messages?` | `{"messages": [{"message_id", "data", "ack_id", ...}]}` |
+| `acknowledge_messages` | `subscription_name`, `ack_ids` | `{"status": "SUCCESS"}` |
+
+Failures come back as `{"status": "ERROR", ...}`. `tool_filter=None` exposes all three; `tool_filter=[]` exposes none. Credentials default to ADC; pass `credentials_config=PubSubCredentialsConfig(credentials=...)` (`google.adk.tools.pubsub.pubsub_credentials`) to override. Tell the model to acknowledge what it has processed, or messages are redelivered.
+
 > Full constructor reference, message tool signatures, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
 
 ## SpannerToolset (experimental)
@@ -1518,23 +1528,57 @@ agent = LlmAgent(
 | `registry` | `SkillRegistry \| None` | `None` | Dynamic skill registry (enables `search_skills`) |
 | `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for `run_skill_script` |
 | `environment` | `BaseEnvironment \| None` | `None` | Execution environment for scripts (alternative to `code_executor`) |
-| `skills_folder` | `Path \| str \| None` | `None` | Load every skill under a directory |
+| `skills_folder` | `Path \| str \| None` | `None` | Where skills are materialised **inside `environment`**; absolute path, requires `environment` (default `<environment.working_dir>/skills`) |
 | `script_timeout` | `int` | `300` | Shell-script timeout in seconds |
 | `save_output_artifacts` | `bool` | `False` | Persist script outputs as artifacts (added in 2.12.0) |
 | `additional_tools` | `Sequence[ToolUnion \| BaseNode] \| None` | `None` | Extra tools unlocked when a skill is activated |
-| `tool_name_prefix`, `tool_filter` | | `None` | Rename / filter the generated tools |
+| `tool_name_prefix`, `tool_filter` | | `None` | Prefix (`"coding"` → `coding_list_skills`) / filter the **management tools** above, not individual skills |
 | `discovery_mode`, `lifecycle_config` | | `LAZY`, `None` | How skills are surfaced and unloaded (lifecycle is experimental; `ADK_ENABLE_SKILL_LIFECYCLE=1`) |
 
-**Loading from disk:**
+`code_executor` and `environment` are mutually exclusive (passing both raises `ValueError`), and `skills_folder` without an `environment`, or a relative one, also raises. `run_skill_script` is only exposed when the toolset has a `code_executor` or `environment`, or the agent has a `code_executor`. `BuiltInCodeExecutor` can't run skill scripts; use `UnsafeLocalCodeExecutor` locally or a sandboxed executor in production. To choose which skills an agent sees, pass only those `Skill` objects; `tool_filter=["list_skills", "load_skill", "load_skill_resource"]` is how you make a toolset read-only.
+
+**`additional_tools` is a pool, not a tool list.** A tool from it is surfaced only while an activated skill names it in its frontmatter:
+
+```markdown
+---
+name: my-api-skill
+description: Calls the internal API to fetch live data.
+metadata:
+  adk_additional_tools:
+    - my_api_tool
+---
+```
+
+**Loading from disk:** a skill is a directory named after the skill, containing `SKILL.md` (YAML frontmatter with `name` ≤ 64 chars in kebab- or snake_case, and `description`, then the instruction body) plus optional `references/`, `assets/` and `scripts/`. The loaders parse and validate all of it into `Skill(frontmatter, instructions, resources)`:
 
 ```python
-from google.adk.skills import load_skill_from_dir
+from google.adk.skills import load_skill_from_dir, load_skills_from_dir
 
-skill = load_skill_from_dir("my_skills/python_helper")   # reads SKILL.md + subfolders
-toolset = SkillToolset(skills=[skill])
+skill = load_skill_from_dir("my_skills/python_helper")   # dir name must equal frontmatter name
+all_skills = load_skills_from_dir("my_skills")            # every subdirectory with a SKILL.md
+toolset = SkillToolset(skills=all_skills)
+```
 
-# or every skill in a folder
-toolset = SkillToolset(skills_folder="my_skills")
+Async (`*_async`) and GCS (`load_skill_from_gcs_dir`, `list_skills_in_gcs_dir`) variants are exported from `google.adk.skills` too.
+
+**Custom registries.** Implement `SkillRegistry` when skills live in a database or bucket. Both abstract methods are keyword-only; raising from `get_skill` reaches the model as `REGISTRY_ERROR`, a falsy return as `SKILL_NOT_FOUND`. Override `search_tool_description()` to describe your search to the model. (`GCPSkillRegistry` is the built-in Vertex AI implementation; see the [Class & API Reference](/google-adk-guide/python/google_adk_comprehensive_guide/#gcpskillregistry--apiregistry--agentregistry).)
+
+```python
+from google.adk.skills import Frontmatter, Skill, SkillRegistry
+
+class InMemorySkillRegistry(SkillRegistry):
+    def __init__(self, skills: list[Skill]):
+        self._skills = {s.name: s for s in skills}
+
+    async def get_skill(self, *, name: str) -> Skill:
+        return self._skills[name]
+
+    async def search_skills(self, *, query: str) -> list[Frontmatter]:
+        q = query.lower()
+        return [s.frontmatter for s in self._skills.values()
+                if q in s.name.lower() or q in s.description.lower()]
+
+toolset = SkillToolset(registry=InMemorySkillRegistry([python_skill]))   # adds search_skills
 ```
 
 > **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
@@ -1617,8 +1661,34 @@ runner = Runner(
 
 ## HITL tools
 
-- `get_user_choice` — a `LongRunningFunctionTool` that prompts the user with a list; the LLM picks from the returned choice.
+- `get_user_choice_tool` (`google.adk.tools.get_user_choice_tool`) — a module-level `LongRunningFunctionTool` wrapping `get_user_choice(options: list[str], tool_context)`. It returns `None` straight away, so the call stays pending until the client answers it.
 - `request_input` via `ToolContext.request_confirmation()` — any tool can pause and solicit input.
+- `exit_loop` (`google.adk.tools.exit_loop_tool`) — sets `actions.escalate = True` and `skip_summarization = True`. Put it in the `tools=` of the agent *inside* the `LoopAgent`; on a parent it does nothing useful. In a `Workflow`, a cycle needs a conditional edge (an unconditional self-loop fails validation), so end loops by routing instead.
+
+To answer `get_user_choice`, capture the pending call's `id` and send a `FunctionResponse` with that id as the next message, not a plain text turn:
+
+```python
+from google.genai import types
+from google.adk.tools.get_user_choice_tool import get_user_choice_tool
+
+agent = LlmAgent(name="booking", model="gemini-2.5-flash",
+                 instruction="When the user must pick, call get_user_choice with the options.",
+                 tools=[get_user_choice_tool])
+
+pending_id = None
+async for event in runner.run_async(user_id="u1", session_id="s1", new_message=types.Content(
+        role="user", parts=[types.Part(text="Book me a flight to London")])):
+    for fc in event.get_function_calls():
+        if fc.name == "get_user_choice":
+            pending_id = fc.id                      # fc.args["options"] holds the choices to show
+
+async for event in runner.run_async(user_id="u1", session_id="s1", new_message=types.Content(
+        role="user", parts=[types.Part(function_response=types.FunctionResponse(
+            id=pending_id, name="get_user_choice", response={"result": "Morning flight"}))])):
+    ...
+```
+
+The same reply pattern answers a confirmation request: respond to the `adk_request_confirmation` call with `response={"confirmed": True}` (or a full `ToolConfirmation` dict; `ToolConfirmation.from_response_dict` accepts both that and the ADK client's `{"response": "<json>"}` wrapper).
 
 ## Patterns
 
