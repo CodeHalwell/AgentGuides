@@ -7,7 +7,7 @@
 /*
  * Brand: Daniel Halwell, "From atoms to agents".
  * Paper ground, ink type, one oxide accent; verdigris and sulfur for data only.
- * Flat colour, square corners, hard oxide offset shadows, graph-paper grid.
+ * Flat colour, square corners, hard oxide offset shadows. Plain paper ground.
  * Newsreader (display) · Hanken Grotesk (body) · JetBrains Mono (code, labels).
  */
 :root {
@@ -46,7 +46,6 @@
   --sl-color-hairline: #2a2d33;
 
   --brand-rule: #f4f1ea;
-  --brand-grid: #1f2228;
   --brand-shadow: var(--brand-oxide);
 
   --sl-shadow-sm: none;
@@ -80,20 +79,14 @@
   --sl-color-hairline-shade: #dcd6ca;
 
   --brand-rule: #16181d;
-  --brand-grid: #e7e2d7;
 }
 
 html {
   scroll-behavior: smooth;
 }
 
-/* Graph paper: a 24px grid, the default ground for long-form pages. */
 body {
   background-color: var(--sl-color-bg);
-  background-image:
-    linear-gradient(var(--brand-grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--brand-grid) 1px, transparent 1px);
-  background-size: 24px 24px;
 }
 
 /* Header and sidebars: flat ground with a firm rule, like a notebook margin. */
