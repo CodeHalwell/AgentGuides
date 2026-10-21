@@ -32,7 +32,7 @@ Three ways to end execution:
 
 1. **Normal flow** — `await call_next()`, then optionally mutate `context.result`.
 2. **Short-circuit** — set `context.result = ...` and **return without calling `call_next`**. Downstream middleware and the actual model / tool call are skipped.
-3. **Hard termination** — `raise MiddlewareTermination("reason", result=...)`. Unwinds the pipeline; the agent returns the attached result (or re-raises if none).
+3. **Hard termination** — `raise MiddlewareTermination("reason", result=...)`. Unwinds the pipeline; the agent returns the attached result. Always attach a `result=`: without one, agent-level termination makes `agent.run()` return `None`. To signal an error to the caller, raise your own exception type instead.
 
 ## Decorator form
 
@@ -86,7 +86,11 @@ Order inside `middleware=[...]` is outer-to-inner. `log_run` wraps everything; `
 Pick the class form when the middleware holds state (retry counts, budgets, token totals) or needs configuration.
 
 ```python
-from agent_framework import AgentMiddleware, AgentContext, MiddlewareTermination
+from agent_framework import AgentMiddleware, AgentContext
+
+
+class BudgetExhausted(Exception):
+    pass
 
 
 class BudgetGuard(AgentMiddleware):
@@ -95,7 +99,7 @@ class BudgetGuard(AgentMiddleware):
 
     async def process(self, context: AgentContext, call_next) -> None:
         if self.remaining <= 0:
-            raise MiddlewareTermination("budget exhausted")
+            raise BudgetExhausted("budget exhausted")   # propagates out of agent.run()
         self.remaining -= 1
         await call_next()
 
@@ -192,13 +196,18 @@ class HardBudgetGuard(AgentMiddleware):
         await call_next()
 ```
 
-When `MiddlewareTermination(result=R)` is raised the agent returns `R` as if it were the normal result. Raised without `result=`, it becomes a regular exception you can catch and translate at the call site:
+When `MiddlewareTermination(result=R)` is raised the agent returns `R` as if it were the normal result. Raised **without** `result=` from agent middleware, it does not surface as an exception — `agent.run()` simply returns `None` (checked against %%version=agent-framework%%). If the caller should see an error, raise your own exception; ordinary exceptions propagate out of `agent.run()` unchanged:
 
 ```python
+class QuotaExceeded(Exception):
+    pass
+
+# in middleware:  raise QuotaExceeded(f"tenant {tenant} over quota")
+
 try:
     response = await agent.run("Hello")
-except MiddlewareTermination as exc:
-    print(f"blocked: {exc}")  # exc.result is None
+except QuotaExceeded as exc:
+    print(f"blocked: {exc}")
 ```
 
 ## Caching tool results — `FunctionMiddleware`

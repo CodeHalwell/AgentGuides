@@ -7,23 +7,23 @@ language: python
 
 # 10 Source-Verified Class Deep Dives
 
-Verified against **pydantic-ai==2.33.0** (installed `pydantic_ai/__init__.py` — `Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `CachePoint`, `DeferredToolRequests`, `DeferredToolResults`, `PrefixedToolset`, `FilteredToolset`, `RenamedToolset`, `WebSearchTool`, `FunctionToolset`, `ModelRetry`, `UnexpectedModelBehavior`, `ModelHTTPError`).
+First written for **pydantic-ai 2.33.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 
 This page focuses on **runnable code**. Every field and method mentioned below is taken directly from the installed package. Each section shows the real dataclass fields, then a runnable example that exercises them.
 
 Install and confirm the version first:
 
 ```bash
-pip install "pydantic-ai==2.33.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.33.0
+#> %%version=pydantic-ai%%
 ```
 
 ---
 
 ## 1. `Agent` — the full constructor surface
 
-`pydantic_ai.agent.Agent` is the entrypoint. The **complete** constructor signature at 2.33.0 is:
+`pydantic_ai.agent.Agent` is the entrypoint. The **complete** constructor signature (unchanged between 2.33.0 and %%version=pydantic-ai%%) is:
 
 ```python
 Agent(
@@ -655,7 +655,7 @@ Two things this shows that the smaller examples elsewhere skip:
 
 ## Reference
 
-* Package version: `pydantic-ai==2.33.0` (Aug 2026).
+* Package version: first written for `pydantic-ai==2.33.0` (Aug 2026); re-checked against %%version=pydantic-ai%%.
 * Source read for this page:
   * `pydantic_ai/agent/__init__.py`
   * `pydantic_ai/_run_context.py`

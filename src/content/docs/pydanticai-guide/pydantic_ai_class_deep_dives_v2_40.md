@@ -9,7 +9,7 @@ sidebar:
 
 # 10 Source-Verified Class Deep Dives — v2.40.0
 
-Verified against **pydantic-ai 2.40.0** (installed package, sources read via `inspect.getsource`).
+First written for **pydantic-ai 2.40.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/realtime/_session.py`, `pydantic_ai/realtime/settings.py`,
 `pydantic_ai/agent/abstract.py`, `pydantic_ai/capabilities/capability.py`,
 `pydantic_ai/capabilities/hooks.py`, `pydantic_ai/template.py`,
@@ -22,9 +22,9 @@ This page covers classes that were **absent or thin** in the two earlier deep-di
 > **v2.43.0 available:** See [10-Class Deep Dives v2.43.0](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_43/) for `ToolFailed`, `RunCancelled`, `ToolSelector`, `ToolOrOutput`, `ServiceTier`/`ThinkingLevel`, `AgentStream`/`StreamedRunResult`, `SkipModelRequest`/`SkipToolValidation`/`SkipToolExecution`, `ToolDefinition.sequential`, `OutputContext`, and `ApprovalRequired` — verified against pydantic-ai 2.43.0.
 
 ```bash
-pip install "pydantic-ai==2.40.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.40.0
+#> %%version=pydantic-ai%%
 ```
 
 ---
@@ -1357,6 +1357,6 @@ print(result.output)
 
 | Page | Classes | Version |
 |---|---|---|
-| [pydantic\_ai\_class\_examples\_2026\_08](./pydantic_ai_class_examples_2026_08/) | `Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `DeferredToolRequests`/`Results`, `CachePoint`, `PrefixedToolset`/`FilteredToolset`/`RenamedToolset`, `WebSearchTool`, error taxonomy | 2.33.0 |
-| [pydantic\_ai\_class\_deep\_dives\_v2\_36](./pydantic_ai_class_deep_dives_v2_36/) | `AgentRun`, `AgentRunResult`, `StreamedRunResult`, `ModelSettings`, `Tool`, `ToolDefinition`, `RunUsage`/`RequestUsage`, `ConcurrencyLimiter`/`ConcurrencyLimit`, `MCPToolset`, `ApprovalRequiredToolset`/`DynamicToolset` | 2.36.0 |
+| [pydantic\_ai\_class\_examples\_2026\_08](/pydanticai-guide/pydantic_ai_class_examples_2026_08/) | `Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `DeferredToolRequests`/`Results`, `CachePoint`, `PrefixedToolset`/`FilteredToolset`/`RenamedToolset`, `WebSearchTool`, error taxonomy | 2.33.0 |
+| [pydantic\_ai\_class\_deep\_dives\_v2\_36](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_36/) | `AgentRun`, `AgentRunResult`, `StreamedRunResult`, `ModelSettings`, `Tool`, `ToolDefinition`, `RunUsage`/`RequestUsage`, `ConcurrencyLimiter`/`ConcurrencyLimit`, `MCPToolset`, `ApprovalRequiredToolset`/`DynamicToolset` | 2.36.0 |
 | **This page** | `RealtimeSession`, `RealtimeModelSettings`/`TurnDetection`, `AgentRealtime`, `Capability`, `Hooks`, `TemplateStr`, `ExternalToolset`, `RetryConfig`/`HTTPX2TenacityTransport`, `DuckDuckGoSearchTool`, `ImageGenerationSubagentTool` | **2.40.0** |

@@ -1,51 +1,77 @@
 ---
 title: "Semantic Kernel Streaming Server (FastAPI, Python)"
-description: "Stream incremental events from an SK-driven workflow over SSE."
+description: "Stream Semantic Kernel prompt and agent output token by token over Server-Sent Events with FastAPI."
 framework: semantic-kernel
 language: python
 ---
 
 # Semantic Kernel Streaming Server (FastAPI, Python)
 
-Latest: semantic-kernel 1.43.0 | Updated: June 4, 2026
-Last verified: 2025-11
+> Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%).
 
-This example streams staged events from a Semantic Kernel workflow; token-level streaming may depend on your SK function/service.
-
+```bash
+pip install "semantic-kernel==%%version=semantic-kernel%%" fastapi uvicorn
+```
 
 ```python
+# app.py
+import json
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-import semantic_kernel as sk
+from semantic_kernel import Kernel
+from semantic_kernel.agents import ChatCompletionAgent, ChatHistoryAgentThread
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
-import os
+from semantic_kernel.functions import KernelArguments
 
 app = FastAPI()
 
-kernel = sk.Kernel()
-kernel.add_chat_service("openai", OpenAIChatCompletion(model_id="gpt-4o-mini", api_key=os.environ["OPENAI_API_KEY"]))
-fn = kernel.create_function_from_prompt("Summarize: {{$input}} in 3 bullets")
+service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")    # reads OPENAI_API_KEY
+kernel = Kernel()
+kernel.add_service(service)
+summarise = kernel.add_function(
+    plugin_name="text", function_name="summarise",
+    prompt="Summarise in 3 bullets:\n\n{{$input}}",
+)
 
-@app.get("/stream")
-def stream(q: str):
-    async def run():
-        yield "data: {\"event\": \"invoke\"}\n\n"
-        result = await kernel.invoke_async(fn, input_text=q)
-        yield f"data: {{\"final\": {result!r} }}\n\n"
+def sse(event: str, data) -> str:
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
 
-    return StreamingResponse(run(), media_type="text/event-stream")
+@app.get("/summarise")
+async def stream_summary(q: str):
+    async def gen():
+        async for chunks in kernel.invoke_stream(summarise, KernelArguments(input=q)):
+            for chunk in chunks:                        # each item is a list of streaming contents
+                if str(chunk):
+                    yield sse("token", str(chunk))
+        yield sse("done", {})
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
+agent = ChatCompletionAgent(service=service, name="Assistant", instructions="Be concise.")
+threads: dict[str, ChatHistoryAgentThread] = {}          # demo only: use a shared store in production
+
+@app.get("/chat")
+async def stream_chat(session: str, q: str):
+    async def gen():
+        thread = threads.get(session)
+        async for chunk in agent.invoke_stream(messages=q, thread=thread):
+            threads[session] = chunk.thread
+            if chunk.content:
+                yield sse("token", str(chunk.content))
+        yield sse("done", {})
+    return StreamingResponse(gen(), media_type="text/event-stream")
 ```
 
+JSON-encoding each token keeps newlines inside tokens from breaking SSE framing.
 
 ## Deployment
 
 ### Dockerfile
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 EXPOSE 8080
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
@@ -75,6 +101,10 @@ metadata: { name: sk-stream }
 spec: { selector: { app: sk-stream }, ports: [{ port: 80, targetPort: 8080 }] }
 ```
 
-### Security Best Practices
-- Authenticate SSE clients; implement rate limiting and timeouts
-- Store API keys in secret managers; avoid printing model outputs in logs
+With more than one replica, keep conversation threads in a shared store (or use sticky sessions) — the in-memory `threads` dict above is per process.
+
+### Security
+
+- Authenticate SSE clients; rate-limit and set request timeouts.
+- Disable proxy buffering for the streaming routes (nginx: `proxy_buffering off;`).
+- Keep API keys in a secret manager; avoid logging model output that may contain user data.

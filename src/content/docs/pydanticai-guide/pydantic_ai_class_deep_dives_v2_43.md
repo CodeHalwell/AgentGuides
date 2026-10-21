@@ -9,7 +9,7 @@ sidebar:
 
 # 10 Source-Verified Class Deep Dives — v2.43.0
 
-Verified against **pydantic-ai 2.43.0** (installed package, sources read directly).
+First written for **pydantic-ai 2.43.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/exceptions.py`, `pydantic_ai/tools.py`,
 `pydantic_ai/settings.py`, `pydantic_ai/result.py`, `pydantic_ai/output.py`,
 `pydantic_ai/tool_manager.py`.
@@ -20,9 +20,9 @@ This page covers classes that were **absent or thin** in the three earlier deep-
 deeper 2.43.0-specific patterns and corrections.
 
 ```bash
-pip install "pydantic-ai==2.43.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.43.0
+#> %%version=pydantic-ai%%
 ```
 
 ---

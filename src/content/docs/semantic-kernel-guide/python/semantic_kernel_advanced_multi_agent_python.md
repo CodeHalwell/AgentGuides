@@ -1,142 +1,166 @@
 ---
 title: "Semantic Kernel Advanced Multi‑Agent (Python)"
-description: "Advanced multi-agent patterns in Semantic Kernel (Python) with AgentGroupChat, structured handoffs, and routing."
+description: "Advanced multi-agent patterns in Semantic Kernel (Python) — custom group-chat managers, hand-offs with human input, routing, structured results and resilience."
 framework: semantic-kernel
 language: python
 ---
 
 # Semantic Kernel Advanced Multi‑Agent (Python)
 
-Last verified: 2025-11 • Source of truth: https://github.com/microsoft/semantic-kernel (agents)
+> Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Orchestrations are experimental in Semantic Kernel; Microsoft Agent Framework's workflows are their supported successor — see the [comprehensive guide](../semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework).
 
-## Goals
-- Architect robust multi-agent systems using `AgentGroupChat` and termination strategies
-- Implement role routing, tool capability routing, and human-in-the-loop handoffs
-- Ensure resilience with retries, timeouts, and circuit-breaking per agent
+Earlier versions of this page used pre-1.0 APIs (`kernel.add_chat_service`, `ChatCompletionAgent(tools=...)`, `AgentGroupChat(execution_settings=...)`) that no longer exist. Everything below uses the orchestration API.
 
 ## Setup
 
 ```python
 import asyncio
-from typing import Optional
-from semantic_kernel.agents import AgentGroupChat, ChatCompletionAgent
+from typing import Annotated
+from semantic_kernel.agents import (
+    ChatCompletionAgent, GroupChatOrchestration, RoundRobinGroupChatManager,
+    HandoffOrchestration, OrchestrationHandoffs,
+)
+from semantic_kernel.agents.runtime import InProcessRuntime
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
-import semantic_kernel as sk
+from semantic_kernel.contents import AuthorRole, ChatMessageContent
+from semantic_kernel.functions import kernel_function
 
-async def build_kernel():
-    kernel = sk.Kernel()
-    kernel.add_chat_service(
-        "openai-chat",
-        OpenAIChatCompletion(model_id="gpt-4o-mini", api_key=os.environ["OPENAI_API_KEY"])  # choose current model
-    )
-    return kernel
-```
+service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")   # reads OPENAI_API_KEY
 
-## Roles and Capabilities
+class SearchPlugin:
+    @kernel_function(description="Search the web and return result snippets.")
+    async def web_search(self, query: Annotated[str, "Search query"]) -> str:
+        return f"(results for {query})"   # wrap your provider; add timeouts and retries
 
-```python
-class Tooling:
-    @staticmethod
-    async def web_search(q: str) -> str:
-        # wrap your search provider; add timeouts + retries
-        return f"search:{q}"
-
-def system_prompt(role: str, capabilities: list[str]) -> str:
-    return (
-        f"You are the {role}. You can: {', '.join(capabilities)}. "
-        "Respond concisely with citations when applicable."
-    )
-
-def create_researcher(kernel: sk.Kernel) -> ChatCompletionAgent:
+def make_agent(name: str, description: str, instructions: str, plugins=None) -> ChatCompletionAgent:
     return ChatCompletionAgent(
-        kernel=kernel,
-        name="researcher",
-        instructions=system_prompt("Researcher", ["search", "draft findings"]),
-        tools={"web_search": Tooling.web_search},
+        name=name, description=description, instructions=instructions,
+        service=service, plugins=plugins or [],
     )
 
-def create_writer(kernel: sk.Kernel) -> ChatCompletionAgent:
-    return ChatCompletionAgent(
-        kernel=kernel,
-        name="writer",
-        instructions=system_prompt("Writer", ["outline", "finalize copy"]),
+researcher = make_agent("Researcher", "Finds facts with sources",
+                        "Research the topic. Cite sources. Be concise.", [SearchPlugin()])
+writer = make_agent("Writer", "Drafts copy", "Write clear, short copy from the research.")
+reviewer = make_agent("Reviewer", "Checks drafts", "Review the draft. Reply 'APPROVED' if it is good, otherwise list fixes.")
+```
+
+## 1. Group chat with a custom manager
+
+`RoundRobinGroupChatManager` just takes turns. Subclass `GroupChatManager` to decide who speaks next and when to stop — here: stop as soon as the reviewer approves.
+
+```python
+from semantic_kernel.agents import GroupChatManager, BooleanResult, StringResult, MessageResult
+from semantic_kernel.contents import ChatHistory
+
+class ReviewLoopManager(RoundRobinGroupChatManager):
+    async def should_terminate(self, chat_history: ChatHistory) -> BooleanResult:
+        base = await super().should_terminate(chat_history)    # honours max_rounds
+        if base.result:
+            return base
+        last = chat_history.messages[-1] if chat_history.messages else None
+        approved = bool(last and last.name == "Reviewer" and "APPROVED" in str(last.content))
+        return BooleanResult(result=approved, reason="Reviewer approved" if approved else "Keep going")
+
+async def run_review_loop(task: str) -> str:
+    orchestration = GroupChatOrchestration(
+        members=[researcher, writer, reviewer],
+        manager=ReviewLoopManager(max_rounds=9),
+        agent_response_callback=lambda m: print(f"[{m.name}] {str(m.content)[:80]}"),
     )
+    runtime = InProcessRuntime()
+    runtime.start()
+    try:
+        result = await orchestration.invoke(task=task, runtime=runtime)
+        return str((await result.get(timeout=300)).content)
+    finally:
+        await runtime.stop_when_idle()
 ```
 
-## AgentGroupChat with Termination
+The manager can also override `select_next_agent` (return a `StringResult` naming the agent) and `filter_results` (decide what the orchestration returns). An LLM-driven manager is a manager whose methods call a chat service.
+
+## 2. Hand-off with a human in the loop
 
 ```python
-class TokenOrTurnsTermination:
-    def __init__(self, max_turns: int = 8):
-        self.max_turns = max_turns
+triage = make_agent("Triage", "Routes requests", "Work out what the customer needs and hand off.")
+billing = make_agent("Billing", "Invoices and refunds", "Handle billing questions. Never promise refunds.")
+tech = make_agent("Tech", "Technical support", "Troubleshoot technical issues step by step.")
 
-    def __call__(self, messages) -> bool:
-        return len(messages) >= self.max_turns
+handoffs = (
+    OrchestrationHandoffs()
+    .add_many(source_agent=triage.name, target_agents={
+        billing.name: "Billing, invoices, refunds",
+        tech.name: "Errors, outages, how-to questions",
+    })
+    .add(source_agent=billing.name, target_agent=triage.name, description="Not a billing issue")
+    .add(source_agent=tech.name, target_agent=triage.name, description="Not a technical issue")
+)
 
-async def run_chat(user_input: str) -> str:
-    kernel = await build_kernel()
-    researcher = create_researcher(kernel)
-    writer = create_writer(kernel)
+def ask_human() -> ChatMessageContent:
+    return ChatMessageContent(role=AuthorRole.USER, content=input("customer> "))
 
-    chat = AgentGroupChat(
-        researcher,
-        writer,
-        execution_settings={
-            "termination_strategy": TokenOrTurnsTermination(max_turns=6),
-        },
-    )
-
-    await chat.add_user_message(user_input)
-    result = await chat.invoke()
-    return result
+support = HandoffOrchestration(
+    members=[triage, billing, tech],
+    handoffs=handoffs,
+    human_response_function=ask_human,     # called when an agent needs more input
+)
 ```
 
-## Routing Patterns
+In a web service, `human_response_function` can await a queue that your HTTP handler fills, instead of `input()`.
+
+## 3. Deterministic routing in front of the LLM
+
+Keyword or classifier routing is cheaper and testable. Use it to pick the orchestration (or a single agent), and fall back to the LLM triage agent when unsure:
 
 ```python
-def router(message: str) -> str:
-    if "search" in message.lower() or "cite" in message.lower():
-        return "researcher"
-    return "writer"
+def route(message: str) -> ChatCompletionAgent | None:
+    text = message.lower()
+    if any(w in text for w in ("invoice", "refund", "charge")):
+        return billing
+    if any(w in text for w in ("error", "crash", "timeout")):
+        return tech
+    return None   # ambiguous: let the hand-off orchestration decide
 
-async def run_routed_chat(user_input: str) -> str:
-    kernel = await build_kernel()
-    agents = {"researcher": create_researcher(kernel), "writer": create_writer(kernel)}
-    chat = AgentGroupChat(agents["researcher"], agents["writer"])
-
-    await chat.add_user_message(user_input)
-    while True:
-        current = router(chat.messages[-1].content)
-        await chat.step(next_agent=agents[current])
-        if chat.should_terminate():
-            break
-    return chat.messages[-1].content
+async def answer(message: str) -> str:
+    agent = route(message)
+    if agent:
+        return str((await agent.get_response(messages=message)).message.content)
+    runtime = InProcessRuntime(); runtime.start()
+    try:
+        result = await support.invoke(task=message, runtime=runtime)
+        return str(await result.get(timeout=300))
+    finally:
+        await runtime.stop_when_idle()
 ```
 
-## Human-in-the-Loop Handoffs
+## 4. Typed results with `output_transform`
 
 ```python
-async def hitl_handoff(chat: AgentGroupChat, reason: str):
-    chat.add_system_message(f"Handoff to human required: {reason}")
-    # persist chat state and notify via your ticketing system
+from pydantic import BaseModel
+from semantic_kernel.agents import ConcurrentOrchestration
+
+class Opinions(BaseModel):
+    optimist: str
+    sceptic: str
+
+optimist = make_agent("Optimist", "Sees upsides", "Give the strongest case for.")
+sceptic = make_agent("Sceptic", "Sees risks", "Give the strongest case against.")
+
+def to_opinions(messages: list[ChatMessageContent]) -> Opinions:
+    by_name = {m.name: str(m.content) for m in messages}
+    return Opinions(optimist=by_name["Optimist"], sceptic=by_name["Sceptic"])
+
+debate = ConcurrentOrchestration[str, Opinions](members=[optimist, sceptic], output_transform=to_opinions)
 ```
 
-Use guardrail checks (policy, PII) to trigger `hitl_handoff` when needed.
+## 5. Resilience
 
-## Resilience
+- **Timeouts.** Always pass `timeout=` to `result.get()`; an orchestration waiting on a model that never answers otherwise waits forever. `result.cancel()` stops it.
+- **Retries.** Put retries in plugins (e.g. `tenacity`) for flaky tools; the OpenAI connector already retries rate-limit and 5xx responses.
+- **Loop limits.** Set `max_rounds` on group-chat managers; for hand-offs, keep hand-off descriptions specific so agents do not bounce requests between each other.
+- **Idempotent tools.** A retried or repeated tool call must not double-charge or double-send.
 
-- Per-agent timeouts and retries around tool calls (use tenacity/backoff)
-- Circuit breakers for flaky tools (open on repeated failures)
-- Idempotent tool design; keep tool IO deterministic and side-effect aware
+## 6. Observability and testing
 
-## Observability
-
-- Log agent, step, selected route, and tool IO with trace IDs
-- Export traces to OpenTelemetry; correlate across agents in the same chat
-
-## Testing
-
-- Golden prompts with snapshot tests for role prompts
-- Deterministic tool mocks; property tests for router
-- Conversation regression tests validating termination and handoff paths
-
+- `agent_response_callback` gives every agent message — log agent name, length and latency with a request ID.
+- Semantic Kernel emits OpenTelemetry spans for agent invocations and function calls; see the [middleware page](../semantic_kernel_middleware_python/) for filters that add your own attributes.
+- Test routers and managers as plain Python (they are deterministic); test agents against a stub chat service (subclass `ChatCompletionClientBase` and return canned messages).

@@ -1,13 +1,14 @@
 ---
 title: "Pydantic AI: Production Deployment & Architecture Guide"
-description: "Version: 1.0.0 Focus: Enterprise-grade deployment, scaling, monitoring, and architectural patterns"
+description: "Enterprise-grade deployment, scaling, monitoring, and architectural patterns for Pydantic AI agents."
 framework: pydanticai
 ---
 
 # Pydantic AI: Production Deployment & Architecture Guide
 
-**Version:** 1.0.0  
-**Focus:** Enterprise-grade deployment, scaling, monitoring, and architectural patterns
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line and updated for V2.
+
+**Focus:** Enterprise-grade deployment, scaling, monitoring, and architectural patterns. Much of this page is ordinary FastAPI / Kubernetes / Prometheus practice; the Pydantic AI-specific parts are the error classes, `UsageLimits`, `RunUsage` and the Logfire instrumentation.
 
 ---
 
@@ -430,9 +431,21 @@ Production error handling with:
 """
 
 from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.exceptions import (
+    ModelAPIError,
+    ModelConnectionError,
+    ModelRateLimitError,
+    ModelServerError,
+    ModelTimeoutError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from enum import Enum
 import asyncio
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 class ErrorCategory(str, Enum):
     """Error classification for monitoring."""
@@ -462,23 +475,37 @@ async def retry_with_backoff(
         try:
             return await func()
         
-        except AgentError as e:
-            if not e.retryable or attempt == max_retries - 1:
-                raise
-            
-            # Exponential backoff with jitter
+        except Exception as exc:
+            error = categorise(exc)
+            if not error.retryable or attempt == max_retries - 1:
+                raise error from exc
+
+            # Exponential backoff with jitter (respect Retry-After when the provider sent one)
             delay = min(base_delay * (2 ** attempt), max_delay)
+            retry_after = getattr(exc, 'retry_after', None)
+            if retry_after:
+                delay = min(retry_after, max_delay)
             import random
             jitter = random.uniform(0, delay * 0.1)
-            
+
             await asyncio.sleep(delay + jitter)
-        
-        except Exception as e:
-            # Unexpected error
-            raise AgentError(
-                f"Unexpected error: {str(e)}",
-                ErrorCategory.INTERNAL
-            )
+
+
+def categorise(exc: BaseException) -> AgentError:
+    """Map Pydantic AI's categorised exceptions onto our own error taxonomy."""
+    if isinstance(exc, AgentError):
+        return exc
+    if isinstance(exc, ModelRateLimitError):
+        return AgentError(str(exc), ErrorCategory.RATE_LIMIT, retryable=True)
+    if isinstance(exc, ModelTimeoutError):
+        return AgentError(str(exc), ErrorCategory.TIMEOUT, retryable=True)
+    if isinstance(exc, (ModelServerError, ModelConnectionError)):
+        return AgentError(str(exc), ErrorCategory.EXTERNAL_SERVICE, retryable=True)
+    if isinstance(exc, (UnexpectedModelBehavior, UsageLimitExceeded)):
+        return AgentError(str(exc), ErrorCategory.VALIDATION)
+    if isinstance(exc, ModelAPIError):
+        return AgentError(str(exc), ErrorCategory.EXTERNAL_SERVICE)
+    return AgentError(f"Unexpected error: {exc}", ErrorCategory.INTERNAL)
 
 # Agent with comprehensive error handling
 agent = Agent('openai:gpt-4o')
@@ -528,9 +555,15 @@ async def safe_agent_run(query: str) -> Optional[str]:
 Production token tracking for cost control and optimization.
 """
 
+from decimal import Decimal
+import logging
+from typing import Optional
+
 from pydantic_ai import Agent, UsageLimits, RunUsage
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class TokenBudget:
@@ -600,16 +633,20 @@ async def cost_controlled_run(query: str) -> Optional[str]:
     if not tracker.check_budget(estimated_tokens):
         return "Budget limit reached. Please try again later."
     
-    # Run with token limits
+    # Run with token limits — and a hard cost ceiling, priced via genai-prices
     result = await agent.run(
         query,
-        usage_limits=UsageLimits(total_tokens_limit=estimated_tokens + 100)
+        usage_limits=UsageLimits(
+            total_tokens_limit=estimated_tokens + 100,
+            cost_limit=Decimal('0.05'),
+        ),
     )
-    
+
     # Record actual usage and cost
     tracker.record_usage(result.usage)
     cost = tracker.estimate_cost(result.usage)
-    
+    # result.usage.cost carries Pydantic AI's own estimate when the model is priced in genai-prices (else None)
+
     logger.info(f"Request cost: ${cost:.4f}")
     
     return result.output
@@ -623,6 +660,7 @@ Production caching strategies for agent responses.
 Reduces latency and costs significantly.
 """
 
+from typing import Optional
 from redis import Redis
 import hashlib
 import json

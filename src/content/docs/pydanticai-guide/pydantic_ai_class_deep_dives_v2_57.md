@@ -9,7 +9,7 @@ sidebar:
 
 # 10 Source-Verified Class Deep Dives — v2.57.0
 
-Verified against **pydantic-ai 2.57.0** (installed package, sources read directly).
+First written for **pydantic-ai 2.57.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/toolsets/filtered.py`,
 `pydantic_ai/toolsets/prefixed.py`, `pydantic_ai/toolsets/renamed.py`,
 `pydantic_ai/toolsets/external.py`, `pydantic_ai/toolsets/deferred_loading.py`,
@@ -17,9 +17,9 @@ Modules consulted: `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/too
 `pydantic_ai/capabilities/select_model.py`, `pydantic_ai/capabilities/native_or_local.py`.
 
 ```bash
-pip install "pydantic-ai==2.57.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.57.0
+#> %%version=pydantic-ai%%
 ```
 
 ---
@@ -1304,7 +1304,7 @@ asyncio.run(main())
 | `SelectModel` | `capabilities.select_model` | Per-step dynamic model selection via a callable |
 | `NativeOrLocalTool` | `capabilities.native_or_local` | Provider-native tool + Python fallback, auto-resolved |
 
-Most examples above are runnable against **pydantic-ai 2.57.0** using `TestModel` for
+Most examples above are runnable against **pydantic-ai %%version=pydantic-ai%%** using `TestModel` for
 offline verification. Replace `TestModel` with your provider model (e.g. `openai:gpt-4o`)
 for live usage. **Exceptions:**
 

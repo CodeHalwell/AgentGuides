@@ -1044,16 +1044,14 @@ import logging
 from agent_framework import (
     AgentFrameworkException,
     MiddlewareException,
-    MiddlewareTermination,
 )
 
 log = logging.getLogger(__name__)
 
+# MiddlewareTermination is not caught here: agent.run() absorbs it and returns
+# the termination's result= (or None when none was attached).
 try:
     response = await agent.run("Hello")
-except MiddlewareTermination as exc:
-    # Short-circuit from a middleware: exc.result holds whatever was passed in.
-    fallback_text = getattr(exc, "result", None) or "Request blocked."
 except MiddlewareException as exc:
     # Anything else gone wrong inside the middleware pipeline.
     log.exception("middleware failure")

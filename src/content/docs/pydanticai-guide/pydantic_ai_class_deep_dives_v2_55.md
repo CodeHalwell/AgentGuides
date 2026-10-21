@@ -9,7 +9,7 @@ sidebar:
 
 # 10 Source-Verified Class Deep Dives — v2.55.0
 
-Verified against **pydantic-ai 2.55.0** (installed package, sources read directly).
+First written for **pydantic-ai 2.55.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/models/fallback.py`, `pydantic_ai/models/instrumented.py`,
 `pydantic_ai/capabilities/caching.py`, `pydantic_ai/capabilities/local_workspace.py`,
 `pydantic_ai/capabilities/resolve_model_id.py`, `pydantic_ai/toolsets/set_metadata.py`,
@@ -17,9 +17,9 @@ Modules consulted: `pydantic_ai/models/fallback.py`, `pydantic_ai/models/instrum
 `pydantic_ai/capabilities/image_generation.py`, `pydantic_ai/capabilities/hooks.py`.
 
 ```bash
-pip install "pydantic-ai==2.55.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.55.0
+#> %%version=pydantic-ai%%
 ```
 
 ---
@@ -1219,13 +1219,13 @@ asyncio.run(main())
 
 | Class / concept | Previous deep dive |
 |---|---|
-| `FilteredToolset` | [v2.54.0 deep dives](./pydantic_ai_class_deep_dives_v2_54/) |
-| `PreparedToolset` / `DynamicToolset` | [v2.54.0 deep dives](./pydantic_ai_class_deep_dives_v2_54/) |
-| `Thinking` / `WebSearch` capabilities | [v2.54.0 deep dives](./pydantic_ai_class_deep_dives_v2_54/) |
-| `ApprovalRequiredToolset` | [v2.51.0 deep dives](./pydantic_ai_class_deep_dives_v2_51/) |
-| `DeferredLoadingToolset` | [v2.51.0 deep dives](./pydantic_ai_class_deep_dives_v2_51/) |
-| `FallbackModel` (response handlers) | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46/) |
-| `CombinedToolset` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46/) |
-| `RealtimeSession` / `RealtimeModelSettings` | [v2.40.0 deep dives](./pydantic_ai_class_deep_dives_v2_40/) |
-| `Agent` / `RunContext` / `UsageLimits` | [Aug 2026 deep dives (v2.33.0)](./pydantic_ai_class_examples_2026_08/) |
-| Full class & API reference | [Comprehensive guide](./pydantic_ai_comprehensive_guide/#class--api-reference) |
+| `FilteredToolset` | [v2.54.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_54/) |
+| `PreparedToolset` / `DynamicToolset` | [v2.54.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_54/) |
+| `Thinking` / `WebSearch` capabilities | [v2.54.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_54/) |
+| `ApprovalRequiredToolset` | [v2.51.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_51/) |
+| `DeferredLoadingToolset` | [v2.51.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_51/) |
+| `FallbackModel` (response handlers) | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `CombinedToolset` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `RealtimeSession` / `RealtimeModelSettings` | [v2.40.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_40/) |
+| `Agent` / `RunContext` / `UsageLimits` | [Aug 2026 deep dives (v2.33.0)](/pydanticai-guide/pydantic_ai_class_examples_2026_08/) |
+| Full class & API reference | [Comprehensive guide](/pydanticai-guide/pydantic_ai_comprehensive_guide/#class--api-reference) |

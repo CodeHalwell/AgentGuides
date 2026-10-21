@@ -1,16 +1,13 @@
 ---
 title: "Google ADK for Go - Production Deployment Guide"
-description: "Complete guide for deploying AI agents to production"
+description: "Deploying ADK for Go agents: containers, Cloud Run, GKE, authentication, rate limiting, telemetry, caching and CI/CD."
 framework: google-adk
 language: go
 ---
 
 # Google ADK for Go - Production Deployment Guide
 
-**Complete guide for deploying AI agents to production**
-
-Version: 0.1.0
-Last Updated: April 2026
+**Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). The Go programs on this page compile with `go vet` against that release; the YAML and shell snippets are templates to adapt.
 
 ---
 
@@ -25,7 +22,7 @@ Last Updated: April 2026
 7. [Performance Optimization](#performance-optimization)
 8. [CI/CD Pipeline](#cicd-pipeline)
 
-Horizontal scaling is covered under [Kubernetes Deployment](#kubernetes-deployment); for Vertex AI Agent Engine deployment see the [Python production guide](/google-adk-guide/python/google_adk_production_guide/#production-deployment-patterns).
+Horizontal scaling is covered under [Kubernetes Deployment](#kubernetes-deployment). ADK for Go can also run on Vertex AI Agent Engine (`cmd/launcher/agentengine`, `server/agentengine`); the ADK repository's `examples/agentengine` shows the entry point.
 
 ---
 
@@ -35,55 +32,46 @@ Horizontal scaling is covered under [Kubernetes Deployment](#kubernetes-deployme
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              Load Balancer                       │
+│         HTTPS load balancer / Cloud Run          │
 └────────────────┬────────────────────────────────┘
                  │
     ┌────────────┴────────────┐
     │                         │
-┌───▼────┐            ┌───────▼──┐
-│ Agent  │            │  Agent   │
-│ Pod 1  │            │  Pod 2   │
-└────┬───┘            └────┬─────┘
-     │                     │
-     │    ┌────────────────┴──────────┐
-     │    │                           │
-     ▼    ▼                           ▼
-┌─────────────┐              ┌────────────┐
-│  Session    │              │   Model    │
-│  Store      │              │   API      │
-│ (Firestore) │              │  (Gemini)  │
-└─────────────┘              └────────────┘
+┌───▼──────────┐      ┌───────▼──────┐
+│ Agent server │      │ Agent server │   stateless replicas:
+│ (adkrest)    │      │ (adkrest)    │   any replica can serve any session
+└────┬─────────┘      └──────┬───────┘
+     │                       │
+     ├──────────────┬────────┴─────────┬──────────────┐
+     ▼              ▼                  ▼              ▼
+┌──────────┐  ┌────────────┐   ┌─────────────┐  ┌───────────┐
+│ Sessions │  │ Artifacts  │   │ Vertex AI   │  │ Cloud     │
+│ Cloud SQL│  │ GCS        │   │ Gemini      │  │ Trace/Logs│
+└──────────┘  └────────────┘   └─────────────┘  └───────────┘
 ```
+
+Keep the servers stateless: sessions in `session/database` (Cloud SQL, AlloyDB, Spanner) or `session/vertexai`, artifacts in `artifact/gcsartifact`. Then replicas scale horizontally and no session affinity is needed.
 
 ### Multi-Agent Production System
 
 ```
 ┌──────────────────────────────────────────┐
-│         API Gateway                       │
-│      (Cloud Endpoints/Kong)               │
+│        API gateway / load balancer        │
 └───────────────┬──────────────────────────┘
                 │
 ┌───────────────▼──────────────────────────┐
-│      Supervisor Agent Service             │
-│      (Cloud Run/GKE)                      │
+│     Coordinator agent service (REST)      │
+│     remoteagent.NewA2A for each peer      │
 └──┬────────┬────────┬───────────┬─────────┘
-   │        │        │           │
+   │ A2A    │ A2A    │ A2A       │ A2A
    ▼        ▼        ▼           ▼
-┌─────┐ ┌─────┐  ┌─────┐    ┌─────┐
-│Agent│ │Agent│  │Agent│    │Agent│
-│  1  │ │  2  │  │  3  │    │  4  │
-└──┬──┘ └──┬──┘  └──┬──┘    └──┬──┘
-   │       │        │           │
-   └───────┴────────┴───────────┘
-                │
-      ┌─────────┴─────────┐
-      │                   │
-      ▼                   ▼
-┌──────────┐      ┌─────────────┐
-│ Database │      │   Storage   │
-│(Spanner) │      │    (GCS)    │
-└──────────┘      └─────────────┘
+┌──────┐ ┌──────┐ ┌──────┐   ┌──────┐
+│Agent │ │Agent │ │Agent │   │Agent │   each an independent
+│  A   │ │  B   │ │  C   │   │  D   │   service (adka2a/v2)
+└──────┘ └──────┘ └──────┘   └──────┘
 ```
+
+Splitting specialists into A2A services lets each one scale, deploy and hold credentials independently. Keep it to one process until you need that.
 
 ---
 
@@ -92,113 +80,50 @@ Horizontal scaling is covered under [Kubernetes Deployment](#kubernetes-deployme
 ### Production Dockerfile
 
 ```dockerfile
-# Build stage
-FROM golang:1.24.4-alpine AS builder
+# syntax=docker/dockerfile:1
+FROM golang:1.25 AS build
+WORKDIR /src
 
-WORKDIR /app
-
-# Install build dependencies
-RUN apk add --no-cache git ca-certificates tzdata
-
-# Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 
-# Copy source code
-COPY . .
-
-# Build binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-    -ldflags='-w -s -extldflags "-static"' \
-    -a -installsuffix cgo \
-    -o /app/agent \
-    ./cmd/agent
-
-# Production stage
-FROM scratch
-
-# Copy CA certificates for HTTPS
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-# Copy timezone data
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-
-# Copy binary
-COPY --from=builder /app/agent /agent
-
-# Non-root user
-USER 65534:65534
-
-# Expose port
-EXPOSE 8080
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD ["/agent", "healthcheck"]
-
-# Run agent
-ENTRYPOINT ["/agent"]
-CMD ["serve"]
-```
-
-### Optimized Multi-Stage Build
-
-```dockerfile
-# syntax=docker/dockerfile:1.4
-
-FROM golang:1.24.4-alpine AS base
-WORKDIR /app
-RUN apk add --no-cache git ca-certificates
-
-FROM base AS dependencies
-COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
-
-FROM dependencies AS build
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -o /agent ./cmd/agent
+    CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/agent ./cmd/agent
 
-FROM gcr.io/distroless/static-debian11
-COPY --from=build /agent /agent
-USER nonroot:nonroot
+# distroless/static includes CA certificates and tzdata and runs as non-root.
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/agent /agent
 EXPOSE 8080
 ENTRYPOINT ["/agent"]
 ```
 
+ADK for Go needs Go 1.25 or later to build. `CGO_ENABLED=0` works because the pure-Go `github.com/glebarez/sqlite` and `gorm.io/driver/postgres` drivers need no C toolchain. Health checks belong to the platform (Cloud Run startup probes, Kubernetes probes), so the image needs no shell.
+
 ### Build and Push
+
+Container Registry (`gcr.io`) has been replaced by Artifact Registry:
 
 ```bash
 #!/bin/bash
-# build.sh
-
-set -e
+set -euo pipefail
 
 PROJECT_ID="your-gcp-project"
-IMAGE_NAME="agent-service"
-VERSION=$(git rev-parse --short HEAD)
-REGION="us-central1"
+REGION="europe-west2"
+REPO="agents"
+IMAGE="$REGION-docker.pkg.dev/$PROJECT_ID/$REPO/agent-service:$(git rev-parse --short HEAD)"
 
-# Build image
-docker build \
-  --platform linux/amd64 \
-  --build-arg VERSION=$VERSION \
-  -t $IMAGE_NAME:$VERSION \
-  -t $IMAGE_NAME:latest \
-  .
+gcloud artifacts repositories create "$REPO" --repository-format=docker \
+  --location="$REGION" --project="$PROJECT_ID" 2>/dev/null || true
+gcloud auth configure-docker "$REGION-docker.pkg.dev" --quiet
 
-# Tag for GCR
-docker tag $IMAGE_NAME:$VERSION gcr.io/$PROJECT_ID/$IMAGE_NAME:$VERSION
-docker tag $IMAGE_NAME:latest gcr.io/$PROJECT_ID/$IMAGE_NAME:latest
-
-# Push to GCR
-docker push gcr.io/$PROJECT_ID/$IMAGE_NAME:$VERSION
-docker push gcr.io/$PROJECT_ID/$IMAGE_NAME:latest
-
-echo "Image pushed: gcr.io/$PROJECT_ID/$IMAGE_NAME:$VERSION"
+docker build --platform linux/amd64 -t "$IMAGE" .
+docker push "$IMAGE"
+echo "$IMAGE"
 ```
+
+Or skip Docker entirely with `gcloud builds submit --tag "$IMAGE"`.
 
 ---
 
@@ -207,153 +132,219 @@ echo "Image pushed: gcr.io/$PROJECT_ID/$IMAGE_NAME:$VERSION"
 ### Cloud Run Deployment
 
 ```bash
-#!/bin/bash
-# deploy-cloud-run.sh
-
-PROJECT_ID="your-gcp-project"
-SERVICE_NAME="agent-service"
-REGION="us-central1"
-IMAGE="gcr.io/$PROJECT_ID/agent-service:latest"
-
-gcloud run deploy $SERVICE_NAME \
-  --image $IMAGE \
-  --platform managed \
-  --region $REGION \
-  --project $PROJECT_ID \
-  --allow-unauthenticated \
-  --memory 2Gi \
-  --cpu 2 \
+gcloud run deploy agent-service \
+  --image "$IMAGE" \
+  --region europe-west2 \
+  --service-account "agent-service@$PROJECT_ID.iam.gserviceaccount.com" \
+  --no-allow-unauthenticated \
+  --memory 1Gi --cpu 1 \
+  --concurrency 40 \
   --timeout 300 \
-  --concurrency 80 \
-  --min-instances 1 \
-  --max-instances 10 \
-  --set-env-vars="ENV=production" \
-  --set-secrets="GOOGLE_API_KEY=gemini-api-key:latest,DATABASE_URL=db-connection:latest" \
-  --service-account agent-service@$PROJECT_ID.iam.gserviceaccount.com \
-  --vpc-connector projects/$PROJECT_ID/locations/$REGION/connectors/vpc-connector \
-  --ingress all \
-  --cpu-throttling \
-  --session-affinity
+  --min-instances 1 --max-instances 20 \
+  --set-env-vars "MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=europe-west2" \
+  --set-secrets "DATABASE_URL=agent-db-url:latest" \
+  --add-cloudsql-instances "$PROJECT_ID:europe-west2:agents"
 ```
+
+- `--no-allow-unauthenticated` puts IAM in front of the service; callers need `roles/run.invoker`.
+- The service account needs `roles/aiplatform.user` (Gemini on Vertex AI), `roles/cloudsql.client`, `roles/secretmanager.secretAccessor` for the mounted secrets, and `roles/cloudtrace.agent` plus `roles/logging.logWriter` for telemetry.
+- Concurrency is mostly waiting on the model, so a single vCPU handles tens of concurrent requests; tune with load tests.
 
 ### Cloud Run Service YAML
 
 ```yaml
-# service.yaml
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: agent-service
-  namespace: default
 spec:
   template:
     metadata:
       annotations:
         autoscaling.knative.dev/minScale: "1"
-        autoscaling.knative.dev/maxScale: "100"
-        autoscaling.knative.dev/target: "80"
+        autoscaling.knative.dev/maxScale: "20"
         run.googleapis.com/startup-cpu-boost: "true"
     spec:
-      containerConcurrency: 80
+      containerConcurrency: 40
       timeoutSeconds: 300
-      serviceAccountName: agent-service@project.iam.gserviceaccount.com
+      serviceAccountName: agent-service@your-gcp-project.iam.gserviceaccount.com
       containers:
-      - image: gcr.io/project/agent-service:latest
+      - image: europe-west2-docker.pkg.dev/your-gcp-project/agents/agent-service:latest
         ports:
         - containerPort: 8080
-          protocol: TCP
         env:
-        - name: ENV
-          value: production
-        - name: PORT
-          value: "8080"
+        - name: MODEL
+          value: gemini-2.5-flash
         - name: GOOGLE_CLOUD_PROJECT
-          value: your-project-id
+          value: your-gcp-project
+        - name: GOOGLE_CLOUD_LOCATION
+          value: europe-west2
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: agent-db-url
+              key: latest
         resources:
           limits:
-            cpu: "2"
-            memory: 2Gi
+            cpu: "1"
+            memory: 1Gi
+        startupProbe:
+          httpGet:
+            path: /healthz
         livenessProbe:
           httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 5
+            path: /healthz
+          periodSeconds: 30
 ```
 
 ### Production Agent Server
 
 ```go
+// A production agent server: ADK REST API, PostgreSQL sessions, Cloud
+// telemetry, health checks and graceful shutdown.
 package main
 
 import (
-    "context"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "syscall"
-    "time"
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
-    "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/server/restapi"
+	"google.golang.org/genai"
+	"gorm.io/driver/postgres"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model/gemini"
+	"google.golang.org/adk/server/adkrest"
+	"google.golang.org/adk/session/database"
+	"google.golang.org/adk/telemetry"
 )
 
 func main() {
-    ctx := context.Background()
-
-    // Create agent
-    agent, err := createAgent(ctx)
-    if err != nil {
-        log.Fatal(err)
-    }
-
-    // Create server
-    server := restapi.NewServer(&restapi.Config{
-        Agent:   agent,
-        Port:    getEnvInt("PORT", 8080),
-        Timeout: 5 * time.Minute,
-        MaxConcurrent: 80,
-    })
-
-    // Start server in goroutine
-    go func() {
-        log.Printf("Server starting on port %d", server.Port)
-        if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-            log.Fatalf("Server error: %v", err)
-        }
-    }()
-
-    // Graceful shutdown
-    quit := make(chan os.Signal, 1)
-    signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-    <-quit
-
-    log.Println("Shutting down server...")
-
-    shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-    defer cancel()
-
-    if err := server.Shutdown(shutdownCtx); err != nil {
-        log.Fatalf("Server forced to shutdown: %v", err)
-    }
-
-    log.Println("Server exited")
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		slog.Error("server stopped", "err", err)
+		os.Exit(1)
+	}
 }
 
-func getEnvInt(key string, defaultValue int) int {
-    if val := os.Getenv(key); val != "" {
-        if i, err := strconv.Atoi(val); err == nil {
-            return i
-        }
-    }
-    return defaultValue
+func run(ctx context.Context) error {
+	providers, err := telemetry.New(ctx, telemetry.WithOtelToCloud(true))
+	if err != nil {
+		return err
+	}
+	providers.SetGlobalOtelProviders()
+	defer providers.Shutdown(context.Background())
+
+	// On Cloud Run / GKE, Vertex AI uses the service account's credentials.
+	m, err := gemini.NewModel(ctx, os.Getenv("MODEL"), &genai.ClientConfig{
+		Backend:  genai.BackendVertexAI,
+		Project:  os.Getenv("GOOGLE_CLOUD_PROJECT"),
+		Location: os.Getenv("GOOGLE_CLOUD_LOCATION"),
+	})
+	if err != nil {
+		return err
+	}
+	a, err := llmagent.New(llmagent.Config{
+		Name:        "support",
+		Model:       m,
+		Instruction: "You are a customer support assistant.",
+	})
+	if err != nil {
+		return err
+	}
+
+	sessions, err := database.NewSessionService(postgres.Open(os.Getenv("DATABASE_URL")))
+	if err != nil {
+		return err
+	}
+	if err := database.AutoMigrate(sessions); err != nil {
+		return err
+	}
+
+	api, err := adkrest.NewServer(adkrest.ServerConfig{
+		AgentLoader:     agent.NewSingleLoader(a),
+		SessionService:  sessions,
+		SSEWriteTimeout: 5 * time.Minute,
+	})
+	if err != nil {
+		return err
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/api/", http.StripPrefix("/api", api))
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		slog.Info("listening", "port", port)
+		errc <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-errc:
+		if !errors.Is(err, http.ErrServerClosed) {
+			return err
+		}
+	case <-ctx.Done():
+	}
+
+	// Cloud Run sends SIGTERM and allows 10 seconds before SIGKILL.
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 9*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
+}
+```
+
+If you do not need your own mux, the `prod` launcher gives you the same REST API (and A2A) from flags:
+
+```go
+// The shortest production entry point: the prod launcher serves the REST API
+// and (optionally) A2A, with no console or dev UI.
+//
+//	./agent web -port 8080 -host 0.0.0.0 api a2a
+package main
+
+import (
+	"context"
+	"log"
+	"os"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/cmd/launcher"
+	"google.golang.org/adk/cmd/launcher/prod"
+	"google.golang.org/adk/session"
+)
+
+func main() {
+	ctx := context.Background()
+	var root agent.Agent // build with llmagent.New
+
+	cfg := &launcher.Config{
+		AgentLoader:    agent.NewSingleLoader(root),
+		SessionService: session.InMemoryService(), // or database.NewSessionService(...)
+	}
+	l := prod.NewLauncher()
+	if err := l.Execute(ctx, cfg, os.Args[1:]); err != nil {
+		log.Fatalf("%v\n\n%s", err, l.CommandLineSyntax())
+	}
 }
 ```
 
@@ -364,7 +355,6 @@ func getEnvInt(key string, defaultValue int) int {
 ### Deployment Manifest
 
 ```yaml
-# deployment.yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -373,7 +363,6 @@ metadata:
 spec:
   replicas: 3
   strategy:
-    type: RollingUpdate
     rollingUpdate:
       maxSurge: 1
       maxUnavailable: 0
@@ -384,65 +373,41 @@ spec:
     metadata:
       labels:
         app: agent-service
-        version: v1
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
     spec:
-      serviceAccountName: agent-service
+      serviceAccountName: agent-service   # bound to a Google service account via Workload Identity
+      terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
-        runAsUser: 65534
-        fsGroup: 65534
       containers:
       - name: agent
-        image: gcr.io/project/agent-service:latest
-        imagePullPolicy: Always
+        image: europe-west2-docker.pkg.dev/your-gcp-project/agents/agent-service:1a2b3c4
         ports:
         - containerPort: 8080
-          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: agent-config
         env:
-        - name: ENV
-          value: production
-        - name: GOOGLE_CLOUD_PROJECT
-          valueFrom:
-            configMapKeyRef:
-              name: agent-config
-              key: project_id
-        - name: GOOGLE_API_KEY
+        - name: DATABASE_URL
           valueFrom:
             secretKeyRef:
               name: agent-secrets
-              key: gemini-api-key
+              key: database-url
         resources:
           requests:
-            cpu: 500m
-            memory: 1Gi
+            cpu: 250m
+            memory: 256Mi
           limits:
-            cpu: 2
-            memory: 2Gi
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
+            memory: 1Gi
         readinessProbe:
           httpGet:
-            path: /ready
+            path: /healthz
             port: 8080
-          initialDelaySeconds: 10
           periodSeconds: 5
-          timeoutSeconds: 3
-          successThreshold: 1
-          failureThreshold: 3
-        lifecycle:
-          preStop:
-            exec:
-              command: ["/bin/sh", "-c", "sleep 15"]
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          periodSeconds: 20
 ---
 apiVersion: v1
 kind: Service
@@ -450,14 +415,11 @@ metadata:
   name: agent-service
   namespace: production
 spec:
-  type: ClusterIP
+  selector:
+    app: agent-service
   ports:
   - port: 80
     targetPort: 8080
-    protocol: TCP
-    name: http
-  selector:
-    app: agent-service
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -470,7 +432,7 @@ spec:
     kind: Deployment
     name: agent-service
   minReplicas: 3
-  maxReplicas: 50
+  maxReplicas: 30
   metrics:
   - type: Resource
     resource:
@@ -478,82 +440,32 @@ spec:
       target:
         type: Utilization
         averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 30
-      - type: Pods
-        value: 4
-        periodSeconds: 30
-      selectPolicy: Max
 ```
+
+Agent servers spend most of their time waiting on the model, so CPU is a weak scaling signal; if you export a requests-in-flight metric, scale on that instead.
 
 ### ConfigMap and Secrets
 
 ```yaml
-# config.yaml
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: agent-config
   namespace: production
 data:
-  project_id: "your-gcp-project"
-  region: "us-central1"
-  model: "gemini-2.5-flash"
-  max_tokens: "2048"
-  temperature: "0.7"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: agent-secrets
-  namespace: production
-type: Opaque
-data:
-  gemini-api-key: <base64-encoded-key>
-  database-url: <base64-encoded-url>
+  MODEL: gemini-2.5-flash
+  GOOGLE_CLOUD_PROJECT: your-gcp-project
+  GOOGLE_CLOUD_LOCATION: europe-west2
 ```
+
+Prefer the Secret Manager CSI driver or External Secrets over hand-written `Secret` manifests, and use Workload Identity rather than API keys for Vertex AI.
 
 ### Deploy to GKE
 
 ```bash
-#!/bin/bash
-# deploy-gke.sh
-
-CLUSTER_NAME="production-cluster"
-REGION="us-central1"
-PROJECT_ID="your-gcp-project"
-
-# Get credentials
-gcloud container clusters get-credentials $CLUSTER_NAME \
-  --region $REGION \
-  --project $PROJECT_ID
-
-# Apply configurations
-kubectl apply -f config.yaml
-kubectl apply -f deployment.yaml
-
-# Wait for rollout
+gcloud container clusters get-credentials production-cluster --region europe-west2 --project "$PROJECT_ID"
+kubectl apply -f config.yaml -f deployment.yaml
 kubectl rollout status deployment/agent-service -n production
-
-# Verify
-kubectl get pods -n production -l app=agent-service
 ```
 
 ---
@@ -562,372 +474,180 @@ kubectl get pods -n production -l app=agent-service
 
 ### Authentication
 
+On Cloud Run and GKE, put authentication in the platform where you can (IAM invoker, Identity-Aware Proxy, an API gateway). When the service itself must check credentials, wrap the ADK handler:
+
 ```go
+// API-key authentication in front of the agent API. On Cloud Run, prefer
+// IAM (--no-allow-unauthenticated) or Identity-Aware Proxy where you can.
 package main
 
 import (
-    "context"
-    "net/http"
-    "strings"
-
-    "google.golang.org/api/idtoken"
+	"crypto/sha256"
+	"crypto/subtle"
+	"net/http"
+	"os"
+	"strings"
 )
 
-// JWT Authentication Middleware
-func authMiddleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        authHeader := r.Header.Get("Authorization")
-        if authHeader == "" {
-            http.Error(w, "Unauthorized", http.StatusUnauthorized)
-            return
-        }
-
-        token := strings.TrimPrefix(authHeader, "Bearer ")
-
-        // Validate JWT token
-        payload, err := idtoken.Validate(r.Context(), token, "")
-        if err != nil {
-            http.Error(w, "Invalid token", http.StatusUnauthorized)
-            return
-        }
-
-        // Add user info to context
-        ctx := context.WithValue(r.Context(), "user_id", payload.Subject)
-        next.ServeHTTP(w, r.WithContext(ctx))
-    })
+func requireAPIKey(next http.Handler, validKeys []string) http.Handler {
+	hashes := make([][32]byte, len(validKeys))
+	for i, k := range validKeys {
+		hashes[i] = sha256.Sum256([]byte(k))
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		got := sha256.Sum256([]byte(key))
+		for _, h := range hashes {
+			if subtle.ConstantTimeCompare(got[:], h[:]) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		http.Error(w, "unauthorised", http.StatusUnauthorized)
+	})
 }
 
-// API Key Authentication
-func apiKeyAuth(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        apiKey := r.Header.Get("X-API-Key")
-        if apiKey == "" {
-            http.Error(w, "API key required", http.StatusUnauthorized)
-            return
-        }
-
-        // Validate API key (check against database/cache)
-        valid, userID := validateAPIKey(r.Context(), apiKey)
-        if !valid {
-            http.Error(w, "Invalid API key", http.StatusUnauthorized)
-            return
-        }
-
-        ctx := context.WithValue(r.Context(), "user_id", userID)
-        next.ServeHTTP(w, r.WithContext(ctx))
-    })
+func main() {
+	var api http.Handler // from adkrest.NewServer
+	keys := strings.Split(os.Getenv("API_KEYS"), ",") // injected from Secret Manager
+	http.Handle("/api/", requireAPIKey(http.StripPrefix("/api", api), keys))
+	_ = http.ListenAndServe(":8080", nil)
 }
 ```
+
+Use the authenticated identity as the ADK `userID` so `user:` state and sessions cannot leak between callers.
 
 ### Secret Management
 
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-
-    secretmanager "cloud.google.com/go/secretmanager/apiv1"
-    "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-)
-
-type SecretManager struct {
-    client    *secretmanager.Client
-    projectID string
-}
-
-func NewSecretManager(ctx context.Context, projectID string) (*SecretManager, error) {
-    client, err := secretmanager.NewClient(ctx)
-    if err != nil {
-        return nil, err
-    }
-
-    return &SecretManager{
-        client:    client,
-        projectID: projectID,
-    }, nil
-}
-
-func (sm *SecretManager) GetSecret(ctx context.Context, name string) (string, error) {
-    req := &secretmanagerpb.AccessSecretVersionRequest{
-        Name: fmt.Sprintf("projects/%s/secrets/%s/versions/latest",
-            sm.projectID, name),
-    }
-
-    result, err := sm.client.AccessSecretVersion(ctx, req)
-    if err != nil {
-        return "", fmt.Errorf("failed to access secret: %w", err)
-    }
-
-    return string(result.Payload.Data), nil
-}
-
-// Usage
-func createSecureAgent(ctx context.Context) error {
-    sm, err := NewSecretManager(ctx, os.Getenv("GOOGLE_CLOUD_PROJECT"))
-    if err != nil {
-        return err
-    }
-
-    apiKey, err := sm.GetSecret(ctx, "gemini-api-key")
-    if err != nil {
-        return err
-    }
-
-    model, err := gemini.New(ctx, &gemini.Config{
-        APIKey: apiKey,
-        Model:  "gemini-2.5-flash",
-    })
-
-    // Create agent with secret API key
-    return nil
-}
-```
+- Mount secrets as environment variables (`--set-secrets` on Cloud Run, CSI driver on GKE) rather than calling Secret Manager from request paths.
+- Use the Vertex AI backend with the service account's identity instead of a Gemini API key in production.
+- Keep tool credentials (third-party API keys, database passwords) out of prompts and session state; inject them into tool closures at start-up, as in the [database tool recipe](/google-adk-guide/go/google_adk_go_recipes/#database-tool).
 
 ### Rate Limiting
 
 ```go
+// Per-client rate limiting with golang.org/x/time/rate.
 package main
 
 import (
-    "net/http"
-    "sync"
-    "time"
+	"net/http"
+	"sync"
 
-    "golang.org/x/time/rate"
+	"golang.org/x/time/rate"
 )
 
-type RateLimiter struct {
-    limiters map[string]*rate.Limiter
-    mu       sync.RWMutex
-    rate     rate.Limit
-    burst    int
+type limiter struct {
+	mu      sync.Mutex
+	clients map[string]*rate.Limiter
+	rps     rate.Limit
+	burst   int
 }
 
-func NewRateLimiter(rps int, burst int) *RateLimiter {
-    return &RateLimiter{
-        limiters: make(map[string]*rate.Limiter),
-        rate:     rate.Limit(rps),
-        burst:    burst,
-    }
+func newLimiter(rps float64, burst int) *limiter {
+	return &limiter{clients: map[string]*rate.Limiter{}, rps: rate.Limit(rps), burst: burst}
 }
 
-func (rl *RateLimiter) getLimiter(key string) *rate.Limiter {
-    rl.mu.Lock()
-    defer rl.mu.Unlock()
-
-    limiter, exists := rl.limiters[key]
-    if !exists {
-        limiter = rate.NewLimiter(rl.rate, rl.burst)
-        rl.limiters[key] = limiter
-    }
-
-    return limiter
+func (l *limiter) get(id string) *rate.Limiter {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	lim, ok := l.clients[id]
+	if !ok {
+		lim = rate.NewLimiter(l.rps, l.burst)
+		l.clients[id] = lim
+	}
+	return lim
 }
 
-func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
-    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        userID := r.Context().Value("user_id").(string)
-        limiter := rl.getLimiter(userID)
+func (l *limiter) middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.Header.Get("Authorization") // or the authenticated user ID
+		if !l.get(id).Allow() {
+			w.Header().Set("Retry-After", "1")
+			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
-        if !limiter.Allow() {
-            http.Error(w, "Rate limit exceeded", http.StatusTooManyRequests)
-            return
-        }
-
-        next.ServeHTTP(w, r)
-    })
+func main() {
+	var api http.Handler
+	lim := newLimiter(2, 10) // 2 requests/second, bursts of 10
+	_ = http.ListenAndServe(":8080", lim.middleware(api))
 }
 ```
+
+Limit per authenticated user, and keep an eye on the Vertex AI quota for the model as the ultimate ceiling.
 
 ---
 
 ## Monitoring and Observability
 
-### Prometheus Metrics
-
-```go
-package main
-
-import (
-    "github.com/prometheus/client_golang/prometheus"
-    "github.com/prometheus/client_golang/prometheus/promauto"
-    "github.com/prometheus/client_golang/prometheus/promhttp"
-)
-
-var (
-    requestsTotal = promauto.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "agent_requests_total",
-            Help: "Total number of agent requests",
-        },
-        []string{"agent", "status"},
-    )
-
-    requestDuration = promauto.NewHistogramVec(
-        prometheus.HistogramOpts{
-            Name:    "agent_request_duration_seconds",
-            Help:    "Agent request duration in seconds",
-            Buckets: prometheus.DefBuckets,
-        },
-        []string{"agent"},
-    )
-
-    tokensUsed = promauto.NewCounterVec(
-        prometheus.CounterOpts{
-            Name: "agent_tokens_used_total",
-            Help: "Total tokens used",
-        },
-        []string{"agent", "type"},
-    )
-)
-
-func instrumentAgent(agent agent.Agent) agent.Agent {
-    return &instrumentedAgent{
-        Agent: agent,
-    }
-}
-
-type instrumentedAgent struct {
-    agent.Agent
-}
-
-func (a *instrumentedAgent) Run(ctx context.Context, input string) (*agent.Response, error) {
-    timer := prometheus.NewTimer(requestDuration.WithLabelValues(a.Name()))
-    defer timer.ObserveDuration()
-
-    resp, err := a.Agent.Run(ctx, input)
-
-    status := "success"
-    if err != nil {
-        status = "error"
-    }
-    requestsTotal.WithLabelValues(a.Name(), status).Inc()
-
-    if resp != nil && resp.Usage != nil {
-        tokensUsed.WithLabelValues(a.Name(), "input").Add(float64(resp.Usage.InputTokens))
-        tokensUsed.WithLabelValues(a.Name(), "output").Add(float64(resp.Usage.OutputTokens))
-    }
-
-    return resp, err
-}
-
-// Expose metrics endpoint
-func metricsHandler() http.Handler {
-    return promhttp.Handler()
-}
-```
-
-### Structured Logging
-
-```go
-package main
-
-import (
-    "context"
-    "log/slog"
-    "os"
-)
-
-func setupLogging() *slog.Logger {
-    opts := &slog.HandlerOptions{
-        Level: slog.LevelInfo,
-        AddSource: true,
-    }
-
-    handler := slog.NewJSONHandler(os.Stdout, opts)
-    logger := slog.New(handler)
-    slog.SetDefault(logger)
-
-    return logger
-}
-
-func logAgentExecution(ctx context.Context, agent agent.Agent, input string, resp *agent.Response, err error) {
-    userID := ctx.Value("user_id").(string)
-    requestID := ctx.Value("request_id").(string)
-
-    fields := []any{
-        "agent", agent.Name(),
-        "user_id", userID,
-        "request_id", requestID,
-        "input_length", len(input),
-    }
-
-    if err != nil {
-        fields = append(fields, "error", err.Error())
-        slog.ErrorContext(ctx, "Agent execution failed", fields...)
-    } else {
-        fields = append(fields,
-            "output_length", len(resp.Text),
-            "tokens_input", resp.Usage.InputTokens,
-            "tokens_output", resp.Usage.OutputTokens,
-        )
-        slog.InfoContext(ctx, "Agent execution completed", fields...)
-    }
-}
-```
-
 ### Distributed Tracing
 
+`telemetry.New` sets up OpenTelemetry tracing and logging with export to Cloud Trace and Cloud Logging (see the production server above). ADK emits spans for each invocation, agent run, model call and tool call; outbound HTTP from your tools joins the trace if you use an instrumented client. The launchers accept `-otel_to_cloud` to do the same from a flag.
+
+Set `telemetry.WithGenAICaptureMessageContent(false)` (the safe choice) unless you have a reason to record prompts and responses in traces.
+
+### Structured Logging and Metrics
+
+A runner plugin sees every model and tool call across all agents, which makes it the natural place for usage logging:
+
 ```go
+// A runner plugin that logs one structured line per model call, with token
+// usage, and one per tool error. Point Cloud Logging (or any log-based
+// metrics pipeline) at these fields.
 package main
 
 import (
-    "context"
+	"log/slog"
+	"os"
 
-    "go.opentelemetry.io/otel"
-    "go.opentelemetry.io/otel/attribute"
-    "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-    "go.opentelemetry.io/otel/sdk/resource"
-    sdktrace "go.opentelemetry.io/otel/sdk/trace"
-    semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/plugin"
+	"google.golang.org/adk/tool"
 )
 
-func setupTracing(ctx context.Context, serviceName string) (*sdktrace.TracerProvider, error) {
-    exporter, err := otlptracegrpc.New(ctx)
-    if err != nil {
-        return nil, err
-    }
-
-    tp := sdktrace.NewTracerProvider(
-        sdktrace.WithBatcher(exporter),
-        sdktrace.WithResource(resource.NewWithAttributes(
-            semconv.SchemaURL,
-            semconv.ServiceNameKey.String(serviceName),
-            attribute.String("environment", os.Getenv("ENV")),
-        )),
-    )
-
-    otel.SetTracerProvider(tp)
-    return tp, nil
+func newUsagePlugin(logger *slog.Logger) (*plugin.Plugin, error) {
+	return plugin.New(plugin.Config{
+		Name: "usage",
+		AfterModelCallback: func(ctx agent.CallbackContext, resp *model.LLMResponse, err error) (*model.LLMResponse, error) {
+			attrs := []any{
+				"agent", ctx.AgentName(),
+				"invocation_id", ctx.InvocationID(),
+				"session_id", ctx.SessionID(),
+			}
+			if err != nil {
+				logger.Error("model call failed", append(attrs, "err", err)...)
+				return nil, nil // keep the original error
+			}
+			if resp != nil && resp.UsageMetadata != nil && !resp.Partial {
+				u := resp.UsageMetadata
+				logger.Info("model call", append(attrs,
+					"prompt_tokens", u.PromptTokenCount,
+					"output_tokens", u.CandidatesTokenCount,
+					"cached_tokens", u.CachedContentTokenCount,
+				)...)
+			}
+			return nil, nil // nil, nil leaves the response unchanged
+		},
+		OnToolErrorCallback: func(ctx agent.ToolContext, t tool.Tool, args map[string]any, err error) (map[string]any, error) {
+			logger.Warn("tool failed", "tool", t.Name(), "err", err)
+			return nil, nil // nil, nil leaves the original error in place
+		},
+	})
 }
 
-func traceAgentExecution(ctx context.Context, agent agent.Agent, input string) (*agent.Response, error) {
-    tracer := otel.Tracer("agent-service")
-    ctx, span := tracer.Start(ctx, "agent.run")
-    defer span.End()
-
-    span.SetAttributes(
-        attribute.String("agent.name", agent.Name()),
-        attribute.Int("input.length", len(input)),
-    )
-
-    resp, err := agent.Run(ctx, input)
-    if err != nil {
-        span.RecordError(err)
-        return nil, err
-    }
-
-    span.SetAttributes(
-        attribute.Int("output.length", len(resp.Text)),
-        attribute.Int("tokens.input", resp.Usage.InputTokens),
-        attribute.Int("tokens.output", resp.Usage.OutputTokens),
-    )
-
-    return resp, nil
+func main() {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	if _, err := newUsagePlugin(logger); err != nil {
+		logger.Error("plugin", "err", err)
+	}
 }
 ```
+
+Register it with `runner.Config{PluginConfig: runner.PluginConfig{Plugins: ...}}` (or `adkrest.ServerConfig.PluginConfig`). Cloud Logging can turn the JSON fields into log-based metrics; if you run Prometheus, increment counters in the same callbacks. `plugin/loggingplugin` is a ready-made, more verbose logger for development.
 
 ---
 
@@ -935,85 +655,15 @@ func traceAgentExecution(ctx context.Context, agent agent.Agent, input string) (
 
 ### Context Caching
 
-```go
-package main
-
-import (
-    "context"
-    "time"
-
-    "github.com/patrickmn/go-cache"
-)
-
-type CachedAgent struct {
-    agent agent.Agent
-    cache *cache.Cache
-    ttl   time.Duration
-}
-
-func NewCachedAgent(ag agent.Agent, ttl time.Duration) *CachedAgent {
-    return &CachedAgent{
-        agent: ag,
-        cache: cache.New(ttl, ttl*2),
-        ttl:   ttl,
-    }
-}
-
-func (ca *CachedAgent) Run(ctx context.Context, input string) (*agent.Response, error) {
-    // Check cache
-    key := hashInput(input)
-    if cached, found := ca.cache.Get(key); found {
-        return cached.(*agent.Response), nil
-    }
-
-    // Execute agent
-    resp, err := ca.agent.Run(ctx, input)
-    if err != nil {
-        return nil, err
-    }
-
-    // Store in cache
-    ca.cache.Set(key, resp, ca.ttl)
-    return resp, nil
-}
-```
+- **Implicit caching.** Gemini caches repeated prompt prefixes automatically. Keep long, stable instructions at the start of the prompt and put per-request detail later; the `cached_tokens` field in the usage plugin above shows whether it is working.
+- **Response caching.** A `BeforeModelCallback` that returns a non-nil `*model.LLMResponse` skips the model call, so you can serve cached answers for repeated, deterministic requests (FAQ-style agents). Key the cache on the full request contents, and do not cache responses that contain function calls.
+- **Shorter history.** For helper agents that do not need the conversation, set `IncludeContents: llmagent.IncludeContentsNone`.
 
 ### Connection Pooling
 
-```go
-package main
-
-import (
-    "context"
-    "sync"
-)
-
-type AgentPool struct {
-    agents  []agent.Agent
-    current int
-    mu      sync.Mutex
-}
-
-func NewAgentPool(size int, factory func() agent.Agent) *AgentPool {
-    agents := make([]agent.Agent, size)
-    for i := 0; i < size; i++ {
-        agents[i] = factory()
-    }
-
-    return &AgentPool{
-        agents: agents,
-    }
-}
-
-func (p *AgentPool) Get() agent.Agent {
-    p.mu.Lock()
-    defer p.mu.Unlock()
-
-    ag := p.agents[p.current]
-    p.current = (p.current + 1) % len(p.agents)
-    return ag
-}
-```
+- Build the `model.LLM`, toolsets and `runner.Runner` once at start-up and share them; the Gemini client and HTTP transports pool connections internally.
+- For `session/database`, tune GORM's underlying `*sql.DB` pool (`SetMaxOpenConns`, `SetConnMaxIdleTime`) to stay inside Cloud SQL connection limits across all replicas.
+- MCP toolsets hold a connection to their server; create them once, not per request.
 
 ---
 
@@ -1023,78 +673,58 @@ func (p *AgentPool) Get() agent.Agent {
 
 ```yaml
 # .github/workflows/deploy.yml
-name: Build and Deploy
+name: Build and deploy
 
 on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write   # for Workload Identity Federation
 
 env:
-  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-  SERVICE_NAME: agent-service
-  REGION: us-central1
+  PROJECT_ID: your-gcp-project
+  REGION: europe-west2
+  IMAGE: europe-west2-docker.pkg.dev/your-gcp-project/agents/agent-service
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-
-    - name: Set up Go
-      uses: actions/setup-go@v4
+    - uses: actions/checkout@v4
+    - uses: actions/setup-go@v5
       with:
-        go-version: '1.24.4'
-
-    - name: Test
-      run: go test -v -race -coverprofile=coverage.out ./...
-
-    - name: Upload coverage
-      uses: codecov/codecov-action@v3
-
-  build:
-    needs: test
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-    - name: Set up Cloud SDK
-      uses: google-github-actions/setup-gcloud@v1
-
-    - name: Configure Docker
-      run: gcloud auth configure-docker
-
-    - name: Build and push
-      run: |
-        docker build -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
-        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        go-version-file: go.mod
+    - run: go vet ./...
+    - run: go test -race ./...
 
   deploy:
-    needs: build
+    needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-
     steps:
-    - uses: google-github-actions/auth@v1
+    - uses: actions/checkout@v4
+    - uses: google-github-actions/auth@v2
       with:
-        credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-    - name: Deploy to Cloud Run
-      run: |
-        gcloud run deploy $SERVICE_NAME \
-          --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
-          --region $REGION \
-          --platform managed
+        workload_identity_provider: projects/123456789/locations/global/workloadIdentityPools/github/providers/github
+        service_account: deployer@your-gcp-project.iam.gserviceaccount.com
+    - uses: google-github-actions/setup-gcloud@v2
+    - run: gcloud builds submit --tag "$IMAGE:$GITHUB_SHA"
+    - run: |
+        gcloud run deploy agent-service \
+          --image "$IMAGE:$GITHUB_SHA" \
+          --region "$REGION"
 ```
+
+Tests that use a fake `model.LLM` (see [Testing](/google-adk-guide/go/google_adk_go_comprehensive_guide/#testing)) run in CI without credentials or model cost.
 
 ---
 
-**This production guide provides complete deployment patterns for ADK Go agents. Combine with [google_adk_go_comprehensive_guide.md](./google_adk_go_comprehensive_guide/) for complete coverage.**
+## Revision History
 
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-21 | current | Rewritten against the current release. Go code now uses the real serving packages (`server/adkrest`, `cmd/launcher/prod`, `telemetry`, `plugin`) instead of the non-existent `server/restapi` and `agent.Run(ctx, input)`; Go 1.25 build image; Artifact Registry instead of Container Registry; Workload Identity Federation in CI. |
+| April 2026 | 0.1.0 | Initial production guide. |

@@ -7,7 +7,7 @@ language: python
 
 # 10 More Source-Verified Class Deep Dives
 
-Verified against **pydantic-ai 2.36.0** (installed package, sources read via `inspect.getsource`).
+First written for **pydantic-ai 2.36.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/run.py`, `pydantic_ai/result.py`, `pydantic_ai/settings.py`,
 `pydantic_ai/tools.py`, `pydantic_ai/usage.py`, `pydantic_ai/concurrency.py`,
 `pydantic_ai/mcp.py`, `pydantic_ai/toolsets/{approval_required,_dynamic}.py`.
@@ -18,9 +18,9 @@ covered `Agent`, `RunContext`, `UsageLimits`, `ToolReturn`, `DeferredToolRequest
 error taxonomy. All classes here are distinct from that set.
 
 ```bash
-pip install "pydantic-ai==2.36.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.36.0
+#> %%version=pydantic-ai%%
 ```
 
 ---

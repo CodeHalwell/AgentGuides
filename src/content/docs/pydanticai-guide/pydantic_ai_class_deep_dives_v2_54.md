@@ -9,7 +9,7 @@ sidebar:
 
 # 10 Source-Verified Class Deep Dives — v2.54.0
 
-Verified against **pydantic-ai 2.54.0** (installed package, sources read directly).
+First written for **pydantic-ai 2.54.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/toolsets/filtered.py`, `pydantic_ai/toolsets/renamed.py`,
 `pydantic_ai/toolsets/prefixed.py`, `pydantic_ai/toolsets/prepared.py`,
 `pydantic_ai/toolsets/_dynamic.py`, `pydantic_ai/capabilities/thinking.py`,
@@ -21,9 +21,9 @@ This page covers classes new in 2.54.0 or **not yet deeply documented**.
 Cross-references to the 2.51.0 series appear at the end.
 
 ```bash
-pip install "pydantic-ai==2.54.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.54.0
+#> %%version=pydantic-ai%%
 ```
 
 ---
@@ -1307,7 +1307,7 @@ from pydantic_ai.capabilities import (
 | Version | Topics |
 |---------|--------|
 | v2.51.0 | `ApprovalRequiredToolset`, `DeferredLoadingToolset`, `ExternalToolset`, `web_fetch_tool`, `duckduckgo_search_tool`, `image_generation_tool`, `format_as_xml`, `RealtimeModelSettings`, `SourcedInstruction`, `Hooks` |
-| v2.46.0 | `MCP`, `MCPServer`, `MCPClient`, `CombinedToolset`, `IncludeReturnSchemas` |
+| v2.46.0 | `FallbackModel`, `FunctionToolset`, output markers, `Embedder`, `MCPToolset`, `load_mcp_toolsets`, `CombinedToolset`, `StructuredDict`, `AdvisorTool` |
 | v2.43.0 | `Agent`, `RunContext`, `Tool`, `ToolDefinition`, `FunctionToolset` |
 | v2.40.0 | `ModelSettings`, `UsageLimits`, `RunUsage`, `AgentRunResult` |
 | v2.36.0 | Core primitives, `messages`, `exceptions`, `result`, `settings` |

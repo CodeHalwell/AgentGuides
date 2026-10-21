@@ -1,77 +1,90 @@
 ---
 title: "Semantic Kernel Diagrams (.NET)"
-description: "Visual Architecture and Flow Diagrams for .NET Implementation"
+description: "Visual architecture and flow diagrams for Semantic Kernel in .NET — request flow, dependency injection lifetimes and agent orchestration."
 framework: semantic-kernel
 language: dotnet
 ---
 
 # Semantic Kernel Diagrams (.NET)
 
-**Visual Architecture and Flow Diagrams for .NET Implementation**
-
-Last Updated: April 2026
+Diagrams for `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%%. Code for each flow is in the [comprehensive .NET guide](../semantic_kernel_comprehensive_dotnet/).
 
 ---
 
-## ASP.NET Core Request Flow
+## ASP.NET Core request flow
 
 ```
-HTTP Request
+HTTP request
      │
-     ├─→ Controller Action
+     ├─→ Endpoint / controller
      │        │
-     │        ├─→ Kernel (DI injected)
+     │        ├─→ Kernel (transient, resolved per request)
      │        │        │
-     │        │        ├─→ Chat Completion Service
-     │        │        ├─→ Plugins
-     │        │        └─→ Memory
+     │        │        ├─→ IChatCompletionService / IChatClient   (singleton)
+     │        │        ├─→ Plugins  ──→ your services via DI
+     │        │        ├─→ Filters  (logging, approval, redaction)
+     │        │        └─→ Vector store search (RAG plugin)
      │        │
-     │        └─→ ILogger (structured logging)
+     │        └─→ ILogger + OpenTelemetry spans (Microsoft.SemanticKernel*)
      │
-     └─────────────────→ HTTP Response
+     └─────────────────→ HTTP response (JSON or SSE stream)
 ```
 
 ---
 
-## Dependency Injection Pattern
+## Dependency injection lifetimes
 
 ```
-┌─────────────────────────────────────────────────┐
-│              Program.cs / Startup.cs            │
-│                                                 │
-│  builder.Services.AddSingleton<Kernel>(...)     │
-│  builder.Services.AddScoped<IAgentService>(...) │
-└─────────────────┬───────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Program.cs                                           │
+│                                                      │
+│  services.AddAzureOpenAIChatCompletion(...)          │  singleton
+│  services.AddSingleton<VectorStore>(...)             │  singleton
+│  services.AddSingleton<WeatherPlugin>()              │  singleton (stateless)
+│  services.AddTransient(sp => new Kernel(sp) {...})   │  transient
+│  services.AddScoped<IAgentOrchestrator, ...>()       │  scoped
+└─────────────────┬────────────────────────────────────┘
                   │
                   ↓
-┌─────────────────────────────────────────────────┐
-│           Dependency Injection Container        │
-│                                                 │
-│  - Kernel (Singleton)                           │
-│  - IChatCompletionService (Singleton)           │
-│  - IMemoryStore (Singleton)                     │
-│  - IAgentService (Scoped)                       │
-└─────────────────┬───────────────────────────────┘
-                  │
-                  ↓
-┌──────────────────────────────────────────────────┐
-│               Controller / Service               │
-│                                                  │
-│  public MyController(                            │
-│      Kernel kernel,                              │
-│      IAgentService agentService,                 │
-│      ILogger<MyController> logger)               │
-│  {                                               │
-│      _kernel = kernel;                           │
-│      _agentService = agentService;               │
-│      _logger = logger;                           │
-│  }                                               │
-└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│ Endpoint / service                                   │
+│                                                      │
+│  (Kernel kernel, IAgentOrchestrator orchestrator,    │
+│   ILogger<T> logger) => ...                          │
+└──────────────────────────────────────────────────────┘
+```
+
+Why transient: plugins and filters are added to a `Kernel` instance; a singleton kernel would share whatever one request added with every other request.
+
+---
+
+## Agent orchestration on the in-process runtime
+
+```
+InvokeAsync(task, runtime)
+        │
+        ▼
+┌───────────────────────────── InProcessRuntime ─────────────────────────────┐
+│                                                                             │
+│  Sequential:   Agent A ──▶ Agent B ──▶ Agent C ──▶ result                   │
+│                                                                             │
+│  Concurrent:   ┌─▶ Agent A ─┐                                               │
+│        task ───┼─▶ Agent B ─┼──▶ string[] result                            │
+│                └─▶ Agent C ─┘                                               │
+│                                                                             │
+│  Group chat:   manager picks next speaker ──▶ agent replies ──▶ repeat      │
+│                (RoundRobinGroupChatManager, MaximumInvocationCount)         │
+│                                                                             │
+│  Hand-off:     triage ──handoff──▶ billing ──handoff──▶ triage …            │
+│                (OrchestrationHandoffs; InteractiveCallback for the user)    │
+└─────────────────────────────────────────────────────────────────────────────┘
+        │
+        ▼
+OrchestrationResult<T>.GetValueAsync(timeout)
 ```
 
 ---
 
-For more diagrams, see [../semantic_kernel_diagrams.md](../semantic_kernel_diagrams/)
+For more diagrams, see the [language-agnostic diagrams](../semantic_kernel_diagrams/).
 
-**[Back to .NET README](./)** | **[Overview](./)**
-
+**[Back to .NET overview](../)**

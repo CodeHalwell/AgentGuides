@@ -9,7 +9,7 @@ sidebar:
 
 # 10 Source-Verified Class Deep Dives — v2.51.0
 
-Verified against **pydantic-ai 2.51.0** (installed package, sources read directly).
+First written for **pydantic-ai 2.51.0**; examples re-verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — installed package, sources read directly.
 Modules consulted: `pydantic_ai/toolsets/approval_required.py`, `pydantic_ai/toolsets/deferred_loading.py`,
 `pydantic_ai/toolsets/external.py`, `pydantic_ai/common_tools/web_fetch.py`,
 `pydantic_ai/common_tools/duckduckgo.py`, `pydantic_ai/common_tools/image_generation.py`,
@@ -20,9 +20,9 @@ This page covers classes that are **new since 2.46.0** or were only **thinly doc
 in earlier deep-dive pages. Cross-references to the earlier series appear at the end.
 
 ```bash
-pip install "pydantic-ai==2.51.0"
+pip install "pydantic-ai==%%version=pydantic-ai%%"
 python -c "import pydantic_ai; print(pydantic_ai.__version__)"
-#> 2.51.0
+#> %%version=pydantic-ai%%
 ```
 
 ---
@@ -1414,12 +1414,12 @@ asyncio.run(main())
 
 | Class | Guide |
 |---|---|
-| `FallbackModel` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46) |
-| `FunctionToolset` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46) |
-| `CombinedToolset` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46) |
-| `MCPToolset` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46) |
-| `Embedder` / `EmbeddingResult` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46) |
-| `TextOutput` / `ToolOutput` | [v2.46.0 deep dives](./pydantic_ai_class_deep_dives_v2_46) |
-| `PrefixedToolset` / `FilteredToolset` / `RenamedToolset` | [2026-08 deep dives](./pydantic_ai_class_examples_2026_08) |
-| `Agent` / `RunContext` / `UsageLimits` | [2026-08 deep dives](./pydantic_ai_class_examples_2026_08) |
-| `CachePoint` / `DeferredToolRequests` | [2026-08 deep dives](./pydantic_ai_class_examples_2026_08) |
+| `FallbackModel` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `FunctionToolset` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `CombinedToolset` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `MCPToolset` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `Embedder` / `EmbeddingResult` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `TextOutput` / `ToolOutput` | [v2.46.0 deep dives](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_46/) |
+| `PrefixedToolset` / `FilteredToolset` / `RenamedToolset` | [2026-08 deep dives](/pydanticai-guide/pydantic_ai_class_examples_2026_08/) |
+| `Agent` / `RunContext` / `UsageLimits` | [2026-08 deep dives](/pydanticai-guide/pydantic_ai_class_examples_2026_08/) |
+| `CachePoint` / `DeferredToolRequests` | [2026-08 deep dives](/pydanticai-guide/pydantic_ai_class_examples_2026_08/) |

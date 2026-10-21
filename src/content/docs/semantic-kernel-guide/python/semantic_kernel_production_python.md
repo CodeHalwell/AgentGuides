@@ -1,17 +1,15 @@
 ---
 title: "Semantic Kernel Production Guide (Python)"
-description: "Production Deployment, Monitoring, and Best Practices for Python"
+description: "Production deployment, monitoring, resilience and testing for Semantic Kernel Python applications."
 framework: semantic-kernel
 language: python
 ---
 
 # Semantic Kernel Production Guide (Python)
 
-**Production Deployment, Monitoring, and Best Practices for Python**
+**Production deployment, monitoring, resilience and testing for Python**
 
-Last Updated: April 2026
-Python Version: 3.9+
-Semantic Kernel Python: 1.41.2+
+> Targets `semantic-kernel` %%version=semantic-kernel%% on Python 3.10+ (checked %%versions-checked%%). Semantic Kernel is supported, but new agent features land in its successor, [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/); the deployment patterns here apply to both.
 
 ---
 
@@ -19,7 +17,7 @@ Semantic Kernel Python: 1.41.2+
 
 This guide covers production deployment of Semantic Kernel Python applications including Docker/Kubernetes deployment, monitoring, security, performance optimization, and operational best practices.
 
-**See Also:** [../semantic_kernel_production_guide.md](../semantic_kernel_production_guide/) for language-agnostic patterns.
+**See also:** [general production guide](../../semantic_kernel_production_guide/) for language-agnostic patterns.
 
 ---
 
@@ -43,7 +41,7 @@ This guide covers production deployment of Semantic Kernel Python applications i
 ### Dockerfile
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -65,7 +63,7 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"
 
 EXPOSE 8000
 
@@ -75,18 +73,17 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ### requirements.txt
 
 ```txt
-semantic-kernel[azure,openai]>=1.41.2
-fastapi==0.104.0
-uvicorn[standard]==0.24.0
-python-dotenv==1.0.0
-tenacity==8.2.3
-opentelemetry-api==1.21.0
-opentelemetry-sdk==1.21.0
-azure-monitor-opentelemetry==1.1.0
-azure-identity==1.15.0
-azure-keyvault-secrets==4.7.0
-pydantic==2.5.0
+semantic-kernel[azure]==%%version=semantic-kernel%%
+fastapi
+uvicorn[standard]
+tenacity
+circuitbreaker
+azure-monitor-opentelemetry
+azure-identity
+azure-keyvault-secrets
 ```
+
+Pin Semantic Kernel exactly and lock the rest (`pip-compile`, `uv lock`); SK already depends on `openai`, `pydantic` and the OpenTelemetry API/SDK, so do not pin those separately to versions it does not support. (There is no `openai` extra — the OpenAI connector is always installed.)
 
 ### Build and Run
 
@@ -247,15 +244,17 @@ from health import HealthCheck
 async def lifespan(app: FastAPI):
     # Startup
     app.state.config = Config.from_env()
-    app.state.kernel = await create_kernel(app.state.config)
+    app.state.kernel = create_kernel(app.state.config)
+    app.state.chat_function = app.state.kernel.add_function(
+        plugin_name="chat", function_name="reply", prompt="{{$input}}",
+    )
     app.state.health = HealthCheck()
 
     setup_monitoring(app.state.config)
 
     yield
 
-    # Shutdown
-    await app.state.kernel.dispose()
+    # Shutdown: nothing to dispose on the Kernel itself; close clients you created
 
 app = FastAPI(lifespan=lifespan)
 
@@ -278,9 +277,21 @@ async def chat(request: ChatRequest):
             input=request.message
         )
         return {"response": str(result)}
-    except Exception as e:
-        logger.error(f"Chat failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Chat failed")
+        raise HTTPException(status_code=500, detail="Internal error")   # don't leak exception text
+
+def create_kernel(config: "Config") -> Kernel:
+    from azure.identity import DefaultAzureCredential
+    from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
+
+    kernel = Kernel()
+    kernel.add_service(AzureChatCompletion(
+        deployment_name=config.azure_openai_deployment,
+        endpoint=config.azure_openai_endpoint,
+        credential=DefaultAzureCredential(),       # managed identity in production
+    ))
+    return kernel
 ```
 
 ```python
@@ -334,16 +345,12 @@ class Config:
 
 ## Monitoring with OpenTelemetry
 
+Semantic Kernel emits OpenTelemetry spans and metrics itself (function invocations, model calls, token usage). Turn on the GenAI diagnostics with `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true` (add `..._SENSITIVE=true` only in development — it records prompts and completions), configure an exporter, and add your own metrics on top.
+
 ```python
 # monitoring.py
 from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from azure.monitor.opentelemetry import configure_azure_monitor
-from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter, AzureMonitorMetricExporter
-import logging
 
 def setup_monitoring(config: Config):
     """Configure OpenTelemetry with Azure Monitor"""
@@ -351,7 +358,7 @@ def setup_monitoring(config: Config):
     # Configure Azure Monitor
     configure_azure_monitor(
         connection_string=config.app_insights_connection_string,
-        logger_name="semantic_kernel"
+        logger_name="semantic_kernel",
     )
 
     # Get tracer and meter
@@ -404,10 +411,8 @@ async def invoke_with_monitoring(kernel, function, **kwargs):
             # Record metrics
             latency_histogram.record(duration_ms, {"function": function.name})
 
-            if hasattr(result, 'metadata'):
-                tokens = result.metadata.get("total_tokens", 0)
-                token_counter.add(tokens, {"function": function.name})
-                span.set_attribute("sk.tokens", tokens)
+            # Token usage is recorded by SK's own metrics
+            # (semantic_kernel.function.invocation.token_usage.*); no need to parse it here.
 
             return result
 
@@ -425,6 +430,7 @@ async def invoke_with_monitoring(kernel, function, **kwargs):
 # resilience.py
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from circuitbreaker import circuit
+from semantic_kernel.exceptions import ServiceResponseException
 import asyncio
 import logging
 
@@ -439,7 +445,9 @@ class ResilientKernel:
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(Exception)
+        # retry only service failures, not bugs in your own code
+        retry=retry_if_exception_type(ServiceResponseException),
+        reraise=True,
     )
     async def invoke_with_retry(self, function, **kwargs):
         """Invoke with automatic retry"""
@@ -456,19 +464,17 @@ class ResilientKernel:
             logger.error(f"Timeout after {timeout}s")
             raise
 
-    @circuit(failure_threshold=5, recovery_timeout=60, expected_exception=Exception)
+    @circuit(failure_threshold=5, recovery_timeout=60, expected_exception=ServiceResponseException)
     async def invoke_with_circuit_breaker(self, function, **kwargs):
         """Invoke with circuit breaker"""
         return await self.kernel.invoke(function, **kwargs)
 
-    async def invoke_safe(self, function, timeout=30.0, **kwargs):
-        """Invoke with all resilience patterns"""
-        return await self.invoke_with_timeout(
-            function,
-            timeout=timeout,
-            **kwargs
-        )
+    async def invoke_safe(self, function, timeout=60.0, **kwargs):
+        """Timeout around retry around a single call"""
+        return await asyncio.wait_for(self.invoke_with_retry(function, **kwargs), timeout=timeout)
 ```
+
+The OpenAI connectors already retry rate-limit and 5xx responses inside the OpenAI SDK; keep application-level retries few, or you multiply them.
 
 ---
 
@@ -476,14 +482,18 @@ class ResilientKernel:
 
 ### Caching
 
+An exact-match cache like this helps for repeated, deterministic prompts (classification, extraction). It is not a semantic cache — near-duplicate questions miss.
+
 ```python
 # caching.py
-from functools import lru_cache
+import logging
 from typing import Dict, Any
 import hashlib
 import json
 
-class SemanticCache:
+logger = logging.getLogger(__name__)
+
+class PromptCache:
     def __init__(self, max_size=1000):
         self.cache: Dict[str, Any] = {}
         self.max_size = max_size
@@ -516,7 +526,7 @@ class SemanticCache:
 ```python
 # batching.py
 import asyncio
-from typing import List
+from typing import Any, List
 
 class BatchProcessor:
     def __init__(self, kernel, function, batch_size=10):
@@ -550,32 +560,29 @@ class BatchProcessor:
 ```python
 # tests/test_kernel.py
 import pytest
-from unittest.mock import Mock, AsyncMock
 from semantic_kernel import Kernel
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.contents import AuthorRole, ChatMessageContent
+
+class StubChat(ChatCompletionClientBase):
+    """Offline chat service returning a canned reply."""
+    async def _inner_get_chat_message_contents(self, chat_history, settings):
+        return [ChatMessageContent(role=AuthorRole.ASSISTANT, content="Mocked response")]
 
 @pytest.fixture
-async def mock_kernel():
-    kernel = Kernel()
-    # Mock AI service
-    mock_service = AsyncMock()
-    mock_service.complete_async.return_value = "Mocked response"
-    kernel.add_service(mock_service)
-    return kernel
+def kernel() -> Kernel:
+    k = Kernel()
+    k.add_service(StubChat(ai_model_id="stub"))
+    return k
 
 @pytest.mark.asyncio
-async def test_simple_invocation(mock_kernel):
-    function = mock_kernel.create_function_from_prompt("Test prompt")
-    result = await mock_kernel.invoke(function)
-    assert result is not None
-
-@pytest.mark.asyncio
-async def test_retry_on_failure():
-    kernel = ResilientKernel(mock_kernel, max_retries=3)
-
-    # Should retry and eventually succeed
-    result = await kernel.invoke_with_retry(function, input="test")
-    assert result is not None
+async def test_simple_invocation(kernel):
+    function = kernel.add_function(plugin_name="t", function_name="echo", prompt="Test prompt")
+    result = await kernel.invoke(function)
+    assert str(result) == "Mocked response"
 ```
+
+`unittest.mock.AsyncMock` does not satisfy the service interface the kernel looks up; subclassing `ChatCompletionClientBase` does, and also works behind agents.
 
 ---
 
@@ -590,16 +597,16 @@ async def test_retry_on_failure():
 7. **Regular dependency updates**
 8. **Content filtering and guardrails**
 
-See: [Middleware Guide](./semantic_kernel_middleware_python/) for guardrails implementation.
+See: [Middleware Guide](../semantic_kernel_middleware_python/) for guardrails implementation.
 
 ---
 
 ## Additional Resources
 
-- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) - Complete reference
-- [Recipes](./semantic_kernel_recipes_python/) - Code examples
-- [General Production Guide](../semantic_kernel_production_guide/) - Language-agnostic patterns
-- [Streaming Server Guide](./semantic_kernel_streaming_server_fastapi/) - FastAPI patterns
+- [Comprehensive Guide](../semantic_kernel_comprehensive_python/) - Complete reference
+- [Recipes](../semantic_kernel_recipes_python/) - Code examples
+- [General Production Guide](../../semantic_kernel_production_guide/) - Language-agnostic patterns
+- [Streaming Server Guide](../semantic_kernel_streaming_server_fastapi/) - FastAPI patterns
 
-**[Back to Python README](./)** | **[Overview](./)**
+**[Back to Python overview](../)**
 

@@ -7,7 +7,7 @@ language: python
 
 # Testing Agents
 
-Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI ships two model implementations built for tests: `TestModel` (auto-generates tool calls + a response from JSON schema) and `FunctionModel` (you write the response-generating function). Combined with `agent.override(...)` and `capture_run_messages`, you can unit-test agents hermetically — no network, no API keys, deterministic.
 
@@ -148,7 +148,9 @@ agent = Agent(FunctionModel(stream_function=stream_word_by_word))
 async def test_streaming():
     chunks = []
     async with agent.run_stream('What is the answer?') as stream:
-        async for chunk in stream.stream_text(delta=True):
+        # debounce_by=None: yield every delta (the default 0.1 s window would
+        # merge this fast in-process stream into a single chunk)
+        async for chunk in stream.stream_text(delta=True, debounce_by=None):
             chunks.append(chunk)
         final = await stream.get_output()
 
@@ -315,7 +317,7 @@ Pair with [syrupy](https://github.com/syrupy-project/syrupy) or pytest-snapshot.
 | `TestModel`                        | You want schema-correct, deterministic behaviour. Fast.      |
 | `FunctionModel`                    | You need to control the exact `ModelResponse`.                |
 | Real model + `pytest-vcr`          | Regression-test against the real provider. Slow, flaky, needs API keys on record. |
-| `respx` / `httpx_mock` + real `OpenAIModel` | HTTP-layer testing. Flakier than `FunctionModel`.      |
+| `respx` / `httpx_mock` + real `OpenAIChatModel` | HTTP-layer testing. Flakier than `FunctionModel`.      |
 
 For most unit tests, prefer `TestModel` or `FunctionModel`. For contract tests, use real models in a CI nightly job.
 

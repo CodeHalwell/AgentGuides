@@ -7,7 +7,7 @@ language: python
 
 # Toolsets
 
-Verified against **pydantic-ai==2.43.0** — source modules: `pydantic_ai.toolsets.*`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.toolsets.*`.
 
 A *toolset* is a reusable, named collection of tools with a shared policy (retries, timeout, metadata, instructions). PydanticAI ships 10+ toolset wrappers that let you filter, rename, combine, gate, or lazy-load tools without rewriting the functions. They're the supported way to attach non-code tool sources — MCP servers, remote APIs, human approval — to an agent.
 
@@ -799,9 +799,12 @@ ApprovalRequiredToolset(write_tools,
 ### 3. MCP server alongside local tools
 
 ```python
-from pydantic_ai.mcp import MCPServerStdio
+from fastmcp.client.transports import StdioTransport
+from pydantic_ai.mcp import MCPToolset
 
-server = MCPServerStdio('uv', args=['run', 'mcp-run-python', 'stdio'])
+# MCPToolset replaced V1's MCPServerStdio / MCPServerSSE / MCPServerStreamableHTTP.
+# It accepts a URL, a script path, a FastMCP server or client, or a transport.
+server = MCPToolset(StdioTransport('uv', args=['run', 'mcp-run-python', 'stdio']))
 agent = Agent('openai:gpt-5.2',
               toolsets=[local_tools, PrefixedToolset(server, prefix='mcp_')])
 async with agent:
@@ -1207,8 +1210,7 @@ agent = Agent('openai:gpt-4o', toolsets=[FilteredToolset(tools, filter_func=cart
 import asyncio
 from dataclasses import dataclass
 from pydantic_ai import Agent, FunctionToolset, ApprovalRequiredToolset, RunContext
-from pydantic_ai.output import DeferredToolRequests
-from pydantic_ai.tools import DeferredToolResults, ToolApproved, ToolDenied
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 
 @dataclass
 class AdminDeps:
@@ -1411,8 +1413,7 @@ This pattern is useful for:
 import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.toolsets import ExternalToolset
-from pydantic_ai.tools import ToolDefinition, DeferredToolResults
-from pydantic_ai.output import DeferredToolRequests
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolDefinition
 
 # Define tool schemas — no Python implementation needed
 external = ExternalToolset([
@@ -1484,25 +1485,25 @@ async def main():
 asyncio.run(main())
 ```
 
-**`DeferredToolset` is deprecated** — `ExternalToolset` is the replacement. The old name is still importable but emits a `DeprecationWarning`.
+**`DeferredToolset` was removed in 2.0** — `ExternalToolset` is the replacement (it was deprecated in V1). Likewise V1's `DeferredToolCalls` output type is now `DeferredToolRequests`, whose `.calls` replaced `.tool_calls`.
 
 ---
 
 ## Reference
 
 - `AbstractToolset` — `toolsets/abstract.py`
-- `FunctionToolset` — `toolsets/function.py:44`
-- `CombinedToolset` — `toolsets/combined.py:26`
+- `FunctionToolset` — `toolsets/function.py`
+- `CombinedToolset` — `toolsets/combined.py`
 - `PrefixedToolset` — `toolsets/prefixed.py`
 - `RenamedToolset` — `toolsets/renamed.py`
 - `FilteredToolset` — `toolsets/filtered.py`
 - `PreparedToolset` — `toolsets/prepared.py`
 - `ApprovalRequiredToolset` — `toolsets/approval_required.py`
 - `DeferredLoadingToolset` — `toolsets/deferred_loading.py`
-- `ExternalToolset` — `toolsets/external.py` (replaces deprecated `DeferredToolset`)
+- `ExternalToolset` — `toolsets/external.py` (replaced `DeferredToolset`, removed in 2.0)
 - `IncludeReturnSchemasToolset` — `toolsets/include_return_schemas.py`
 - `SetMetadataToolset` — `toolsets/set_metadata.py`
-- `DeferredToolRequests` — `pydantic_ai.output`
+- `DeferredToolRequests` — `pydantic_ai.tools` (also exported from `pydantic_ai`)
 - `DeferredToolResults` — `pydantic_ai.tools`
 - `ToolApproved` / `ToolDenied` — `pydantic_ai.tools`
 - `ToolSearch` capability — `pydantic_ai.capabilities`

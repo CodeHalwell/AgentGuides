@@ -1,523 +1,286 @@
 ---
 title: "Semantic Kernel Recipes (Python)"
-description: "Ready-to-Use Python Code Examples for Common Patterns"
+description: "Ready-to-use Python recipes for Semantic Kernel — Q&A, structured extraction, plugins, RAG with vector stores, multi-agent teams, resilient agents and MCP tools."
 framework: semantic-kernel
 language: python
 ---
 
 # Semantic Kernel Recipes (Python)
 
-**Ready-to-Use Python Code Examples for Common Patterns**
+> Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Each recipe uses only APIs checked against an installed copy. Model names are examples. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/), Semantic Kernel's successor.
 
-Last Updated: April 2026
-Semantic Kernel Python: 1.41.2+
-
----
-
-## Overview
-
-This document provides production-ready Python recipes for common Semantic Kernel patterns. Each recipe includes complete, tested code that can be adapted for your use case.
-
-**See Also:** [../semantic_kernel_recipes.md](../semantic_kernel_recipes/) for additional language-agnostic recipes.
+**See also:** [language-agnostic recipes](../semantic_kernel_recipes/) · [comprehensive Python guide](../semantic_kernel_comprehensive_python/)
 
 ---
 
-## Table of Contents
+## Table of contents
 
-1. [Basic Recipes](#basic-recipes)
-2. [Plugin Recipes](#plugin-recipes)
-3. [Memory & RAG Recipes](#memory--rag-recipes)
-4. [Multi-Agent Recipes](#multi-agent-recipes)
-5. [Production Patterns](#production-patterns)
-6. [2025 Features Recipes](#2025-features-recipes)
+1. [Simple Q&A](#1-simple-qa)
+2. [Summariser with structured output](#2-summariser-with-structured-output)
+3. [Custom database plugin](#3-custom-database-plugin)
+4. [Document Q&A with RAG](#4-document-qa-with-rag)
+5. [Research and writing team](#5-research-and-writing-team)
+6. [Resilient agent with monitoring](#6-resilient-agent-with-monitoring)
+7. [MCP tools](#7-mcp-tools)
+8. [Vector search with filters](#8-vector-search-with-filters)
 
 ---
 
-## Basic Recipes
-
-### 1. Simple Q&A System
-
+## 1. Simple Q&A
 
 ```python
 import asyncio
 from semantic_kernel import Kernel
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
-import os
+from semantic_kernel.functions import KernelArguments
 
-async def simple_qa_system():
-    # Initialize kernel
-    kernel = Kernel()
-    kernel.add_service(
-        OpenAIChatCompletion(
-            model_id="gpt-4",
-            api_key=os.environ["OPENAI_API_KEY"]
-        )
-    )
+kernel = Kernel()
+kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-5-mini"))   # reads OPENAI_API_KEY
 
-    # Create Q&A function
-    qa_prompt = """
-    Answer the following question concisely and accurately:
+qa = kernel.add_function(
+    plugin_name="qa",
+    function_name="answer",
+    prompt=(
+        "Answer the question accurately and concisely. "
+        "If you are not sure, say so.\n\nQuestion: {{$question}}\nAnswer:"
+    ),
+)
 
-    Question: {{$question}}
+async def main():
+    for question in ["What is Semantic Kernel?", "How does function calling work?"]:
+        result = await kernel.invoke(qa, KernelArguments(question=question))
+        print(f"Q: {question}\nA: {result}\n")
 
-    Answer:
-    """
-
-    qa_function = kernel.create_function_from_prompt(
-        qa_prompt,
-        function_name="answer_question"
-    )
-
-    # Use it
-    questions = [
-        "What is Semantic Kernel?",
-        "How do plugins work in SK?",
-        "What are agents in SK?"
-    ]
-
-    for question in questions:
-        result = await kernel.invoke(qa_function, question=question)
-        print(f"Q: {question}")
-        print(f"A: {result}\n")
-
-if __name__ == "__main__":
-    asyncio.run(simple_qa_system())
+asyncio.run(main())
 ```
 
+---
 
-### 2. Content Summarizer with Structured Output
-
+## 2. Summariser with structured output
 
 ```python
 from pydantic import BaseModel
-from typing import List
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatPromptExecutionSettings
 
 class Summary(BaseModel):
-    main_points: List[str]
-    key_takeaway: str
-    word_count: int
+    title: str
+    key_points: list[str]
+    sentiment: str          # positive | neutral | negative
 
-async def structured_summarizer():
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(...))
-
-    prompt = """
-    Summarize the following text and return JSON:
-
-    Text: {{$text}}
-
-    Return JSON with:
-    - main_points: list of 3-5 key points
-    - key_takeaway: one sentence summary
-    - word_count: approximate word count
-
-    JSON:
-    """
-
-    function = kernel.create_function_from_prompt(prompt)
-
-    text = """
-    Semantic Kernel is an open-source SDK that lets you easily build agents
-    that can call your existing code. As a highly extensible SDK, you can use
-    Semantic Kernel with models from OpenAI, Azure OpenAI, Hugging Face, and more!
-    """
-
-    result = await kernel.invoke(function, text=text)
-    summary = Summary.model_validate_json(str(result))
-
-    print(f"Main Points: {summary.main_points}")
-    print(f"Takeaway: {summary.key_takeaway}")
-    print(f"Word Count: {summary.word_count}")
-
-asyncio.run(structured_summarizer())
+async def summarise(text: str) -> Summary:
+    settings = OpenAIChatPromptExecutionSettings(response_format=Summary)
+    result = await kernel.invoke_prompt(
+        "Summarise this text:\n\n{{$text}}",
+        arguments=KernelArguments(text=text, settings=settings),
+    )
+    return Summary.model_validate_json(str(result))
 ```
 
+`response_format=<Pydantic model>` requests a strict JSON schema, so there is no need to parse JSON out of free text.
 
 ---
 
-## Plugin Recipes
-
-### 3. Custom Database Plugin
+## 3. Custom database plugin
 
 ```python
+import sqlite3
+from typing import Annotated
+from semantic_kernel.agents import ChatCompletionAgent
 from semantic_kernel.functions import kernel_function
-from typing import Annotated, List, Dict
-import asyncpg
 
-class DatabasePlugin:
-    def __init__(self, connection_string: str):
-        self.connection_string = connection_string
-        self.pool = None
+class CustomerDB:
+    def __init__(self, path: str):
+        # Read-only connection: the model can only query, never modify
+        self.conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, check_same_thread=False)
 
-    async def initialize(self):
-        self.pool = await asyncpg.create_pool(self.connection_string)
+    @kernel_function(description="List customers in a US state.")
+    def customers_in_state(self, state: Annotated[str, "Two-letter state code, e.g. CA"]) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT id, name, email FROM customers WHERE state = ? LIMIT 50", (state.upper(),)
+        ).fetchall()
+        return [{"id": r[0], "name": r[1], "email": r[2]} for r in rows]
 
-    @kernel_function(
-        name="query_customers",
-        description="Query customers by criteria"
-    )
-    async def query_customers(
-        self,
-        filter: Annotated[str, "SQL WHERE clause"] = "1=1",
-        limit: Annotated[int, "Max results"] = 10
-    ) -> Annotated[str, "JSON array of customers"]:
-        async with self.pool.acquire() as conn:
-            query = f"SELECT * FROM customers WHERE {filter} LIMIT {limit}"
-            rows = await conn.fetch(query)
-            return json.dumps([dict(row) for row in rows])
+    @kernel_function(description="Get one customer's order count and total spend.")
+    def customer_summary(self, customer_id: int) -> dict:
+        count, total = self.conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(total), 0) FROM orders WHERE customer_id = ?", (customer_id,)
+        ).fetchone()
+        return {"orders": count, "total": total}
 
-    @kernel_function(
-        name="update_customer",
-        description="Update customer information"
-    )
-    async def update_customer(
-        self,
-        customer_id: Annotated[str, "Customer ID"],
-        updates: Annotated[str, "JSON of fields to update"]
-    ) -> Annotated[str, "Success message"]:
-        update_data = json.loads(updates)
+agent = ChatCompletionAgent(
+    service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+    name="DataAssistant",
+    instructions="Answer questions about customers using the database tools. Never invent data.",
+    plugins=[CustomerDB("shop.db")],
+)
 
-        async with self.pool.acquire() as conn:
-            set_clause = ", ".join([f"{k} = ${i+2}" for i, k in enumerate(update_data.keys())])
-            query = f"UPDATE customers SET {set_clause} WHERE id = $1"
-            values = [customer_id] + list(update_data.values())
-
-            await conn.execute(query, *values)
-            return f"Customer {customer_id} updated successfully"
-
-# Usage
-async def main():
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(...))
-
-    db_plugin = DatabasePlugin(os.environ["DATABASE_URL"])
-    await db_plugin.initialize()
-
-    kernel.add_plugin(db_plugin, "Database")
-
-    # Agent can now use database
-    agent = ChatCompletionAgent(
-        kernel=kernel,
-        name="data_agent",
-        instructions="You can query and update customer data using the Database plugin."
-    )
-
-    result = await agent.invoke("Find all customers in California and show their names")
-    print(result)
-
-asyncio.run(main())
+async def demo():
+    response = await agent.get_response(messages="Which customers are in California?")
+    print(response.message.content)
 ```
+
+Prefer narrow, parameterised functions like these over a generic "run this SQL" tool: the model cannot construct a destructive query, and each tool is easy to test.
 
 ---
 
-## Memory & RAG Recipes
-
-### 4. Document Q&A with RAG
-
+## 4. Document Q&A with RAG
 
 ```python
-from semantic_kernel.memory import SemanticTextMemory
-from semantic_kernel.connectors.memory.azure_ai_search import AzureAISearchMemoryStore
+from dataclasses import dataclass
+from typing import Annotated
 from semantic_kernel.connectors.ai.open_ai import OpenAITextEmbedding
+from semantic_kernel.connectors.in_memory import InMemoryCollection
+from semantic_kernel.data.vector import vectorstoremodel, VectorStoreField
 
-async def document_qa_rag():
-    # Setup
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(model_id="gpt-4", api_key=os.environ["OPENAI_API_KEY"]))
+@vectorstoremodel(collection_name="docs")
+@dataclass
+class DocChunk:
+    id: Annotated[str, VectorStoreField("key")]
+    text: Annotated[str, VectorStoreField("data", is_full_text_indexed=True)]
+    source: Annotated[str, VectorStoreField("data", is_indexed=True)]
+    embedding: Annotated[list[float] | str | None, VectorStoreField("vector", dimensions=1536)] = None
 
-    # Embedding service
-    embedding_service = OpenAITextEmbedding(
-        model_id="text-embedding-ada-002",
-        api_key=os.environ["OPENAI_API_KEY"]
-    )
+    def __post_init__(self):
+        if self.embedding is None:
+            self.embedding = self.text            # embedded automatically on upsert
 
-    # Vector store (v1.34)
-    memory_store = AzureAISearchMemoryStore(
-        search_endpoint=os.environ["AZURE_SEARCH_ENDPOINT"],
-        api_key=os.environ["AZURE_SEARCH_API_KEY"],
-        index_name="documents"
-    )
+docs = InMemoryCollection(
+    record_type=DocChunk,
+    embedding_generator=OpenAITextEmbedding(ai_model_id="text-embedding-3-small"),
+)
 
-    memory = SemanticTextMemory(
-        storage=memory_store,
-        embeddings_generator=embedding_service
-    )
+async def index(chunks: list[tuple[str, str]]):
+    await docs.ensure_collection_exists()
+    await docs.upsert([DocChunk(id=str(i), text=t, source=s) for i, (t, s) in enumerate(chunks)])
 
-    # Index documents
-    documents = [
-        "Semantic Kernel is an SDK for integrating AI into applications.",
-        "Plugins extend SK functionality with custom code.",
-        "Agents in SK can reason, plan, and use tools.",
-        "Vector stores enable semantic search and retrieval."
-    ]
+# Expose search as a tool and let the agent decide when to retrieve
+kernel.add_function(
+    plugin_name="docs",
+    function=docs.create_search_function(
+        function_name="search",
+        description="Search the product documentation. Returns relevant passages.",
+        top=4,
+    ),
+)
 
-    for i, doc in enumerate(documents):
-        await memory.save_information(
-            collection="kb",
-            id=f"doc_{i}",
-            text=doc
-        )
-
-    # RAG function
-    rag_prompt = """
-    Using the following context, answer the question:
-
-    Context:
-    {{$context}}
-
-    Question: {{$question}}
-
-    Answer:
-    """
-
-    rag_function = kernel.create_function_from_prompt(rag_prompt)
-
-    # Query
-    question = "How do I extend Semantic Kernel?"
-
-    # Retrieve relevant context
-    results = await memory.search(
-        collection="kb",
-        query=question,
-        limit=3,
-        min_relevance_score=0.7
-    )
-
-    context = "\n".join([r.text for r in results])
-
-    # Generate answer
-    answer = await kernel.invoke(
-        rag_function,
-        context=context,
-        question=question
-    )
-
-    print(f"Question: {question}")
-    print(f"Answer: {answer}")
-    print(f"\nSources:")
-    for r in results:
-        print(f"  [{r.relevance:.2f}] {r.text}")
-
-asyncio.run(document_qa_rag())
+rag_agent = ChatCompletionAgent(
+    kernel=kernel,
+    name="DocsAssistant",
+    instructions="Answer only from passages returned by docs-search. Cite the source of each fact.",
+)
 ```
 
+Swap `InMemoryCollection` for `AzureAISearchCollection`, `QdrantCollection`, `PostgresCollection` and so on without changing `DocChunk`. The old `SemanticTextMemory` / `*MemoryStore` API used by earlier versions of this recipe is legacy.
 
 ---
 
-## Multi-Agent Recipes
-
-### 5. Research & Writing Team
+## 5. Research and writing team
 
 ```python
-from semantic_kernel.agents import ChatCompletionAgent, AgentGroupChat
+from semantic_kernel.agents import SequentialOrchestration
+from semantic_kernel.agents.runtime import InProcessRuntime
 
-async def research_writing_team():
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(...))
+service = OpenAIChatCompletion(ai_model_id="gpt-5-mini")
 
-    # Create agents
-    researcher = ChatCompletionAgent(
-        kernel=kernel,
-        name="researcher",
-        instructions="""You are a research specialist. Your job is to:
-        1. Gather factual information
-        2. Verify sources
-        3. Provide comprehensive research
-        When you complete research, say 'RESEARCH COMPLETE' and hand off to writer.
-        """
+researcher = ChatCompletionAgent(name="Researcher", description="Finds facts", service=service,
+    instructions="List the key facts about the topic, with sources where possible.")
+writer = ChatCompletionAgent(name="Writer", description="Drafts", service=service,
+    instructions="Write a 200-word article from the research notes.")
+editor = ChatCompletionAgent(name="Editor", description="Polishes", service=service,
+    instructions="Edit for clarity and accuracy. Return only the final article.")
+
+async def write_article(topic: str) -> str:
+    team = SequentialOrchestration(
+        members=[researcher, writer, editor],
+        agent_response_callback=lambda m: print(f"— {m.name} finished ({len(str(m.content))} chars)"),
     )
-
-    writer = ChatCompletionAgent(
-        kernel=kernel,
-        name="writer",
-        instructions="""You are a content writer. Your job is to:
-        1. Take research and create engaging content
-        2. Ensure clarity and flow
-        3. Format appropriately
-        When complete, say 'DRAFT COMPLETE' and hand off to editor.
-        """
-    )
-
-    editor = ChatCompletionAgent(
-        kernel=kernel,
-        name="editor",
-        instructions="""You are an editor. Your job is to:
-        1. Review for quality and accuracy
-        2. Fix grammar and style
-        3. Ensure consistency
-        When complete, say 'DONE' to finish.
-        """
-    )
-
-    # Create group chat
-    group_chat = AgentGroupChat(researcher, writer, editor)
-
-    # Process request
-    await group_chat.add_user_message(
-        "Create a blog post about Semantic Kernel's agent capabilities with examples"
-    )
-
-    # Run conversation
-    async for message in group_chat.invoke():
-        print(f"[{message.name}]: {message.content}\n")
-
-        if "DONE" in message.content:
-            break
-
-asyncio.run(research_writing_team())
+    runtime = InProcessRuntime()
+    runtime.start()
+    try:
+        result = await team.invoke(task=topic, runtime=runtime)
+        return str((await result.get(timeout=300)).content)
+    finally:
+        await runtime.stop_when_idle()
 ```
+
+For iterative review loops, see the custom group-chat manager in [advanced multi-agent](../semantic_kernel_advanced_multi_agent_python/).
 
 ---
 
-## Production Patterns
-
-### 6. Resilient Agent with Monitoring
+## 6. Resilient agent with monitoring
 
 ```python
-from opentelemetry import trace
-from tenacity import retry, stop_after_attempt, wait_exponential
-import time
+import logging, time
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from semantic_kernel.agents import ChatHistoryAgentThread
+from semantic_kernel.exceptions import ServiceResponseException
 
-tracer = trace.get_tracer(__name__)
+log = logging.getLogger("agent")
 
-class ProductionAgent:
-    def __init__(self, kernel, name, instructions):
-        self.agent = ChatCompletionAgent(
-            kernel=kernel,
-            name=name,
-            instructions=instructions
-        )
+class ResilientAgent:
+    def __init__(self, agent: ChatCompletionAgent):
+        self.agent = agent
+        self.threads: dict[str, ChatHistoryAgentThread] = {}
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10)
+        wait=wait_exponential(multiplier=1, min=2, max=20),
+        retry=retry_if_exception_type(ServiceResponseException),
+        reraise=True,
     )
-    async def invoke_with_retry(self, message: str):
-        return await self.agent.invoke(message)
+    async def _call(self, message: str, thread):
+        return await self.agent.get_response(messages=message, thread=thread)
 
-    async def invoke_with_monitoring(self, message: str):
-        with tracer.start_as_current_span("agent_invoke") as span:
-            span.set_attribute("agent.name", self.agent.name)
-            span.set_attribute("message.length", len(message))
-
-            start = time.time()
-
-            try:
-                result = await self.invoke_with_retry(message)
-
-                duration_ms = (time.time() - start) * 1000
-                span.set_attribute("duration_ms", duration_ms)
-                span.set_attribute("status", "success")
-
-                return result
-
-            except Exception as e:
-                span.set_attribute("status", "error")
-                span.record_exception(e)
-                raise
-
-# Usage
-async def main():
-    from monitoring import setup_monitoring
-
-    setup_monitoring(Config.from_env())
-
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(...))
-
-    agent = ProductionAgent(
-        kernel,
-        "assistant",
-        "You are a helpful assistant"
-    )
-
-    result = await agent.invoke_with_monitoring("Hello!")
-    print(result)
-
-asyncio.run(main())
+    async def chat(self, session_id: str, message: str) -> str:
+        start = time.perf_counter()
+        response = await self._call(message, self.threads.get(session_id))
+        self.threads[session_id] = response.thread
+        usage = response.message.metadata.get("usage")
+        log.info("session=%s latency_ms=%.0f usage=%s",
+                 session_id, (time.perf_counter() - start) * 1000, usage)
+        return str(response.message.content)
 ```
+
+`ServiceResponseException` is what the OpenAI connectors raise for failed calls. Retrying a whole agent turn re-sends the conversation, so keep the retry count low and make tools idempotent.
 
 ---
 
-## 2025 Features Recipes
-
-### 7. MCP Client Integration
+## 7. MCP tools
 
 ```python
-from semantic_kernel.connectors.mcp import MCPClient, MCPToolPlugin
+from semantic_kernel.connectors.mcp import MCPStdioPlugin
 
-async def mcp_client_recipe():
-    # Setup kernel
-    kernel = Kernel()
-    kernel.add_service(OpenAIChatCompletion(...))
-
-    # Connect to MCP server
-    mcp_plugin = await MCPToolPlugin.from_mcp_server(
-        server_url="http://localhost:3000",
-        plugin_name="ExternalTools"
-    )
-
-    kernel.add_plugin(mcp_plugin)
-
-    # Agent can now use MCP tools
-    agent = ChatCompletionAgent(
-        kernel=kernel,
-        name="mcp_agent",
-        instructions="You have access to external tools via MCP. Use them to answer questions."
-    )
-
-    result = await agent.invoke("Use the weather tool to get current weather in Tokyo")
-    print(result)
-
-asyncio.run(mcp_client_recipe())
-```
-
-### 8. Vector Store v1.34 with Metadata Filtering
-
-```python
-async def vector_store_v134_recipe():
-    # Setup
-    embedding_service = OpenAITextEmbedding(...)
-    memory_store = AzureAISearchMemoryStore(...)
-    memory = SemanticTextMemory(storage=memory_store, embeddings_generator=embedding_service)
-
-    # Index with metadata
-    products = [
-        {"id": "1", "text": "Laptop - 16GB RAM", "metadata": {"category": "electronics", "price": 999}},
-        {"id": "2", "text": "Desk Chair - Ergonomic", "metadata": {"category": "furniture", "price": 299}},
-        {"id": "3", "text": "Monitor - 27 inch 4K", "metadata": {"category": "electronics", "price": 499}},
-    ]
-
-    for product in products:
-        await memory.save_information(
-            collection="products",
-            id=product["id"],
-            text=product["text"],
-            additional_metadata=product["metadata"]
+async def mcp_demo():
+    async with MCPStdioPlugin(
+        name="filesystem",
+        description="Read files in the project directory",
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "./project"],
+    ) as fs:
+        agent = ChatCompletionAgent(
+            service=OpenAIChatCompletion(ai_model_id="gpt-5-mini"),
+            name="CodeReader",
+            instructions="Answer questions about the project files.",
+            plugins=[fs],
         )
-
-    # Search with metadata filter (NEW in v1.34)
-    results = await memory.search(
-        collection="products",
-        query="computer equipment",
-        limit=10,
-        min_relevance_score=0.7,
-        filter={"category": "electronics"}  # Filter by metadata
-    )
-
-    for r in results:
-        print(f"[{r.relevance:.2f}] {r.text} - ${r.metadata['price']}")
-
-asyncio.run(vector_store_v134_recipe())
+        print(await agent.get_response(messages="Summarise README.md"))
 ```
+
+`MCPStreamableHttpPlugin(name=..., url=...)` connects to remote servers. Earlier versions of this recipe used `MCPClient` / `MCPToolPlugin` classes, which do not exist.
 
 ---
 
-For more recipes, see:
-- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) - Detailed examples
-- [Production Guide](./semantic_kernel_production_python/) - Production patterns
-- [Advanced Multi-Agent Guide](./semantic_kernel_advanced_multi_agent_python/) - Complex multi-agent patterns
-- [General Recipes](../semantic_kernel_recipes/) - Language-agnostic examples
+## 8. Vector search with filters
 
-**[Back to Python README](./)** | **[Overview](./)**
+```python
+async def search_billing_docs(query: str):
+    results = await docs.search(query, top=3, filter=lambda r: r.source == "billing-handbook")
+    async for hit in results.results:
+        print(f"{hit.score:.3f}  {hit.record.source}: {hit.record.text[:80]}")
+```
 
+The lambda is translated into each store's native filter syntax; only simple comparisons and boolean combinations are supported, so keep filters to equality and ranges on indexed fields (`is_indexed=True`).
+
+---
+
+**[Back to Python overview](../)**
