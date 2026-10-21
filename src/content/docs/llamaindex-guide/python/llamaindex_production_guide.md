@@ -426,7 +426,7 @@ Serve it with `python -c "import asyncio, wfserver; asyncio.run(wfserver.server.
 
 Two things that are easy to get wrong with the current releases:
 
-- **Agent start events.** When you start an agent (`FunctionAgent`, `ReActAgent`, `AgentWorkflow`) over HTTP, send `user_msg`, `chat_history` and `max_iterations`. With only `user_msg`, the agent's start event fails to serialise and the run never completes.
+- **Agent start events.** When you start an agent (`FunctionAgent`, `ReActAgent`, `AgentWorkflow`) over HTTP, send `user_msg`, `chat_history` and `max_iterations`. With only `user_msg`, the agent's start event fails to serialise: the request returns a 500 and the run stays in `running`.
 - **The serializer.** With a durable store, agent state (memory, the scratchpad of chat messages) is written to the store and read back between steps. The default serializer refuses to rebuild those classes, and the run fails with `... is not in the serializer's allowed types`. `JsonSerializer()` resolves classes by import path, which is safe as long as only your server writes to the store. To be stricter, list the classes instead: `JsonSerializer(allowed_types=[...])` with the classes named in the error messages.
 
 Call the server from Python with `WorkflowClient`:
@@ -483,7 +483,7 @@ LlamaIndexOpenTelemetry(
 ).start_registering()
 ```
 
-Spans can carry prompt and retrieved text, so treat the trace store as holding user data, or filter attributes in the collector. Hosted tools (Phoenix, Langfuse and others), custom event handlers and the metrics worth exporting are on the [observability page](/llamaindex-guide/python/llamaindex_observability_python/).
+Span events are built from LlamaIndex's instrumentation events, which can include query strings and model output, so treat the trace store as holding user data or filter attributes in the collector. Hosted tools (Phoenix, Langfuse and others), custom event handlers and the metrics worth exporting are on the [observability page](/llamaindex-guide/python/llamaindex_observability_python/).
 
 For cost, count tokens with `TokenCountingHandler` and price them from configuration rather than constants in code, since prices change:
 
