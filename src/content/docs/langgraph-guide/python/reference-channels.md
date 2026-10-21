@@ -10,7 +10,7 @@ sidebar:
 
 # Channels — API reference
 
-Verified against **`langgraph==1.2.12`** (module: `langgraph.channels`).
+Verified against **`langgraph==1.2.14`** (module: `langgraph.channels`).
 
 Every key in a `StateGraph` state schema is backed by a **channel**. Channels define how values are stored and how concurrent writes within the same super-step are resolved. Most users interact with channels only through `Annotated[type, reducer]` syntax; this page documents what those annotations actually create, their semantics under parallel execution, and when to choose each one.
 
@@ -850,5 +850,5 @@ print(snap.values.get("embedding"))   # None — not persisted
 |---|---|
 | 1.2 | `UntrackedValue` added — same semantics as `LastValue` but never written to checkpoints. Use for computed or sensitive fields you don't want persisted. |
 | 1.0 | `Topic`, `EphemeralValue`, `NamedBarrierValue`, `AnyValue` moved from `langgraph.channels` to their own submodules but remain re-exported at `langgraph.channels`. Existing imports unaffected. |
-| 0.6 | `DeltaChannel` added (beta) — a write-efficient channel that stores only deltas and reconstructs state by replaying ancestor writes. Not covered here; see the beta warning in source. |
+| 0.6 | `DeltaChannel` added (beta) — a write-efficient channel that stores only deltas and reconstructs state by replaying ancestor writes. See [Class Deep Dives Vol. 2 — `DeltaChannel`](./reference-class-deep-dives-vol2/#1-deltachannel--write-efficient-reducer-with-lazy-snapshots) for a full walkthrough. |
 | 0.2 | `BinaryOperatorAggregate` introduced; `add_messages` became the canonical reducer for message lists. |
