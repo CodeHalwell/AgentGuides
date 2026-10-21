@@ -18,9 +18,9 @@ LangGraph's control flow primitives live in `langgraph.types`:
 |---|---|
 | `Command(update, goto, resume, graph)` | Update state **and/or** jump to another node **and/or** resume an interrupt — all in one return value from a node. |
 | `Send(node, arg)` | Dispatch a node with custom state; used from conditional edges for fan-out and from `Command.goto` for dynamic routing. |
-| `interrupt(value)` | Pause the current task and surface `value` to the client (resume with `Command(resume=...)`). |
+| `interrupt(value, *, response_schema=None)` | Pause the current task and surface `value` to the client (resume with `Command(resume=...)`). |
 | `Overwrite(value)` | Write directly to a reducing channel, bypassing the reducer. |
-| `Interrupt(value, id)` | The dataclass surfaced inside `StateSnapshot.interrupts` (v1.1: `value` and `id` only; older attributes `ns`, `when`, `resumable` were removed in v0.6). |
+| `Interrupt(value, id, response_schema)` | The dataclass surfaced inside `StateSnapshot.interrupts` and `GraphOutput.interrupts` (older attributes `ns`, `when`, `resumable` were removed in v0.6). |
 
 ## Minimal runnable example
 
@@ -158,7 +158,7 @@ Equality is structural (`node` + `arg` + `timeout`), and `Send` is hashable.
 
 ### Per-task timeout on `Send`
 
-The `timeout` parameter overrides the target node's default timeout for this specific dispatched task. Pass a `float` (seconds), `timedelta`, or `TimeoutPolicy` directly:
+The `timeout` parameter overrides the target node's default timeout for this specific dispatched task. Pass a `float` (seconds), `timedelta`, or `TimeoutPolicy` directly. Timeouts use cooperative asyncio cancellation, so the target node must be `async def` (a sync target raises `ValueError: Node timeouts are only supported for async nodes`), and a branch that overruns raises `NodeTimeoutError`, which the node's `retry_policy` or `error_handler` can catch:
 
 ```python
 import operator
@@ -193,7 +193,7 @@ def dispatch(state: BatchState) -> list[Send]:
     return sends
 
 
-def run_job(state: JobState) -> dict:
+async def run_job(state: JobState) -> dict:
     return {"results": [f"done:{state['id']}"]}
 
 
@@ -202,6 +202,7 @@ builder.add_node("run_job", run_job)
 builder.add_conditional_edges(START, dispatch)
 builder.add_edge("run_job", END)
 graph = builder.compile()
+# await graph.ainvoke({"jobs": [...], "results": []})
 ```
 
 For fine-grained control (both run and idle caps), pass a `TimeoutPolicy`:
@@ -244,17 +245,70 @@ cfg = {"configurable": {"thread_id": "t"}}
 graph.invoke(Command(resume={"abc": "yes", "def": "no"}), cfg)
 ```
 
+When one node calls `interrupt()` several times, the graph pauses at each call in turn, so in practice you resume one id at a time: read `graph.get_state(cfg).interrupts[0].id`, resume it, and the next interrupt surfaces with its own id.
+
+> Checkpoint history is not a complete interrupt audit log. Repeated `interrupt()` calls in one node reuse the same task slot, so `get_state_history()` only shows the interrupts each snapshot retained. If you need every interrupt that ever fired, record the `__interrupt__` events as you stream.
+
+### Typed resume values: `response_schema`
+
+`interrupt(value, *, response_schema=...)` tells the client what shape the resume value should take. It accepts two kinds of schema:
+
+- **A JSON Schema `dict`**: metadata only. It is surfaced to callers, but the resume value is returned as-is with no validation.
+- **A Python type** (Pydantic model, `TypedDict`, or dataclass): LangGraph validates the resume value with a pydantic `TypeAdapter`, raises `pydantic.ValidationError` on a mismatch, and returns the constructed instance. Type checkers also infer the return type from it.
+
+Either way, the `Interrupt` stored in the snapshot carries `response_schema` as a JSON Schema `dict`, so it serializes with any checkpointer.
+
+```python
+from pydantic import BaseModel
+from typing_extensions import TypedDict
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import START, END, StateGraph
+from langgraph.types import Command, interrupt
+
+
+class Decision(BaseModel):
+    action: str
+    reason: str
+
+
+class State(TypedDict):
+    proposal: str
+    decision: dict | None
+
+
+def review(state: State) -> dict:
+    decision = interrupt({"proposal": state["proposal"]}, response_schema=Decision)
+    return {"decision": decision.model_dump()}   # decision is a Decision instance
+
+
+graph = (
+    StateGraph(State)
+    .add_node("review", review)
+    .add_edge(START, "review")
+    .add_edge("review", END)
+    .compile(checkpointer=InMemorySaver())
+)
+cfg = {"configurable": {"thread_id": "typed-interrupt"}}
+
+out = graph.invoke({"proposal": "Deploy to prod", "decision": None}, cfg, version="v2")
+print(out.interrupts[0].response_schema)   # {'properties': {...}, 'required': ['action', 'reason'], ...}
+
+graph.invoke(Command(resume={"action": "approve", "reason": "All checks passed."}), cfg)
+# Resuming with {"action": "approve"} alone would raise pydantic.ValidationError.
+```
+
 ### `Interrupt` dataclass
 
 ```python
 @final
 @dataclass(init=False, slots=True)
-class Interrupt:
+class Interrupt(Generic[ResponseT]):
     value: Any
     id: str
+    response_schema: type[ResponseT] | dict[str, Any] | None = None
 ```
 
-Only `value` and `id` are supported. The deprecated `interrupt_id` property still exists but warns. `ns`, `when`, and `resumable` were removed in v0.6 — use `StateSnapshot.interrupts` for structural info.
+A surfaced interrupt always carries `response_schema` as JSON Schema (or `None`). The deprecated `interrupt_id` property still exists but warns; use `id`. `ns`, `when`, and `resumable` were removed in v0.6; use `StateSnapshot.interrupts` for structural info.
 
 ## `Overwrite`
 
@@ -328,19 +382,30 @@ Inside a compiled subgraph `worker` can hand control back to the parent graph's 
 
 ### 4. Tool-authored commands
 
-Any `@tool` that returns a `Command` is treated as control flow by `ToolNode`. Example:
+Any `@tool` that returns a `Command` is treated as control flow by `ToolNode`. The `update` must include a `ToolMessage` answering the tool call, or `ToolNode` raises `ValueError: Expected to have a matching ToolMessage in Command.update`. Inject the call id with `InjectedToolCallId`:
 
 ```python
-from langchain_core.tools import tool
+from typing import Annotated
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.types import Command
 
 @tool
-def transfer_to_refunds(reason: str) -> Command:
+def transfer_to_refunds(
+    reason: str,
+    tool_call_id: Annotated[str, InjectedToolCallId],   # hidden from the LLM
+) -> Command:
     """Hand this conversation to the refunds agent."""
-    return Command(goto="refunds_agent", update={"transfer_reason": reason})
+    return Command(
+        goto="refunds_agent",
+        update={
+            "transfer_reason": reason,
+            "messages": [ToolMessage("Transferring to refunds.", tool_call_id=tool_call_id)],
+        },
+    )
 ```
 
-`ToolNode` unpacks the `Command` into a state update plus goto.
+`ToolNode` unpacks the `Command` into a state update plus goto, so the graph jumps to `refunds_agent` straight from the tools node.
 
 ### 5. Interrupt + resume + update
 
@@ -506,7 +571,57 @@ result2 = graph.invoke({"task": "complex quantum theory", "output": "", "escalat
 print(result2["output"])   # "Supervisor resolved escalation."
 ```
 
-### 8. Fan-out then fan-in with `Send` and a barrier edge
+### 8. Nested fan-out: a `Send` target that fans out again
+
+Conditional-edge functions always receive the **root graph state**, not the payload of the `Send` that started the branch. To fan out a second level from branch-local data, do it inside the node and return `Command(goto=[Send(...), ...])`:
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import START, END, StateGraph
+from langgraph.types import Command, Send
+
+
+class RootState(TypedDict):
+    sections: list[str]
+    chunks: Annotated[list[str], operator.add]
+
+
+class SectionState(TypedDict):
+    section: str
+
+
+class ChunkState(TypedDict):
+    chunk: str
+
+
+def section_entry(state: SectionState) -> Command:
+    # Branch-local payload from the level-1 Send; fan out level 2 from here.
+    words = state["section"].split()
+    mid = max(1, len(words) // 2)
+    parts = [" ".join(words[:mid]), " ".join(words[mid:])]
+    return Command(goto=[Send("process_chunk", {"chunk": p}) for p in parts if p])
+
+
+def process_chunk(state: ChunkState) -> dict:
+    return {"chunks": [state["chunk"].upper()]}
+
+
+builder = StateGraph(RootState)
+builder.add_node("section_entry", section_entry, destinations=("process_chunk",))
+builder.add_node("process_chunk", process_chunk)
+builder.add_conditional_edges(
+    START, lambda s: [Send("section_entry", {"section": x}) for x in s["sections"]]
+)
+builder.add_edge("process_chunk", END)
+graph = builder.compile()
+
+print(graph.invoke({"sections": ["hello world", "foo bar baz"], "chunks": []})["chunks"])
+# ['HELLO', 'WORLD', 'FOO', 'BAR BAZ'] (order may vary)
+```
+
+### 9. Fan-out then fan-in with `Send` and a barrier edge
 
 `Send` from a conditional edge fans out to N parallel tasks. A barrier edge (`add_edge(["source1", "source2"], "target")`) waits for all of them before running the aggregation node.
 

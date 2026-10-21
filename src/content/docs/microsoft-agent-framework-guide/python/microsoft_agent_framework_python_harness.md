@@ -956,6 +956,277 @@ store = MemoryFileStore(
 
 ---
 
+## `FileMemoryProvider` — session-scoped scratch files
+
+`FileMemoryProvider` gives the agent a small file system it can use as working memory: park a large API response, a research note or a draft plan in a file and read it back later, instead of keeping everything in the conversation. It registers seven tools (`file_memory_write`, `file_memory_read`, `file_memory_delete`, `file_memory_ls`, `file_memory_grep`, `file_memory_replace`, `file_memory_replace_lines`) and injects a `memories.md` index (file names plus the description the agent gave each file, capped at 50 entries) into every turn, so the model knows what it has stored.
+
+```python
+FileMemoryProvider(store: AgentFileStore, *, source_id="file_memory",
+                   scope: str | None = None, instructions: str | None = None)
+```
+
+- **Isolation.** With `scope=None` each session gets its own folder, derived from `session_id`. Pass `scope="user-alice"` to share one folder across all of that user's sessions. The scope is an opaque key mapped to a single folder, not a path.
+- **Flat namespace.** File names can't contain path separators (`"plan.md"` is fine, `"notes/plan.md"` is rejected).
+- **Concurrency.** Writes, deletes and index rebuilds are serialized through a per-provider `asyncio.Lock`.
+
+```python
+import asyncio
+from agent_framework import Agent, FileMemoryProvider, FileSystemAgentFileStore
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    # Disk-backed; every session for user "alice" shares the same folder.
+    memory = FileMemoryProvider(
+        store=FileSystemAgentFileStore(root_directory="./agent_memory"),
+        scope="user-alice",
+    )
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions=(
+            "You are a personal assistant. Store anything worth remembering in a "
+            "memory file with a short description; use file_memory_grep before asking the user."
+        ),
+        context_providers=[memory],
+    )
+
+    await agent.run("I prefer dark mode. Remember that.", session=agent.create_session())
+
+    # A different session with the same scope sees the same files.
+    result = await agent.run("Do I have any stored preferences?", session=agent.create_session())
+    print(result.text)
+
+
+asyncio.run(main())
+```
+
+Use `InMemoryAgentFileStore()` instead of `FileSystemAgentFileStore` in tests.
+
+---
+
+## `FileAccessProvider` — a shared workspace
+
+`FileAccessProvider` is the counterpart for *shared, persistent* files: a workspace the agent reads and edits, such as a repo checkout, a folder of reports or a knowledge base other processes also write to. It exposes eight tools: the read-only `file_access_read`, `file_access_read_lines`, `file_access_ls` and `file_access_grep`, and the write tools `file_access_write`, `file_access_delete`, `file_access_replace` and `file_access_replace_lines`.
+
+```python
+FileAccessProvider(
+    store: AgentFileStore,
+    *,
+    source_id: str = "file_access",
+    instructions: str | None = None,
+    disable_write_tools: bool = False,             # advertise only the read-only tools
+    disable_readonly_tool_approval: bool = False,  # read-only tools run without approval
+    disable_write_tool_approval: bool = False,     # write tools run without approval
+    session_scoped: bool = False,                  # confine each session to its own folder
+    scope: str | None = None,                      # or a named folder (user / tenant id)
+)
+```
+
+Every tool defaults to `approval_mode="always_require"`, so either relax that with the two `disable_*_approval` flags or pair the provider with [`ToolApprovalMiddleware`](#toolapprovalmiddleware--standing-approvals) and one of the two static rule callbacks, `FileAccessProvider.read_only_tools_auto_approval_rule` and `FileAccessProvider.all_tools_auto_approval_rule`. They are `(function_call) -> bool` callables, so pass them without calling them. By default the store is shared by every session. `session_scoped=True` gives each session its own folder, and a non-empty `scope` shares one folder across sessions; both behave like `FileMemoryProvider`'s isolation.
+
+```python
+import asyncio
+from agent_framework import Agent, FileAccessProvider, InMemoryAgentFileStore, ToolApprovalMiddleware
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    store = InMemoryAgentFileStore()
+    await store.write("notes.txt", "Q3 budget review: travel spend is 12% over plan.")
+
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You can read and edit the team's notes.",
+        context_providers=[FileAccessProvider(store)],
+        # Reads run straight away; writes still come back as approval requests.
+        middleware=[ToolApprovalMiddleware(
+            auto_approval_rules=[FileAccessProvider.read_only_tools_auto_approval_rule],
+        )],
+    )
+    result = await agent.run("Summarise notes.txt.", session=agent.create_session())
+    print(result.text)
+
+
+asyncio.run(main())
+```
+
+### `AgentFileStore` backends
+
+Both providers sit on the `AgentFileStore` ABC: `write(path, content, *, overwrite=True)`, `read(path) -> str | None`, `delete(path) -> bool`, `list_children(directory="")` and `search(pattern, *, glob=None, base_dir="")`, all async. Paths are always relative: implementations reject `..` traversal, and `overwrite=False` is an atomic exclusive create.
+
+| Store | Notes |
+|---|---|
+| `InMemoryAgentFileStore()` | Dict-backed, case-insensitive keys, one `asyncio.Lock`. For tests. |
+| `FileSystemAgentFileStore(root_directory)` | Disk-backed under `root_directory` (created lazily). Rejects symlinks (`O_NOFOLLOW` on POSIX). |
+
+Subclass `AgentFileStore` to put agent files in blob storage or a database.
+
+---
+
+## `BackgroundAgentsProvider` — delegate to concurrent sub-agents
+
+`BackgroundAgentsProvider` lets a parent agent hand work to named sub-agents that run concurrently, each in its own session, without blocking on them. The parent gets six tools:
+
+| Tool | Purpose |
+|---|---|
+| `background_agents_start_task` | Start a task on a named agent; returns a task id |
+| `background_agents_wait_for_first_completion` | Block until the first of several tasks finishes (capped by `wait_timeout_seconds`) |
+| `background_agents_get_task_results` | Read a finished task's output |
+| `background_agents_get_all_tasks` | List tasks and their status (`RUNNING`, `COMPLETED`, `FAILED`, `LOST`) |
+| `background_agents_continue_task` | Send a follow-up to a finished task's session |
+| `background_agents_clear_completed_task` | Free a finished task's session |
+
+```python
+BackgroundAgentsProvider(agents: Sequence[SupportsAgentRun], *, source_id="background_agents",
+                         instructions: str | None = None,   # may contain {background_agents}
+                         wait_timeout_seconds: int = 300)
+```
+
+Each agent needs a unique, non-empty `name`, and its `description` is what the parent sees when choosing. Task state is serialized into the session, but the running `asyncio.Task` objects live in the provider. Call `await provider.release_session(session, cancel_running=True, timeout=30.0)` when a parent session ends so they don't leak. A task whose in-process handle was lost (for example after a restart) is reported as `LOST`.
+
+```python
+import asyncio
+from agent_framework import Agent, BackgroundAgentsProvider, InMemoryHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    client = OpenAIChatClient()
+    python_expert = Agent(client=client, name="python_expert",
+                          description="Answers questions about Python.",
+                          instructions="You are a Python expert. Answer concisely.")
+    rust_expert = Agent(client=client, name="rust_expert",
+                        description="Answers questions about Rust.",
+                        instructions="You are a Rust expert. Answer concisely.")
+
+    background = BackgroundAgentsProvider(agents=[python_expert, rust_expert])
+    coordinator = Agent(
+        client=client,
+        instructions=("Delegate each part of a multi-part question to the right background "
+                      "agent, wait for the results, then combine them."),
+        context_providers=[InMemoryHistoryProvider(), background],
+    )
+
+    session = coordinator.create_session()
+    try:
+        result = await coordinator.run(
+            "Compare how Python and Rust manage memory.", session=session
+        )
+        print(result.text)
+    finally:
+        await background.release_session(session, cancel_running=True, timeout=30.0)
+
+
+asyncio.run(main())
+```
+
+> **Security.** Sub-agents receive text from the parent, which may include untrusted content, and their output flows back into the parent's context. Only register agents you trust with whatever the parent might pass them.
+
+---
+
+## `ToolApprovalMiddleware` — standing approvals
+
+`@tool(approval_mode="always_require")` turns every call into a `function_approval_request` that the caller must answer (see [Tool approval](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval)). `ToolApprovalMiddleware` adds two things on top: **auto-approval rules** that answer some requests in code, and **standing approvals** ("always allow this tool") that are remembered in the session. It needs an `AgentSession` and raises `RuntimeError` without one.
+
+```python
+ToolApprovalMiddleware(*, source_id="tool_approval",
+                       auto_approval_rules: Sequence[ToolApprovalRuleCallback] | None = None)
+```
+
+An auto-approval rule is a callable `(function_call: Content) -> bool | Awaitable[bool]`. To record a standing approval from a pending request, answer it with `create_always_approve_tool_response(request)`, which allows every future call to that tool, or `create_always_approve_tool_with_arguments_response(request)`, which allows only calls with the same arguments:
+
+```python
+import asyncio
+from agent_framework import (
+    Agent, Message, ToolApprovalMiddleware, create_always_approve_tool_response, tool,
+)
+from agent_framework.openai import OpenAIChatClient
+
+READ_ONLY = {"list_reports"}
+
+
+@tool(approval_mode="always_require")
+def list_reports() -> list[str]:
+    """List available reports."""
+    return ["q1.pdf", "q2.pdf"]
+
+
+@tool(approval_mode="always_require")
+def archive_report(name: str) -> str:
+    """Archive a report."""
+    return f"archived {name}"
+
+
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        tools=[list_reports, archive_report],
+        middleware=[ToolApprovalMiddleware(
+            auto_approval_rules=[lambda call: call.name in READ_ONLY],
+        )],
+    )
+    session = agent.create_session()
+
+    result = await agent.run("List the reports, then archive q1.pdf.", session=session)
+    for request in result.user_input_requests:          # archive_report is waiting
+        print("Approving for the rest of the session:", request.function_call.name)
+        answer = create_always_approve_tool_response(request, reason="operator approved")
+        result = await agent.run(Message(role="user", contents=[answer]), session=session)
+    print(result.text)
+
+
+asyncio.run(main())
+```
+
+> **Security.** Rules and standing approvals match by tool **name**, and they live in the session, not on the agent. If you reuse a session with a rebuilt agent or a changed tool set (MCP servers especially), a different tool with the same name inherits the approval. Re-check standing approvals before handing an old session to a new tool set.
+
+---
+
+## `AgentLoopMiddleware` — keep going until the task is done
+
+`AgentLoopMiddleware` re-runs the agent after each response until a `should_continue` predicate says stop, or `max_iterations` is hit. It's the harness's answer to "the model stopped halfway".
+
+```python
+AgentLoopMiddleware(
+    should_continue,                  # async (**loop_kwargs) -> bool | tuple[bool, str | None]
+    *,
+    max_iterations: int | None = 10,
+    next_message=None,                # builds the next user turn; default is a "continue" nudge
+    record_feedback=None,             # appends a line to the progress log after each iteration
+    inject_progress: bool = True,     # feed the progress log back into each iteration
+    fresh_context: bool = False,      # restart each iteration from the original request
+    return_final_only: bool = False,  # return only the last iteration's response
+    additional_instructions: str | None = None,
+)
+```
+
+`should_continue` and `next_message` receive keyword arguments: `iteration`, `last_result`, `messages`, `original_messages`, `session`, `agent`, `progress` and `feedback`. Return `(False, reason)` from `should_continue` to stop with a rationale. With `fresh_context=True` the session is restored to its pre-loop snapshot between iterations, so only the progress log carries over.
+
+```python
+from agent_framework import Agent, AgentLoopMiddleware, AgentResponse
+from agent_framework.openai import OpenAIChatClient
+
+
+async def should_continue(*, iteration: int, last_result: AgentResponse, **_) -> tuple[bool, str | None]:
+    if "FINAL ANSWER" in last_result.text:
+        return False, "answered"
+    return True, f"Iteration {iteration} did not finish; keep going."
+
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Work step by step. End with 'FINAL ANSWER: ...' when done.",
+    middleware=[AgentLoopMiddleware(should_continue, max_iterations=5, return_final_only=True)],
+)
+```
+
+Two other ways to build the stop condition:
+
+- **LLM judge.** `AgentLoopMiddleware.with_judge(judge_client, criteria=[...], max_iterations=5)` asks a second model for a structured `JudgeVerdict(answered: bool, reasoning: str)` after every iteration, and feeds the reasoning back as the next prompt. The judge sees the request and every answer, so point it at a trusted endpoint.
+- **Ready-made predicates.** `todos_remaining(looping_modes=None)` keeps looping while the agent's `TodoProvider` has open items, and `background_tasks_running()` keeps looping while `BackgroundAgentsProvider` tasks are still running. Pair them with `next_message=todos_remaining_message` / `background_tasks_running_message`. `create_harness_agent(...)` wires all of the harness providers plus this loop in one call (see the [class reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#create_harness_agent)).
+
+---
+
 ## Quick-reference table
 
 | Class / helper | Import | Notes |

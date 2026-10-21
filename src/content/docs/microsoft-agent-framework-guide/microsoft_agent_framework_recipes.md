@@ -117,6 +117,7 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using OpenAI.Chat;
 
 public class WeatherAgentRecipe
 {
@@ -168,11 +169,11 @@ public class WeatherAgentRecipe
 
         // Query 1
         var result1 = await agent.RunAsync("What's the weather in London?");
-        Console.WriteLine($"Q: What's the weather in London?\n{result1}\n");
+        Console.WriteLine($"Q: What's the weather in London?\n{result1.Text}\n");
 
         // Query 2 - agent will use tool
         var result2 = await agent.RunAsync("Compare weather in Paris and Amsterdam");
-        Console.WriteLine($"Q: Compare weather in Paris and Amsterdam\n{result2}");
+        Console.WriteLine($"Q: Compare weather in Paris and Amsterdam\n{result2.Text}");
     }
 }
 ```
@@ -691,176 +692,167 @@ agent = Agent(
 
 ### Recipe 8: Azure Functions Integration - C#
 
-**Scenario:** Deploy agent as Azure Function
+**Scenario:** Expose an agent through an HTTP-triggered Azure Function (isolated worker model)
+
+```bash
+dotnet add package Microsoft.Azure.Functions.Worker
+dotnet add package Microsoft.Azure.Functions.Worker.Extensions.Http.AspNetCore
+dotnet add package Microsoft.Agents.AI.OpenAI --version %%version=Microsoft.Agents.AI%%
+dotnet add package Azure.AI.OpenAI --prerelease
+dotnet add package Azure.Identity
+```
 
 ```csharp
+using System.ComponentModel;
+using System.Text.Json;
 using Azure.AI.OpenAI;
 using Azure.Identity;
+using Microsoft.Agents.AI;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
-using Microsoft.Agents.AI;
-using System.ComponentModel;
+using OpenAI.Chat;
 
-public class AgentFunction
+public record AgentQuery(string Query);
+
+public class AgentFunction(ILogger<AgentFunction> logger)
 {
-    private readonly ILogger<AgentFunction> _logger;
+    // Built once per worker process and reused across invocations.
+    private static readonly Lazy<AIAgent> Agent = new(CreateAgent);
 
-    public AgentFunction(ILogger<AgentFunction> logger)
-    {
-        _logger = logger;
-    }
-
-    /// <summary>
-    /// HTTP-triggered function exposing agent
-    /// </summary>
     [Function("QueryAgent")]
     public async Task<IActionResult> RunAgent(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "agent/query")]
-        HttpRequest req)
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "agent/query")] HttpRequest req,
+        CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Agent query received");
+        AgentQuery? body = await JsonSerializer.DeserializeAsync<AgentQuery>(
+            req.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web), cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(body?.Query))
+        {
+            return new BadRequestObjectResult("Query is required");
+        }
 
         try
         {
-            // Parse request
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            string query = data?.query;
-
-            if (string.IsNullOrEmpty(query))
-            {
-                return new BadRequestObjectResult("Query is required");
-            }
-
-            // Create agent
-            var agent = CreateAgent();
-
-            // Execute
-            var result = await agent.RunAsync(query);
-
-            // Return response
-            return new OkObjectResult(new
-            {
-                success = true,
-                response = result,
-                timestamp = DateTime.UtcNow
-            });
+            AgentResponse result = await Agent.Value.RunAsync(body.Query, cancellationToken: cancellationToken);
+            return new OkObjectResult(new { response = result.Text, timestamp = DateTime.UtcNow });
         }
         catch (Exception ex)
         {
-            _logger.LogError($"Error: {ex.Message}");
-            
-            return new ObjectResult(new
-            {
-                success = false,
-                error = ex.Message
-            })
-            {
-                StatusCode = 500
-            };
+            logger.LogError(ex, "Agent call failed");
+            return new ObjectResult(new { error = "The agent could not complete the request." }) { StatusCode = 500 };
         }
     }
 
     [Description("Get current weather for a location")]
-    private static string GetWeather(
-        [Description("City name")] string location)
+    private static string GetWeather([Description("City name")] string location) =>
+        $"Weather in {location}: 20°C, sunny";
+
+    private static AIAgent CreateAgent()
     {
-        return $"Weather in {location}: 20°C, Sunny";
-    }
+        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!;
+        var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME") ?? "gpt-4o-mini";
 
-    private AIAgent CreateAgent()
-    {
-        var endpoint = Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT");
-        var deploymentName = Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT_NAME");
-
-        var client = new AzureOpenAIClient(
-            new Uri(endpoint),
-            new DefaultAzureCredential()
-        );
-
-        var chatClient = client.GetChatClient(deploymentName);
-        
-        return chatClient.AsAIAgent(
-            instructions: "You are a helpful assistant",
-            tools: [AIFunctionFactory.Create(GetWeather)]
-        );
+        return new AzureOpenAIClient(new Uri(endpoint), new DefaultAzureCredential())
+            .GetChatClient(deploymentName)
+            .AsAIAgent(
+                instructions: "You are a helpful assistant",
+                tools: [AIFunctionFactory.Create(GetWeather)]);
     }
 }
+
+// Program.cs:
+//   var builder = FunctionsApplication.CreateBuilder(args);
+//   builder.ConfigureFunctionsWebApplication();
+//   builder.Build().Run();
 ```
+
+Don't return exception messages to callers; log them. For conversations across requests, persist the agent session (`SerializeSessionAsync`) keyed by the caller, or use Durable Functions, where the framework's durable agents keep state for you.
 
 ---
 
 ## Troubleshooting Patterns
 
-### Pattern 1: Debugging Agent Responses
+### Pattern 1: Debugging agent runs with middleware
+
+Subclassing `Agent` to add logging couples your debugging to one class. Agent middleware sees every run of any agent it is attached to, and can be added per call.
 
 ```python
-"""
-Debug Pattern: Inspect agent internals
-"""
+import logging
 
-class DebuggableAgent(Agent):
-    """Agent with debugging capabilities"""
-    
-    async def run_with_debug(self, query: str, debug: bool = True):
-        """Run with detailed debugging"""
-        
-        if debug:
-            print(f"[DEBUG] Query: {query}")
-        
-        # Run agent
-        response = await self.run(query)
-        
-        if debug:
-            print(f"[DEBUG] Response length: {len(response.text)}")
-            print(f"[DEBUG] Response preview: {response.text[:200]}...")
-            if hasattr(response, 'metadata'):
-                print(f"[DEBUG] Metadata: {response.metadata}")
-        
-        return response
+from agent_framework import AgentContext, AgentResponse, agent_middleware
+
+logger = logging.getLogger("agent.debug")
+
+
+@agent_middleware
+async def debug_run(context: AgentContext, call_next) -> None:
+    logger.debug("[%s] input: %s", context.agent.name, [m.text for m in context.messages])
+    await call_next()
+    if isinstance(context.result, AgentResponse):
+        logger.debug(
+            "[%s] output (%d chars, usage=%s): %s",
+            context.agent.name,
+            len(context.result.text),
+            context.result.usage_details,
+            context.result.text[:200],
+        )
+
+
+# Only for this call:   await agent.run("Hello", middleware=[debug_run])
+# Or always:            Agent(client=..., instructions=..., middleware=[debug_run])
 ```
 
-### Pattern 2: Monitoring Tool Execution
+### Pattern 2: Monitoring tool execution
+
+Function middleware runs around every tool call, so it can time calls and record failures without touching the tools.
 
 ```python
-"""
-Monitoring Pattern: Track tool calls
-"""
+import time
+from collections import Counter
 
-class MonitoredAgent(Agent):
-    """Agent that monitors tool execution"""
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.tool_calls = []
-        self.tool_errors = []
-    
-    async def track_tool_execution(self, tool_name: str, args: dict):
-        """Track tool calls"""
-        execution = {
-            "tool": tool_name,
-            "args": args,
-            "timestamp": datetime.utcnow().isoformat(),
-            "status": "pending"
-        }
-        
-        self.tool_calls.append(execution)
-        return len(self.tool_calls) - 1  # Return index
-    
-    def get_tool_statistics(self):
-        """Get tool execution statistics"""
+from agent_framework import FunctionInvocationContext, FunctionMiddleware
+
+
+class ToolMonitor(FunctionMiddleware):
+    def __init__(self) -> None:
+        self.calls: Counter[str] = Counter()
+        self.errors: Counter[str] = Counter()
+        self.total_ms: Counter[str] = Counter()
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        name = context.function.name
+        self.calls[name] += 1
+        start = time.perf_counter()
+        try:
+            await call_next()
+        except Exception:
+            self.errors[name] += 1
+            raise
+        finally:
+            self.total_ms[name] += round((time.perf_counter() - start) * 1000)
+
+    def statistics(self) -> dict:
         return {
-            "total_calls": len(self.tool_calls),
-            "total_errors": len(self.tool_errors),
-            "tools_used": list(set(t["tool"] for t in self.tool_calls))
+            "total_calls": sum(self.calls.values()),
+            "total_errors": sum(self.errors.values()),
+            "per_tool": {n: {"calls": c, "errors": self.errors[n], "ms": self.total_ms[n]} for n, c in self.calls.items()},
         }
+
+
+# monitor = ToolMonitor()
+# agent = Agent(client=..., tools=[get_weather, check_hotels], middleware=[monitor])
+# ...; print(monitor.statistics())
 ```
+
+For production monitoring, the built-in OpenTelemetry spans (`execute_tool`) give you the same data in your tracing backend; see the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#opentelemetry-instrumentation).
 
 ---
 
 **These recipes provide production-ready patterns for common Agent Framework scenarios. Adapt and extend them for your specific use cases.**
 
-For comprehensive conceptual information, see `microsoft_agent_framework_comprehensive_guide.md`.
+For the concepts behind these recipes, see the [comprehensive guide](/microsoft-agent-framework-guide/microsoft_agent_framework_comprehensive_guide/).
 

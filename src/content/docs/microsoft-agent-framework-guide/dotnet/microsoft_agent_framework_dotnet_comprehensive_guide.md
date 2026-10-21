@@ -175,7 +175,7 @@ public class ConversationalAgent(IChatClient chatClient)
 }
 ```
 
-The convenience extension `AsAIAgent(...)` exists on the OpenAI SDK's `ChatClient` and `ResponsesClient` (package `Microsoft.Agents.AI.OpenAI`) and on Foundry's `AIProjectClient`; for a general `IChatClient`, construct `ChatClientAgent` directly. (It was called `CreateAIAgent` in early previews, and `AgentThread` / `GetNewThread()` became `AgentSession` / `CreateSessionAsync()` before GA.)
+The convenience extension `AsAIAgent(...)` is equivalent to `new ChatClientAgent(...)`. It exists on any `IChatClient` (in `Microsoft.Agents.AI`), on the OpenAI SDK's `ChatClient` and `ResponsesClient` (package `Microsoft.Agents.AI.OpenAI`), and on Foundry's `AIProjectClient`. (It was called `CreateAIAgent` in early previews, and `AgentThread` / `GetNewThread()` became `AgentSession` / `CreateSessionAsync()` before GA.)
 
 ### Agent lifecycle
 
