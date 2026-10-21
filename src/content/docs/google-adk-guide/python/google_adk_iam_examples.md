@@ -585,7 +585,7 @@ gcloud secrets add-iam-policy-binding "my-secret" \
 
 ## 9 · Gotchas
 
-- `AuthenticatedFunctionTool` is `@experimental(FeatureName.PLUGGABLE_AUTH)` — suppress the warning with `GOOGLE_ADK_IGNORE_WARNINGS=pluggable_auth`.
+- `AuthenticatedFunctionTool` is `@experimental(FeatureName.PLUGGABLE_AUTH)` — suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
 - `credential_key` in `AuthConfig` allows two tools to share a cached token. Without it, each tool triggers its own auth flow even when they use the same provider.
 - `AuthenticatedFunctionTool` marks `"credential"` as an `_ignore_params` name — it does **not** appear in the model's function schema. Always name the parameter exactly `credential` in your function signature.
 - On Cloud Run with min-instances=0, the SA key rotation is picked up on cold start. Warm instances keep the old secret until their memory is cleared.

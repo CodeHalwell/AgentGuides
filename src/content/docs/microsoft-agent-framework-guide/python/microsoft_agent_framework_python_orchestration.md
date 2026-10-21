@@ -557,6 +557,7 @@ from agent_framework import (
     WorkflowContext,
     handler,
 )
+from agent_framework.openai import OpenAIChatClient
 
 
 @dataclass
@@ -579,8 +580,8 @@ def route_by_priority(task: AnalysisTask, candidate_ids: list[str]) -> list[str]
     return [cid for cid in candidate_ids if "fast" in cid]
 
 
-fast_agent = Agent(id="fast_agent", model="gpt-4o-mini", instructions="Answer concisely.")
-thorough_agent = Agent(id="thorough_agent", model="gpt-4o", instructions="Answer thoroughly.")
+fast_agent = Agent(OpenAIChatClient(model="gpt-4o-mini"), "Answer concisely.", id="fast_agent")
+thorough_agent = Agent(OpenAIChatClient(model="gpt-4o"), "Answer thoroughly.", id="thorough_agent")
 
 dispatcher = Dispatcher(id="dispatcher")
 fast_worker = AgentExecutor(id="fast_worker", agent=fast_agent)

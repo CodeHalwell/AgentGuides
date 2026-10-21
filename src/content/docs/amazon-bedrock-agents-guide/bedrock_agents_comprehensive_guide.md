@@ -1,14 +1,16 @@
 ---
 title: "Amazon Bedrock Agents: Comprehensive Technical Guide"
-description: "Framework Name: bedrockagents Strands SDK Version: 1.35.0 (April 2026) Last Updated: April 2026"
+description: "End-to-end reference for Amazon Bedrock Agents (Agents Classic): IAM, action groups, knowledge bases, guardrails, flows, models, regions and infrastructure as code, with boto3 examples."
 framework: amazon-bedrock-agents
 ---
 
 # Amazon Bedrock Agents: Comprehensive Technical Guide
 
-**Framework Name:** bedrock_agents
-**Strands SDK Version:** 1.35.0 (April 2026)
-**Last Updated:** April 2026
+> **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%). Service clients and operation names in the examples were checked against that release.
+
+> **Maintenance mode.** Amazon Bedrock Agents — now called *Agents Classic* — stopped accepting new customers on 30 July 2026. Existing customers can keep using it, and this guide remains accurate for them. For new work AWS recommends [Amazon Bedrock AgentCore](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/); see AWS's [migration guidance](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html).
+
+**Which boto3 client?** Agent, action-group, knowledge-base and flow *management* uses `bedrock-agent`; *invoking* agents and querying knowledge bases uses `bedrock-agent-runtime`; guardrail management and model listing use `bedrock`; direct model calls and `ApplyGuardrail` use `bedrock-runtime`.
 
 A definitive, end-to-end technical reference covering Amazon Bedrock Agents from foundational concepts through enterprise-scale production deployment. This guide provides exhaustive coverage of architecture patterns, implementation strategies, AWS integration techniques, cost optimisation, security best practices, and advanced agentic patterns.
 
@@ -37,16 +39,19 @@ A definitive, end-to-end technical reference covering Amazon Bedrock Agents from
 
 ### Amazon Bedrock AgentCore
 
-Amazon Bedrock AgentCore is a new platform that simplifies the building and deployment of AI agents. It offers a suite of tools and services for securely and scalably operating AI agents at an enterprise level.
+Amazon Bedrock AgentCore (generally available since October 2025) is AWS's platform for deploying and operating agents built with any framework and model. It is the recommended successor to Bedrock Agents for new work.
 
-**Key Features of AgentCore:**
+**Key services of AgentCore:**
 
-*   **Secure Serverless Runtime:** Provides a secure, serverless environment for executing agent logic.
-*   **Access to Tools:** Enables agents to access a wide range of tools, including AWS services, third-party APIs, and custom functions.
-*   **Support for Open Source Frameworks:** Supports popular open-source frameworks like LangChain, allowing developers to bring their own agent implementations.
-*   **Identity Services:** Manages agent permissions and access control through integration with AWS IAM.
-*   **Built-in Checkpointing and Recovery:** Provides automatic checkpointing and recovery for long-running tasks, ensuring agent resilience.
-*   **Integrated Observability:** Offers built-in monitoring and logging capabilities through integration with Amazon CloudWatch.
+*   **Runtime:** Session-isolated, serverless hosting for agents and MCP/A2A servers.
+*   **Harness:** A managed agent loop declared as configuration (model, prompt, tools).
+*   **Gateway:** Exposes Lambda functions, APIs and MCP servers to agents as MCP tools.
+*   **Memory:** Short-term conversation events and long-term extracted memories.
+*   **Identity:** Inbound JWT/IAM auth and outbound OAuth/API-key credentials for agents.
+*   **Code Interpreter and Browser:** Managed sandboxes for code execution and web automation.
+*   **Observability:** OpenTelemetry traces and metrics in CloudWatch.
+
+Details and examples are in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/).
 
 ### Best Practices for Building Bedrock Agents
 
@@ -69,7 +74,7 @@ Amazon Bedrock Agents require comprehensive AWS environment setup with granular 
 - Active AWS Account with administrative or appropriate delegated access
 - Region selection supporting Amazon Bedrock (us-east-1, us-west-2, eu-west-1, ap-southeast-1)
 - AWS CLI v2 installed and configured
-- Python 3.8+ or Node.js 14+ for SDK operations
+- Python 3.10+ (required by current boto3) or Node.js 18+ for SDK operations
 
 **AWS Bedrock Console Access:**
 
@@ -77,9 +82,12 @@ Amazon Bedrock Agents require comprehensive AWS environment setup with granular 
 # Verify Bedrock service availability in your region
 aws bedrock list-foundation-models --region us-east-1
 
-# Check account's foundation model access
-aws bedrock get-foundation-model-availability-in-region --model-identifier anthropic.claude-3-5-sonnet-20240620-v1:0
-# Note: As of late 2025, newer models like Claude 3.5 Haiku and Llama 3.1 are available and may offer better performance or cost-effectiveness.
+# List the Anthropic models offered in this Region
+aws bedrock list-foundation-models --by-provider anthropic --region us-east-1 \
+  --query 'modelSummaries[].modelId'
+
+# List cross-Region inference profiles (IDs such as us.anthropic.claude-sonnet-5-5)
+aws bedrock list-inference-profiles --region us-east-1
 ```
 
 #### Comprehensive IAM Role Configuration
@@ -128,15 +136,16 @@ aws bedrock get-foundation-model-availability-in-region --model-identifier anthr
         "bedrock:PrepareAgent",
         "bedrock:GetAgent",
         "bedrock:ListAgents",
+        "bedrock:DeleteAgent",
         "bedrock:InvokeAgent",
         "bedrock:CreateAgentAlias",
         "bedrock:UpdateAgentAlias",
         "bedrock:GetAgentAlias",
-        "bedrock:DeleteAgent",
-        "bedrock:CreateActionGroup",
-        "bedrock:UpdateActionGroup",
-        "bedrock:GetActionGroup",
-        "bedrock:DeleteActionGroup",
+        "bedrock:CreateAgentActionGroup",
+        "bedrock:UpdateAgentActionGroup",
+        "bedrock:GetAgentActionGroup",
+        "bedrock:DeleteAgentActionGroup",
+        "bedrock:AssociateAgentKnowledgeBase",
         "bedrock:CreateKnowledgeBase",
         "bedrock:UpdateKnowledgeBase",
         "bedrock:GetKnowledgeBase",
@@ -145,7 +154,11 @@ aws bedrock get-foundation-model-availability-in-region --model-identifier anthr
         "bedrock:UpdateDataSource",
         "bedrock:GetDataSource",
         "bedrock:DeleteDataSource",
-        "bedrock:Invoke"
+        "bedrock:StartIngestionJob",
+        "bedrock:Retrieve",
+        "bedrock:RetrieveAndGenerate",
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream"
       ],
       "Resource": "arn:aws:bedrock:*:ACCOUNT_ID:*"
     },
@@ -254,7 +267,6 @@ class BedrockIAMManager:
     
     def __init__(self, region_name='us-east-1'):
         self.iam_client = boto3.client('iam', region_name=region_name)
-        self.bedrock_client = boto3.client('bedrock', region_name=region_name)
         self.region = region_name
     
     def create_bedrock_agent_role(self, role_name, s3_bucket_arn=None, kms_key_arn=None):
@@ -319,15 +331,13 @@ class BedrockIAMManager:
             "Version": "2012-10-17",
             "Statement": [
                 {
-                    "Sid": "BedrockCorePermissions",
+                    "Sid": "BedrockModelInvocation",
                     "Effect": "Allow",
                     "Action": [
-                        "bedrock:CreateAgent",
-                        "bedrock:UpdateAgent",
-                        "bedrock:GetAgent",
-                        "bedrock:InvokeAgent",
-                        "bedrock:ListFoundationModels",
-                        "bedrock:GetFoundationModel"
+                        "bedrock:InvokeModel",
+                        "bedrock:InvokeModelWithResponseStream",
+                        "bedrock:GetFoundationModel",
+                        "bedrock:GetInferenceProfile"
                     ],
                     "Resource": bedrock_resource
                 },
@@ -430,9 +440,9 @@ Amazon Bedrock Agents orchestrate sophisticated interactions between foundation 
 
 | Component | Unit | Approximate Cost | Notes |
 |-----------|------|------------------|-------|
-| Foundation Model Invocation | Per 1K input/output tokens | $0.003-$0.15 | Varies by model (Claude, Llama, Titan) |
+| Foundation Model Invocation | Per million input/output tokens | Varies widely by model | The main cost driver; see [Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) |
 | Action Group Invocation | Per invocation | No additional charge | Charged via underlying service (Lambda, API) |
-| Knowledge Base Query | Per query | $0.10 per retrieve | OpenSearch Serverless pricing applies |
+| Knowledge Base Query | Per query | Embedding + vector store + model tokens | Vector store (e.g. OpenSearch Serverless) is billed separately |
 | Storage (S3) | Per GB/month | $0.023 | Standard S3 rates |
 | Agent Version/Alias Management | Per version | Free | No charge for creating versions/aliases |
 
@@ -477,21 +487,26 @@ import time
 class HighAvailabilityBedrockManager:
     """Implements HA patterns for Bedrock Agents"""
     
-    def __init__(self, primary_region, fallback_region):
-        self.primary_client = boto3.client('bedrock', region_name=primary_region)
-        self.fallback_client = boto3.client('bedrock', region_name=fallback_region)
+    def __init__(self, primary_region, fallback_region, agents):
+        """agents maps region -> (agent_id, agent_alias_id); agent IDs differ per Region."""
+        self.primary_client = boto3.client('bedrock-agent-runtime', region_name=primary_region)
+        self.fallback_client = boto3.client('bedrock-agent-runtime', region_name=fallback_region)
         self.primary_region = primary_region
         self.fallback_region = fallback_region
+        self.agents = agents
     
-    def invoke_with_failover(self, agent_id, input_text, max_retries=3):
+    def invoke_with_failover(self, session_id, input_text, max_retries=3):
         """Invoke agent with automatic failover to secondary region"""
         
         retries = 0
         while retries < max_retries:
             try:
                 # Try primary region
+                agent_id, alias_id = self.agents[self.primary_region]
                 response = self.primary_client.invoke_agent(
                     agentId=agent_id,
+                    agentAliasId=alias_id,
+                    sessionId=session_id,
                     inputText=input_text,
                     enableTrace=True
                 )
@@ -499,12 +514,15 @@ class HighAvailabilityBedrockManager:
                 return response
             
             except ClientError as e:
-                if e.response['Error']['Code'] in ['ServiceUnavailable', 'ThrottlingException']:
+                if e.response['Error']['Code'] in ['ServiceUnavailableException', 'ThrottlingException']:
                     print(f"⚠ Primary region unavailable, attempting fallback...")
                     try:
-                        # Try fallback region
+                        # Try fallback region (a separate agent deployed there)
+                        agent_id, alias_id = self.agents[self.fallback_region]
                         response = self.fallback_client.invoke_agent(
                             agentId=agent_id,
+                            agentAliasId=alias_id,
+                            sessionId=session_id,
                             inputText=input_text,
                             enableTrace=True
                         )
@@ -519,8 +537,16 @@ class HighAvailabilityBedrockManager:
                     raise
 
 # Usage
-ha_manager = HighAvailabilityBedrockManager('us-east-1', 'us-west-2')
-response = ha_manager.invoke_with_failover('agent-123', 'What is the status of my account?')
+ha_manager = HighAvailabilityBedrockManager(
+    'us-east-1', 'us-west-2',
+    agents={'us-east-1': ('AGENT_ID_EAST', 'ALIAS_ID_EAST'), 'us-west-2': ('AGENT_ID_WEST', 'ALIAS_ID_WEST')},
+)
+response = ha_manager.invoke_with_failover('session-1', 'What is the status of my account?')
+
+# invoke_agent returns an event stream; join the chunks for the final text
+answer = ''.join(
+    event['chunk']['bytes'].decode() for event in response['completion'] if 'chunk' in event
+)
 ```
 
 ### Core Components: Action Groups, Knowledge Bases, Guardrails, Prompt Flows
@@ -540,7 +566,7 @@ class ActionGroupManager:
     """Comprehensive management of Bedrock Agent Action Groups"""
     
     def __init__(self, agent_id: str, region_name='us-east-1'):
-        self.bedrock_client = boto3.client('bedrock', region_name=region_name)
+        self.bedrock_client = boto3.client('bedrock-agent', region_name=region_name)
         self.agent_id = agent_id
         self.region_name = region_name
     
@@ -562,10 +588,11 @@ class ActionGroupManager:
         """
         
         try:
-            response = self.bedrock_client.create_action_group(
+            response = self.bedrock_client.create_agent_action_group(
                 agentId=self.agent_id,
+                agentVersion='DRAFT',
                 actionGroupName=action_group_name,
-                actionGroupDescription=description,
+                description=description,
                 actionGroupExecutor={
                     'lambda': lambda_function_arn
                 },
@@ -579,51 +606,42 @@ class ActionGroupManager:
             print(f"✗ Error creating action group: {e}")
             raise
     
-    def create_api_action_group(self, action_group_name: str,
-                                api_endpoint: str,
-                                description: str,
-                                api_schema: Dict,
-                                auth_type='API_KEY',
-                                auth_secret_arn: Optional[str] = None) -> Dict:
+    def create_return_control_action_group(self, action_group_name: str,
+                                           description: str,
+                                           api_schema: Dict) -> Dict:
         """
-        Create action group that invokes external APIs
+        Create an action group whose calls are returned to your application
+        (return of control) instead of being executed by Lambda.
+        
+        Bedrock Agents has no built-in HTTP executor: to call an external API,
+        either put the call in a Lambda function, or use RETURN_CONTROL and make
+        the call from your application, sending the result back with
+        sessionState['returnControlInvocationResults'] on the next invoke_agent.
         
         Args:
             action_group_name: Name of the action group
-            api_endpoint: Base URL of the API
             description: Description
             api_schema: OpenAPI specification
-            auth_type: Authentication type (API_KEY, OAuth2, Basic)
-            auth_secret_arn: ARN of Secrets Manager secret with credentials
         
         Returns:
             Created action group response
         """
         
-        executor_config = {
-            'customHttpExecutor': {
-                'endpoint': api_endpoint
-            }
-        }
-        
-        if auth_type == 'API_KEY' and auth_secret_arn:
-            executor_config['customHttpExecutor']['authType'] = 'API_KEY'
-            executor_config['customHttpExecutor']['authSecretArn'] = auth_secret_arn
-        
         try:
-            response = self.bedrock_client.create_action_group(
+            response = self.bedrock_client.create_agent_action_group(
                 agentId=self.agent_id,
+                agentVersion='DRAFT',
                 actionGroupName=action_group_name,
-                actionGroupDescription=description,
-                actionGroupExecutor=executor_config,
+                description=description,
+                actionGroupExecutor={'customControl': 'RETURN_CONTROL'},
                 apiSchema={
                     'payload': json.dumps(api_schema)
                 }
             )
-            print(f"✓ Created API action group: {action_group_name}")
+            print(f"✓ Created return-of-control action group: {action_group_name}")
             return response
         except Exception as e:
-            print(f"✗ Error creating API action group: {e}")
+            print(f"✗ Error creating action group: {e}")
             raise
 ```
 
@@ -775,7 +793,7 @@ class KnowledgeBaseManager:
     """Comprehensive management of Bedrock Knowledge Bases"""
     
     def __init__(self, region_name='us-east-1'):
-        self.bedrock_client = boto3.client('bedrock', region_name=region_name)
+        self.bedrock_client = boto3.client('bedrock-agent', region_name=region_name)
         self.opensearch_client = boto3.client('opensearchserverless', region_name=region_name)
         self.s3_client = boto3.client('s3', region_name=region_name)
     
@@ -784,7 +802,7 @@ class KnowledgeBaseManager:
                              s3_bucket_arn: str,
                              opensearch_collection_arn: str,
                              role_arn: str,
-                             embedding_model_id: str = 'amazon.titan-embed-text-v1') -> Dict:
+                             embedding_model_arn: str = 'arn:aws:bedrock:us-east-1::foundation-model/amazon.titan-embed-text-v2:0') -> Dict:
         """
         Create a comprehensive knowledge base with OpenSearch backend
         
@@ -794,7 +812,7 @@ class KnowledgeBaseManager:
             s3_bucket_arn: ARN of S3 bucket for source documents
             opensearch_collection_arn: ARN of OpenSearch Serverless collection
             role_arn: IAM role ARN with necessary permissions
-            embedding_model_id: Model ID for text embeddings
+            embedding_model_arn: ARN of the embedding model
         
         Returns:
             Created knowledge base response
@@ -808,12 +826,7 @@ class KnowledgeBaseManager:
                 knowledgeBaseConfiguration={
                     'type': 'VECTOR',
                     'vectorKnowledgeBaseConfiguration': {
-                        'embeddingModel': {
-                            'provider': 'BEDROCK',
-                            'bedrockEmbeddingModelConfiguration': {
-                                'modelId': embedding_model_id
-                            }
-                        }
+                        'embeddingModelArn': embedding_model_arn
                     }
                 },
                 storageConfiguration={
@@ -837,7 +850,8 @@ class KnowledgeBaseManager:
     
     def create_data_source(self, knowledge_base_id: str,
                           data_source_name: str,
-                          s3_location_arn: str,
+                          s3_bucket_arn: str,
+                          s3_prefix: str = '',
                           chunking_strategy: str = 'FIXED_SIZE',
                           chunk_size: int = 1000,
                           chunk_overlap: int = 100) -> Dict:
@@ -847,7 +861,8 @@ class KnowledgeBaseManager:
         Args:
             knowledge_base_id: ID of the knowledge base
             data_source_name: Name of the data source
-            s3_location_arn: S3 location containing documents (s3://bucket/prefix)
+            s3_bucket_arn: ARN of the bucket holding the documents (arn:aws:s3:::bucket)
+            s3_prefix: Optional key prefix to restrict ingestion to
             chunking_strategy: Strategy for chunking documents
             chunk_size: Size of each chunk in tokens
             chunk_overlap: Overlap between chunks
@@ -864,8 +879,8 @@ class KnowledgeBaseManager:
                 dataSourceConfiguration={
                     'type': 'S3',
                     's3Configuration': {
-                        'bucketArn': s3_location_arn.split('s3://')[1].split('/')[0],
-                        'inclusionPrefixes': [s3_location_arn.split('s3://')[1].split('/')[1:]]
+                        'bucketArn': s3_bucket_arn,
+                        **({'inclusionPrefixes': [s3_prefix]} if s3_prefix else {})
                     }
                 },
                 vectorIngestionConfiguration={
@@ -984,6 +999,8 @@ class GuardrailsManager:
             response = self.bedrock_client.create_guardrail(
                 name=guardrail_name,
                 description=description,
+                blockedInputMessaging="Sorry, I can't help with that request.",
+                blockedOutputsMessaging="Sorry, I can't provide that response.",
                 topicPolicyConfig={
                     'topicsConfig': [
                         {
@@ -1090,6 +1107,9 @@ class GuardrailsManager:
         except Exception as e:
             print(f"✗ Error creating guardrail: {e}")
             raise
+```
+
+Guardrails are managed with the `bedrock` client (as above). Attach one to an agent with `guardrailConfiguration={'guardrailIdentifier': ..., 'guardrailVersion': ...}` on `bedrock-agent` `create_agent` / `update_agent`.
 
 #### Applying Guardrails Programmatically
 
@@ -1114,24 +1134,23 @@ response = bedrock_runtime.apply_guardrail(
 )
 
 # Process the response to check for any violations
-if response['action'] == 'DENY':
-    print("Input violates guardrails.")
+if response['action'] == 'GUARDRAIL_INTERVENED':
+    print("Input violates guardrails:", response['outputs'])
 else:
     # Proceed with invoking the agent
     pass
 ```
-```
 
 #### Prompt Flows: Orchestrated Conversation Flows
 
-**Prompt Flows** enable visual, no-code orchestration of complex agent interactions with conditional logic and state management.
+**Amazon Bedrock Flows** (formerly Prompt Flows) orchestrate prompts, agents, knowledge bases and Lambda functions as a graph of nodes. Flows are created with the `bedrock-agent` client (`create_flow`, `prepare_flow`, `create_flow_version`, `create_flow_alias`) and run with `bedrock-agent-runtime` `invoke_flow`. The class below sketches the *shape* of a routing flow as plain data; the real `create_flow` definition uses typed node configurations (`Input`, `Prompt`, `Condition`, `Agent`, `Output`) — see the [Flows API reference](https://docs.aws.amazon.com/bedrock/latest/userguide/flows-create.html).
 
 ```python
 class PromptFlowManager:
     """Management of Bedrock Prompt Flows"""
     
     def __init__(self, region_name='us-east-1'):
-        self.bedrock_client = boto3.client('bedrock', region_name=region_name)
+        self.bedrock_client = boto3.client('bedrock-agent', region_name=region_name)
     
     def create_conditional_prompt_flow(self, flow_name: str,
                                       agent_id: str) -> Dict:
@@ -1159,7 +1178,7 @@ class PromptFlowManager:
                     "id": "classify_intent",
                     "type": "INVOKE_MODEL",
                     "properties": {
-                        "modelId": "anthropic.claude-3-sonnet",
+                        "modelId": "us.anthropic.claude-haiku-5-5",
                         "prompt": "Classify the user intent as one of: SUPPORT, SALES, BILLING, TECHNICAL. Respond with ONLY the classification."
                     },
                     "connections": [
@@ -1246,7 +1265,7 @@ class PromptFlowManager:
             ]
         }
         
-        # Store flow definition (implementation depends on Bedrock Prompt Flows API)
+        # Translate this outline into a typed definition for self.bedrock_client.create_flow(...)
         print(f"✓ Defined prompt flow: {flow_name}")
         return flow_definition
 ```
@@ -1257,158 +1276,121 @@ Amazon Bedrock provides access to leading foundation models, each optimised for 
 
 #### Model Comparison Matrix
 
-| Model | Provider | Input Tokens | Output Tokens | Use Cases | Strengths | Cost |
-|-------|----------|--------------|---------------|-----------|-----------|------|
-| Claude 3 Opus | Anthropic | 200K | 4K | Complex reasoning, analysis | Superior reasoning, instruction following | Higher |
-| Claude 3 Sonnet | Anthropic | 200K | 4K | Balanced tasks, general purpose | Fast, cost-effective, high quality | Medium |
-| Claude 3 Haiku | Anthropic | 200K | 4K | Quick responses, high volume | Fastest, most cost-effective | Lowest |
-| Llama 2 70B | Meta | 4K | 4K | General purpose, code | Open source, flexible | Low |
-| Llama 2 13B | Meta | 4K | 4K | Lightweight applications | Efficient for edge deployment | Very Low |
-| Titan Text Large | Amazon | 8K | 8K | Document summarisation | Native AWS integration | Low |
-| Titan Multimodal | Amazon | N/A | N/A | Image + text processing | Multimodal capabilities | Medium |
-| Mistral Large | Mistral AI | 32K | 8K | Long context tasks | Excellent long-range reasoning | Medium |
+The current Claude models on Bedrock are the Claude 5.5 family. Bedrock model IDs have no date suffix; prefix them with a geography (`us.`, `eu.`, `jp.`, `au.`) or `global.` to use a cross-Region inference profile, which most agent workloads should do.
+
+| Model | Provider | Bedrock model ID | Inference profile example | Best for | Relative cost |
+|-------|----------|------------------|---------------------------|----------|---------------|
+| Claude Opus 5.5 | Anthropic | `anthropic.claude-opus-5-5` | `us.anthropic.claude-opus-5-5` | Hardest reasoning, long-horizon agentic work, complex code | Highest |
+| Claude Sonnet 5.5 | Anthropic | `anthropic.claude-sonnet-5-5` | `us.anthropic.claude-sonnet-5-5` | Default for most agents: tool use, coding, analysis | Medium |
+| Claude Haiku 5.5 | Anthropic | `anthropic.claude-haiku-5-5` | `us.anthropic.claude-haiku-5-5` | Routing, classification, extraction, high volume | Lowest |
+| Amazon Nova family | Amazon | see model cards | — | AWS-native, multimodal, cost-sensitive workloads | Low |
+| Llama family | Meta | see model cards | — | Open-weight preference | Low |
+| Mistral family | Mistral AI | see model cards | — | Open-weight / European provider preference | Low–medium |
+
+Context windows, maximum output, Region availability and prices change between releases; check the [Bedrock model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) and [Bedrock pricing](https://aws.amazon.com/bedrock/pricing/) rather than hard-coding them. Older Claude 3.x and 4.x model IDs remain in many tutorials; prefer the current IDs above for new agents.
 
 #### Model Selection Framework
 
 ```python
 class ModelSelectionFramework:
-    """Framework for optimal model selection based on task requirements"""
-    
+    """Pick a Bedrock model (inference profile) from coarse task requirements."""
+
+    # Relative 1-10 scores; tune them against your own evaluations
     MODEL_CAPABILITIES = {
-        'claude-3-opus': {
-            'reasoning_quality': 10,
-            'speed': 3,
-            'cost': 3,
-            'context_window': 200000,
-            'best_for': ['complex analysis', 'code generation', 'multi-step reasoning']
-        },
-        'claude-3-sonnet': {
-            'reasoning_quality': 9,
-            'speed': 7,
-            'cost': 2,
-            'context_window': 200000,
-            'best_for': ['balanced tasks', 'general conversation', 'document analysis']
-        },
-        'claude-3-haiku': {
-            'reasoning_quality': 7,
-            'speed': 10,
-            'cost': 1,
-            'context_window': 200000,
-            'best_for': ['high-volume tasks', 'quick responses', 'cost-sensitive applications']
-        },
-        'llama-2-70b': {
-            'reasoning_quality': 7,
-            'speed': 5,
-            'cost': 1,
-            'context_window': 4096,
-            'best_for': ['open source preference', 'custom fine-tuning', 'on-premises deployment']
-        },
-        'titan-text-large': {
-            'reasoning_quality': 6,
-            'speed': 8,
-            'cost': 1,
-            'context_window': 8000,
-            'best_for': ['AWS-native applications', 'summarisation', 'entity extraction']
-        }
+        'us.anthropic.claude-opus-5-5': {'reasoning_quality': 10, 'speed': 4, 'cost': 8},
+        'us.anthropic.claude-sonnet-5-5': {'reasoning_quality': 9, 'speed': 7, 'cost': 4},
+        'us.anthropic.claude-haiku-5-5': {'reasoning_quality': 7, 'speed': 10, 'cost': 1},
     }
-    
-    def select_optimal_model(self, 
+
+    def select_optimal_model(self,
                             required_reasoning: int = 5,  # 1-10
                             latency_requirements: str = 'MEDIUM',  # LOW, MEDIUM, HIGH
-                            budget_constraints: str = 'MEDIUM',  # LOW, MEDIUM, HIGH
-                            context_needed: int = 8000) -> str:
-        """
-        Select optimal model based on task requirements
-        
-        Args:
-            required_reasoning: Quality of reasoning needed (1-10)
-            latency_requirements: Speed requirements (LOW, MEDIUM, HIGH)
-            budget_constraints: Budget constraints (LOW, MEDIUM, HIGH)
-            context_needed: Required context window size
-        
-        Returns:
-            Recommended model identifier
-        """
-        
+                            budget_constraints: str = 'MEDIUM') -> str:  # LOW, MEDIUM, HIGH
+        """Return the inference profile ID with the best composite score."""
+
         latency_weights = {'LOW': 1, 'MEDIUM': 5, 'HIGH': 10}
         cost_weights = {'LOW': 10, 'MEDIUM': 5, 'HIGH': 1}
-        
+
         scores = {}
-        
-        for model, capabilities in self.MODEL_CAPABILITIES.items():
-            # Calculate composite score
-            reasoning_score = capabilities['reasoning_quality'] * (required_reasoning / 10)
-            speed_score = capabilities['speed'] * latency_weights[latency_requirements] / 10
-            cost_score = (10 - capabilities['cost']) * cost_weights[budget_constraints] / 10
-            
-            # Context window compatibility
-            context_score = 1 if capabilities['context_window'] >= context_needed else -10
-            
-            total_score = reasoning_score + speed_score + cost_score + context_score
-            scores[model] = total_score
-        
-        recommended_model = max(scores, key=scores.get)
-        print(f"✓ Recommended model: {recommended_model} (Score: {scores[recommended_model]:.2f})")
-        
-        return recommended_model
-    
-    def model_fallback_chain(self, primary_model: str) -> List[str]:
-        """
-        Define fallback model chain for robustness
-        
-        Returns: List of models in fallback order
-        """
-        fallback_chains = {
-            'claude-3-opus': ['claude-3-sonnet', 'claude-3-haiku', 'titan-text-large'],
-            'claude-3-sonnet': ['claude-3-haiku', 'claude-3-opus', 'mistral-large'],
-            'llama-2-70b': ['llama-2-13b', 'titan-text-large', 'claude-3-haiku'],
-            'titan-text-large': ['claude-3-haiku', 'mistral-7b', 'llama-2-13b']
-        }
-        
-        return fallback_chains.get(primary_model, [])
+        for model, caps in self.MODEL_CAPABILITIES.items():
+            if caps['reasoning_quality'] < required_reasoning:
+                continue
+            speed_score = caps['speed'] * latency_weights[latency_requirements] / 10
+            cost_score = (10 - caps['cost']) * cost_weights[budget_constraints] / 10
+            scores[model] = caps['reasoning_quality'] + speed_score + cost_score
+
+        recommended = max(scores, key=scores.get)
+        print(f"✓ Recommended model: {recommended} (score {scores[recommended]:.2f})")
+        return recommended
+
+    def model_fallback_chain(self, primary_model: str) -> list:
+        """Fallback order for throttling or capacity errors."""
+        return {
+            'us.anthropic.claude-opus-5-5': ['us.anthropic.claude-sonnet-5-5'],
+            'us.anthropic.claude-sonnet-5-5': ['global.anthropic.claude-sonnet-5-5', 'us.anthropic.claude-haiku-5-5'],
+            'us.anthropic.claude-haiku-5-5': ['global.anthropic.claude-haiku-5-5'],
+        }.get(primary_model, [])
 ```
 
 ### Code Interpretation
 
-Amazon Bedrock Agents now feature code interpretation, which allows agents to dynamically generate and execute code in a secure environment. This is particularly useful for complex analytical queries, data analysis, data visualization, and mathematical problem-solving.
-
-**Enabling Code Interpretation:**
-
-To enable code interpretation for an agent, you need to set the `enableCodeInterpreter` parameter to `true` when creating or updating the agent.
+Bedrock Agents can generate and run Python in a managed sandbox for analysis, charts and calculations. It is enabled by adding an action group with the built-in `AMAZON.CodeInterpreter` signature (there is no `enableCodeInterpreter` flag on the agent):
 
 ```python
-response = bedrock.create_agent(
+import boto3
+
+agent_client = boto3.client('bedrock-agent')
+
+agent = agent_client.create_agent(
     agentName='CodeInterpretingAgent',
-    foundationModelId='anthropic.claude-3-5-sonnet-20240620-v1:0',
-    instruction='You are a data analyst. You can write and execute Python code to answer questions.',
-    enableCodeInterpreter=True
+    foundationModel='us.anthropic.claude-sonnet-5-5',
+    instruction='You are a data analyst. Write and run Python code to answer questions about data.',
+    agentResourceRoleArn='arn:aws:iam::111122223333:role/BedrockAgentRole',
+)['agent']
+
+agent_client.create_agent_action_group(
+    agentId=agent['agentId'],
+    agentVersion='DRAFT',
+    actionGroupName='CodeInterpreterAction',
+    parentActionGroupSignature='AMAZON.CodeInterpreter',
+    actionGroupState='ENABLED',
 )
+
+agent_client.prepare_agent(agentId=agent['agentId'])
 ```
 
 **Example: Using Code Interpretation for Data Analysis**
 
+Files are passed in `sessionState`, and the answer arrives as an event stream:
+
 ```python
-# Invoke the agent with a data analysis task
-response = bedrock_runtime.invoke_agent(
+runtime = boto3.client('bedrock-agent-runtime')
+
+response = runtime.invoke_agent(
     agentId='YOUR_AGENT_ID',
     agentAliasId='YOUR_AGENT_ALIAS_ID',
-    inputText='Analyze the attached CSV file and provide a summary of the data.',
     sessionId='session-1',
-    inputFiles=[
-        {
-            'name': 'sales_data.csv',
-            'source': {
-                's3': {
-                    'uri': 's3://your-bucket/sales_data.csv'
-                }
+    inputText='Analyse the attached CSV file and summarise the data.',
+    sessionState={
+        'files': [
+            {
+                'name': 'sales_data.csv',
+                'source': {
+                    'sourceType': 'S3',
+                    's3Location': {'uri': 's3://your-bucket/sales_data.csv'},
+                },
+                'useCase': 'CODE_INTERPRETER',
             }
-        }
-    ]
+        ]
+    },
 )
 
-# The agent will generate and execute Python code to read the CSV file,
-# perform the analysis, and generate a summary.
-print(response['outputText'])
+for event in response['completion']:
+    if 'chunk' in event:
+        print(event['chunk']['bytes'].decode(), end='')
+    elif 'files' in event:  # charts or files produced by the generated code
+        for f in event['files']['files']:
+            open(f['name'], 'wb').write(f['bytes'])
 ```
 
 ### AWS CLI and SDK Setup
@@ -1441,11 +1423,8 @@ aws bedrock list-foundation-models --region us-east-1
 #### Python SDK (Boto3) Setup
 
 ```bash
-# Install boto3 latest version
-pip install --upgrade boto3
-
-# Install Bedrock-specific dependencies
-pip install boto3 botocore --upgrade
+# Install the boto3 release this guide was checked against (botocore is pulled in automatically)
+pip install "boto3==%%version=boto3%%"
 
 # Verify installation
 python -c "import boto3; print(boto3.__version__)"
@@ -1467,10 +1446,10 @@ bedrock_config = Config(
     signature_version='v4'
 )
 
-bedrock_client = boto3.client('bedrock', config=bedrock_config)
-
-# Create Bedrock Runtime client (for agent invocation)
-bedrock_runtime = boto3.client('bedrock-runtime', config=bedrock_config)
+bedrock_client = boto3.client('bedrock', config=bedrock_config)                      # models, guardrails
+agent_client = boto3.client('bedrock-agent', config=bedrock_config)                  # build agents, KBs, flows
+agent_runtime = boto3.client('bedrock-agent-runtime', config=bedrock_config)         # invoke agents, query KBs
+bedrock_runtime = boto3.client('bedrock-runtime', config=bedrock_config)             # direct model calls
 
 # Verify connectivity
 try:
@@ -1483,18 +1462,15 @@ except Exception as e:
 #### JavaScript/Node.js SDK Setup
 
 ```bash
-# Install AWS SDK for JavaScript v3
-npm install @aws-sdk/client-bedrock @aws-sdk/client-bedrock-runtime
-
-# Or install full SDK
-npm install aws-sdk
+# AWS SDK for JavaScript v3 (the v2 "aws-sdk" package is end-of-support)
+npm install @aws-sdk/client-bedrock @aws-sdk/client-bedrock-agent-runtime
 ```
 
 **Node.js SDK Usage:**
 
 ```javascript
 const { BedrockClient, ListFoundationModelsCommand } = require("@aws-sdk/client-bedrock");
-const { BedrockRuntimeClient, InvokeAgentCommand } = require("@aws-sdk/client-bedrock-runtime");
+const { BedrockAgentRuntimeClient, InvokeAgentCommand } = require("@aws-sdk/client-bedrock-agent-runtime");
 
 // Create Bedrock client
 const bedrockClient = new BedrockClient({ region: "us-east-1" });
@@ -1514,7 +1490,7 @@ async function listModels() {
 
 // Invoke agent
 async function invokeAgent(agentId, inputText) {
-    const runtimeClient = new BedrockRuntimeClient({ region: "us-east-1" });
+    const runtimeClient = new BedrockAgentRuntimeClient({ region: "us-east-1" });
     
     try {
         const command = new InvokeAgentCommand({
@@ -1525,8 +1501,12 @@ async function invokeAgent(agentId, inputText) {
         });
         
         const response = await runtimeClient.send(command);
+        let text = "";
+        for await (const event of response.completion) {
+            if (event.chunk?.bytes) text += new TextDecoder().decode(event.chunk.bytes);
+        }
         console.log("✓ Agent invocation successful");
-        return response;
+        return text;
     } catch (error) {
         console.error("✗ Error invoking agent:", error);
         throw error;
@@ -1539,15 +1519,9 @@ listModels();
 
 ### Region Availability and Configuration
 
-#### Regional Availability Matrix
+#### Regional Availability
 
-| Region | Bedrock | Agents | Knowledge Bases | Guardrails | Multi-Agent |
-|--------|---------|--------|-----------------|------------|------------|
-| us-east-1 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| us-west-2 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| eu-west-1 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ap-southeast-1 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| ap-northeast-1 | ✓ | Limited | Limited | Limited | Limited |
+At the time of checking, Bedrock Agents (Classic) is available in ap-northeast-1, ap-northeast-2, ap-south-1, ap-southeast-1, ap-southeast-2, ca-central-1, eu-central-1, eu-central-2, eu-west-1, eu-west-2, eu-west-3, sa-east-1, us-east-1, us-east-2, us-gov-west-1 and us-west-2. Model availability varies by Region and is wider through cross-Region inference profiles. Check [Supported Regions for Amazon Bedrock Agents](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-supported.html) and the model cards before choosing a Region.
 
 #### Multi-Region Agent Deployment
 
@@ -1560,7 +1534,7 @@ class MultiRegionAgentDeployment:
     
     def __init__(self, regions=['us-east-1', 'eu-west-1', 'ap-southeast-1']):
         self.regions = regions
-        self.clients = {region: boto3.client('bedrock', region_name=region) for region in regions}
+        self.clients = {region: boto3.client('bedrock-agent', region_name=region) for region in regions}
     
     def deploy_agent_to_all_regions(self, agent_config):
         """Deploy identical agent configuration across all regions"""
@@ -1568,9 +1542,9 @@ class MultiRegionAgentDeployment:
         def deploy_to_region(region):
             try:
                 client = self.clients[region]
-                response = client.create_agent(**agent_config)
-                print(f"✓ Deployed agent to {region}: {response['agentId']}")
-                return {region: response['agentId']}
+                agent_id = client.create_agent(**agent_config)['agent']['agentId']
+                print(f"✓ Deployed agent to {region}: {agent_id}")
+                return {region: agent_id}
             except Exception as e:
                 print(f"✗ Deployment failed in {region}: {e}")
                 return {region: None}
@@ -1592,7 +1566,7 @@ class MultiRegionAgentDeployment:
         for region, agent_id in agent_id_mapping.items():
             if agent_id:
                 endpoints[region] = {
-                    'endpoint': f'https://bedrock-runtime.{region}.amazonaws.com',
+                    'endpoint': f'https://bedrock-agent-runtime.{region}.amazonaws.com',
                     'agent_id': agent_id
                 }
         
@@ -1603,9 +1577,16 @@ class MultiRegionAgentDeployment:
 
 ## Multi-Agent Systems (MAS)
 
-**Note:** As of March 2025, Multi-Agent Systems in Amazon Bedrock are generally available. This includes support for the Agent-to-Agent (A2A) protocol, enabling seamless communication and coordination between agents built using different frameworks.
+**Note:** Multi-agent collaboration in Bedrock Agents (a supervisor agent with collaborator agents, configured with `agentCollaboration` on the supervisor and `associate_agent_collaborator`) became generally available in March 2025. It does not use the A2A protocol; A2A interoperability is provided by AgentCore Runtime (see the [A2A guide](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/)). Supervisor patterns are covered in [Advanced multi-agent patterns](/amazon-bedrock-agents-guide/bedrock_agents_advanced_multi_agent_python/).
 
 ### Creating Basic Bedrock Agents via Console
+
+1. Open the Amazon Bedrock console and choose **Agents** → **Create agent** (existing Agents Classic customers only).
+2. Give the agent a name, choose a service role (or let the console create one), and pick a model — for example the `us.anthropic.claude-sonnet-5-5` inference profile.
+3. Write the agent's instructions.
+4. Add action groups (Lambda or return of control, defined by an OpenAPI or function schema) and associate knowledge bases if needed.
+5. Choose **Save**, then **Prepare**, and test in the console's test pane against the `DRAFT` version.
+6. Create an alias (which snapshots a numbered version) and invoke that alias from your application.
 
 ### Creating Basic Bedrock Agents via CloudFormation and Terraform
 
@@ -1623,8 +1604,8 @@ Parameters:
 
   FoundationModel:
     Type: String
-    Default: anthropic.claude-3-5-sonnet-20240620-v1:0
-    Description: Foundation model to use for the agent
+    Default: us.anthropic.claude-sonnet-5-5
+    Description: Foundation model or inference profile to use for the agent
 
 Resources:
   BedrockAgentRole:
@@ -1638,19 +1619,19 @@ Resources:
             Principal:
               Service: bedrock.amazonaws.com
             Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
-      InlinePolicies:
+      Policies:
         - PolicyName: BedrockAgentPolicy
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/bedrock/*'
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                  - bedrock:GetInferenceProfile
+                Resource:
+                  - !Sub 'arn:aws:bedrock:*::foundation-model/*'
+                  - !Sub 'arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*'
 
   BedrockAgent:
     Type: AWS::Bedrock::Agent
@@ -1658,83 +1639,96 @@ Resources:
       AgentName: !Ref AgentName
       Description: Basic Bedrock Agent for demonstration
       FoundationModel: !Ref FoundationModel
-      AgentInstructions: |
+      AutoPrepare: true
+      Instruction: |
         You are a helpful customer support assistant. Your role is to:
         1. Understand customer inquiries
         2. Provide accurate, helpful information
         3. Escalate complex issues when necessary
         4. Maintain professional and courteous tone
-      AgentRoleArn: !GetAtt BedrockAgentRole.Arn
-      ActionGroupConfigs:
+      AgentResourceRoleArn: !GetAtt BedrockAgentRole.Arn
+      ActionGroups:
         - ActionGroupName: CustomerSupport
-          ActionGroupDescription: Basic customer support actions
-          ApiSchemaS3Location:
-            S3BucketName: !Sub '${AWS::StackName}-schemas'
-            S3ObjectKey: customer-support-schema.json
+          Description: Basic customer support actions
+          ApiSchema:
+            S3:
+              S3BucketName: !Sub '${AWS::StackName}-schemas'
+              S3ObjectKey: customer-support-schema.json
           ActionGroupExecutor:
-            LambdaArn: !GetAtt CustomerSupportLambda.Arn
+            Lambda: !GetAtt CustomerSupportLambda.Arn
 
   CustomerSupportLambda:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: !Sub '${AgentName}-support-function'
-      Runtime: python3.11
+      Runtime: python3.13
       Handler: index.handler
+      Role: !GetAtt CustomerSupportLambdaRole.Arn
       Code:
         ZipFile: |
           import json
           
           def handler(event, context):
-              """Lambda function for customer support actions"""
-              
-              action_type = event.get('actionGroup')
-              operation = event.get('function')
-              parameters = event.get('parameters', {})
-              
-              # Process customer support requests
-              if operation == 'GetCustomerInfo':
-                  customer_id = parameters.get('customerId')
-                  return {
-                      'statusCode': 200,
-                      'body': json.dumps({
-                          'customerId': customer_id,
-                          'name': 'John Doe',
-                          'email': 'john@example.com',
-                          'accountStatus': 'ACTIVE'
-                      })
-                  }
-              
-              elif operation == 'UpdateTicket':
-                  ticket_id = parameters.get('ticketId')
-                  status = parameters.get('status')
-                  return {
-                      'statusCode': 200,
-                      'body': json.dumps({
-                          'ticketId': ticket_id,
-                          'status': status,
-                          'updatedAt': '2024-01-10T10:00:00Z'
-                      })
-                  }
-              
-              return {'statusCode': 400, 'body': json.dumps({'error': 'Unknown operation'})}
+              """Action group Lambda for an OpenAPI-schema action group."""
+              params = {p['name']: p['value'] for p in event.get('parameters', [])}
+              api_path = event['apiPath']
+
+              if api_path == '/customers/{customerId}':
+                  status, body = 200, {'customerId': params.get('customerId'),
+                                       'name': 'John Doe', 'accountStatus': 'ACTIVE'}
+              else:
+                  status, body = 404, {'error': f'Unknown path {api_path}'}
+
+              # Bedrock Agents expects this envelope, not an API Gateway-style response
+              return {
+                  'messageVersion': '1.0',
+                  'response': {
+                      'actionGroup': event['actionGroup'],
+                      'apiPath': api_path,
+                      'httpMethod': event['httpMethod'],
+                      'httpStatusCode': status,
+                      'responseBody': {'application/json': {'body': json.dumps(body)}},
+                  },
+              }
+
+  CustomerSupportLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  CustomerSupportLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CustomerSupportLambda
+      Action: lambda:InvokeFunction
+      Principal: bedrock.amazonaws.com
+      SourceArn: !GetAtt BedrockAgent.AgentArn
 
   AgentAlias:
     Type: AWS::Bedrock::AgentAlias
     Properties:
-      AgentId: !Ref BedrockAgent
+      AgentId: !GetAtt BedrockAgent.AgentId
       AgentAliasName: production
       Description: Production alias for the Bedrock Agent
 
 Outputs:
   AgentId:
     Description: ID of the created Bedrock Agent
-    Value: !Ref BedrockAgent
+    Value: !GetAtt BedrockAgent.AgentId
     Export:
       Name: !Sub '${AWS::StackName}-AgentId'
 
   AgentAliasId:
     Description: Production alias for the agent
-    Value: !Ref AgentAlias
+    Value: !GetAtt AgentAlias.AgentAliasId
     Export:
       Name: !Sub '${AWS::StackName}-AgentAliasId'
 
@@ -1752,7 +1746,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.0"
+      version = ">= 5.0"
     }
   }
 }
@@ -1770,7 +1764,7 @@ variable "agent_name" {
 }
 
 variable "foundation_model" {
-  default = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+  default = "us.anthropic.claude-sonnet-5-5"
 }
 
 # IAM Role for Bedrock Agent
@@ -1802,12 +1796,11 @@ resource "aws_iam_role_policy" "bedrock_agent_policy" {
       {
         Effect = "Allow"
         Action = [
-          "bedrock:*",
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
+          "bedrock:InvokeModel",
+          "bedrock:InvokeModelWithResponseStream",
+          "bedrock:GetInferenceProfile"
         ]
-        Resource = "*"
+        Resource = "*"  # narrow to the specific foundation-model and inference-profile ARNs in production
       }
     ]
   })
@@ -1819,7 +1812,15 @@ resource "aws_lambda_function" "customer_support" {
   function_name = "${var.agent_name}-support-function"
   role          = aws_iam_role.lambda_role.arn
   handler       = "index.handler"
-  runtime       = "python3.11"
+  runtime       = "python3.13"
+}
+
+resource "aws_lambda_permission" "allow_bedrock" {
+  statement_id  = "AllowBedrockAgent"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.customer_support.function_name
+  principal     = "bedrock.amazonaws.com"
+  source_arn    = aws_bedrockagent_agent.this.agent_arn
 }
 
 resource "aws_iam_role" "lambda_role" {
@@ -1845,8 +1846,31 @@ resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Bedrock Agent (Note: Direct Bedrock Agent creation via Terraform may require custom resources)
-# For now, use AWS CLI or boto3 for agent creation after infrastructure is provisioned
+# Bedrock Agent, action group and alias
+resource "aws_bedrockagent_agent" "this" {
+  agent_name              = var.agent_name
+  agent_resource_role_arn = aws_iam_role.bedrock_agent_role.arn
+  foundation_model        = var.foundation_model
+  instruction             = "You are a helpful customer support assistant. Answer accurately and escalate complex issues."
+}
+
+resource "aws_bedrockagent_agent_action_group" "support" {
+  agent_id          = aws_bedrockagent_agent.this.agent_id
+  agent_version     = "DRAFT"
+  action_group_name = "CustomerSupport"
+  action_group_executor {
+    lambda = aws_lambda_function.customer_support.arn
+  }
+  api_schema {
+    payload = file("${path.module}/customer-support-schema.json")
+  }
+}
+
+resource "aws_bedrockagent_agent_alias" "production" {
+  agent_id         = aws_bedrockagent_agent.this.agent_id
+  agent_alias_name = "production"
+  depends_on       = [aws_bedrockagent_agent_action_group.support]
+}
 
 output "agent_role_arn" {
   value = aws_iam_role.bedrock_agent_role.arn
@@ -1858,6 +1882,4 @@ output "lambda_function_arn" {
 ```
 
 ---
-
-Due to the extremely verbose nature of this request and token limitations, I'll create the remaining files with comprehensive content. Let me create all remaining guides now:
 

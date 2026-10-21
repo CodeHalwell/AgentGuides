@@ -1,21 +1,23 @@
 ---
 title: "Microsoft Agent Framework (Python) — HARNESS Providers"
-description: "TodoProvider, AgentModeProvider, MemoryContextProvider — experimental context providers giving agents self-managed task lists, mode-switching, and long-term memory. Verified against agent-framework-core 1.5.0."
+description: "TodoProvider, AgentModeProvider, MemoryContextProvider — experimental context providers giving agents self-managed task lists, mode-switching, and long-term memory."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # HARNESS Providers — Python
 
-> **Experimental.** `TodoProvider`, `AgentModeProvider`, `MemoryContextProvider`, and their backing stores are marked `ExperimentalFeature.HARNESS` in 1.5.0. The APIs are functional but may change between minor releases. Import warnings appear on first use.
+> **Experimental.** `TodoProvider`, `AgentModeProvider`, `MemoryContextProvider`, and their backing stores are marked `ExperimentalFeature.HARNESS`. The APIs are functional but may change between minor releases. Import warnings appear on first use.
+>
+> Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.5.0). The tool names the providers expose were renamed in 1.7.0 (`add_todos` → `todos_add`, `set_mode` → `mode_set`, and so on); this page uses the current names.
 
 HARNESS providers are a family of `ContextProvider` implementations that give agents durable, session-scoped capabilities beyond conversation history:
 
 | Provider / Helper | What it adds to the agent |
 |---|---|
-| `TodoProvider` | Five tools (`add_todos`, `complete_todos`, `remove_todos`, `get_remaining_todos`, `get_all_todos`) + instructions for autonomous task tracking |
-| `AgentModeProvider` | Two tools (`get_mode`, `set_mode`) + instructions for operating in distinct modes (plan / execute, or any custom set) |
-| `get_agent_mode` / `set_agent_mode` | External helpers to read and flip the mode from application code without waiting for the agent to call `set_mode` |
+| `TodoProvider` | Five tools (`todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, `todos_get_all`) + instructions for autonomous task tracking |
+| `AgentModeProvider` | Two tools (`mode_get`, `mode_set`) + instructions for operating in distinct modes (plan / execute, or any custom set) |
+| `get_agent_mode` / `set_agent_mode` | External helpers to read and flip the mode from application code without waiting for the agent to call `mode_set` |
 
 Both providers plug in via `context_providers=` and store state inside `AgentSession.state` (or optionally on disk).
 
@@ -50,7 +52,7 @@ async def main() -> None:
     )
     print("Plan:\n", r1.text)
 
-    # Turn 2 — the agent checks get_remaining_todos and marks items done as it works
+    # Turn 2 — the agent checks todos_get_remaining and marks items done as it works
     r2 = await agent.run(
         "Draft the engineering checklist and mark those tasks complete.",
         session=session,
@@ -69,10 +71,10 @@ Every todo the agent creates becomes a `TodoItem`. The fields:
 
 | Field | Type | Description |
 |---|---|---|
-| `id` | `int` | Auto-assigned integer ID. Use this in `complete_todos([id])` and `remove_todos([id])`. |
+| `id` | `int` | Auto-assigned integer ID. Use this in `todos_complete([id])` and `todos_remove([id])`. |
 | `title` | `str` | Short task description (non-empty, stripped). |
 | `description` | `str \| None` | Optional longer description. |
-| `is_complete` | `bool` | `True` after the agent calls `complete_todos`. |
+| `is_complete` | `bool` | `True` after the agent calls `todos_complete`. |
 
 ```python
 from agent_framework import TodoItem
@@ -86,16 +88,16 @@ restored = TodoItem.from_dict(d)
 assert restored == item
 ```
 
-### `TodoInput` — what the agent passes to `add_todos`
+### `TodoInput` — what the agent passes to `todos_add`
 
-When the agent calls `add_todos`, it produces a list of `TodoInput` objects (or raw dicts with `title` and optional `description`). You rarely construct `TodoInput` yourself, but it is useful in tests where you want to pre-seed the store:
+When the agent calls `todos_add`, it produces a list of `TodoInput` objects (or raw dicts with `title` and optional `description`). You rarely construct `TodoInput` yourself, but it is useful in tests where you want to pre-seed the store:
 
 ```python
-from agent_framework import TodoInput
+from agent_framework._harness._todo import TodoInput  # not re-exported from agent_framework
 
 task = TodoInput(title="Review PR #42", description="Focus on error handling")
 print(task.title)        # "Review PR #42"
-print(task.to_dict())    # {"title": "Review PR #42", "description": "Review PR #42"}
+print(task.to_dict())    # {"title": "Review PR #42", "description": "Focus on error handling"}
 ```
 
 ### Inspecting todos from application code
@@ -228,8 +230,8 @@ focused_provider = TodoProvider(
     instructions=(
         "## Task List\n\n"
         "You have a task list. Break complex work into ≤5 tasks at a time.\n"
-        "- Use `add_todos` when planning.\n"
-        "- Use `complete_todos` when a task is done. Never skip this step.\n"
+        "- Use `todos_add` when planning.\n"
+        "- Use `todos_complete` when a task is done. Never skip this step.\n"
         "- Never remove tasks without the user's explicit instruction.\n"
     ),
 )
@@ -298,7 +300,7 @@ In **plan** mode the agent is instructed to ask for clarification before acting.
 
 ### Custom mode set
 
-Define your own mode names and descriptions when the defaults don't fit. Mode names come from the `mode_descriptions` mapping keys:
+Define your own mode names and descriptions when the defaults don't fit. Mode names come from the `mode_instructions` mapping keys:
 
 ```python
 import asyncio
@@ -312,7 +314,7 @@ agent = Agent(
     context_providers=[
         AgentModeProvider(
             default_mode="review",
-            mode_descriptions={
+            mode_instructions={
                 "review": (
                     "Read the diff and identify issues. Do not suggest fixes yet. "
                     "List every issue with a severity label: 🔴 critical, 🟡 minor, 🟢 nit."
@@ -322,7 +324,7 @@ agent = Agent(
                     "Show the diff inline."
                 ),
                 "approve": (
-                    "All issues are resolved. Write the final approval comment and call set_mode('done')."
+                    "All issues are resolved. Write the final approval comment and call mode_set('done')."
                 ),
                 "done": "Review complete. Do not take any further actions.",
             },
@@ -365,7 +367,7 @@ MODES = ["review", "suggest", "approve", "done"]
 agent = Agent(
     client=OpenAIChatClient(),
     instructions="You are a code-review assistant.",
-    context_providers=[AgentModeProvider(default_mode="review", mode_descriptions={m: m for m in MODES})],
+    context_providers=[AgentModeProvider(default_mode="review", mode_instructions={m: m for m in MODES})],
 )
 
 
@@ -388,7 +390,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-When you call `set_agent_mode` externally, the provider injects a `user`-role message on the next `run()` announcing the switch. This is necessary because system instructions alone may not override a model that has seen its own `set_mode` tool call earlier in the history.
+When you call `set_agent_mode` externally, the provider injects a `user`-role message on the next `run()` announcing the switch. This is necessary because system instructions alone may not override a model that has seen its own `mode_set` tool call earlier in the history.
 
 ### `AgentModeProvider` constructor reference
 
@@ -396,9 +398,11 @@ When you call `set_agent_mode` externally, the provider injects a `user`-role me
 AgentModeProvider(
     source_id: str = "agent_mode",   # session.state partition key
     *,
-    default_mode: str | None = None, # first key in mode_descriptions if omitted
-    mode_descriptions: Mapping[str, str] | None = None,  # None = {"plan": ..., "execute": ...}
+    default_mode: str | None = None, # first key in mode_instructions if omitted
+    mode_instructions: Mapping[str, str] | None = None,  # None = {"plan": ..., "execute": ...}
     instructions: str | None = None, # override prompt block; supports {available_modes} and {current_mode}
+    expose_mode_set: bool = True,    # register the mode_set tool
+    expose_mode_get: bool = True,    # register the mode_get tool
 )
 ```
 
@@ -530,7 +534,7 @@ PLAN_INSTRUCTIONS = (
     "## Plan Mode\n\n"
     "You are in planning mode. Before doing anything else:\n"
     "1. Break the user's request into 3–7 concrete, actionable tasks.\n"
-    "2. Add them with `add_todos` (include a description for each).\n"
+    "2. Add them with `todos_add` (include a description for each).\n"
     "3. Present the full list to the user for review.\n"
     "Do NOT execute any tasks. Ask the user to confirm before switching modes."
 )
@@ -538,11 +542,11 @@ PLAN_INSTRUCTIONS = (
 EXECUTE_INSTRUCTIONS = (
     "## Execute Mode\n\n"
     "You are in execution mode. Work autonomously:\n"
-    "1. Call `get_remaining_todos` at the start of each turn.\n"
+    "1. Call `todos_get_remaining` at the start of each turn.\n"
     "2. Pick the next incomplete task and execute it.\n"
-    "3. Mark it done with `complete_todos([id])` immediately after.\n"
+    "3. Mark it done with `todos_complete([id])` immediately after.\n"
     "4. Do not ask the user questions. Make reasonable decisions independently.\n"
-    "5. When all todos are complete, call `set_mode('review')`."
+    "5. When all todos are complete, call `mode_set('review')`."
 )
 
 REVIEW_INSTRUCTIONS = (
@@ -558,7 +562,7 @@ agent = Agent(
         TodoProvider(),
         AgentModeProvider(
             default_mode="plan",
-            mode_descriptions={
+            mode_instructions={
                 "plan":    PLAN_INSTRUCTIONS,
                 "execute": EXECUTE_INSTRUCTIONS,
                 "review":  REVIEW_INSTRUCTIONS,
@@ -958,10 +962,10 @@ store = MemoryFileStore(
 |---|---|---|
 | `TodoProvider` | `agent_framework` | `ContextProvider`; injects 5 tools + instructions |
 | `TodoItem` | `agent_framework` | Dataclass: `id`, `title`, `description`, `is_complete` |
-| `TodoInput` | `agent_framework` | Tool argument shape for `add_todos` |
+| `TodoInput` | `agent_framework._harness._todo` | Tool argument shape for `todos_add` |
 | `TodoSessionStore` | `agent_framework` | In-memory store; default for `TodoProvider` |
 | `TodoFileStore` | `agent_framework` | File-backed; `owner_state_key` for multi-user |
-| `AgentModeProvider` | `agent_framework` | `ContextProvider`; injects `get_mode`/`set_mode` + instructions |
+| `AgentModeProvider` | `agent_framework` | `ContextProvider`; injects `mode_get`/`mode_set` + instructions |
 | `get_agent_mode` | `agent_framework` | Read current mode from `AgentSession.state` |
 | `set_agent_mode` | `agent_framework` | Write mode externally; triggers notification on next `run()` |
 | `MemoryContextProvider` | `agent_framework` | `HistoryProvider`; long-term memory via extraction + injection |

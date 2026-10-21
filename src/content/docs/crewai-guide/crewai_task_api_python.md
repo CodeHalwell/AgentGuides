@@ -8,7 +8,7 @@ sidebar:
   order: 21
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/task.py`, `crewai/tasks/conditional_task.py`, `crewai/tasks/task_output.py`, `crewai/process.py`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/task.py`, `crewai/tasks/conditional_task.py`, `crewai/tasks/task_output.py`, `crewai/process.py`).
 
 Tasks are the units of work a crew executes. Their outputs feed forward into `{variables}` available to later tasks. This page covers the real fields, the two process types, and the surprisingly subtle rules around structured outputs.
 
@@ -53,6 +53,7 @@ print(out.tasks_output[0].pydantic.headline)
 | `async_execution` | `bool` | `False` | Run in a thread. Several async tasks in a row fan out in parallel. |
 | `context` | `list[Task] \| None` | *auto* | Explicit upstream tasks. Defaults to the prior task's output in sequential crews. |
 | `tools` | `list[BaseTool] \| None` | `[]` | Restrict the tools available **for this task only**. |
+| `tool_failure_policy` | `"ignore" \| "warn" \| "raise" \| None` | `None` | Overrides the agent's policy for tools that run but report failure, for this task only. |
 | `callback` | `Callable \| None` | `None` | Called with the `TaskOutput` on completion. |
 | `output_file` | `str \| None` | `None` | File path (template vars allowed) for raw output. |
 | `create_directory` | `bool \| None` | `True` | Create the parent dir of `output_file` if missing. |

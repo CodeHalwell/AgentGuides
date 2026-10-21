@@ -4,9 +4,9 @@ description: "Complete CrewAI reference — agents, tasks, crews, processes, too
 framework: crewai
 ---
 
-Latest: crewai 1.14.6 | Updated: May 29, 2026
-# CrewAI Comprehensive Technical Guide
-## From Beginner to Expert - Role-Based Agent Collaboration
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%). First written for the 1.x line in late 2025 and revised through the 1.14 and 1.15 releases.
+
+**From beginner to expert — role-based agent collaboration.**
 
 ---
 
@@ -25,9 +25,9 @@ Latest: crewai 1.14.6 | Updated: May 29, 2026
 11. [Crew Configuration](#crew-configuration)
 12. [Agentic Patterns](#agentic-patterns)
 13. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-14. [**NEW: CrewAI Flows (2025)**](#crewai-flows-2025)
-15. [**NEW: CrewAI AMP Suite**](#crewai-amp-suite)
-16. [**NEW: UV Dependency Management**](#uv-dependency-management)
+14. [CrewAI Flows](#crewai-flows)
+15. [CrewAI AMP Suite](#crewai-amp-suite)
+16. [UV Dependency Management](#uv-dependency-management)
 
 ---
 
@@ -37,7 +37,7 @@ Latest: crewai 1.14.6 | Updated: May 29, 2026
 
 CrewAI is an exceptionally powerful Python framework designed for orchestrating collaborative autonomous AI agents. It enables the creation of sophisticated multi-agent systems where each agent possesses a distinct role, specialisation, and set of responsibilities. The framework facilitates seamless collaboration between agents through well-defined communication protocols, task delegation mechanisms, and intelligent workflow orchestration.
 
-**April 2026 Update (v1.14.2)**: CrewAI has evolved into a leading framework for agentic AI automation and is widely used for building collaborative AI systems. Version 1.14.0 introduced a production-grade **checkpoint system** for resumable crew execution, native support for OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras), structured Pydantic outputs via `response_format`, before/after tool hooks, GPT-5/o-series vision support, and SSRF and path traversal protections. Version 1.14.1 added an **async checkpoint TUI browser** and streaming output context managers. Version 1.14.2 (April 17, 2026) further enhanced the checkpoint system with **checkpoint forking**, `from_checkpoint` support in `Agent.kickoff`, enriched LLM token tracking (reasoning and cache creation tokens), and security patches for CVE-2026-39892. Combined with **CrewAI Flows** (event-driven workflows), the **CrewAI AMP Suite** (enterprise-grade automation), and **UV dependency management** (streamlined setup), CrewAI now provides a complete ecosystem for building production-ready agentic applications at any scale.
+**Recent releases**: The 1.15 line (from June 2026) made JSON-first project scaffolds the default (`crewai create crew`, with `--classic` for the Python/YAML layout), added declarative flow definitions and conversational flows (stable since 1.15.18), split the CLI into its own `crewai-cli` package, made the newer `AgentExecutor` the default agent loop, and added `crewai eval` for grading traced runs. Earlier, version 1.14.0 introduced a production-grade **checkpoint system** for resumable crew execution, native support for OpenAI-compatible providers (OpenRouter, DeepSeek, Ollama, vLLM, Cerebras), structured Pydantic outputs via `response_format`, before/after tool hooks, GPT-5/o-series vision support, and SSRF and path traversal protections. Version 1.14.1 added an **async checkpoint TUI browser** and streaming output context managers. Version 1.14.2 (April 17, 2026) further enhanced the checkpoint system with **checkpoint forking**, `from_checkpoint` support in `Agent.kickoff`, enriched LLM token tracking (reasoning and cache creation tokens), and security patches for CVE-2026-39892. Alongside **CrewAI Flows** (event-driven workflows), the hosted **CrewAI AMP** platform and **uv**-based project management, it covers most of what a production multi-agent application needs.
 
 ### Core Philosophy
 
@@ -65,7 +65,7 @@ CrewAI is fundamentally built upon the concept of **role-based agent collaborati
 
 #### Python Requirements
 
-CrewAI requires Python 3.10 or later. Verify your Python version:
+CrewAI requires Python 3.10–3.13 (`requires-python = ">=3.10,<3.14"`). Verify your Python version:
 
 ```bash
 python --version
@@ -79,9 +79,9 @@ Install the core CrewAI package:
 pip install crewai
 ```
 
-#### **NEW (2025): UV Dependency Management**
+#### UV Dependency Management
 
-CrewAI now supports UV, the ultra-fast Python package installer and resolver, providing a significantly improved setup experience:
+CrewAI's CLI uses uv for project environments (`crewai install` wraps `uv sync`), and uv also works as a faster drop-in for pip:
 
 ```bash
 # Install UV (if not already installed)
@@ -145,10 +145,10 @@ Solution:
 Create a new CrewAI project with automated scaffolding:
 
 ```bash
-crewai create crew my_project_name
+crewai create crew my_project_name --classic
 ```
 
-This generates the following directory structure:
+Without `--classic`, the command runs an interactive wizard and writes a JSON-first project (`crew.jsonc` plus `agents/*.jsonc`); see the [CLI page](./crewai_cli_python/). The classic Python/YAML layout, which this guide uses, looks like this:
 
 ```
 my_project_name/
@@ -156,6 +156,8 @@ my_project_name/
 ├── .env
 ├── pyproject.toml
 ├── README.md
+├── AGENTS.md
+├── knowledge/
 └── src/
     └── my_project_name/
         ├── __init__.py
@@ -786,16 +788,17 @@ crew = Crew(
 
 #### Built-in Tools Available
 
-CrewAI provides numerous built-in tools through the crewai-tools package:
+CrewAI provides numerous built-in tools through the `crewai-tools` package (`pip install "crewai[tools]"`), for example:
 
 1. **FileReadTool**: Read and process file contents
-2. **FileWriteTool**: Write data to files
+2. **FileWriterTool**: Write data to files
 3. **DirectoryReadTool**: List and explore directories
 4. **ScrapeWebsiteTool**: Extract content from web pages
 5. **SerperDevTool**: Search the internet using Serper API
-6. **GithubSearchTool**: Search GitHub repositories
-7. **GmailTool**: Interact with Gmail
-8. **JiraSearchTool**: Search Jira for issues and projects
+6. **GithubSearchTool**: Semantic search over a GitHub repository (needs a `gh_token`)
+7. **URLReadTool**: Read an arbitrary URL through the SSRF-safe fetcher
+
+SaaS integrations such as Gmail and Jira are no longer separate `crewai_tools` classes; they come from CrewAI Platform apps via `Agent(apps=["gmail", "jira"])` (requires `crewai login` and a platform integration token).
 
 > **v1.14.0 Breaking Change**: `CodeInterpreterTool` was hard-removed in CrewAI v1.14.0 and will raise an `ImportError` if referenced. Use a custom tool instead:
 >
@@ -1101,13 +1104,14 @@ result = crew.kickoff()
 #### File Operations
 
 ```python
-from crewai_tools import FileReadTool, FileWriteTool, DirectoryReadTool
+from crewai import Agent
+from crewai_tools import FileReadTool, FileWriterTool, DirectoryReadTool
 
 # Read files
 reader = FileReadTool(file_path="/path/to/file.txt")
 
 # Write files
-writer = FileWriteTool()
+writer = FileWriterTool()
 
 # Read directories
 dir_reader = DirectoryReadTool(directory="/path/to/directory")
@@ -1116,6 +1120,7 @@ dir_reader = DirectoryReadTool(directory="/path/to/directory")
 agent = Agent(
     role="File Processor",
     goal="Process and analyse files",
+    backstory="Careful operator who never overwrites without checking first",
     tools=[reader, writer, dir_reader]
 )
 ```
@@ -1136,6 +1141,7 @@ searcher = SerperDevTool(
 agent = Agent(
     role="Web Researcher",
     goal="Find and synthesise web information",
+    backstory="Researcher who checks every claim against a second source",
     tools=[scraper, searcher]
 )
 ```
@@ -1143,29 +1149,31 @@ agent = Agent(
 #### API Operations
 
 ```python
-from crewai_tools import GithubSearchTool, JiraSearchTool
+import os
+from crewai import Agent
+from crewai_tools import GithubSearchTool
 
-# Search GitHub
-github = GithubSearchTool()
-
-# Search Jira
-jira = JiraSearchTool(
-    jira_server="https://your-jira.atlassian.net",
-    username="your-email@example.com",
-    api_token="your-api-token"
+# Semantic search over a GitHub repository
+github = GithubSearchTool(
+    github_repo="crewAIInc/crewAI",
+    gh_token=os.environ["GITHUB_TOKEN"],
+    content_types=["code", "issue"],
 )
 
 agent = Agent(
     role="Integration Specialist",
     goal="Integrate with external systems",
-    tools=[github, jira]
+    backstory="Engineer who knows the team's GitHub and Jira inside out",
+    tools=[github],
+    apps=["jira"],  # Jira via CrewAI Platform integrations (needs `crewai login`)
 )
 ```
 
 ### Custom Tool Creation with BaseTool
 
 ```python
-from crewai_tools import BaseTool
+from crewai import Agent
+from crewai.tools import BaseTool
 
 class CalculationTool(BaseTool):
     name: str = "calculation_tool"
@@ -1185,6 +1193,7 @@ calc_tool = CalculationTool()
 agent = Agent(
     role="Mathematician",
     goal="Solve mathematical problems",
+    backstory="Applied mathematician",
     tools=[calc_tool]
 )
 ```
@@ -1193,12 +1202,16 @@ agent = Agent(
 
 ```python
 import asyncio
-from crewai_tools import BaseTool
+from crewai import Task
+from crewai.tools import BaseTool
 
 class AsyncAPITool(BaseTool):
     name: str = "async_api_tool"
     description: str = "Calls external APIs asynchronously"
-    
+
+    def _run(self, endpoint: str) -> str:  # _run is abstract and always required
+        return asyncio.run(self._arun(endpoint))
+
     async def _arun(self, endpoint: str) -> str:
         # Simulated async API call
         await asyncio.sleep(2)
@@ -1207,6 +1220,7 @@ class AsyncAPITool(BaseTool):
 # Use in async task
 task = Task(
     description="Fetch data from multiple APIs",
+    expected_output="One line of data per endpoint",
     agent=api_agent,
     async_execution=True
 )
@@ -1297,37 +1311,30 @@ data = json.loads(result)
 
 ## Memory Systems
 
-### Short-Term Memory
+CrewAI used to expose separate short-term, long-term and entity memories. They have been folded into one `Memory` class with hierarchical scopes; the old `--long`/`--short`/`--entities` CLI flags survive only as hidden shims. See the [Memory page](./crewai_memory_python/) for the full API.
 
 ```python
-# Agent maintains context within a session
-agent = Agent(
+from crewai import Agent, Crew, Memory
+
+memory = Memory()  # LanceDB storage; OpenAI LLM + embedder by default
+
+assistant = Agent(
     role="Assistant",
-    goal="Provide consistent assistance",
-    memory=True  # Enables memory
+    goal="Provide consistent assistance across sessions",
+    backstory="Remembers what each customer has told it before.",
+    memory=memory.scope("/customers/acme"),  # agent sees only this subtree
 )
 
-# Memory is maintained during crew execution
-# Useful for multi-task workflows where context matters
+crew = Crew(agents=[assistant], tasks=[...], memory=memory)
+
+# Memory can also be used directly
+memory.remember("Acme prefers weekly summaries.", scope="/customers/acme")
+matches = memory.recall("How often does Acme want updates?", limit=3)
 ```
 
-### Long-Term Memory
-
-```python
-# Enable long-term memory for persistence
-agent = Agent(
-    role="Assistant",
-    goal="Learn from interactions",
-    memory=True
-)
-
-# Memory persists across multiple crew kickoffs
-# Useful for ongoing relationships with the agent
-```
-
-### Entity Memory
-
-CrewAI tracks entities (people, places, concepts) automatically when memory is enabled.
+- `memory=True` on a crew or agent creates a default `Memory()`; pass an instance to control storage, embedder and scoring.
+- Entities are no longer a separate store: use scopes (`/people/ada`) or `categories=["entity:ada"]`.
+- Records persist across kickoffs because the default storage is on disk.
 
 ---
 
@@ -1643,7 +1650,7 @@ agent = Agent(
 
 ---
 
-## CrewAI Flows (2025)
+## CrewAI Flows
 
 ### Introduction to Flows
 
@@ -2188,151 +2195,44 @@ print(f"Final result: {result}")
 
 ## CrewAI AMP Suite
 
-> **Errata (April 2026):** the Python snippets below reference a `crewai.amp` module that **does not exist** in the installed package (`crewai==1.14.3a2`). The AMP platform is real but is accessed through the `crewai` CLI (`crewai login`, `crewai deploy ...`, `crewai org ...`, `crewai enterprise configure ...`) — see the [CLI page](./crewai_cli_python/). The `AMPCrew`, `AuthConfig`, `DeploymentConfig`, etc. names below are not importable. Treat this section as a conceptual overview until rewritten.
+**CrewAI AMP** (Agent Management Platform) is CrewAI's hosted platform for deploying, monitoring and sharing crews and flows. There is no `crewai.amp` Python module: earlier drafts of this section showed `AMPCrew`, `AuthConfig`, `DeploymentConfig` and similar classes, which never existed in the package and have been removed. You interact with AMP through the `crewai` CLI, through platform integrations on your agents, and through the web console.
 
-### Introduction to CrewAI AMP
+### Deploying a project
 
-**CrewAI AMP (Agent Management Platform)** is the enterprise-grade suite for secure, scalable agentic automation. Released in 2025, the AMP Suite transforms CrewAI from a development framework into a complete enterprise platform.
+```bash
+crewai login                      # authenticate the CLI against AMP
+crewai deploy validate            # local pre-flight checks, no network calls
+crewai deploy create              # first deployment of the current project
+crewai deploy push                # redeploy after changes
+crewai deploy status -u <uuid>
+crewai deploy logs -u <uuid>
+crewai org list                   # switch with `crewai org switch <id>`
+```
 
-### What is CrewAI AMP?
+Self-hosted or enterprise tenants are configured with `crewai enterprise configure <url>`. See the [CLI page](./crewai_cli_python/) for every flag.
 
-The AMP Suite provides:
+### Evaluating runs
 
-1. **Enterprise Security**: Advanced authentication, authorization, and audit logging
-2. **Scalable Infrastructure**: Production-ready deployment and scaling capabilities
-3. **Monitoring and Observability**: Real-time monitoring, metrics, and dashboards
-4. **Team Collaboration**: Multi-user support with role-based access control
-5. **Deployment Tools**: One-click deployment to cloud platforms
-6. **SLA Guarantees**: Enterprise support with SLAs and uptime guarantees
+`crewai eval` grades the most recent traced run through AMP and exits non-zero unless the goal gate passed, so it can gate a CI job. `crewai eval --models "openai/gpt-4.1-mini,anthropic/claude-haiku-4-5"` re-runs a deployment once per model for comparison. Enable tracing first with `crewai traces enable`.
 
-### Key Features
+### Platform integrations
 
-#### 1. Enterprise Authentication and Authorization
+Agents can use SaaS integrations managed in AMP without any extra Python packages:
 
 ```python
-from crewai.amp import AMPCrew, AuthConfig
+from crewai import Agent
 
-# Configure authentication
-auth_config = AuthConfig(
-    provider="oauth2",
-    client_id="your-client-id",
-    allowed_domains=["yourcompany.com"],
-    role_based_access=True
-)
-
-# Create AMP-enabled crew
-amp_crew = AMPCrew(
-    name="enterprise_crew",
-    auth_config=auth_config,
-    agents=[agent1, agent2],
-    tasks=[task1, task2]
+assistant = Agent(
+    role="Ops Assistant",
+    goal="Triage incoming requests",
+    backstory="Keeps the team's inbox and tracker in order.",
+    apps=["gmail", "jira/create_issue"],  # whole app, or a single action
 )
 ```
 
-#### 2. Scalable Deployment
+This needs `CREWAI_PLATFORM_INTEGRATION_TOKEN` in the environment (the `crewai create crew` wizard can write it to `.env` for you).
 
-```python
-from crewai.amp import DeploymentConfig
-
-deployment = DeploymentConfig(
-    platform="kubernetes",
-    replicas=3,
-    auto_scaling=True,
-    min_instances=2,
-    max_instances=10,
-    cpu_threshold=70,
-    memory_threshold=80
-)
-
-amp_crew.deploy(deployment)
-```
-
-#### 3. Real-Time Monitoring
-
-```python
-from crewai.amp import MonitoringConfig
-
-monitoring = MonitoringConfig(
-    enable_metrics=True,
-    enable_logging=True,
-    log_level="INFO",
-    metrics_endpoint="/metrics",
-    dashboard_enabled=True
-)
-
-amp_crew.configure_monitoring(monitoring)
-
-# Access metrics
-metrics = amp_crew.get_metrics()
-print(f"Total executions: {metrics['total_executions']}")
-print(f"Success rate: {metrics['success_rate']}%")
-print(f"Average duration: {metrics['avg_duration']}s")
-```
-
-#### 4. Audit Logging
-
-```python
-from crewai.amp import AuditConfig
-
-audit = AuditConfig(
-    enable_audit_log=True,
-    log_all_actions=True,
-    retention_days=90,
-    compliance_mode="SOC2"
-)
-
-amp_crew.configure_audit(audit)
-
-# Query audit logs
-logs = amp_crew.get_audit_logs(
-    start_date="2025-01-01",
-    end_date="2025-01-31",
-    user="john@company.com"
-)
-```
-
-#### 5. Team Collaboration
-
-```python
-from crewai.amp import TeamConfig, Role
-
-# Define roles
-admin_role = Role(
-    name="admin",
-    permissions=["create", "read", "update", "delete", "deploy"]
-)
-
-developer_role = Role(
-    name="developer",
-    permissions=["create", "read", "update"]
-)
-
-viewer_role = Role(
-    name="viewer",
-    permissions=["read"]
-)
-
-# Configure team
-team = TeamConfig(
-    roles=[admin_role, developer_role, viewer_role],
-    members=[
-        {"email": "admin@company.com", "role": "admin"},
-        {"email": "dev@company.com", "role": "developer"},
-        {"email": "viewer@company.com", "role": "viewer"}
-    ]
-)
-
-amp_crew.configure_team(team)
-```
-
-### AMP Pricing and Plans
-
-- **Developer**: Free for development and testing
-- **Team**: $99/month - Up to 10 users, basic monitoring
-- **Business**: $499/month - Unlimited users, advanced features, 99.9% SLA
-- **Enterprise**: Custom pricing - Dedicated support, custom SLAs, on-premise options
-
-For more information, visit: https://www.crewai.com/amp
+Authentication, role-based access, audit logging and plan pricing are configured in the AMP console rather than in code; check CrewAI's current documentation for what your plan includes.
 
 ---
 
@@ -2374,8 +2274,8 @@ source .venv/bin/activate  # macOS/Linux
 # Install CrewAI with UV (blazing fast!)
 uv pip install crewai 'crewai[tools]'
 
-# Install specific versions
-uv pip install crewai==1.14.6
+# Install a specific version
+uv pip install crewai==%%version=crewai%%
 
 # Install from requirements file
 uv pip install -r requirements.txt
@@ -2385,22 +2285,16 @@ uv pip install -r requirements.txt
 
 ```bash
 # Create project structure
-crewai create crew my_project
+crewai create crew my_project --classic
 
 # Navigate to project
 cd my_project
 
-# Create UV environment
-uv venv
-
-# Activate
-source .venv/bin/activate
-
-# Install dependencies with UV
-uv pip install -r requirements.txt
+# Create the environment and install from pyproject.toml / uv.lock
+crewai install            # wraps `uv sync`
 
 # Add additional packages
-uv pip install pytest black ruff
+uv add --dev pytest ruff
 ```
 
 ### UV Advantages for CrewAI Projects
@@ -2463,7 +2357,7 @@ uv pip install package_name==1.2.3
 
 ---
 
-This comprehensive guide now includes all features through CrewAI v1.14.2 (April 2026), including the Checkpoint System (with forking and `from_checkpoint`), enriched LLM token tracking, native OpenAI-compatible providers, CrewAI Flows, the AMP Suite, and UV dependency management. For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide/).
+For detailed Flows examples and patterns, refer to the dedicated [CrewAI Flows Guide](./crewai_flows_guide/).
 
 ---
 
@@ -2471,6 +2365,7 @@ This comprehensive guide now includes all features through CrewAI v1.14.2 (April
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.15.28 | October 21, 2026 | Re-verified against 1.15.28: imports and constructor keywords checked in a clean venv. Fixed `crewai_tools` imports (`BaseTool` now from `crewai.tools`; `FileWriteTool` → `FileWriterTool`; removed non-existent `JiraSearchTool`/`GmailTool` in favour of `apps=`); replaced the fabricated `crewai.amp` section with real CLI usage; noted JSON-first scaffolds and `--classic`; Python upper bound (<3.14). |
 | 1.14.6 | May 29, 2026 | Patch release; stability improvements. `Latest:` header updated 1.14.5 → 1.14.6; revision history entry added. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`) with `-W error::DeprecationWarning`; no warnings. | Claude routine |
 | 1.14.5 | May 19, 2026 | Patch release; stability improvements. Version confirmed against installed `crewai 1.14.5` (`.routine-envs/check-0519-crewai`); `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified with `-W error::DeprecationWarning`; no warnings. | Claude routine |
 | 1.14.4 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `crewai 1.14.4` (`.routine-envs/check-crewai-0501`); `Agent`, `Task`, `Crew` imports verified with `-W error::DeprecationWarning`. |

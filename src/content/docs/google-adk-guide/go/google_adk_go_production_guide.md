@@ -515,7 +515,7 @@ metadata:
 data:
   project_id: "your-gcp-project"
   region: "us-central1"
-  model: "gemini-2.0-flash"
+  model: "gemini-2.5-flash"
   max_tokens: "2048"
   temperature: "0.7"
 ---
@@ -677,7 +677,7 @@ func createSecureAgent(ctx context.Context) error {
 
     model, err := gemini.New(ctx, &gemini.Config{
         APIKey: apiKey,
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
 
     // Create agent with secret API key

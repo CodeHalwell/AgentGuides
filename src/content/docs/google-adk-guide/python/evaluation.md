@@ -515,16 +515,22 @@ asyncio.run(main())
 
 ## Saving eval results
 
+`evaluate_eval_set` returns `None`; to keep results, hand it a results manager and an `app_name`. `LocalEvalSetResultsManager` writes each run to `<agents_dir>/<app_name>/.adk/eval_history/`:
+
 ```python
 from google.adk.evaluation.local_eval_set_results_manager import (
     LocalEvalSetResultsManager,
 )
 
-results_manager = LocalEvalSetResultsManager(results_dir="./eval_results")
+results_manager = LocalEvalSetResultsManager(agents_dir="./agents")
 
-# After evaluate_eval_set completes, save results
-result = await AgentEvaluator.evaluate_eval_set(...)
-await results_manager.save_eval_set_result(result)
+await AgentEvaluator.evaluate_eval_set(
+    agent_module="my_agent",
+    eval_set=eval_set,
+    eval_config=eval_config,
+    app_name="my_agent",
+    eval_set_results_manager=results_manager,
+)
 ```
 
 Or use `GcsEvalSetResultsManager` to persist to Cloud Storage:
@@ -534,7 +540,7 @@ from google.adk.evaluation.gcs_eval_set_results_manager import GcsEvalSetResults
 
 results_manager = GcsEvalSetResultsManager(
     bucket_name="my-eval-results",
-    eval_storage_dir="runs/",
+    project="my-gcp-project",   # extra kwargs go to google.cloud.storage.Client
 )
 ```
 
@@ -578,28 +584,22 @@ config = EvalConfig(
 Rubrics let you score responses against structured criteria instead of a single binary pass/fail:
 
 ```python
-from google.adk.evaluation.eval_rubrics import Rubric, RubricScore
+from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 from google.adk.evaluation.eval_metrics import RubricsBasedCriterion
 
+def rubric(rubric_id: str, text: str) -> Rubric:
+    return Rubric(rubric_id=rubric_id, rubric_content=RubricContent(text_property=text))
+
 rubrics = [
-    Rubric(
-        criterion="The response must cite at least one source URL.",
-        points=1,
-    ),
-    Rubric(
-        criterion="The response must be written in plain English, no jargon.",
-        points=1,
-    ),
-    Rubric(
-        criterion="The response must be under 200 words.",
-        points=1,
-    ),
+    rubric("cites_source", "The response cites at least one source URL."),
+    rubric("plain_english", "The response is written in plain English, without jargon."),
+    rubric("concise", "The response is under 200 words."),
 ]
 
 config = EvalConfig(
     criteria={
         "rubric_based_final_response_quality_v1": RubricsBasedCriterion(
-            threshold=0.8,          # fraction of total rubric points required
+            threshold=0.8,          # minimum mean rubric score to pass
             rubrics=rubrics,
         ),
     }

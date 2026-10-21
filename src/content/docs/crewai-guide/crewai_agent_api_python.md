@@ -8,7 +8,7 @@ sidebar:
   order: 20
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/agent/core.py`, `crewai/agents/agent_builder/base_agent.py`). Every import, field, and default below was read from the installed package.
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/agent/core.py`, `crewai/agents/agent_builder/base_agent.py`). Every import, field, and default below was read from the installed package.
 
 `Agent` is a Pydantic model. Fields inherit from `BaseAgent` and `Agent` extends the set. Any unknown kwarg raises a validation error — this page lists the real fields.
 
@@ -49,6 +49,9 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `llm` | `str \| BaseLLM \| None` | `None` | Model name (`"openai/gpt-4o"`) or `LLM(...)` / `BaseLLM` instance. `None` uses default from `crewai.llm`. |
 | `function_calling_llm` | `str \| BaseLLM \| None` | `None` | Override the tool-calling LLM only (agent keeps `llm` for reasoning). |
 | `tools` | `list[BaseTool] \| None` | `[]` | Tools the agent may call. See the tools page. |
+| `skills` | `list[Path \| Skill \| str] \| None` | `None` | Agent Skills: directories to discover, inline `SKILL.md` text, `Skill` objects, or `"@org/name"` registry refs. |
+| `tool_failure_policy` | `"ignore" \| "warn" \| "raise" \| None` | `None` | What to do when a tool runs but reports failure. `None` inherits from the crew, then `"warn"`. |
+| `memory` | `bool \| Memory \| MemoryScope \| MemorySlice \| None` | `None` | Per-agent memory; falls back to the crew's memory when unset. |
 | `max_iter` | `int` | `25` | Hard cap on reasoning iterations per task. |
 | `max_rpm` | `int \| None` | `None` | Requests-per-minute throttle for this agent. |
 | `max_tokens` | `int \| None` | `None` | Max tokens per LLM call. |
@@ -59,7 +62,7 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `respect_context_window` | `bool` | `True` | Summarise messages to stay under the model's context limit. |
 | `max_retry_limit` | `int` | `2` | Retries on task-level errors. |
 | `use_system_prompt` | `bool \| None` | `True` | Whether to set a system message (some o1-style models want `False`). |
-| `inject_date` | `bool` | `False` | Prepend current date to the task description. |
+| `inject_date` | `bool` | `False` | Inject the current date into the agent's prompt. |
 | `date_format` | `str` | `"%Y-%m-%d"` | Format when `inject_date=True`. |
 | `planning` | `bool` | `False` | Enable planning (reflection) before execution. |
 | `planning_config` | `PlanningConfig \| None` | `None` | Fine-tune planning (max attempts, LLM override). |
@@ -74,15 +77,15 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `step_callback` | `Callable \| None` | `None` | Called after every agent step. |
 | `system_template` / `prompt_template` / `response_template` | `str \| None` | `None` | Override the built-in prompt strings. |
 | `checkpoint` | `CheckpointConfig \| bool \| None` | `None` | Opt the agent into checkpointing. |
-| `executor_class` | `type[CrewAgentExecutor] \| type[AgentExecutor]` | `CrewAgentExecutor` | Swap in the experimental `AgentExecutor` (ReAct-style). |
+| `executor_class` | `type[CrewAgentExecutor] \| type[AgentExecutor]` | `AgentExecutor` | The newer `AgentExecutor` (from `crewai.experimental`) is now the default; pass `CrewAgentExecutor` to get the older loop back. |
 | `from_repository` | `str \| None` | `None` | Load base config from the user's CrewAI repository. |
 
-## Deprecated in 1.14.x
+## Deprecated fields
 
-The installed source marks these as deprecated — **don't introduce them in new code**:
+These were deprecated during the 1.14 line and are still marked so in the current release — **don't introduce them in new code**:
 
 - `allow_code_execution` / `code_execution_mode` — `CodeInterpreterTool` was removed. Call out to E2B / Modal / your own sandbox.
-- `multimodal` — pass files natively via `Task.input_files`.
+- `multimodal` — pass files natively via `Task.input_files`. The field description says it will be removed in v2.0.
 - `reasoning`, `max_reasoning_attempts` — superseded by `planning` + `planning_config`.
 
 Setting any of these still works but emits a `DeprecationWarning`.
@@ -205,7 +208,7 @@ remote = Agent(
     goal="Look up internal knowledge base",
     backstory="Specialised retrieval agent.",
     a2a=A2AClientConfig(
-        agent_card_url="https://kb.example.com/.well-known/agent.json",
+        endpoint="https://kb.example.com/.well-known/agent-card.json",
     ),
 )
 ```

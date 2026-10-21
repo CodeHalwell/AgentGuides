@@ -52,7 +52,7 @@ func main() {
     // Create model
     model, err := gemini.New(ctx, &gemini.Config{
         APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
     if err != nil {
         log.Fatal(err)
@@ -108,7 +108,7 @@ func main() {
 
     model, _ := gemini.New(ctx, &gemini.Config{
         APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
 
     // Create tools
@@ -220,7 +220,7 @@ func createModel() model.LLM {
     ctx := context.Background()
     m, _ := gemini.New(ctx, &gemini.Config{
         APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
     return m
 }

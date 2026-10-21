@@ -732,7 +732,7 @@ plugin = ContextFilterPlugin(
 
 ```python
 from google.adk.apps.app import App
-from google.adk.apps._configs import EventsCompactionConfig
+from google.adk.apps.app import EventsCompactionConfig
 from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService

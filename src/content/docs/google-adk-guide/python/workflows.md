@@ -652,8 +652,13 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.events.request_input import RequestInput
 from google.adk.workflow import Workflow, node, START
-from google.adk.workflow.utils._workflow_hitl_utils import has_request_input_function_call
 from google.genai import types
+
+REQUEST_INPUT = "adk_request_input"   # function-call name RequestInput is surfaced as
+
+def request_input_ids(event) -> list[str]:
+    """Interrupt ids of any RequestInput pauses carried by this event."""
+    return [fc.id for fc in event.get_function_calls() if fc.name == REQUEST_INPUT]
 
 drafter = LlmAgent(
     name="drafter",
@@ -716,9 +721,9 @@ async def main():
         new_message=user_msg,
         user_id="u1", session_id="s1",
     ):
-        # Use has_request_input_function_call to detect a RequestInput pause
+        # A RequestInput pause arrives as an `adk_request_input` function call
         # (event.actions.requested_auth_configs is for OAuth, not HITL interrupts)
-        if has_request_input_function_call(event):
+        if request_input_ids(event):
             print("Workflow paused. Waiting for human approval.")
         if hasattr(event, "content") and event.content:
             print(event.content.parts[0].text if event.content.parts else "")
@@ -726,18 +731,15 @@ async def main():
 asyncio.run(main())
 ```
 
-To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. Use `get_request_input_interrupt_ids(event)` to capture the ID during the first run, then build the response:
+To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. The `has_request_input_function_call` / `get_request_input_interrupt_ids` helpers that earlier 2.x releases shipped in `_workflow_hitl_utils` are gone; read the id from the event's `adk_request_input` function call (the `request_input_ids` helper above), then build the response with `create_request_input_response`, which is still there (it is a private module, so pin your ADK version if you rely on it):
 
 ```python
-from google.adk.workflow.utils._workflow_hitl_utils import (
-    get_request_input_interrupt_ids,
-    create_request_input_response,
-)
+from google.adk.workflow.utils._workflow_hitl_utils import create_request_input_response
 
 # Collect the interrupt_id emitted during the first run
 interrupt_id = None
 async for event in runner.run_async(new_message=user_msg, user_id="u1", session_id="s1"):
-    ids = get_request_input_interrupt_ids(event)
+    ids = request_input_ids(event)
     if ids:
         interrupt_id = ids[0]
 
@@ -757,7 +759,7 @@ async for event in runner.run_async(
 ## Gotchas
 
 - Nodes are **Pydantic models** — if you subclass `Node`, annotate fields or they won't serialise.
-- `Workflow` is not a `BaseAgent`. `Runner(agent=workflow)` fails. Use `App(root_agent=workflow)` and `Runner(app=app, session_service=...)`.
+- `Workflow` is not a `BaseAgent`. `Runner(agent=workflow)` fails. Use `App(root_agent=workflow)` and `Runner(app=app, session_service=...)`, or pass it as `Runner(node=workflow, app_name=..., session_service=...)`.
 - `ctx.run_node(callable)` requires `rerun_on_resume=True` on the calling node.
 - `wait_for_output=True` means a node *must* yield output/route before it's marked complete. Forget that and the workflow deadlocks.
 - When a tuple contains only one element (e.g. `(START, single_node)`), you still get a single edge — not sugar for fan-out. Fan-out needs a **nested** tuple: `(START, (a, b))`.

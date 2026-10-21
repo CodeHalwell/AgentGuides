@@ -920,15 +920,19 @@ ToolSpecification<TInput, TOutput>
     ├── Callbacks: RunManager
     └── Error handling: Comprehensive
 
-StateSchema
+State definitions (any one of)
 │
-├── Annotation<T>
-│   ├── value_type: string
-│   ├── default: () => T
-│   └── reducer: (x: T, y: T) => T
+├── Annotation.Root({ key: Annotation<T>(...) })
+│   ├── Annotation<T>                      (last value wins)
+│   └── Annotation<T>({ reducer, default })
 │
-└── Record<key, Annotation<T>>
-    └── Used in: StateGraph definition
+├── Zod object schema  (z.object({...}))
+│
+└── new StateSchema({ ... })
+    ├── Standard Schema field (Zod 4 / Valibot / ArkType)
+    ├── new ReducedValue(schema, { reducer, inputSchema? })
+    ├── new UntrackedValue<T>()
+    └── MessagesValue
 ```
 
 ---

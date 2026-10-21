@@ -9,6 +9,8 @@ language: typescript
 
 **Deployment, Operations, Monitoring, and Best Practices**
 
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
+
 ---
 
 ## Table of Contents
@@ -119,13 +121,13 @@ function validateEnvironmentVariables(): EnvironmentConfig {
     apis: {
       openai: {
         apiKey: process.env.OPENAI_API_KEY!,
-        model: process.env.OPENAI_MODEL || 'gpt-4-turbo',
+        model: process.env.OPENAI_MODEL || 'gpt-4o',
         maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '4000'),
         timeout: parseInt(process.env.OPENAI_TIMEOUT || '30000'),
       },
       anthropic: {
         apiKey: process.env.ANTHROPIC_API_KEY || '',
-        model: process.env.ANTHROPIC_MODEL || 'claude-3-opus-20240229',
+        model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
       },
     },
     
@@ -148,7 +150,7 @@ function validateEnvironmentVariables(): EnvironmentConfig {
     langchain: {
       langsmithKey: process.env.LANGSMITH_API_KEY,
       langsmithProject: process.env.LANGSMITH_PROJECT,
-      tracingEnabled: process.env.LANGSMITH_TRACING_V2 === 'true',
+      tracingEnabled: process.env.LANGSMITH_TRACING === 'true',
     },
     
     app: {
@@ -312,7 +314,8 @@ export async function executeAgentWithCaching(
   }
   
   // Execute agent
-  const result = await agent.invoke({ input });
+  const state = await agent.invoke({ messages: [{ role: 'user', content: input }] });
+  const result = String(state.messages.at(-1)?.content ?? '');
   
   // Cache result for 1 hour
   await cache.set(
@@ -335,7 +338,7 @@ import { encoding_for_model } from 'js-tiktoken';
 export class TokenCounter {
   private encoding: any;
   
-  constructor(modelName: string = 'gpt-4') {
+  constructor(modelName: string = 'gpt-4o') {
     this.encoding = encoding_for_model(modelName);
   }
   
@@ -344,7 +347,7 @@ export class TokenCounter {
   }
   
   countMessagesTokens(messages: any[]): number {
-    let tokensPerMessage = 4; // for gpt-4
+    let tokensPerMessage = 4; // approximate per-message overhead
     let tokenCount = 0;
     
     for (const message of messages) {
@@ -363,9 +366,10 @@ export class TokenCounter {
     model: string
   ): number {
     const pricing: Record<string, { input: number; output: number }> = {
-      'gpt-4-turbo': { input: 0.01, output: 0.03 },
-      'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
-      'claude-3-opus': { input: 0.015, output: 0.075 },
+      // USD per 1K tokens. Illustrative only: check current provider pricing.
+      'gpt-4o': { input: 0.0025, output: 0.01 },
+      'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
+      'claude-sonnet-5-5': { input: 0.002, output: 0.01 },
     };
     
     const rates = pricing[model] || { input: 0.001, output: 0.002 };
@@ -389,12 +393,13 @@ export async function executeWithTokenTracking(
   }
   
   const startTime = Date.now();
-  const result = await agent.invoke({ input });
+  const state = await agent.invoke({ messages: [{ role: 'user', content: input }] });
+  const result = String(state.messages.at(-1)?.content ?? '');
   const duration = Date.now() - startTime;
   
   const outputTokens = counter.countTokens(result);
   const totalTokens = inputTokens + outputTokens;
-  const cost = counter.estimateCost(inputTokens, outputTokens, 'gpt-4-turbo');
+  const cost = counter.estimateCost(inputTokens, outputTokens, 'gpt-4o');
   
   console.log(`
     Total tokens: ${totalTokens}
@@ -711,143 +716,43 @@ export function configureCORS(app: express.Application, allowedOrigins: string[]
 
 ### PostgreSQL Checkpoint Saver
 
+Use the maintained saver rather than writing your own. `BaseCheckpointSaver` has a specific contract (`getTuple`, `list`, `put`, `putWrites`, `deleteThread`) plus pending-write and versioning semantics that a hand-rolled table rarely gets right.
+
+```bash
+npm install @langchain/langgraph-checkpoint-postgres
+```
+
 ```typescript
 // persistence/postgresCheckpointer.ts
-import { Pool, Client } from 'pg';
-import { BaseCheckpointSaver, Checkpoint } from '@langchain/langgraph';
+import { PostgresSaver } from '@langchain/langgraph-checkpoint-postgres';
 
-export class PostgresCheckpointSaver extends BaseCheckpointSaver {
-  private pool: Pool;
-  
-  constructor(connectionString: string) {
-    super();
-    this.pool = new Pool({ connectionString });
-  }
-  
-  async initialize(): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS checkpoints (
-          thread_id VARCHAR(255) NOT NULL,
-          checkpoint_id VARCHAR(255) NOT NULL,
-          checkpoint JSONB NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          PRIMARY KEY (thread_id, checkpoint_id)
-        );
-        
-        CREATE INDEX IF NOT EXISTS idx_checkpoints_created 
-        ON checkpoints(created_at);
-      `);
-    } finally {
-      client.release();
-    }
-  }
-  
-  async get_checkpoint(config: any): Promise<Checkpoint | null> {
-    const { thread_id, checkpoint_id } = config.configurable;
-    
-    const result = await this.pool.query(
-      'SELECT checkpoint FROM checkpoints WHERE thread_id = $1 AND checkpoint_id = $2',
-      [thread_id, checkpoint_id]
-    );
-    
-    return result.rows[0]?.checkpoint || null;
-  }
-  
-  async put_checkpoint(config: any, checkpoint: Checkpoint): Promise<void> {
-    const { thread_id, checkpoint_id } = config.configurable;
-    
-    await this.pool.query(
-      `INSERT INTO checkpoints (thread_id, checkpoint_id, checkpoint)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (thread_id, checkpoint_id)
-       DO UPDATE SET checkpoint = EXCLUDED.checkpoint`,
-      [thread_id, checkpoint_id, JSON.stringify(checkpoint)]
-    );
-  }
-  
-  async list_checkpoints(thread_id: string): Promise<Checkpoint[]> {
-    const result = await this.pool.query(
-      'SELECT checkpoint FROM checkpoints WHERE thread_id = $1 ORDER BY created_at DESC',
-      [thread_id]
-    );
-    
-    return result.rows.map((row) => row.checkpoint);
-  }
-}
+const checkpointer = PostgresSaver.fromConnString(process.env.POSTGRES_URL!);
+await checkpointer.setup(); // creates/migrates the tables; run once at startup
 
-// Usage
-const checkpointer = new PostgresCheckpointSaver(process.env.POSTGRES_URL!);
-await checkpointer.initialize();
+const graph = stateGraph.compile({ checkpointer });
 
-const graph = stateGraph.compile({
-  checkpointer,
-});
+await graph.invoke(input, { configurable: { thread_id: 'user-42' } });
+
+// Housekeeping
+await checkpointer.deleteThread('user-42');
+await checkpointer.end(); // close the pool on shutdown
 ```
 
 ### SQLite for Local Development
 
+```bash
+npm install @langchain/langgraph-checkpoint-sqlite
+```
+
 ```typescript
 // persistence/sqliteCheckpointer.ts
-import Database from 'better-sqlite3';
-import { BaseCheckpointSaver, Checkpoint } from '@langchain/langgraph';
+import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
 
-export class SqliteCheckpointSaver extends BaseCheckpointSaver {
-  private db: Database.Database;
-  
-  constructor(dbPath: string = './checkpoints.db') {
-    super();
-    this.db = new Database(dbPath);
-    this.initialize();
-  }
-  
-  private initialize(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS checkpoints (
-        thread_id TEXT NOT NULL,
-        checkpoint_id TEXT NOT NULL,
-        checkpoint TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (thread_id, checkpoint_id)
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_checkpoints_created 
-      ON checkpoints(created_at);
-    `);
-  }
-  
-  async get_checkpoint(config: any): Promise<Checkpoint | null> {
-    const { thread_id, checkpoint_id } = config.configurable;
-    
-    const stmt = this.db.prepare(
-      'SELECT checkpoint FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ?'
-    );
-    const result = stmt.get(thread_id, checkpoint_id) as any;
-    
-    return result ? JSON.parse(result.checkpoint) : null;
-  }
-  
-  async put_checkpoint(config: any, checkpoint: Checkpoint): Promise<void> {
-    const { thread_id, checkpoint_id } = config.configurable;
-    
-    const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_id, checkpoint)
-      VALUES (?, ?, ?)
-    `);
-    stmt.run(thread_id, checkpoint_id, JSON.stringify(checkpoint));
-  }
-  
-  async list_checkpoints(thread_id: string): Promise<Checkpoint[]> {
-    const stmt = this.db.prepare(
-      'SELECT checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY created_at DESC'
-    );
-    const results = stmt.all(thread_id) as any[];
-    
-    return results.map((row) => JSON.parse(row.checkpoint));
-  }
-}
+const checkpointer = SqliteSaver.fromConnString('./checkpoints.db'); // or ':memory:'
+const graph = stateGraph.compile({ checkpointer });
 ```
+
+Use `MemorySaver` from `@langchain/langgraph` for tests, SQLite for single-process development, and Postgres for anything multi-process.
 
 ---
 
@@ -862,11 +767,10 @@ import { Client } from 'langsmith';
 export class LangSmithMonitoring {
   private client: Client;
   
-  constructor(apiKey: string, projectName?: string) {
+  constructor(apiKey: string, private projectName?: string) {
     this.client = new Client({
       apiKey,
       apiUrl: 'https://api.smith.langchain.com',
-      projectName,
     });
   }
   
@@ -878,7 +782,8 @@ export class LangSmithMonitoring {
   ): Promise<void> {
     await this.client.createRun({
       name: agentName,
-      run_type: 'agent',
+      run_type: 'chain',
+      project_name: this.projectName,
       inputs: { input },
       outputs: { output },
       extra: {
@@ -897,6 +802,7 @@ export class LangSmithMonitoring {
     await this.client.createRun({
       name: toolName,
       run_type: 'tool',
+      project_name: this.projectName,
       inputs: input,
       outputs: output,
       extra: {
@@ -908,7 +814,7 @@ export class LangSmithMonitoring {
 }
 
 // Callback handler for LangChain integration
-import { BaseCallbackHandler } from '@langchain/core/callbacks';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 
 export class LangSmithCallbackHandler extends BaseCallbackHandler {
   name = 'langsmith_handler';
@@ -972,13 +878,14 @@ async function executeAgentWithLogging(
   logger.info('Agent execution started', { input });
   
   try {
-    const result = await agent.invoke({ input });
+    const state = await agent.invoke({ messages: [{ role: 'user', content: input }] });
+    const result = String(state.messages.at(-1)?.content ?? '');
     const duration = Date.now() - startTime;
     
     logger.info('Agent execution completed', {
       duration,
       inputLength: input.length,
-      outputLength: (result as string).length,
+      outputLength: result.length,
     });
     
     return result;
@@ -1005,7 +912,7 @@ async function executeAgentWithLogging(
 ```typescript
 // pages/api/agent.ts
 import { NextApiRequest, NextApiResponse } from 'next';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
 
 // Initialize at module level for reuse across requests
@@ -1013,8 +920,8 @@ const model = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const agent = createReactAgent({
-  llm: model,
+const agent = createAgent({
+  model,
   tools: [], // Add your tools
 });
 
@@ -1035,7 +942,10 @@ export default async function handler(
   const { input } = req.body;
   
   try {
-    const stream = await agent.stream({ input });
+    const stream = await agent.stream(
+      { messages: [{ role: 'user', content: input }] },
+      { streamMode: 'updates' }
+    );
     
     for await (const event of stream) {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -1060,7 +970,7 @@ export default async function handler(
 ```typescript
 // server.ts
 import express from 'express';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
 
 const app = express();
@@ -1075,8 +985,8 @@ async function initializeAgent(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
   
-  agent = createReactAgent({
-    llm: model,
+  agent = createAgent({
+    model,
     tools: [],
   });
   
@@ -1102,7 +1012,8 @@ app.post('/agent', async (req, res) => {
   const { input } = req.body;
   
   try {
-    const result = await agent.invoke({ input });
+    const state = await agent.invoke({ messages: [{ role: 'user', content: input }] });
+    const result = String(state.messages.at(-1)?.content ?? '');
     res.json({ result });
   } catch (error) {
     res.status(500).json({ error: error });

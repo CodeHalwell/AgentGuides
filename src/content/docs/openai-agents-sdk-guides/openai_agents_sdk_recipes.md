@@ -8,6 +8,8 @@ framework: openai-agents-sdk
 
 Production-ready implementations for common use cases and patterns with the OpenAI Agents SDK. Copy and adapt these recipes for your specific applications.
 
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).
+
 ## Table of Contents
 
 1. [Customer Service Agents](#customer-service-agents)

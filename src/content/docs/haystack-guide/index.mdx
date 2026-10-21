@@ -1,6 +1,6 @@
 ---
 title: "Haystack"
-description: "Production-first NLP framework with agentic pipelines, tool calling, and multi-agent orchestration."
+description: "deepset's component-and-pipeline framework for RAG and tool-calling agents, with multi-agent orchestration."
 framework: haystack
 language: python
 sidebar:
@@ -10,41 +10,43 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Production-first agentic NLP.** Haystack 2.x ships a component/pipeline architecture with built-in retrieval, ranking, and LLM nodes, plus an `Agent` class with tool calling, memory, and multi-agent orchestration patterns.
+**Pipelines first, agents included.** Haystack builds LLM applications from typed components (retrievers, rankers, prompt builders, chat generators) wired into pipelines. The `Agent` component runs a tool-calling loop with state and hooks, and can sit inside a pipeline like anything else.
+
+**Current version: `haystack-ai` %%version=haystack-ai%%** (checked %%versions-checked%%). Python 3.10+.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install haystack-ai==2.30.0
+    pip install haystack-ai==%%version=haystack-ai%%
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.30.0** · June 2026 · Python 3.10+
+    **%%version=haystack-ai%%** · Haystack 3 · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
     RAG pipelines, search-first agents, production deployments.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Where to start">
-  Already know Haystack 2.x? Jump to **Agent concepts** or **Multi-agent patterns**. New? Follow Zero → Hero.
+<Aside type="caution" title="Upgrading from Haystack 2.x?">
+  Haystack 3 removed the legacy text Generators, `ToolInvoker` and `AsyncPipeline`, moved many components into integration packages, and made prompt variables required by default. Read **Migrating from Haystack 2.x** before upgrading.
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Installation & setup" href="./haystack_comprehensive_guide/#installation-and-setup" description="Install, first pipeline · 10 min" />
-  <LinkCard title="2 · Architecture overview" href="./haystack_comprehensive_guide/#haystack-2x-architecture-overview" description="Components, pipelines, connections · 15 min" />
-  <LinkCard title="3 · Components & pipelines" href="./haystack_comprehensive_guide/#components-and-pipelines" description="How building blocks compose · 20 min" />
-  <LinkCard title="4 · Agent concepts" href="./haystack_comprehensive_guide/#agent-concepts-in-haystack" description="Agent loop, reasoning, state · 20 min" />
-  <LinkCard title="5 · Creating agents" href="./haystack_comprehensive_guide/#creating-agents-with-the-agent-class" description="Agent class, configuration · 20 min" />
-  <LinkCard title="6 · Tools & function calling" href="./haystack_comprehensive_guide/#tool-integration-and-function-calling" description="Built-in + custom tools · 20 min" />
-  <LinkCard title="7 · Single-purpose agents" href="./haystack_comprehensive_guide/#single-purpose-agents" description="Research, summarisation, Q&A · 20 min" />
-  <LinkCard title="8 · Conversational agents" href="./haystack_comprehensive_guide/#conversational-agents-with-memory" description="Multi-turn, memory management · 15 min" />
-  <LinkCard title="9 · Agentic workflows" href="./haystack_comprehensive_guide/#agentic-ai-workflows-production-first-design" description="Production patterns, resilience · 25 min" />
-  <LinkCard title="10 · Multi-agent pipelines" href="./haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns" description="Orchestration, delegation · 25 min" />
-  <LinkCard title="11 · Advanced agents" href="./haystack_advanced_agents_python/" description="Complex patterns, custom components · 30 min" />
-  <LinkCard title="12 · Production" href="./haystack_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
+  <LinkCard title="1 · Installation & setup" href="./haystack_comprehensive_guide/#installation-and-setup" description="Core package and integrations · 10 min" />
+  <LinkCard title="2 · Architecture overview" href="./haystack_comprehensive_guide/#haystack-3-architecture-overview" description="Components, pipelines, lifecycle · 15 min" />
+  <LinkCard title="3 · Components & pipelines" href="./haystack_comprehensive_guide/#components-and-pipelines" description="Building blocks, RAG, routing · 20 min" />
+  <LinkCard title="4 · Agent concepts" href="./haystack_comprehensive_guide/#agent-concepts-in-haystack" description="The agent loop, state, exit conditions · 15 min" />
+  <LinkCard title="5 · Creating agents" href="./haystack_comprehensive_guide/#creating-agents-with-the-agent-class" description="Agent class, prompts, streaming · 20 min" />
+  <LinkCard title="6 · Tools & function calling" href="./haystack_comprehensive_guide/#tool-integration-and-function-calling" description="@tool, ComponentTool, MCP · 20 min" />
+  <LinkCard title="7 · Single-purpose agents" href="./haystack_comprehensive_guide/#single-purpose-agents" description="Support and analysis agents · 15 min" />
+  <LinkCard title="8 · Conversational agents" href="./haystack_comprehensive_guide/#conversational-agents-with-memory" description="Multi-turn history · 10 min" />
+  <LinkCard title="9 · Agentic workflows" href="./haystack_comprehensive_guide/#agentic-ai-workflows-production-first-design" description="Agents in pipelines, loops, streaming · 25 min" />
+  <LinkCard title="10 · Multi-agent pipelines" href="./haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns" description="AgentTool, stages, routing · 20 min" />
+  <LinkCard title="11 · Advanced agents" href="./haystack_advanced_agents_python/" description="Hooks, state handlers, custom components · 25 min" />
+  <LinkCard title="12 · Production" href="./haystack_production_guide/" description="Serving, serialisation, scaling · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -52,12 +54,12 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <LinkCard title="Agent class" href="./haystack_comprehensive_guide/#creating-agents-with-the-agent-class" />
   <LinkCard title="Tool integration" href="./haystack_comprehensive_guide/#tool-integration-and-function-calling" />
-  <LinkCard title="Conversational memory" href="./haystack_comprehensive_guide/#conversational-agents-with-memory" />
+  <LinkCard title="State, hooks & HITL" href="./haystack_comprehensive_guide/#agent-configuration-and-customisation" />
   <LinkCard title="Multi-agent pipelines" href="./haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns" />
   <LinkCard title="Error handling & resilience" href="./haystack_comprehensive_guide/#error-handling-and-resilience" />
-  <LinkCard title="SearchableToolset (v2.21+)" href="./haystack_comprehensive_guide/#searchabletoolset-v2210" />
-  <LinkCard title="LLMRanker (v2.22+)" href="./haystack_comprehensive_guide/#llmranker-v2220" />
-  <LinkCard title="ToolInvoker" href="./haystack_comprehensive_guide/#toolinvoker" />
+  <LinkCard title="SearchableToolset" href="./haystack_comprehensive_guide/#searchabletoolset" />
+  <LinkCard title="LLMRanker" href="./haystack_comprehensive_guide/#llmranker" />
+  <LinkCard title="Migrating from 2.x" href="./haystack_comprehensive_guide/#migrating-from-haystack-2x" />
   <LinkCard title="Provider-agnostic design" href="./haystack_comprehensive_guide/#provider-agnostic-design-philosophy" />
   <LinkCard title="Observability" href="./haystack_observability_python/" />
 </CardGrid>
@@ -67,7 +69,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <LinkCard title="Comprehensive guide" href="./haystack_comprehensive_guide/" description="Single-page technical reference." />
   <LinkCard title="Advanced agents" href="./haystack_advanced_agents_python/" />
-  <LinkCard title="Multi-agent guide" href="./haystack_multi_agent_guide/" description="2025 multi-agent patterns." />
+  <LinkCard title="Multi-agent guide" href="./haystack_multi_agent_guide/" description="Coordinators, stages, routing, shared state." />
   <LinkCard title="Recipes" href="./haystack_recipes/" />
   <LinkCard title="Diagrams" href="./haystack_diagrams/" />
   <LinkCard title="Observability" href="./haystack_observability_python/" />
@@ -76,26 +78,38 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Start here" href="./start_here/" />
 </CardGrid>
 
-## What's new in v2.30.0 (June 2026)
+## What changed in Haystack 3
 
-- **v2.30.0 (June 2026)** — Minor release; bug fixes and dependency updates. All guide-referenced symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) confirmed present in installed `haystack-ai==2.30.0` (system Python, 2026-06-04) with `-W error::DeprecationWarning`; no warnings emitted.
-- **v2.29.0 (May 13)** — Minor release; bug fixes and dependency updates. All guide-referenced symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) confirmed present in installed `haystack-ai==2.29.0` (`.routine-envs/check-0513-py`); no `DeprecationWarning` emissions.
-- **v2.28.0 (April 2026)** — Stabilisation and bug fixes following 2.28 RCs. `SearchableToolset`, `LLMRanker`, and `ToolInvoker` stabilised. Expanded provider support (Anthropic, Gemini, Mistral, Ollama). Multi-agent guide published (October 2025).
+- **Generators removed.** `OpenAIGenerator`, `AzureOpenAIGenerator` and the Hugging Face text generators are gone; ChatGenerators accept a plain `str` and return `ChatMessage` replies.
+- **`ToolInvoker` removed.** Tools are passed to `Agent`; `tool_invoker_kwargs` became `tool_concurrency_limit` and `tool_streaming_callback_passthrough`.
+- **`AsyncPipeline` merged into `Pipeline`**, which now has `run`, `run_async`, `run_async_generator` and `stream`.
+- **Agent hooks.** `before_run`, `before_llm`, `before_tool`, `after_tool`, `on_exit`, `after_run`; human-in-the-loop confirmation is a `ConfirmationHook` in `haystack.hooks.human_in_the_loop`.
+- **Stricter defaults.** Prompt variables are required; tools read `State` only through `inputs_from_state`; `Pipeline.load` uses a module allowlist.
+- **Leaner core.** Hugging Face, sentence-transformers, web search, Whisper, OpenAPI, OpenTelemetry and Datadog components moved to integration packages under `haystack_integrations.*`; `haystack-experimental` is no longer installed by default.
 
-## Install, minimal example
+## Minimal example
 
 ```python
 from haystack.components.agents import Agent
 from haystack.components.generators.chat import OpenAIChatGenerator
 from haystack.dataclasses import ChatMessage
+from haystack.tools import tool
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"Sunny in {city}"
+
 
 agent = Agent(
-    chat_generator=OpenAIChatGenerator(model="gpt-4o"),
-    system_prompt="You are a helpful research assistant.",
+    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    tools=[get_weather],
+    system_prompt="You are a helpful assistant.",
 )
 
-result = agent.run(messages=[ChatMessage.from_user("Summarise Haystack 2.x.")])
-print(result["messages"][-1].text)
+result = agent.run(messages=[ChatMessage.from_user("What's the weather in Berlin?")])
+print(result["last_message"].text)
 ```
 
 Ready? **[Start Zero → Hero Step 1 →](./haystack_comprehensive_guide/#installation-and-setup)**
@@ -106,8 +120,7 @@ Ready? **[Start Zero → Hero Step 1 →](./haystack_comprehensive_guide/#instal
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-06-04 | 2.30.0 | Version bumped 2.29.0 → 2.30.0 (minor release); version card and "What's new" updated; comprehensive guide header updated; revision history entry added. Core symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) verified with `-W error::DeprecationWarning` against installed `haystack-ai==2.30.0` (system Python, 2026-06-04); no warnings. |
-| 2026-05-13 | 2.29.0 | Version bumped 2.28.0 → 2.29.0; "What's new" updated; comprehensive guide header updated; revision history entry added. Core symbols (`Pipeline`, `Document`, `Agent`, `MetadataRouter`, `PromptBuilder`, `OpenAIChatGenerator`, `ChatMessage`, `ChatRole`) verified with `-W error::DeprecationWarning` against installed `haystack-ai==2.29.0` (`.routine-envs/check-0513-py`); no warnings. |
+| %%versions-checked%% | %%version=haystack-ai%% | Guide moved from Haystack 2.x to 3.x. Code across all pages rewritten against the installed package; version references now come from the site's version data. |
+| 2026-06-04 | 2.30.0 | Last 2.x revision. |
 | 2026-04-21 | 2.28.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| April 20, 2026 | 2.28.0 | GA after 2.28.0rc1/rc2; stabilisation. |
 | November 2025 | 2.20.0 | Initial documented version. |

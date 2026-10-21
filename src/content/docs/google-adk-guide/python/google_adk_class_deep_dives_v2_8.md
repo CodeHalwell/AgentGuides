@@ -568,7 +568,7 @@ from google.adk.apps.app import EventsCompactionConfig
 from google.adk.apps.llm_event_summarizer import LlmEventSummarizer
 from google.adk.models.lite_llm import LiteLlm
 
-fast_llm = LiteLlm(model="gemini-2.0-flash")
+fast_llm = LiteLlm(model="gemini-2.5-flash")
 
 cfg = EventsCompactionConfig(
     summarizer=LlmEventSummarizer(
@@ -649,7 +649,7 @@ agent = LlmAgent(
 )
 
 # Use a cheaper model for summarisation
-summarizer = LlmEventSummarizer(llm=Gemini(model="gemini-2.0-flash"))
+summarizer = LlmEventSummarizer(llm=Gemini(model="gemini-2.5-flash"))
 
 app = App(
     name="support",

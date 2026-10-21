@@ -1,0 +1,57 @@
+components:
+  llm:
+    init_parameters:
+      meta: {}
+      model: mock-model
+      response_fn: null
+      responses: null
+      streaming_callback: null
+    type: __main__.FakeCls
+  prompt:
+    init_parameters:
+      required_variables: '*'
+      template:
+      - content:
+        - text: Answer using only the supplied documents.
+        meta: {}
+        name: null
+        role: system
+      - content:
+        - text: 'Documents:
+
+            {% for doc in documents %}- {{ doc.content }}
+
+            {% endfor %}
+
+            Question: {{ question }}'
+        meta: {}
+        name: null
+        role: user
+      variables: null
+    type: haystack.components.builders.chat_prompt_builder.ChatPromptBuilder
+  retriever:
+    init_parameters:
+      document_store:
+        init_parameters:
+          bm25_algorithm: BM25L
+          bm25_parameters: {}
+          bm25_tokenization_regex: '[^\W\u1100-\u11ff\ua960-\ua97f\ud7b0-\ud7ff\u3130-\u318f\uac00-\ud7af\u3041-\u3096\u30a1-\u30fa\u30fc\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uffa0-\uffdc]+|[\u1100-\u11ff\ua960-\ua97f\ud7b0-\ud7ff\u3130-\u318f\uac00-\ud7af\u3041-\u3096\u30a1-\u30fa\u30fc\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff66-\uff9f\uffa0-\uffdc]'
+          embedding_similarity_function: dot_product
+          index: 1fdfa349-183a-4ddc-a601-a63f018a43b2
+          return_embedding: true
+          shared: true
+          strict_datetime_comparison: false
+        type: haystack.document_stores.in_memory.document_store.InMemoryDocumentStore
+      filter_policy: replace
+      filters: null
+      scale_score: false
+      top_k: 3
+    type: haystack.components.retrievers.in_memory.bm25_retriever.InMemoryBM25Retriever
+connection_type_validation: true
+connections:
+- receiver: prompt.documents
+  sender: retriever.documents
+- receiver: llm.messages
+  sender: prompt.prompt
+max_runs_per_component: 100
+metadata: {}

@@ -403,19 +403,21 @@ For LLM-as-judge or weighted scoring patterns see the [evaluation guide](./micro
 
 ### Recipe 10 — Skills for progressive-disclosure knowledge
 
-A `Skill` is advertised by name + description. Only when the model decides to use it is the full body or a resource fetched — keeping context lean for rarely-used domain knowledge.
+A skill is advertised by name + description. Only when the model decides to use it is the full body or a resource fetched — keeping context lean for rarely-used domain knowledge.
 
 ```python
 # pricing_skill.py
 import asyncio
-from agent_framework import Agent, Skill, SkillsProvider
+from agent_framework import Agent, InlineSkill, SkillFrontmatter, SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
-pricing = Skill(
-    name="tenant-pricing",
-    description="Look up the per-SKU pricing matrix for the active tenant.",
-    content=(
+pricing = InlineSkill(
+    frontmatter=SkillFrontmatter(
+        name="tenant-pricing",
+        description="Look up the per-SKU pricing matrix for the active tenant.",
+    ),
+    instructions=(
         "Use `read_skill_resource('tenant-pricing', 'matrix')` to fetch the current "
         "matrix. Quote prices in USD unless the user specifies otherwise."
     ),
@@ -438,7 +440,12 @@ async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="You answer pricing questions for the active tenant.",
-        context_providers=[SkillsProvider(skills=[pricing])],
+        # Trusted, in-process skill: let the model load and read it without approval.
+        context_providers=[SkillsProvider(
+            pricing,
+            disable_load_skill_approval=True,
+            disable_read_skill_resource_approval=True,
+        )],
     )
 
     response = await agent.run(
@@ -1027,7 +1034,7 @@ For custom types in `session.state`, register them once at module import via `re
 
 ### Recipe 22 — Agent todo list with `TodoProvider` (Experimental)
 
-Give the agent a persistent task list. The provider exposes `add_todos`, `complete_todos`, `get_remaining_todos`, and `remove_todos` tools and injects usage instructions into the system prompt automatically.
+Give the agent a persistent task list. The provider exposes `todos_add`, `todos_complete`, `todos_get_remaining`, and `todos_remove` tools and injects usage instructions into the system prompt automatically.
 
 ```python
 # todo_agent.py
@@ -1100,7 +1107,7 @@ async def main() -> None:
         context_providers=[
             AgentModeProvider(
                 default_mode="plan",
-                mode_descriptions={
+                mode_instructions={
                     "plan":    "Analyse the requirements and ask clarifying questions. Do not write code yet.",
                     "execute": "Implement the approved plan autonomously. Do not ask questions mid-task.",
                     "review":  "Review the completed implementation for correctness and style.",
@@ -1148,7 +1155,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-The agent can also switch modes itself by calling `set_mode` — useful when the agent decides it has enough information to start executing without waiting for the user. Combine with `TodoProvider` (Recipe 22) so the agent tracks its own tasks across the mode transitions.
+The agent can also switch modes itself by calling `mode_set` — useful when the agent decides it has enough information to start executing without waiting for the user. Combine with `TodoProvider` (Recipe 22) so the agent tracks its own tasks across the mode transitions.
 
 ### Recipe 24 — Prompt injection defense with `SecureAgentConfig` (Experimental)
 
@@ -1506,7 +1513,7 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Drop old tool-call groups | `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Summarise old tool results | `ToolResultCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Token-budget composition | `TokenBudgetComposedStrategy(token_budget=N, tokenizer=..., strategies=[...])` |
-| Plan / execute modes (exp.) | `AgentModeProvider(mode_descriptions={...})` |
+| Plan / execute modes (exp.) | `AgentModeProvider(mode_instructions={...})` |
 | Prompt injection defense (exp.) | `SecureAgentConfig(...)` from `agent_framework.security` |
 | Function-based workflow nodes | `@executor` / `FunctionExecutor(func, id=)` |
 | Visualise a workflow | `WorkflowViz(workflow).to_mermaid()` / `.to_digraph()` / `.export(format="svg")` |

@@ -1001,14 +1001,20 @@ class GcsArtifactService(BaseArtifactService):
 
 ```python
 from google.adk.artifacts.gcs_artifact_service import GcsArtifactService
-from google.adk.runners import InMemoryRunner
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 from google.adk.apps import App
 from google.adk.agents import LlmAgent
 
 artifact_service = GcsArtifactService(bucket_name="my-project-artifacts")
 
 app = App(name="my_app", root_agent=LlmAgent(name="agent", model="gemini-2.5-flash", instruction="Help."))
-runner = InMemoryRunner(app=app, artifact_service=artifact_service)
+# InMemoryRunner always uses in-memory services; use Runner to plug in GCS
+runner = Runner(
+    app=app,
+    session_service=InMemorySessionService(),
+    artifact_service=artifact_service,
+)
 ```
 
 ### Saving an artifact from a tool

@@ -1,28 +1,25 @@
 ---
-title: "OpenAI Agents SDK: Critical 2025 Features and Updates"
-description: "Status: Production-Ready Last Updated: January 2025 SDK Version: v0.2.9+ Language: Python"
+title: "OpenAI Agents SDK: Features and Updates (2025–2026)"
+description: "The SDK's core features plus what changed in 2026 — sandbox agents, WebSocket transport, programmatic tool calling, openai v3. Python."
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK: Critical 2025 Features and Updates
+# OpenAI Agents SDK: Features and Updates (2025–2026)
 
-**Status:** Production-Ready
-**Last Updated:** January 2025
-**SDK Version:** v0.2.9+
-**Language:** Python
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). First written in January 2025 for v0.2.9. Language: Python.
 
 ---
 
 ## Overview
 
-The OpenAI Agents SDK is the **official production-ready replacement** for the experimental Swarm framework. This guide covers all critical 2025 features that make the Agents SDK the definitive choice for building agentic AI applications.
+The OpenAI Agents SDK is the **official production-ready replacement** for the experimental Swarm framework. This page covers the core features that arrived during 2025 and the larger additions of 2026 — see [What changed in 2026](#what-changed-in-2026) for the recent releases.
 
 ---
 
 ## Table of Contents
 
 1. [Swarm Replacement](#swarm-replacement)
-2. [Core Primitives (2025)](#core-primitives-2025)
+2. [Core Primitives](#core-primitives)
 3. [Built-in Tracing and Visualization](#built-in-tracing-and-visualization)
 4. [Function Tools with Automatic Schema Generation](#function-tools-with-automatic-schema-generation)
 5. [Provider-Agnostic Support](#provider-agnostic-support)
@@ -31,6 +28,7 @@ The OpenAI Agents SDK is the **official production-ready replacement** for the e
 8. [MCP Integration](#mcp-integration)
 9. [Evaluation and Fine-tuning Integration](#evaluation-and-fine-tuning-integration)
 10. [Production-Ready Features](#production-ready-features)
+11. [What changed in 2026](#what-changed-in-2026)
 
 ---
 
@@ -67,7 +65,7 @@ print(result.final_output)
 
 ---
 
-## Core Primitives (2025)
+## Core Primitives
 
 The Agents SDK provides six lightweight primitives that compose to build complex systems:
 
@@ -76,7 +74,7 @@ The Agents SDK provides six lightweight primitives that compose to build complex
 An LLM configured with instructions, tools, and guardrails.
 
 ```python
-from agents import Agent
+from agents import Agent, ModelSettings
 
 agent = Agent(
     name="Research Assistant",
@@ -84,9 +82,8 @@ agent = Agent(
         - Provide detailed, well-sourced information
         - Cite sources when available
         - Acknowledge uncertainty appropriately""",
-    model="gpt-4o",
-    temperature=0.7,
-    max_tokens=2048
+    model="gpt-5.6-sol",
+    model_settings=ModelSettings(max_tokens=2048),
 )
 ```
 
@@ -221,7 +218,7 @@ agent = Agent(name="Data Processor")
 # Group related runs
 with trace(
     workflow_name="Data Processing Pipeline",
-    group_id="batch_2025_01",
+    group_id="batch_2026_10",
     metadata={
         "environment": "production",
         "version": "2.0.0",
@@ -275,8 +272,8 @@ with trace("Fine-tune Data Collection", metadata={"purpose": "training"}):
 from agents import Agent, Runner, trace
 
 # Use tracing for model distillation
-expensive_model = Agent(name="GPT-4", model="gpt-4o", temperature=0)
-cheap_model = Agent(name="GPT-3.5", model="gpt-3.5-turbo", temperature=0)
+expensive_model = Agent(name="Teacher", model="gpt-5.6-sol")
+cheap_model = Agent(name="Student", model="gpt-5.6-luna")
 
 with trace("Distillation Comparison"):
     # Generate teacher outputs
@@ -296,7 +293,7 @@ with trace("Distillation Comparison"):
 
 ```python
 from agents import Agent, function_tool
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
 class FlightBooking(BaseModel):
@@ -306,7 +303,8 @@ class FlightBooking(BaseModel):
     passengers: int = Field(ge=1, le=9)
     class_type: Literal["economy", "business", "first"] = "economy"
 
-    @validator("origin", "destination")
+    @field_validator("origin", "destination")
+    @classmethod
     def validate_airport_code(cls, v):
         if not v.isupper():
             raise ValueError("Airport code must be uppercase")
@@ -328,7 +326,7 @@ agent = Agent(
 )
 
 # Automatic validation and error handling
-result = await Runner.run(agent, "Book flight from LAX to JFK on 2025-03-15 for 2 passengers")
+result = await Runner.run(agent, "Book flight from LAX to JFK on 2027-03-15 for 2 passengers")
 ```
 
 ### Async Tool Execution
@@ -373,25 +371,25 @@ import os
 os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
 os.environ["GOOGLE_API_KEY"] = "..."
 
-# Use Claude 3.5 Sonnet
+# Use Claude Sonnet
 claude_agent = Agent(
     name="Claude Assistant",
-    model="litellm/anthropic/claude-3-5-sonnet-20240620",
+    model="litellm/anthropic/claude-sonnet-4-5",
     instructions="You are Claude, an AI assistant created by Anthropic"
 )
 
-# Use Gemini 2.0 Flash
+# Use Gemini Flash
 gemini_agent = Agent(
     name="Gemini Assistant",
-    model="litellm/gemini/gemini-2.0-flash",
+    model="litellm/gemini/gemini-2.5-flash",
     instructions="You are Gemini, Google's AI model"
 )
 
-# Use Llama 2
+# Use a local Llama model via Ollama
 llama_agent = Agent(
     name="Llama Assistant",
-    model="litellm/replicate/meta-llama/llama-2-70b-chat",
-    instructions="You are Llama 2, Meta's open-source model"
+    model="litellm/ollama/llama3.1",
+    instructions="You are Llama, Meta's open-weight model"
 )
 
 # Use Mistral
@@ -419,14 +417,14 @@ async def compare_models():
 ### OpenAI Responses API Integration
 
 ```python
-from agents import Agent, Runner, ModelSettings
+from agents import Agent, Runner, ModelSettings, ReasoningItem
 from openai.types.shared import Reasoning
 
 agent = Agent(
     name="Research Agent",
     instructions="Conduct thorough research with reasoning",
     model_settings=ModelSettings(
-        reasoning=Reasoning(effort="high")  # Enable reasoning
+        reasoning=Reasoning(effort="high", summary="auto")  # Enable reasoning summaries
     )
 )
 
@@ -435,9 +433,12 @@ result = await Runner.run(
     "Analyze the implications of quantum computing on cryptography"
 )
 
-# Access reasoning trace
+# Reasoning summaries arrive as ReasoningItem entries
 print("Reasoning Process:")
-print(result.output_reasoning)
+for item in result.new_items:
+    if isinstance(item, ReasoningItem):
+        for part in item.raw_item.summary:
+            print(part.text)
 
 print("\nFinal Analysis:")
 print(result.final_output)
@@ -446,12 +447,14 @@ print(result.final_output)
 ### Chat Completions API Support
 
 ```python
-from agents import Agent, ModelSettings
+from agents import Agent, ModelSettings, OpenAIChatCompletionsModel
+from openai import AsyncOpenAI
 
-# Use standard Chat Completions API
+# Use the Chat Completions API instead of Responses
+# (or call set_default_openai_api("chat_completions") once at startup)
 agent = Agent(
     name="Assistant",
-    model="gpt-4o",
+    model=OpenAIChatCompletionsModel(model="gpt-5.6-luna", openai_client=AsyncOpenAI()),
     model_settings=ModelSettings(
         temperature=0.7,
         max_tokens=1000,
@@ -551,7 +554,7 @@ agent = Agent(
 ### Multiple Backend Support
 
 ```python
-from agents import Agent, Runner, SQLiteSession, InMemorySession
+from agents import Agent, Runner, SQLiteSession
 from agents.extensions.memory import RedisSession
 
 # SQLite (local, persistent)
@@ -563,8 +566,8 @@ redis_session = RedisSession.from_url(
     url="redis://localhost:6379"
 )
 
-# In-Memory (testing, temporary)
-memory_session = InMemorySession()
+# In-memory (testing, temporary) — SQLiteSession defaults to ":memory:"
+memory_session = SQLiteSession("test_user")
 
 # OpenAI Backend (managed)
 from agents import OpenAIConversationsSession
@@ -699,7 +702,7 @@ from agents import Agent, Runner, trace
 evaluation_agent = Agent(
     name="Evaluation Agent",
     instructions="Answer questions accurately",
-    model="gpt-4o"
+    model="gpt-5.6-sol"
 )
 
 # Collect evaluation data
@@ -771,11 +774,11 @@ from agents import Agent, Runner
 agent = Agent(name="Assistant")
 result = await Runner.run(agent, "Explain AI")
 
-# Access usage statistics
-if hasattr(result, "usage"):
-    print(f"Input tokens: {result.usage.input_tokens}")
-    print(f"Output tokens: {result.usage.output_tokens}")
-    print(f"Total tokens: {result.usage.input_tokens + result.usage.output_tokens}")
+# Usage is aggregated on the run context
+usage = result.context_wrapper.usage
+print(f"Input tokens: {usage.input_tokens}")
+print(f"Output tokens: {usage.output_tokens}")
+print(f"Total tokens: {usage.total_tokens}")
 ```
 
 ### Cost Optimization
@@ -786,15 +789,15 @@ from agents import Agent, ModelSettings
 # Use cheaper model for simple queries
 fast_agent = Agent(
     name="Fast Agent",
-    model="gpt-4o-mini",
-    model_settings=ModelSettings(temperature=0, max_tokens=200)
+    model="gpt-5.6-luna",
+    model_settings=ModelSettings(max_tokens=200, verbosity="low")
 )
 
 # Use premium model for complex queries
 premium_agent = Agent(
     name="Premium Agent",
-    model="gpt-4o",
-    model_settings=ModelSettings(temperature=0.7, max_tokens=2000)
+    model="gpt-5.6-sol",
+    model_settings=ModelSettings(max_tokens=2000)
 )
 
 # Route based on complexity
@@ -806,9 +809,66 @@ def select_agent(query: str):
 
 ---
 
+## What changed in 2026
+
+The SDK moved from 0.6 to %%version=openai-agents%% during 2026. Minor (`0.Y`) releases may contain breaking changes, so read the upstream release notes before bumping a pinned minor. The highlights:
+
+| Release | What changed |
+|---------|--------------|
+| 0.7–0.9 | Nested handoff history became opt-in (`RunConfig(nest_handoff_history=True)`); sync function tools run on worker threads; MCP tool failures are returned to the model by default; Python 3.10+ required. |
+| 0.10 | WebSocket transport for Responses models (`responses_websocket_session()`), opt-in. |
+| 0.13 | `MCPServer.list_resources()` / `read_resource()`; resumable Streamable HTTP MCP sessions; default Realtime model `gpt-realtime-1.5`. |
+| 0.14 | **Sandbox Agents** — `SandboxAgent`, `Manifest`, `SandboxRunConfig`, with Unix-local, Docker and hosted backends (Blaxel, Cloudflare, Daytona, E2B, Modal, Runloop, Vercel). |
+| 0.15 | Model refusals raise `ModelRefusalError` (handle with `error_handlers={"model_refusal": ...}`). |
+| 0.16 | Default model became `gpt-5.4-mini`; `max_turns=None` disables the turn limit. |
+| 0.18 | Default Realtime model `gpt-realtime-2.1`. |
+| 0.19 | `ProgrammaticToolCallingTool`; `@tool` alias for `@function_tool` in `agents.decorators`; settings accept dicts or typed objects throughout. |
+| 0.20 | Default model `gpt-5.6-luna`; MCP Python SDK v2 support. |
+| 0.21 | Requires `openai>=3,<4`; HTTP stack moves to HTTPX2; provider-neutral testing utilities. |
+| 0.22 | Stricter failure handling: failed/incomplete Responses raise `ModelBehaviorError`; output guardrails withhold blocked tool output from history. |
+| 0.23–0.24 | MCP listing page limits, opt-in Docker removal protection, MCP tool annotations, run-wide tool error formatting; Sandbox Agents no longer labelled beta in the docs. |
+
+### Sandbox agents
+
+A `SandboxAgent` gets a persistent workspace (files, directories, Git repos, mounts, snapshots) and sandbox-native tools, and runs through the normal `Runner`. See [Sandbox Agents](./openai_agents_sdk_comprehensive_guide/#sandbox-agents--isolated-execution-environment) in the comprehensive guide for a full example.
+
+### Programmatic tool calling
+
+Supported Responses models can write a short JavaScript program that calls your tools in loops or in parallel and returns one result, saving a model round trip per call. The program runs in a hosted V8 sandbox with no filesystem or network access, and can call only tools that opt in:
+
+```python
+from pydantic import BaseModel
+from agents import Agent, ModelSettings, ProgrammaticToolCallingTool, Runner
+from agents.decorators import tool
+
+class InventoryOutput(BaseModel):
+    sku: str
+    available_units: int
+
+@tool(allowed_callers=["programmatic"])
+def get_inventory(sku: str) -> InventoryOutput:
+    return InventoryOutput(sku=sku, available_units=42)
+
+agent = Agent(
+    name="Inventory planner",
+    model="gpt-5.6",
+    model_settings=ModelSettings(tool_choice="programmatic_tool_calling"),
+    tools=[get_inventory, ProgrammaticToolCallingTool()],
+)
+
+result = Runner.run_sync(agent, "Check inventory for desk-lamp and summarise it.")
+print(result.final_output)
+```
+
+### openai v3 and HTTPX2
+
+From 0.21 the SDK requires `openai>=3.0.0,<4`. Code using the default client needs no change. If you pass `http_client=` to `AsyncOpenAI`, migrate it from `httpx` to `httpx2` (the OpenAI SDK's `DefaultAsyncHttpx2Client` keeps its defaults while letting you add options).
+
+---
+
 ## Summary
 
-The OpenAI Agents SDK (2025) provides:
+The OpenAI Agents SDK provides:
 
 ✅ **Production-Ready** replacement for Swarm
 ✅ **Core Primitives** (Agents, Handoffs, Guardrails, Sessions, Tools, Runner)
@@ -821,11 +881,7 @@ The OpenAI Agents SDK (2025) provides:
 ✅ **Evaluation & Fine-tuning** integration
 ✅ **Production Features** (error handling, cost optimization, observability)
 
-**Recommendation**: Use OpenAI Agents SDK for all production agentic applications.
-
 ---
 
-**Last Updated:** January 2025
-**SDK Version:** v0.2.9+
 **Next:** [Swarm Migration Guide](./openai_agents_sdk_swarm_migration_guide/)
 

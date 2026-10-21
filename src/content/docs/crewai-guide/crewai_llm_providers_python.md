@@ -8,7 +8,7 @@ sidebar:
   order: 25
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/llm.py`, `crewai/llms/base_llm.py`, `crewai/llms/providers/`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/llm.py`, `crewai/llms/base_llm.py`, `crewai/llms/providers/`).
 
 The `LLM` factory is doing more than it looks. It's a `__new__`-time router that picks between a native provider SDK and the LiteLLM fallback based on the model name — and it's stricter than older docs suggest.
 
@@ -64,17 +64,17 @@ The first argument **must** include a recognised provider prefix if the model na
 
 Native providers (source: `SUPPORTED_NATIVE_PROVIDERS`):
 
-| Prefix | Canonical provider | SDK package |
+| Prefix | Canonical provider | SDK package (extra) |
 |---|---|---|
-| `openai` | openai | `openai` |
-| `anthropic`, `claude` | anthropic | `anthropic` |
-| `azure`, `azure_openai` | azure | `openai` (Azure) |
-| `google`, `gemini` | gemini | `google-generativeai` |
-| `bedrock`, `aws` | bedrock | `boto3` |
-| `openrouter` | openrouter | `openai`-compatible |
-| `deepseek`, `ollama`, `ollama_chat`, `hosted_vllm`, `cerebras`, `dashscope` | same | `openai`-compatible |
+| `openai` | openai | `openai` (installed by default) |
+| `anthropic`, `claude` | anthropic | `anthropic` (`crewai[anthropic]`) |
+| `azure`, `azure_openai` | azure | `azure-ai-inference` (`crewai[azure-ai-inference]`) |
+| `google`, `gemini` | gemini | `google-genai` (`crewai[google-genai]`) |
+| `bedrock`, `aws` | bedrock | `boto3` (`crewai[bedrock]`) |
+| `snowflake` | snowflake | native Snowflake Cortex provider |
+| `openrouter`, `deepseek`, `ollama`, `ollama_chat`, `hosted_vllm`, `cerebras`, `dashscope`, `deepinfra` | same | `openai`-compatible |
 
-Anything else (`mistral/`, `groq/`, `cohere/`, custom prefixes) falls through to LiteLLM.
+Anything else (`mistral/`, `groq/`, `cohere/`, custom prefixes) falls through to LiteLLM, which is an optional extra (`crewai[litellm]`).
 
 ## Force LiteLLM
 
@@ -254,7 +254,7 @@ class Plan(BaseModel):
 llm = LLM(model="openai/gpt-4o", response_format=Plan)
 ```
 
-Works for OpenAI, Gemini 2, and Claude's structured-tool mode. For other providers set `Task.output_pydantic` instead.
+Works for OpenAI, Gemini, and Claude's structured-tool mode. For other providers set `Task.output_pydantic` instead.
 
 ### 5. LiteLLM routing config
 

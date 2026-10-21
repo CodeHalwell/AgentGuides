@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Skills"
-description: "Progressive-disclosure domain knowledge for agents. InlineSkill / ClassSkill / FileSkillsSource / SkillsProvider with code-defined and file-based skills, composable sources, script runners, and approval gates. Verified against agent-framework-core 1.6.0."
+description: "Progressive-disclosure domain knowledge for agents. InlineSkill / ClassSkill / FileSkillsSource / SkillsProvider with code-defined and file-based skills, composable sources, script runners, and approval gates."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -9,7 +9,7 @@ language: python
 
 Skills are a **progressive-disclosure** knowledge pattern. Instead of stuffing every reference doc and procedure into the system prompt, you advertise skill *names and descriptions* (cheap), let the model decide which to load (`load_skill`), and then fetch resources (`read_skill_resource`) or run scripts (`run_skill_script`) on demand. The total context stays small until the agent actually needs deeper knowledge.
 
-This follows the [Agent Skills specification](https://agentskills.io). Verified against `agent-framework-core==1.6.0` (`agent_framework._skills`). Marked `experimental` — API may evolve.
+This follows the [Agent Skills specification](https://agentskills.io). Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._skills`, re-checked %%versions-checked%%; first written for 1.6.0). Marked `experimental` — API may evolve.
 
 ## The primitives
 
@@ -27,6 +27,8 @@ This follows the [Agent Skills specification](https://agentskills.io). Verified 
 | `SkillScriptRunner` | Strategy protocol for running file-based scripts (sandbox, subprocess, hosted) |
 
 > **API change in 1.3.0:** `Skill` is now an abstract base class. Use `InlineSkill` for code-defined skills (with `instructions=` instead of `content=`). `SkillsProvider` now takes a positional `source` argument instead of `skills=`/`skill_paths=` keyword args. For file-based skills use `SkillsProvider.from_paths(...)`.
+>
+> **API change in 1.11.0:** the single `require_script_approval=` flag was replaced by three opt-out flags — `disable_load_skill_approval`, `disable_read_skill_resource_approval` and `disable_run_skill_script_approval` — and all three skill tools now **require approval by default**. The examples below leave the defaults in place, so the run returns approval requests (see [Script approval](#script-approval)) until you approve them or opt out for skills from a trusted source.
 
 ## Code-defined skill (`InlineSkill`)
 
@@ -34,13 +36,15 @@ The fastest path — define a skill in Python and register it with `SkillsProvid
 
 ```python
 import asyncio
-from agent_framework import Agent, InlineSkill, InlineSkillResource, SkillsProvider
+from agent_framework import Agent, InlineSkill, InlineSkillResource, SkillsProvider, SkillFrontmatter
 from agent_framework.openai import OpenAIChatClient
 
 
 db_skill = InlineSkill(
-    name="db-ops",
-    description="Query and describe the production PostgreSQL database.",
+    frontmatter=SkillFrontmatter(
+        name="db-ops",
+        description="Query and describe the production PostgreSQL database.",
+    ),
     instructions=(
         "When the user asks about data, first call `read_skill_resource` with "
         "'schema' to see the tables, then craft a SELECT query. Never run INSERT/UPDATE/DELETE."
@@ -86,11 +90,13 @@ provider = SkillsProvider([db_skill, stats_skill, tone_skill])
 Resources can be callables — useful when content changes per request or is expensive to build upfront:
 
 ```python
-from agent_framework import InlineSkill, InlineSkillResource
+from agent_framework import InlineSkill, InlineSkillResource, SkillFrontmatter
 
 inventory_skill = InlineSkill(
-    name="inventory",
-    description="Check real-time stock levels.",
+    frontmatter=SkillFrontmatter(
+        name="inventory",
+        description="Check real-time stock levels.",
+    ),
     instructions="Use `read_skill_resource('inventory', 'stock')` to see current stock.",
 )
 
@@ -121,8 +127,10 @@ resource = InlineSkillResource(
 )
 
 pricing_skill = InlineSkill(
-    name="pricing",
-    description="Pricing matrix lookup.",
+    frontmatter=SkillFrontmatter(
+        name="pricing",
+        description="Pricing matrix lookup.",
+    ),
     instructions="Use `read_skill_resource('pricing', 'matrix')` to get prices.",
     resources=[resource],
 )
@@ -133,13 +141,15 @@ pricing_skill = InlineSkill(
 Resource callables can declare `**kwargs` to receive runtime data forwarded by `agent.run(..., function_invocation_kwargs={...})`:
 
 ```python
-from agent_framework import Agent, InlineSkill, SkillsProvider
+from agent_framework import Agent, InlineSkill, SkillsProvider, SkillFrontmatter
 from agent_framework.openai import OpenAIChatClient
 
 
 tenant_skill = InlineSkill(
-    name="tenant-pricing",
-    description="Fetch pricing matrix for the current tenant.",
+    frontmatter=SkillFrontmatter(
+        name="tenant-pricing",
+        description="Fetch pricing matrix for the current tenant.",
+    ),
     instructions="Use `read_skill_resource('tenant-pricing', 'matrix')` to see the current matrix.",
 )
 
@@ -172,12 +182,14 @@ Without `**kwargs` in the signature, the framework calls the resource as `functi
 Skills can bundle executable code. Code-defined scripts run in-process:
 
 ```python
-from agent_framework import InlineSkill
+from agent_framework import InlineSkill, SkillFrontmatter
 
 
 stats_skill = InlineSkill(
-    name="stats",
-    description="Compute summary statistics on numeric data.",
+    frontmatter=SkillFrontmatter(
+        name="stats",
+        description="Compute summary statistics on numeric data.",
+    ),
     instructions="Use `run_skill_script` with name='summary'.",
 )
 
@@ -200,11 +212,13 @@ Both `@skill.resource` and `@skill.script` support bare and parameterised forms:
 
 ```python
 import json
-from agent_framework import InlineSkill
+from agent_framework import InlineSkill, SkillFrontmatter
 
 skill = InlineSkill(
-    name="db-ops",
-    description="PostgreSQL read-only operations.",
+    frontmatter=SkillFrontmatter(
+        name="db-ops",
+        description="PostgreSQL read-only operations.",
+    ),
     instructions="Use load_skill to fetch the schema first, then craft queries.",
 )
 
@@ -299,6 +313,7 @@ When the user pastes a contract, read `references/clauses.md` first. For each se
 
 ```python
 from agent_framework import (
+    SkillFrontmatter,
     Agent,
     InlineSkill,
     InMemorySkillsSource,
@@ -307,14 +322,18 @@ from agent_framework import (
 from agent_framework.openai import OpenAIChatClient
 
 skill_a = InlineSkill(
-    name="db-ops",
-    description="Query and describe the production PostgreSQL database.",
+    frontmatter=SkillFrontmatter(
+        name="db-ops",
+        description="Query and describe the production PostgreSQL database.",
+    ),
     instructions="Use read_skill_resource('db-ops', 'schema') to see the tables, then craft SELECT queries only.",
 )
 
 skill_b = InlineSkill(
-    name="reporting",
-    description="Generate structured business reports from query results.",
+    frontmatter=SkillFrontmatter(
+        name="reporting",
+        description="Generate structured business reports from query results.",
+    ),
     instructions="Format data as Markdown tables with a short executive summary.",
 )
 
@@ -391,6 +410,7 @@ Combine code-defined and file-based skills with `AggregatingSkillsSource`:
 
 ```python
 from agent_framework import (
+    SkillFrontmatter,
     Agent,
     AggregatingSkillsSource,
     DeduplicatingSkillsSource,
@@ -403,8 +423,10 @@ from agent_framework.openai import OpenAIChatClient
 
 # Code-defined skill
 analytics_skill = InlineSkill(
-    name="analytics",
-    description="Run data analytics queries.",
+    frontmatter=SkillFrontmatter(
+        name="analytics",
+        description="Run data analytics queries.",
+    ),
     instructions="Use the run_query script to run SQL SELECT queries.",
 )
 
@@ -537,10 +559,10 @@ provider = SkillsProvider.from_paths(
 
 ## Script approval
 
-Gate every script execution on human approval:
+Script execution is gated on human approval by default. A common set-up is to trust skill *discovery* and *reading* but keep a human in front of every script run:
 
 ```python
-from agent_framework import Agent, SkillsProvider
+from agent_framework import Agent, Message, SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 agent = Agent(
@@ -549,31 +571,34 @@ agent = Agent(
         SkillsProvider.from_paths(
             "./skills",
             script_runner=my_runner,
-            require_script_approval=True,
+            disable_load_skill_approval=True,           # trusted source: load freely
+            disable_read_skill_resource_approval=True,  # trusted source: read freely
+            # disable_run_skill_script_approval stays False -> scripts need approval
         )
     ],
 )
 
 session = agent.create_session()
-stream = agent.run("Run the nightly report", session=session, stream=True)
+response = await agent.run("Run the nightly report", session=session)
 
-async for update in stream:
-    if update.type == "function_approval_request":
-        proposal = update.data
-        print(f"Approve script {proposal.function_call.name} with args {proposal.function_call.arguments}?")
-        approval = proposal.to_function_approval_response(approved=True)
-        await stream.send_response(approval)
-    elif update.type == "message":
-        print(update.text)
+while response.user_input_requests:
+    replies = []
+    for request in response.user_input_requests:
+        call = request.function_call
+        print(f"Approve {call.name} with args {call.arguments}?")
+        replies.append(request.to_function_approval_response(approved=True))
+    response = await agent.run(Message("user", replies), session=session)
+
+print(response.text)
 ```
 
-When the agent tries to run a script, the run pauses and emits a `function_approval_request`. Call `stream.send_response(approval)` — not a new `agent.run()` — to resume the paused call.
+When the agent tries to run a script, the run returns with a `function_approval_request` in `response.user_input_requests`. Reply on the same session with the approval responses to let the call proceed (an earlier draft of this page showed a `stream.send_response()` method — it does not exist).
 
 ## `ClassSkill` — reusable skill types
 
 Subclass `ClassSkill` to create a self-contained, distributable skill class. This pattern is ideal when different teams or deployments need the same skill with different configuration (e.g. different DB connection strings, API endpoints, or tenant IDs).
 
-The correct API (verified against `agent-framework-core==1.6.0`):
+The correct API (verified against `agent-framework` %%version=agent-framework%%):
 
 - `super().__init__(frontmatter=SkillFrontmatter(name=..., description=...))` — constructor takes only `frontmatter=`.
 - `@property instructions(self) -> str` — **abstract**; must be overridden to return the skill body text.
@@ -802,7 +827,7 @@ Key distribution properties of `ClassSkill`:
 | `description` | `str` | Yes | Max 1024 characters. |
 | `license` | `str \| None` | No | SPDX licence identifier (e.g. `"MIT"`, `"Apache-2.0"`). |
 | `compatibility` | `str \| None` | No | Max 500 characters. Documents framework/version requirements. |
-| `allowed_tools` | `str \| None` | No | Space-delimited list of pre-approved tool names the skill may call. Used by `require_script_approval=True` to allow specific tools without gating. |
+| `allowed_tools` | `str \| None` | No | Space-delimited list of pre-approved tool names the skill may call. Advisory metadata from the Agent Skills spec; the framework surfaces it but does not use it to bypass approval. |
 | `metadata` | `dict[str, str] \| None` | No | Arbitrary string key-value pairs. Surfaced to `FilteringSkillsSource` predicates and custom runners. |
 
 ```python
@@ -845,8 +870,11 @@ SkillsProvider(
     source,                          # SkillsSource | Sequence[Skill] | Skill
     *,
     instruction_template=None,       # custom system-prompt template; must contain {skills}
-    require_script_approval=False,   # pause before executing any script
     disable_caching=False,           # rebuild tools/instructions on every invocation
+    cache_refresh_interval=None,     # timedelta after which cached skills are re-discovered
+    disable_load_skill_approval=False,           # False = load_skill needs approval
+    disable_read_skill_resource_approval=False,  # False = read_skill_resource needs approval
+    disable_run_skill_script_approval=False,     # False = run_skill_script needs approval
     source_id=None,                  # unique identifier for this provider instance
 )
 
@@ -855,11 +883,17 @@ SkillsProvider.from_paths(
     skill_paths,                     # str | Path | Sequence[str | Path]
     *,
     script_runner=None,
-    resource_extensions=None,
-    script_extensions=None,
+    resource_extensions=(".md", ".json", ".yaml", ".yml", ".csv", ".xml", ".txt"),
+    script_extensions=(".py",),
+    search_depth=2,
+    script_filter=None,              # Callable[[skill_name, path], bool]
+    resource_filter=None,            # Callable[[skill_name, path], bool]
     instruction_template=None,
-    require_script_approval=False,
     disable_caching=False,
+    cache_refresh_interval=None,
+    disable_load_skill_approval=False,
+    disable_read_skill_resource_approval=False,
+    disable_run_skill_script_approval=False,
     source_id=None,
 )
 ```

@@ -270,7 +270,7 @@ USER_ID = "alice"
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     instruction=(
         "You are a helpful assistant. Use load_memory to recall "
         "things the user told you in previous conversations."
@@ -347,7 +347,7 @@ report_tool = FunctionTool(func=generate_report)
 
 agent = LlmAgent(
     name="report_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     instruction=(
         "Generate reports when asked. Use generate_report to save them. "
         "Use load_artifacts to retrieve them when asked."
@@ -404,7 +404,7 @@ USER_ID = "charlie"
 
 agent = LlmAgent(
     name="vertex_assistant",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     instruction=(
         "You are a helpful assistant. Memories from past conversations "
         "are automatically available to you via preload_memory. "

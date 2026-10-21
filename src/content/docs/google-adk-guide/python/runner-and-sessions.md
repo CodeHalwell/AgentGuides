@@ -45,7 +45,8 @@ asyncio.run(main())
 ## The App container
 
 ```python
-from google.adk.apps import App, ResumabilityConfig, EventsCompactionConfig
+from google.adk.apps import App, ResumabilityConfig
+from google.adk.apps.app import EventsCompactionConfig  # not re-exported from google.adk.apps
 from google.adk.plugins import LoggingPlugin
 from google.adk.agents.context_cache_config import ContextCacheConfig
 

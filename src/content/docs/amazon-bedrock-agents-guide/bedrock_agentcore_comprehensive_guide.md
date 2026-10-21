@@ -1,19 +1,18 @@
 ---
 title: "Amazon Bedrock AgentCore: Comprehensive Technical Guide"
-description: "A complete technical reference for Amazon Bedrock AgentCore, the secure serverless runtime for building, deploying, and managing AI agents at enterprise scale. AgentCore provides a"
+description: "Technical reference for Amazon Bedrock AgentCore: Runtime, Memory, Gateway, Identity, Code Interpreter, Browser and Observability, with examples in the bedrock-agentcore Python SDK and boto3."
 framework: amazon-bedrock-agents
 ---
 
 # Amazon Bedrock AgentCore: Comprehensive Technical Guide
 
-**Framework Name:** bedrock_agentcore
+A technical reference for Amazon Bedrock AgentCore, AWS's platform for deploying and operating agents built with any framework and any model. AgentCore is a set of modular services — Runtime, Memory, Gateway, Identity, Code Interpreter, Browser, Observability, and the newer managed Harness — that you can use together or on their own.
 
-A complete technical reference for Amazon Bedrock AgentCore, the secure serverless runtime for building, deploying, and managing AI agents at enterprise scale. AgentCore provides a unified platform for agent development with support for multiple open-source frameworks, secure sandbox execution, and comprehensive AWS integration.
+> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore%% and `boto3` %%version=boto3%% (checked %%versions-checked%%). Every class, function and boto3 operation shown here was checked against those installed packages.
 
-**Announced:** AWS Summit NYC 2025
-**Status:** Generally Available
-**Free Trial:** Available until September 16, 2025
-**Last Updated:** April 2026
+**History:** AgentCore was announced in preview at AWS Summit New York in July 2025 and became generally available in October 2025. Preview-period pricing (free until 16 September 2025) no longer applies; see the [AgentCore pricing page](https://aws.amazon.com/bedrock/agentcore/pricing/).
+
+**Relationship to Bedrock Agents:** Amazon Bedrock Agents (now "Agents Classic") stopped accepting new customers on 30 July 2026 and is in maintenance mode. AWS recommends AgentCore — either the managed harness or code-defined agents on Runtime — for new work and as the migration target. See [Bedrock Agents Classic maintenance mode](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html).
 
 ---
 
@@ -36,148 +35,41 @@ A complete technical reference for Amazon Bedrock AgentCore, the secure serverle
 
 ## Introduction to AgentCore
 
-Amazon Bedrock AgentCore is a **secure serverless runtime** that simplifies building and deploying AI agents with complex data analysis and workflow automation capabilities. It provides a managed environment for executing agent code with built-in security, scalability, and integration with AWS services.
+AgentCore separates *what your agent does* (your code, in any framework) from *where and how it runs* (managed, session-isolated infrastructure with identity, memory, tools and telemetry). You keep your Strands, LangGraph, CrewAI, LlamaIndex, Google ADK or OpenAI Agents SDK code; AgentCore supplies the operational parts.
 
 ### Key Benefits
 
-| Benefit | Description | Value Proposition |
-|---------|-------------|-------------------|
-| **Secure Sandbox** | Isolated JavaScript, TypeScript, and Python execution | Enterprise-grade security |
-| **Framework Agnostic** | Supports Strands, LangChain, LangGraph, CrewAI | Use your preferred framework |
-| **Serverless Runtime** | No infrastructure management required | Reduced operational overhead |
-| **AWS Integration** | Native integration with AWS services | Seamless enterprise workflows |
-| **Free Trial** | Free until September 16, 2025 | Risk-free evaluation |
+| Benefit | Description |
+|---------|-------------|
+| **Session isolation** | Each Runtime session runs in its own microVM; state does not leak between sessions or users |
+| **Framework- and model-agnostic** | Any Python or Node.js framework; any model in or outside Bedrock |
+| **Serverless** | No clusters to manage; pay for what sessions consume |
+| **Protocol support** | HTTP, MCP, A2A and AG-UI server protocols on Runtime |
+| **Composable services** | Use Memory, Gateway or Code Interpreter without Runtime, or vice versa |
 
 ### Use Cases
 
-- **Complex Data Analysis**: Run analytical queries on large datasets with code interpretation
-- **Workflow Automation**: Orchestrate multi-step business processes
-- **Custom Agent Logic**: Execute complex agent reasoning with full programming language support
-- **Open-Source Framework Integration**: Bring existing agent implementations to AWS
+- **Hosting existing agents**: wrap an existing agent in a small entrypoint and deploy it to Runtime
+- **Tool access**: expose REST APIs, Lambda functions or existing MCP servers to agents through Gateway
+- **Long-running and asynchronous work**: sessions can run for hours, with background tasks reported to the health check
+- **Data analysis**: run model-generated code in the Code Interpreter sandbox rather than in your own process
 
 ---
 
 ## Core Features
 
-### 1. Secure Serverless Runtime
+| Service | What it does | Python SDK entry point | boto3 client |
+|---------|--------------|------------------------|--------------|
+| **Runtime** | Hosts your agent or MCP/A2A server in session-isolated microVMs | `bedrock_agentcore.BedrockAgentCoreApp` | `bedrock-agentcore-control` (`create_agent_runtime`), `bedrock-agentcore` (`invoke_agent_runtime`) |
+| **Harness** | Managed agent loop declared as configuration (model, prompt, tools) | — | `bedrock-agentcore-control` (`create_harness`), `bedrock-agentcore` (`invoke_harness`) |
+| **Memory** | Short-term events and long-term extracted records | `bedrock_agentcore.memory.MemoryClient` | `bedrock-agentcore-control` (`create_memory`), `bedrock-agentcore` (`create_event`, `retrieve_memory_records`) |
+| **Gateway** | Turns APIs, Lambda and MCP servers into one MCP endpoint | `bedrock_agentcore.gateway.client.GatewayClient` | `bedrock-agentcore-control` (`create_gateway`, `create_gateway_target`) |
+| **Identity** | Inbound auth (JWT/IAM) and outbound OAuth / API-key credentials | `bedrock_agentcore.identity.auth.requires_access_token` | `bedrock-agentcore-control` (credential providers) |
+| **Code Interpreter** | Sandboxed Python/JavaScript/TypeScript execution | `bedrock_agentcore.tools.code_interpreter_client.code_session` | `bedrock-agentcore` (`invoke_code_interpreter`) |
+| **Browser** | Managed headless browser for web automation | `bedrock_agentcore.tools.browser_client.browser_session` | `bedrock-agentcore` (`start_browser_session`) |
+| **Observability** | OpenTelemetry traces, metrics and logs in CloudWatch | via OTEL / ADOT instrumentation | CloudWatch |
 
-AgentCore provides a **secure, isolated execution environment** for agent code:
-
-```python
-from bedrock_agentcore import AgentCoreRuntime
-
-# Create a secure runtime instance
-runtime = AgentCoreRuntime(
-    runtime_type='python3.11',
-    timeout_seconds=300,
-    memory_mb=1024,
-    security_profile='enterprise'
-)
-
-# Execute agent code in secure sandbox
-result = runtime.execute(
-    code="""
-import pandas as pd
-import numpy as np
-
-# Complex data analysis
-data = pd.read_csv('sales_data.csv')
-monthly_revenue = data.groupby('month')['revenue'].sum()
-forecast = np.polyfit(range(len(monthly_revenue)), monthly_revenue, deg=2)
-return {'monthly_revenue': monthly_revenue.to_dict(), 'forecast_coefficients': forecast.tolist()}
-    """,
-    context={
-        'data_sources': ['s3://my-bucket/sales_data.csv'],
-        'permissions': ['s3:GetObject']
-    }
-)
-
-print(f"Analysis complete: {result['output']}")
-```
-
-### 2. Framework Support
-
-AgentCore supports multiple open-source frameworks:
-
-| Framework | Language | Features | Use Case |
-|-----------|----------|----------|----------|
-| **Strands** | Python | Lightweight, AWS-native | Quick prototyping, simple workflows |
-| **LangChain** | Python | Rich ecosystem, RAG | Document analysis, knowledge bases |
-| **LangGraph** | Python | State machines, graphs | Complex multi-step workflows |
-| **CrewAI** | Python | Multi-agent collaboration | Team-based agent systems |
-
-### 3. Data Analysis Capabilities
-
-Built-in support for complex data analysis:
-
-```python
-from bedrock_agentcore import DataAnalysisAgent
-
-# Create data analysis agent
-analysis_agent = DataAnalysisAgent(
-    model_id='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    enable_code_interpreter=True,
-    allowed_libraries=['pandas', 'numpy', 'matplotlib', 'scikit-learn']
-)
-
-# Analyze sales data
-result = analysis_agent.analyze(
-    query="Analyze Q4 2024 sales trends and predict Q1 2025 revenue",
-    data_sources=[
-        's3://data-lake/sales/2024-q4.parquet',
-        's3://data-lake/sales/historical.parquet'
-    ],
-    output_format='json'
-)
-
-print(result['insights'])
-print(result['visualizations'])  # URLs to generated charts
-print(result['predictions'])
-```
-
-### 4. Workflow Automation
-
-Orchestrate complex business workflows:
-
-```python
-from bedrock_agentcore import WorkflowOrchestrator
-
-# Define workflow
-workflow = WorkflowOrchestrator(
-    name='InvoiceProcessing',
-    description='Automated invoice processing and approval'
-)
-
-# Add workflow steps
-workflow.add_step(
-    name='extract_data',
-    agent_type='document_extraction',
-    input_source='s3://invoices/incoming/',
-    output_target='dynamodb://processed-invoices'
-)
-
-workflow.add_step(
-    name='validate_data',
-    agent_type='data_validation',
-    depends_on='extract_data',
-    rules=['amount > 0', 'vendor_id exists', 'gl_code valid']
-)
-
-workflow.add_step(
-    name='approval_routing',
-    agent_type='decision_router',
-    depends_on='validate_data',
-    routing_logic={
-        'amount < 1000': 'auto_approve',
-        'amount >= 1000 and amount < 10000': 'manager_approval',
-        'amount >= 10000': 'executive_approval'
-    }
-)
-
-# Execute workflow
-execution_id = workflow.start()
-print(f"Workflow started: {execution_id}")
-```
+AgentCore also includes Policy, Evaluations and Payments services; they are outside the scope of this guide.
 
 ---
 
@@ -187,57 +79,38 @@ print(f"Workflow started: {execution_id}")
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                        User Applications                        │
-│                    (Console, SDK, API, CLI)                    │
+│          Callers: your app, another agent, MCP/A2A client       │
 └──────────────────────────┬─────────────────────────────────────┘
-                           │
+                           │  InvokeAgentRuntime (SigV4 or JWT)
 ┌──────────────────────────▼─────────────────────────────────────┐
-│                    AgentCore Control Plane                      │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │   Runtime    │  │   Framework  │  │   Security   │         │
-│  │   Manager    │  │   Adapter    │  │   Manager    │         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
-└──────────────────────────┬─────────────────────────────────────┘
-                           │
-┌──────────────────────────▼─────────────────────────────────────┐
-│                  AgentCore Data Plane                           │
-│  ┌──────────────────────────────────────────────────┐          │
-│  │         Secure Sandbox Runtime Environment        │          │
-│  │  ┌─────────┐  ┌─────────┐  ┌─────────┐          │          │
-│  │  │ Python  │  │   JS    │  │   TS    │          │          │
-│  │  │ Runtime │  │ Runtime │  │ Runtime │          │          │
-│  │  └─────────┘  └─────────┘  └─────────┘          │          │
-│  │                                                   │          │
-│  │  Security Controls:                              │          │
-│  │  - Network isolation                             │          │
-│  │  - Resource limits                               │          │
-│  │  - IAM integration                               │          │
-│  │  - Audit logging                                 │          │
-│  └──────────────────────────────────────────────────┘          │
-└──────────────────────────┬─────────────────────────────────────┘
-                           │
-┌──────────────────────────▼─────────────────────────────────────┐
-│                      AWS Service Integration                    │
-│  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐  │
-│  │   S3   │  │ Lambda │  │DynamoDB│  │Secrets │  │ Step   │  │
-│  │        │  │        │  │        │  │Manager │  │Function│  │
-│  └────────┘  └────────┘  └────────┘  └────────┘  └────────┘  │
-└────────────────────────────────────────────────────────────────┘
+│                   AgentCore Runtime (data plane)                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │  Session microVM  (one per runtimeSessionId)              │  │
+│  │  Your container or code package:                          │  │
+│  │    BedrockAgentCoreApp  →  /invocations, /ping (port 8080) │  │
+│  │    Strands / LangGraph / CrewAI / custom agent            │  │
+│  └───────────────┬───────────────┬───────────────┬──────────┘  │
+└──────────────────┼───────────────┼───────────────┼─────────────┘
+                   │               │               │
+          ┌────────▼───┐   ┌───────▼─────┐  ┌──────▼────────┐
+          │  Memory    │   │  Gateway    │  │ Code Interp.  │
+          │ (events,   │   │ (MCP tools: │  │ / Browser     │
+          │  records)  │   │ Lambda, API)│  │ sandboxes     │
+          └────────────┘   └─────────────┘  └───────────────┘
+                   │               │
+          ┌────────▼───────────────▼──────────────┐
+          │ Identity (inbound JWT/IAM, outbound   │
+          │ OAuth / API keys) · Observability     │
+          └───────────────────────────────────────┘
 ```
 
 ### Component Overview
 
-**Control Plane Components:**
+**Control plane** (`bedrock-agentcore-control`): create, update and delete runtimes, runtime endpoints, memories, gateways and targets, code interpreters, browsers, credential providers and workload identities.
 
-1. **Runtime Manager**: Manages runtime lifecycle, scaling, and resource allocation
-2. **Framework Adapter**: Provides compatibility layer for different frameworks
-3. **Security Manager**: Enforces security policies and IAM integration
+**Data plane** (`bedrock-agentcore`): invoke runtimes and harnesses, write and read memory, start and use code-interpreter and browser sessions, and fetch workload access tokens.
 
-**Data Plane Components:**
-
-1. **Secure Sandbox**: Isolated execution environment with resource limits
-2. **Multi-Language Support**: Python, JavaScript, TypeScript runtimes
-3. **Security Controls**: Network isolation, IAM, audit logging
+**Runtime contract:** a Runtime container listens on port 8080 and serves `POST /invocations` and `GET /ping`. `BedrockAgentCoreApp` implements that contract for you; MCP servers serve `/mcp`, and A2A servers follow the A2A protocol contract.
 
 ---
 
@@ -245,54 +118,88 @@ print(f"Workflow started: {execution_id}")
 
 ### Prerequisites
 
-- AWS Account with Bedrock access
-- Python 3.8+ or Node.js 16+
-- AWS CLI configured
-- IAM role with AgentCore permissions
+- An AWS account with access to the Bedrock models you intend to use
+- Python 3.10+ (required by `bedrock-agentcore`, `strands-agents` and `boto3`)
+- AWS credentials configured locally
+- Node.js, if you use the AgentCore CLI
 
 ### Installation
 
 ```bash
-# Install AgentCore SDK for Python
-pip install boto3 bedrock-agentcore
+pip install "bedrock-agentcore==%%version=bedrock-agentcore%%" "strands-agents==%%version=strands-agents%%" "boto3==%%version=boto3%%"
 
-# Or for Node.js
-npm install @aws-sdk/client-bedrock-agentcore
+# AgentCore CLI (recommended for packaging and deployment; generates CDK under the hood)
+npm install -g @aws/agentcore
 ```
+
+The older Python `bedrock-agentcore-starter-toolkit` (`agentcore configure` / `agentcore launch`) still exists, but the AgentCore SDK README now points to the npm CLI as the recommended route.
 
 ### Quick Start Example
 
+`main.py` — a Strands agent wrapped for Runtime:
+
 ```python
-import boto3
-from bedrock_agentcore import AgentCore
+from bedrock_agentcore import BedrockAgentCoreApp
+from strands import Agent
 
-# Initialize AgentCore client
-agentcore = AgentCore(region_name='us-east-1')
+app = BedrockAgentCoreApp()
 
-# Create your first AgentCore agent
-agent = agentcore.create_agent(
-    name='MyFirstAgentCoreAgent',
-    description='A simple data analysis agent',
-    runtime='python3.11',
-    framework='strands',
-    handler='main.handler',
-    code_source='s3://my-bucket/agent-code.zip',
-    role_arn='arn:aws:iam::ACCOUNT:role/AgentCoreRole'
+agent = Agent(
+    model="us.anthropic.claude-sonnet-5-5",  # Bedrock cross-Region inference profile
+    system_prompt="You are a concise data analysis assistant.",
 )
 
-print(f"Agent created: {agent['agentId']}")
 
-# Invoke the agent
-response = agentcore.invoke_agent(
-    agent_id=agent['agentId'],
-    input={
-        'query': 'Analyze monthly sales trends for Q4 2024',
-        'data_source': 's3://my-data/sales.csv'
-    }
-)
+@app.entrypoint
+def invoke(payload, context):
+    """Called for every POST /invocations. `context` carries the session ID and headers."""
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    result = agent(prompt)
+    return {"result": str(result), "session_id": context.session_id}
 
-print(f"Analysis result: {response['output']}")
+
+if __name__ == "__main__":
+    app.run()  # serves on port 8080 locally, as Runtime expects
 ```
+
+Test it locally, then deploy:
+
+```bash
+python main.py &
+curl -s -X POST http://localhost:8080/invocations \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Summarise the main drivers of churn in one paragraph."}'
+
+# Deploy with the AgentCore CLI
+agentcore create --name SalesAnalyst --defaults
+cd SalesAnalyst
+agentcore deploy
+agentcore invoke
+```
+
+Invoke the deployed runtime from any Python code with boto3:
+
+```python
+import json
+import uuid
+
+import boto3
+
+client = boto3.client("bedrock-agentcore", region_name="us-west-2")
+
+response = client.invoke_agent_runtime(
+    agentRuntimeArn="arn:aws:bedrock-agentcore:us-west-2:111122223333:runtime/SalesAnalyst-abc123",
+    runtimeSessionId=str(uuid.uuid4()) + "-session",  # must be at least 33 characters
+    payload=json.dumps({"prompt": "Analyse monthly sales trends for Q4"}),
+    qualifier="DEFAULT",
+)
+
+print(json.loads(response["response"].read()))
+```
+
+Reuse the same `runtimeSessionId` to keep talking to the same session microVM (and its in-memory state); use a new one for a fresh, isolated session.
 
 ---
 
@@ -300,247 +207,199 @@ print(f"Analysis result: {response['output']}")
 
 ### Runtime Isolation
 
-AgentCore provides **strong isolation** between agent executions:
+Each `runtimeSessionId` maps to a dedicated microVM with its own CPU, memory and filesystem. When the session ends — idle timeout or maximum lifetime — the microVM is torn down and its memory sanitised. Isolation is configured on the runtime resource rather than in your code:
 
 ```python
-from bedrock_agentcore import SandboxConfiguration
+import boto3
 
-# Configure sandbox security
-sandbox_config = SandboxConfiguration(
-    # Network isolation
-    network_mode='isolated',  # No internet access
-    allow_aws_services=['s3', 'dynamodb', 'secretsmanager'],
+control = boto3.client("bedrock-agentcore-control", region_name="us-west-2")
 
-    # Resource limits
-    max_memory_mb=2048,
-    max_cpu_cores=2,
-    max_execution_time_seconds=300,
-    max_disk_mb=1024,
-
-    # Security policies
-    enable_code_signing=True,
-    require_encrypted_storage=True,
-    audit_all_operations=True,
-
-    # IAM integration
-    execution_role='arn:aws:iam::ACCOUNT:role/AgentExecutionRole',
-    assume_role_policy={
-        'Effect': 'Allow',
-        'Principal': {'Service': 'bedrock-agentcore.amazonaws.com'},
-        'Action': 'sts:AssumeRole'
-    }
+response = control.create_agent_runtime(
+    agentRuntimeName="secure_analysis_agent",
+    agentRuntimeArtifact={
+        "containerConfiguration": {
+            "containerUri": "111122223333.dkr.ecr.us-west-2.amazonaws.com/analysis-agent:latest"
+        }
+    },
+    roleArn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
+    networkConfiguration={
+        "networkMode": "VPC",  # or "PUBLIC"
+        "networkModeConfig": {
+            "subnets": ["subnet-0abc", "subnet-0def"],
+            "securityGroups": ["sg-0123"],
+        },
+    },
+    lifecycleConfiguration={
+        "idleRuntimeSessionTimeout": 900,  # seconds
+        "maxLifetime": 28800,              # seconds
+    },
+    environmentVariables={"LOG_LEVEL": "INFO"},
 )
 
-# Create agent with sandbox configuration
-agent = agentcore.create_agent(
-    name='SecureAnalysisAgent',
-    sandbox_config=sandbox_config,
-    code_source='s3://secure-bucket/agent.zip'
-)
+print(response["agentRuntimeArn"], response["status"])
 ```
 
 ### Language Runtime Support
 
-**Python Runtime:**
+Two artefact types are supported:
+
+| Artefact | How | Notes |
+|----------|-----|-------|
+| **Container** | `containerConfiguration.containerUri` (ECR image) | Build for `linux/arm64`; any language that can serve the HTTP contract |
+| **Direct code deployment** | `codeConfiguration` with `code.s3` (`bucket`, `prefix`), `runtime` and `entryPoint` | `runtime` is one of `PYTHON_3_10` … `PYTHON_3_14` or `NODE_22` |
 
 ```python
-# Python 3.11 runtime with standard libraries
-runtime_config = {
-    'runtime': 'python3.11',
-    'allowed_libraries': [
-        'pandas', 'numpy', 'scikit-learn',
-        'boto3', 'requests', 'matplotlib'
-    ],
-    'custom_layers': [
-        'arn:aws:lambda:us-east-1:ACCOUNT:layer:CustomML:1'
-    ]
-}
-```
-
-**JavaScript/TypeScript Runtime:**
-
-```javascript
-// Node.js 18 runtime
-const runtimeConfig = {
-    runtime: 'nodejs18.x',
-    allowedModules: [
-        '@aws-sdk/client-s3',
-        '@aws-sdk/client-dynamodb',
-        'axios',
-        'lodash'
-    ],
-    tsconfig: {
-        compilerOptions: {
-            target: 'ES2020',
-            module: 'commonjs',
-            strict: true
+control.create_agent_runtime(
+    agentRuntimeName="zip_deployed_agent",
+    agentRuntimeArtifact={
+        "codeConfiguration": {
+            "code": {"s3": {"bucket": "my-agent-artifacts", "prefix": "agents/sales/deployment.zip"}},
+            "runtime": "PYTHON_3_13",
+            "entryPoint": ["main.py"],
         }
-    }
-};
+    },
+    roleArn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
+    networkConfiguration={"networkMode": "PUBLIC"},
+)
 ```
 
 ### Resource Management
 
+There is no in-SDK resource monitor. Use:
+
+- **Lifecycle settings** (`idleRuntimeSessionTimeout`, `maxLifetime`) to bound session cost.
+- **The ping status** to tell Runtime whether a session is busy with background work, so it is not reclaimed while idle-looking:
+
 ```python
-from bedrock_agentcore import ResourceMonitor
+import asyncio
 
-# Monitor agent resource usage
-monitor = ResourceMonitor(agent_id='agent-123')
+from bedrock_agentcore import BedrockAgentCoreApp
 
-# Get real-time metrics
-metrics = monitor.get_current_metrics()
-print(f"CPU Usage: {metrics['cpu_percent']}%")
-print(f"Memory Usage: {metrics['memory_mb']} MB")
-print(f"Execution Time: {metrics['execution_time_ms']} ms")
+app = BedrockAgentCoreApp()
 
-# Set up alerts
-monitor.create_alert(
-    metric='memory_mb',
-    threshold=1500,
-    action='throttle'  # or 'terminate', 'notify'
-)
+
+@app.async_task
+async def rebuild_report(report_id: str):
+    """While this runs, /ping reports HealthyBusy, so the session is kept alive."""
+    ...
+
+
+@app.entrypoint
+async def invoke(payload, context):
+    # Start the work in the background and return immediately
+    asyncio.create_task(rebuild_report(payload["report_id"]))
+    return {"status": "started"}
 ```
+
+- **CloudWatch metrics** emitted by AgentCore Observability for session counts, latency, errors and resource usage.
 
 ---
 
 ## Supported Frameworks
 
+Runtime does not need framework-specific adapters: any code that can be called from the `@app.entrypoint` function works. The patterns below differ only in what happens inside the entrypoint.
+
 ### 1. Strands Agents SDK
 
-**Lightweight, AWS-native framework** (covered in detail in separate guide)
+Covered in detail in the [Strands SDK guide](../bedrock_strands_sdk_guide/). Streaming is supported by making the entrypoint an async generator:
 
 ```python
+from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent, tool
-from bedrock_agentcore import integrate_strands
 
-# Define agent with Strands
+app = BedrockAgentCoreApp()
+
+
 @tool
-def analyze_data(data_path: str) -> dict:
-    """Analyze sales data from S3"""
-    import pandas as pd
-    df = pd.read_csv(data_path)
-    return {
-        'total_revenue': df['revenue'].sum(),
-        'avg_transaction': df['revenue'].mean()
-    }
+def total_revenue(region: str) -> float:
+    """Return total revenue for a sales region.
 
-agent = Agent(
-    name='SalesAnalyst',
-    tools=[analyze_data],
-    model='anthropic.claude-3-5-sonnet-20241022-v2:0'
-)
+    Args:
+        region: Sales region name, for example "EMEA".
+    """
+    return {"EMEA": 1_250_000.0, "AMER": 2_100_000.0}.get(region, 0.0)
 
-# Deploy to AgentCore
-agentcore_agent = integrate_strands(agent)
+
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[total_revenue])
+
+
+@app.entrypoint
+async def invoke(payload, context):
+    async for event in agent.stream_async(payload["prompt"]):
+        if "data" in event:          # text deltas
+            yield event["data"]
+
+
+if __name__ == "__main__":
+    app.run()
 ```
 
-### 2. LangChain Integration
-
-**Rich ecosystem for RAG and document processing**
+### 2. LangChain / LangGraph
 
 ```python
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain.tools import Tool
-from langchain_community.chat_models import BedrockChat
-from bedrock_agentcore import LangChainAdapter
+from bedrock_agentcore import BedrockAgentCoreApp
+from langchain.agents import create_agent
+from langchain_aws import ChatBedrockConverse
 
-# Create LangChain agent
-llm = BedrockChat(model_id='anthropic.claude-3-5-sonnet-20241022-v2:0')
+app = BedrockAgentCoreApp()
 
-tools = [
-    Tool(
-        name='DocumentSearch',
-        func=lambda q: vector_search(q),
-        description='Search company documentation'
-    )
-]
+llm = ChatBedrockConverse(model="us.anthropic.claude-sonnet-5-5")
+graph = create_agent(llm, tools=[])  # a compiled LangGraph graph; add your tools here
 
-agent = create_openai_functions_agent(llm, tools)
-agent_executor = AgentExecutor(agent=agent, tools=tools)
 
-# Deploy to AgentCore
-adapter = LangChainAdapter()
-agentcore_agent = adapter.deploy(
-    agent_executor=agent_executor,
-    runtime='python3.11',
-    name='DocumentAssistant'
-)
+@app.entrypoint
+def invoke(payload, context):
+    result = graph.invoke({"messages": [{"role": "user", "content": payload["prompt"]}]})
+    return {"result": result["messages"][-1].content}
+
+
+if __name__ == "__main__":
+    app.run()
 ```
 
-### 3. LangGraph Integration
-
-**State machine-based workflows**
+### 3. CrewAI
 
 ```python
-from langgraph.graph import StateGraph, END
-from bedrock_agentcore import LangGraphAdapter
+from bedrock_agentcore import BedrockAgentCoreApp
+from crewai import Agent, Crew, Task
 
-# Define state machine
-workflow = StateGraph()
+app = BedrockAgentCoreApp()
 
-# Add nodes
-workflow.add_node('analyze', analyze_step)
-workflow.add_node('validate', validate_step)
-workflow.add_node('report', report_step)
-
-# Add edges
-workflow.add_edge('analyze', 'validate')
-workflow.add_conditional_edges(
-    'validate',
-    lambda x: 'report' if x['valid'] else 'analyze'
-)
-workflow.add_edge('report', END)
-
-# Set entry point
-workflow.set_entry_point('analyze')
-
-# Compile and deploy
-app = workflow.compile()
-adapter = LangGraphAdapter()
-agentcore_agent = adapter.deploy(app, name='DataValidationWorkflow')
-```
-
-### 4. CrewAI Integration
-
-**Multi-agent collaboration**
-
-```python
-from crewai import Agent, Task, Crew
-from bedrock_agentcore import CrewAIAdapter
-
-# Define agents
 researcher = Agent(
-    role='Researcher',
-    goal='Find relevant market data',
-    backstory='Expert market analyst'
+    role="Researcher",
+    goal="Find relevant market data",
+    backstory="Expert market analyst",
+    llm="bedrock/us.anthropic.claude-sonnet-5-5",
 )
-
-analyst = Agent(
-    role='Analyst',
-    goal='Analyze market trends',
-    backstory='Senior data analyst'
-)
-
-# Define tasks
 research_task = Task(
-    description='Research Q4 market trends',
-    agent=researcher
+    description="Research trends for: {topic}",
+    expected_output="Five bullet points",
+    agent=researcher,
 )
+crew = Crew(agents=[researcher], tasks=[research_task])
 
-analysis_task = Task(
-    description='Analyze research findings',
-    agent=analyst
-)
 
-# Create crew
-crew = Crew(
-    agents=[researcher, analyst],
-    tasks=[research_task, analysis_task]
-)
+@app.entrypoint
+def invoke(payload, context):
+    return {"result": str(crew.kickoff(inputs={"topic": payload["prompt"]}))}
 
-# Deploy to AgentCore
-adapter = CrewAIAdapter()
-agentcore_crew = adapter.deploy(crew, name='MarketAnalysisCrew')
+
+if __name__ == "__main__":
+    app.run()
+```
+
+### 4. MCP and A2A servers
+
+Set `protocolConfiguration={"serverProtocol": "MCP"}` (or `"A2A"`, `"AGUI"`) on `create_agent_runtime` to host a protocol server instead of an HTTP agent. For A2A, the SDK provides `serve_a2a`:
+
+```python
+# pip install "bedrock-agentcore[a2a]"
+from bedrock_agentcore.runtime import serve_a2a
+from strands import Agent
+from strands.multiagent.a2a import StrandsA2AExecutor
+
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", system_prompt="You are a helpful assistant.")
+serve_a2a(StrandsA2AExecutor(agent))
 ```
 
 ---
@@ -549,363 +408,287 @@ agentcore_crew = adapter.deploy(crew, name='MarketAnalysisCrew')
 
 ### Code Interpretation
 
-AgentCore provides **secure code interpretation** for complex analysis:
+The Code Interpreter runs code in a managed sandbox, not in your agent's process. `code_session` starts a session on the AWS-managed `aws.codeinterpreter.v1` interpreter and stops it on exit:
 
 ```python
-from bedrock_agentcore import CodeInterpreter
+from bedrock_agentcore.tools.code_interpreter_client import code_session
 
-# Create code interpreter
-interpreter = CodeInterpreter(
-    language='python',
-    allowed_libraries=['pandas', 'numpy', 'matplotlib', 'seaborn'],
-    max_execution_time=60
-)
-
-# Execute analytical code
-result = interpreter.execute(
-    code="""
+with code_session("us-west-2") as ci:
+    ci.upload_file("sales.csv", "month,revenue\nJan,100\nFeb,120\nMar,150\n")
+    result = ci.execute_code(
+        """
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
+df = pd.read_csv("sales.csv")
+print(df.describe())
+print("growth:", df.revenue.pct_change().mean())
+""",
+        language="python",
+    )
+    print(result)
+```
 
-# Load data
-df = pd.read_csv(input_data)
+To give a Strands agent the same capability, wrap it in a tool (or use the `code_interpreter` tool from `strands-agents-tools`):
 
-# Perform analysis
-summary_stats = df.describe()
-correlation_matrix = df.corr()
+```python
+from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter
+from strands import Agent, tool
 
-# Create visualizations
-plt.figure(figsize=(10, 6))
-sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm')
-plt.savefig('correlation_heatmap.png')
+ci = CodeInterpreter("us-west-2")
+ci.start()
 
-# Return results
-return {
-    'summary': summary_stats.to_dict(),
-    'correlations': correlation_matrix.to_dict(),
-    'visualization': 'correlation_heatmap.png'
-}
-    """,
-    inputs={
-        'input_data': 's3://data-bucket/sales_data.csv'
-    },
-    outputs_bucket='s3://results-bucket/analysis/'
-)
 
-print(result['summary'])
-print(f"Visualization saved to: {result['visualization_url']}")
+@tool
+def run_python(code: str) -> str:
+    """Execute Python code in a secure sandbox and return its output.
+
+    Args:
+        code: Python source to execute.
+    """
+    return str(ci.execute_code(code))
+
+
+analyst = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[run_python])
+analyst("Load sales.csv and report month-on-month growth.")
+ci.stop()
 ```
 
 ### Workflow Automation Examples
 
-**Example 1: Document Processing Pipeline**
+AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](../bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
+
+**Remembering context across sessions with Memory:**
 
 ```python
-from bedrock_agentcore import WorkflowBuilder
+from bedrock_agentcore.memory import MemoryClient
 
-# Build document processing workflow
-workflow = WorkflowBuilder(name='DocumentProcessing')
+memory = MemoryClient(region_name="us-west-2")
 
-# Step 1: Extract text
-workflow.add_step(
-    'extract_text',
-    agent_type='textract_extractor',
-    input='s3://documents/incoming/',
-    output='s3://documents/extracted/'
+mem = memory.create_memory_and_wait(
+    name="CustomerOnboardingMemory",
+    strategies=[
+        {"semanticMemoryStrategy": {"name": "facts", "namespaceTemplates": ["/facts/{actorId}/"]}},
+        {"userPreferenceMemoryStrategy": {"name": "prefs", "namespaceTemplates": ["/prefs/{actorId}/"]}},
+    ],
+    event_expiry_days=30,
+)
+memory_id = mem["id"]
+
+# Short-term: record conversation turns as events
+memory.create_event(
+    memory_id=memory_id,
+    actor_id="customer-42",
+    session_id="onboarding-001",
+    messages=[("We are a 40-person fintech in London.", "USER"),
+              ("Thanks — I'll set up the EU billing account.", "ASSISTANT")],
 )
 
-# Step 2: Classify documents
-workflow.add_step(
-    'classify',
-    agent_type='document_classifier',
-    depends_on='extract_text',
-    model='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    classes=['invoice', 'contract', 'report', 'other']
+# Long-term: query records extracted asynchronously by the strategies
+records = memory.retrieve_memories(
+    memory_id=memory_id,
+    namespace="/facts/customer-42/",
+    query="company size and location",
+    top_k=3,
 )
-
-# Step 3: Route by classification
-workflow.add_conditional_step(
-    'route',
-    depends_on='classify',
-    conditions={
-        'invoice': 'process_invoice',
-        'contract': 'process_contract',
-        'report': 'process_report',
-        'other': 'manual_review'
-    }
-)
-
-# Deploy workflow
-workflow.deploy()
 ```
 
-**Example 2: Customer Onboarding Automation**
-
-```python
-from bedrock_agentcore import AutomationWorkflow
-
-# Create onboarding workflow
-onboarding = AutomationWorkflow(name='CustomerOnboarding')
-
-# Collect customer information
-onboarding.add_step(
-    'collect_info',
-    agent='data_collection_agent',
-    required_fields=['name', 'email', 'company', 'industry']
-)
-
-# Verify information
-onboarding.add_step(
-    'verify',
-    agent='verification_agent',
-    checks=['email_valid', 'company_exists', 'duplicate_check']
-)
-
-# Create accounts
-onboarding.add_parallel_steps([
-    ('create_crm_account', 'salesforce_agent'),
-    ('create_billing_account', 'billing_agent'),
-    ('setup_workspace', 'workspace_agent')
-])
-
-# Send welcome email
-onboarding.add_step(
-    'send_welcome',
-    agent='email_agent',
-    template='welcome_email',
-    wait_for_all_parallel=True
-)
-
-# Start workflow
-onboarding.execute(input_data={
-    'name': 'John Doe',
-    'email': 'john@example.com',
-    'company': 'Acme Corp'
-})
-```
+With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](../bedrock_strands_sdk_guide/#memory-and-state-management)).
 
 ---
 
 ## AgentCore APIs
 
-### Create Agent
+The examples below use boto3 directly. `bedrock-agentcore-control` is the control plane; `bedrock-agentcore` is the data plane.
+
+### Create Agent Runtime
 
 ```python
 import boto3
 
-agentcore = boto3.client('bedrock-agentcore')
+control = boto3.client("bedrock-agentcore-control", region_name="us-west-2")
 
-response = agentcore.create_agent(
-    agentName='DataAnalysisAgent',
-    agentType='CUSTOM',  # or 'FRAMEWORK_BASED'
-    framework='strands',  # Optional: strands, langchain, langgraph, crewai
-    runtime={
-        'language': 'python3.11',
-        'timeout': 300,
-        'memory': 2048
-    },
-    codeSource={
-        'type': 'S3',
-        's3Location': {
-            'bucket': 'agent-code-bucket',
-            'key': 'agent.zip'
+response = control.create_agent_runtime(
+    agentRuntimeName="DataAnalysisAgent",
+    description="Sales analysis agent",
+    agentRuntimeArtifact={
+        "containerConfiguration": {
+            "containerUri": "111122223333.dkr.ecr.us-west-2.amazonaws.com/data-analysis-agent:latest"
         }
     },
-    roleArn='arn:aws:iam::ACCOUNT:role/AgentCoreRole',
-    securityConfig={
-        'networkMode': 'VPC',
-        'vpcConfig': {
-            'subnetIds': ['subnet-123', 'subnet-456'],
-            'securityGroupIds': ['sg-789']
-        },
-        'encryptionConfig': {
-            'kmsKeyId': 'arn:aws:kms:us-east-1:ACCOUNT:key/KEY_ID'
-        }
-    }
+    roleArn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
+    networkConfiguration={"networkMode": "PUBLIC"},
+    protocolConfiguration={"serverProtocol": "HTTP"},
 )
 
-print(f"Agent created: {response['agentId']}")
+runtime_id = response["agentRuntimeId"]
+print(response["agentRuntimeArn"], response["agentRuntimeVersion"])
 ```
 
-### Invoke Agent
+### Invoke Agent Runtime
 
 ```python
-response = agentcore.invoke_agent(
-    agentId='agent-123',
-    input={
-        'query': 'Analyze customer churn data',
-        'parameters': {
-            'time_period': 'Q4_2024',
-            'segments': ['enterprise', 'smb']
-        }
-    },
-    sessionId='session-456',
-    enableTrace=True
+import json
+
+data = boto3.client("bedrock-agentcore", region_name="us-west-2")
+
+response = data.invoke_agent_runtime(
+    agentRuntimeArn=response["agentRuntimeArn"],
+    runtimeSessionId="churn-analysis-session-0000000000001",  # >= 33 characters
+    runtimeUserId="analyst-7",                                 # optional
+    payload=json.dumps({"prompt": "Analyse customer churn for enterprise vs SMB in Q4"}),
 )
 
-# Process response
-print(response['output'])
-print(response['executionMetrics'])
+if "text/event-stream" in response.get("contentType", ""):
+    for line in response["response"].iter_lines():
+        if line:
+            print(line.decode())
+else:
+    print(json.loads(response["response"].read()))
 ```
 
-### Update Agent
+### Update Agent Runtime
+
+Updates create a new immutable runtime version; the `DEFAULT` endpoint follows the latest version unless you pin endpoints yourself.
 
 ```python
-response = agentcore.update_agent(
-    agentId='agent-123',
-    codeSource={
-        's3Location': {
-            'bucket': 'agent-code-bucket',
-            'key': 'agent-v2.zip'
+control.update_agent_runtime(
+    agentRuntimeId=runtime_id,
+    agentRuntimeArtifact={
+        "containerConfiguration": {
+            "containerUri": "111122223333.dkr.ecr.us-west-2.amazonaws.com/data-analysis-agent:v2"
         }
     },
-    runtime={
-        'memory': 4096  # Increase memory
-    }
+    roleArn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
+    networkConfiguration={"networkMode": "PUBLIC"},
 )
 ```
 
-### Delete Agent
+### Delete Agent Runtime
 
 ```python
-response = agentcore.delete_agent(
-    agentId='agent-123',
-    deleteData=False  # Preserve execution logs
-)
+control.delete_agent_runtime(agentRuntimeId=runtime_id)
 ```
 
 ---
 
 ## Integration Patterns
 
-### Pattern 1: AgentCore + Bedrock Agents
+### Pattern 1: Gateway — expose existing APIs as MCP tools
 
-Combine AgentCore for complex processing with Bedrock Agents for orchestration:
+Gateway turns Lambda functions, OpenAPI/Smithy APIs, API Gateway stages and existing MCP servers into a single MCP endpoint that any MCP-capable agent can use.
 
 ```python
-from bedrock_agentcore import AgentCore
 import boto3
 
-agentcore = AgentCore()
-bedrock = boto3.client('bedrock')
+control = boto3.client("bedrock-agentcore-control", region_name="us-west-2")
 
-# Create AgentCore agent for complex analysis
-analysis_agent = agentcore.create_agent(
-    name='ComplexAnalysisAgent',
-    framework='langchain',
-    code_source='s3://code/analysis.zip'
+gateway = control.create_gateway(
+    name="analytics-tools",
+    roleArn="arn:aws:iam::111122223333:role/GatewayRole",
+    protocolType="MCP",
+    authorizerType="AWS_IAM",  # or CUSTOM_JWT, NONE, AUTHENTICATE_ONLY
 )
 
-# Create Bedrock Agent as orchestrator
-orchestrator = bedrock.create_agent(
-    agentName='Orchestrator',
-    foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    instruction='Coordinate analysis tasks and user interactions'
-)
-
-# Create action group that calls AgentCore agent
-bedrock.create_action_group(
-    agentId=orchestrator['agentId'],
-    actionGroupName='AnalysisActions',
-    actionGroupExecutor={
-        'customControl': {
-            'endpoint': f'https://agentcore.{region}.amazonaws.com/agent/{analysis_agent["agentId"]}'
+control.create_gateway_target(
+    gatewayIdentifier=gateway["gatewayId"],
+    name="orders-lambda",
+    targetConfiguration={
+        "mcp": {
+            "lambda": {
+                "lambdaArn": "arn:aws:lambda:us-west-2:111122223333:function:orders-api",
+                "toolSchema": {
+                    "inlinePayload": [
+                        {
+                            "name": "get_order",
+                            "description": "Fetch an order by ID",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {"order_id": {"type": "string"}},
+                                "required": ["order_id"],
+                            },
+                        }
+                    ]
+                },
+            }
         }
-    }
+    },
+    credentialProviderConfigurations=[{"credentialProviderType": "GATEWAY_IAM_ROLE"}],
 )
 ```
+
+A Strands agent consumes the gateway like any other MCP server, via `strands.tools.mcp.MCPClient` (with SigV4 or a bearer token, depending on the authorizer).
 
 ### Pattern 2: AgentCore + Step Functions
 
-Use Step Functions for workflow orchestration with AgentCore for execution:
+Step Functions can call any AWS API through its SDK integrations, so a state machine can call `InvokeAgentRuntime` directly:
 
 ```python
+import json
+
 import boto3
 
-sfn = boto3.client('stepfunctions')
+sfn = boto3.client("stepfunctions")
 
-# Define Step Functions state machine
-state_machine_definition = {
-    'Comment': 'Data processing workflow with AgentCore',
-    'StartAt': 'IngestData',
-    'States': {
-        'IngestData': {
-            'Type': 'Task',
-            'Resource': 'arn:aws:states:::bedrock-agentcore:invokeAgent',
-            'Parameters': {
-                'AgentId': 'ingest-agent-id',
-                'Input.$': '$.inputData'
+definition = {
+    "Comment": "Three-stage document pipeline on AgentCore Runtime",
+    "StartAt": "Extract",
+    "States": {
+        "Extract": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime",
+            "Parameters": {
+                "AgentRuntimeArn": "arn:aws:bedrock-agentcore:us-west-2:111122223333:runtime/extractor-abc123",
+                "Payload.$": "States.JsonToString($.input)",
             },
-            'Next': 'ProcessData'
+            "Next": "Report",
         },
-        'ProcessData': {
-            'Type': 'Task',
-            'Resource': 'arn:aws:states:::bedrock-agentcore:invokeAgent',
-            'Parameters': {
-                'AgentId': 'processing-agent-id',
-                'Input.$': '$.IngestData.output'
+        "Report": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:bedrockagentcore:invokeAgentRuntime",
+            "Parameters": {
+                "AgentRuntimeArn": "arn:aws:bedrock-agentcore:us-west-2:111122223333:runtime/reporter-def456",
+                "Payload.$": "States.JsonToString($)",
             },
-            'Next': 'GenerateReport'
+            "End": True,
         },
-        'GenerateReport': {
-            'Type': 'Task',
-            'Resource': 'arn:aws:states:::bedrock-agentcore:invokeAgent',
-            'Parameters': {
-                'AgentId': 'reporting-agent-id',
-                'Input.$': '$.ProcessData.output'
-            },
-            'End': True
-        }
-    }
+    },
 }
 
-# Create state machine
-response = sfn.create_state_machine(
-    name='DataProcessingWorkflow',
-    definition=json.dumps(state_machine_definition),
-    roleArn='arn:aws:iam::ACCOUNT:role/StepFunctionsRole'
+sfn.create_state_machine(
+    name="DocumentPipeline",
+    definition=json.dumps(definition),
+    roleArn="arn:aws:iam::111122223333:role/StepFunctionsAgentCoreRole",
 )
 ```
+
+Check the response shape in the Step Functions console before chaining states: the SDK integration returns the raw `InvokeAgentRuntime` response, and payload handling differs from a plain Lambda task.
 
 ### Pattern 3: AgentCore + EventBridge
 
-Event-driven agent execution:
+EventBridge cannot target an AgentCore runtime directly. Route events to a small Lambda function that calls `invoke_agent_runtime`:
 
 ```python
+import json
+import os
+
 import boto3
 
-events = boto3.client('events')
+agentcore = boto3.client("bedrock-agentcore")
 
-# Create EventBridge rule
-rule = events.put_rule(
-    Name='NewDocumentRule',
-    EventPattern=json.dumps({
-        'source': ['aws.s3'],
-        'detail-type': ['Object Created'],
-        'detail': {
-            'bucket': {'name': ['document-bucket']}
-        }
-    }),
-    State='ENABLED'
-)
 
-# Add AgentCore agent as target
-events.put_targets(
-    Rule='NewDocumentRule',
-    Targets=[{
-        'Id': '1',
-        'Arn': f'arn:aws:bedrock-agentcore:us-east-1:ACCOUNT:agent/document-processor',
-        'RoleArn': 'arn:aws:iam::ACCOUNT:role/EventBridgeRole',
-        'Input': json.dumps({
-            'agentId': 'document-processor-id',
-            'inputTransform': {
-                'documentPath': '$.detail.object.key'
-            }
-        })
-    }]
-)
+def handler(event, context):
+    """EventBridge → Lambda → AgentCore Runtime for each new S3 object."""
+    key = event["detail"]["object"]["key"]
+    response = agentcore.invoke_agent_runtime(
+        agentRuntimeArn=os.environ["AGENT_RUNTIME_ARN"],
+        runtimeSessionId=f"doc-{event['id']}",  # EventBridge event IDs are 36 characters
+        payload=json.dumps({"prompt": f"Classify and summarise s3://document-bucket/{key}"}),
+    )
+    return json.loads(response["response"].read())
 ```
+
+### Pattern 4: Migrating from Bedrock Agents Classic
+
+AWS's migration guidance maps Classic concepts onto AgentCore: action groups become MCP tools behind Gateway, knowledge bases are reached through Gateway, return-of-control becomes inline function tools, and session state moves to AgentCore Memory. Start from the managed harness when the Classic agent was purely declarative; use code-defined agents on Runtime when you relied on prompt overrides, custom orchestration or multi-agent collaboration.
 
 ---
 
@@ -913,85 +696,88 @@ events.put_targets(
 
 ### IAM Policies for AgentCore
 
+Caller policy (who may deploy and invoke):
+
 ```json
 {
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AgentCoreManagement",
+      "Sid": "ManageRuntimes",
       "Effect": "Allow",
       "Action": [
-        "bedrock-agentcore:CreateAgent",
-        "bedrock-agentcore:UpdateAgent",
-        "bedrock-agentcore:DeleteAgent",
-        "bedrock-agentcore:GetAgent",
-        "bedrock-agentcore:ListAgents",
-        "bedrock-agentcore:InvokeAgent"
+        "bedrock-agentcore:CreateAgentRuntime",
+        "bedrock-agentcore:UpdateAgentRuntime",
+        "bedrock-agentcore:DeleteAgentRuntime",
+        "bedrock-agentcore:GetAgentRuntime",
+        "bedrock-agentcore:ListAgentRuntimes"
       ],
-      "Resource": "arn:aws:bedrock-agentcore:*:ACCOUNT:agent/*"
+      "Resource": "arn:aws:bedrock-agentcore:*:111122223333:runtime/*"
     },
     {
-      "Sid": "CodeAccess",
+      "Sid": "InvokeRuntimes",
       "Effect": "Allow",
-      "Action": [
-        "s3:GetObject",
-        "s3:ListBucket"
-      ],
-      "Resource": [
-        "arn:aws:s3:::agent-code-bucket",
-        "arn:aws:s3:::agent-code-bucket/*"
-      ]
+      "Action": "bedrock-agentcore:InvokeAgentRuntime",
+      "Resource": "arn:aws:bedrock-agentcore:*:111122223333:runtime/*"
     },
     {
-      "Sid": "ExecutionRole",
+      "Sid": "PassExecutionRole",
       "Effect": "Allow",
-      "Action": [
-        "iam:PassRole"
-      ],
-      "Resource": "arn:aws:iam::ACCOUNT:role/AgentExecutionRole"
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::111122223333:role/AgentRuntimeRole"
     }
   ]
 }
 ```
 
-### Encryption
+The runtime's execution role trusts `bedrock-agentcore.amazonaws.com` and needs ECR pull, CloudWatch Logs/X-Ray, `bedrock:InvokeModel`/`bedrock:InvokeModelWithResponseStream` on the models it calls, and access to any Memory, Gateway or Code Interpreter resources it uses. See [IAM Permissions for AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html) for the full template.
+
+### Inbound authentication
+
+By default callers authenticate with SigV4 (IAM). To accept end-user tokens from an OAuth/OIDC identity provider instead, configure a JWT authorizer on the runtime:
 
 ```python
-# Create agent with encryption
-agent = agentcore.create_agent(
-    name='SecureAgent',
-    encryptionConfig={
-        'kmsKeyId': 'arn:aws:kms:us-east-1:ACCOUNT:key/KEY_ID',
-        'encryptionType': 'AWS_MANAGED',  # or 'CUSTOMER_MANAGED'
-        'encryptDataAtRest': True,
-        'encryptDataInTransit': True
-    }
-)
-```
-
-### Audit Logging
-
-```python
-# Enable comprehensive logging
-agentcore.update_agent(
-    agentId='agent-123',
-    loggingConfig={
-        'cloudWatchLogs': {
-            'enabled': True,
-            'logGroupName': '/aws/bedrock-agentcore/agent-123',
-            'logLevel': 'DEBUG'  # DEBUG, INFO, WARN, ERROR
-        },
-        'cloudTrail': {
-            'enabled': True
-        },
-        's3Logs': {
-            'enabled': True,
-            'bucket': 'audit-logs-bucket',
-            'prefix': 'agentcore/'
+control.update_agent_runtime(
+    agentRuntimeId=runtime_id,
+    agentRuntimeArtifact={"containerConfiguration": {"containerUri": IMAGE_URI}},
+    roleArn=ROLE_ARN,
+    networkConfiguration={"networkMode": "PUBLIC"},
+    authorizerConfiguration={
+        "customJWTAuthorizer": {
+            "discoveryUrl": "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_EXAMPLE/.well-known/openid-configuration",
+            "allowedClients": ["my-app-client-id"],
         }
-    }
+    },
 )
 ```
+
+Callers using a JWT invoke the runtime over HTTPS with a bearer token rather than through the SigV4-signed SDK call.
+
+### Outbound credentials with Identity
+
+`requires_access_token` fetches (and caches) an OAuth token from an AgentCore Identity credential provider and injects it into your function:
+
+```python
+from bedrock_agentcore.identity.auth import requires_access_token
+
+
+@requires_access_token(
+    provider_name="google-workspace",   # credential provider created in AgentCore Identity
+    scopes=["https://www.googleapis.com/auth/calendar.readonly"],
+    auth_flow="USER_FEDERATION",          # or "M2M"
+    on_auth_url=lambda url: print("Authorise at:", url),
+)
+async def list_calendar_events(*, access_token: str):
+    ...
+```
+
+`requires_api_key(provider_name=...)` does the same for API-key providers.
+
+### Encryption and Audit Logging
+
+- Memory supports customer-managed KMS keys (`encryptionKeyArn` on `create_memory`); Gateway accepts `kmsKeyArn`.
+- AgentCore control- and data-plane calls are recorded by CloudTrail.
+- Runtime stdout/stderr go to CloudWatch Logs under `/aws/bedrock-agentcore/runtimes/…`; traces go to CloudWatch via OpenTelemetry once Transaction Search is enabled.
 
 ---
 
@@ -999,93 +785,75 @@ agentcore.update_agent(
 
 ### 1. Code Organization
 
-```python
-# Recommended project structure
-"""
-my-agentcore-project/
-├── agents/
-│   ├── __init__.py
-│   ├── data_analyzer.py
-│   ├── workflow_orchestrator.py
-│   └── report_generator.py
-├── tools/
-│   ├── __init__.py
-│   ├── data_tools.py
-│   └── api_tools.py
-├── config/
-│   ├── dev.yaml
-│   ├── prod.yaml
-│   └── sandbox_config.yaml
-├── tests/
-│   ├── test_agents.py
-│   └── test_tools.py
-├── requirements.txt
-└── deploy.py
-"""
 ```
+my-agentcore-project/
+├── main.py              # BedrockAgentCoreApp entrypoint only
+├── agent/
+│   ├── __init__.py
+│   ├── build.py         # constructs the Strands/LangGraph agent
+│   └── tools.py
+├── tests/
+│   └── test_tools.py
+├── pyproject.toml       # pins bedrock-agentcore, strands-agents, boto3
+└── Dockerfile           # linux/arm64 if you deploy a container
+```
+
+Keep the entrypoint thin: validate input, call the agent, shape the output. That keeps the agent testable without Runtime.
 
 ### 2. Error Handling
 
+boto3 raises `botocore` `ClientError`; retry only throttling and transient errors:
+
 ```python
-from bedrock_agentcore import AgentCore, AgentError
+import json
 import time
 
-def invoke_with_retry(agent_id, input_data, max_retries=3):
-    """Invoke agent with exponential backoff retry"""
+import boto3
+from botocore.config import Config
+from botocore.exceptions import ClientError
 
-    for attempt in range(max_retries):
-        try:
-            response = agentcore.invoke_agent(
-                agentId=agent_id,
-                input=input_data
-            )
-            return response
-
-        except AgentError as e:
-            if e.code == 'ThrottlingException' and attempt < max_retries - 1:
-                wait_time = 2 ** attempt
-                print(f"Throttled, retrying in {wait_time}s...")
-                time.sleep(wait_time)
-            else:
-                raise
-```
-
-### 3. Performance Optimization
-
-```python
-# Use caching for repeated operations
-from bedrock_agentcore import CacheManager
-
-cache = CacheManager(
-    ttl_seconds=3600,
-    max_size_mb=100
+agentcore = boto3.client(
+    "bedrock-agentcore",
+    config=Config(retries={"max_attempts": 5, "mode": "adaptive"}, read_timeout=900),
 )
 
-@cache.cached()
-def expensive_analysis(data_path):
-    """Cache results of expensive operations"""
-    # Perform analysis
-    return results
+RETRYABLE = {"ThrottlingException", "ServiceQuotaExceededException", "InternalServerException"}
+
+
+def invoke_with_retry(runtime_arn: str, session_id: str, prompt: str, attempts: int = 3) -> dict:
+    for attempt in range(attempts):
+        try:
+            response = agentcore.invoke_agent_runtime(
+                agentRuntimeArn=runtime_arn,
+                runtimeSessionId=session_id,
+                payload=json.dumps({"prompt": prompt}),
+            )
+            return json.loads(response["response"].read())
+        except ClientError as err:
+            code = err.response["Error"]["Code"]
+            if code in RETRYABLE and attempt < attempts - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
 ```
+
+### 3. Performance
+
+- Build the agent object once at module import, not inside the entrypoint, so warm sessions reuse it.
+- Reuse `runtimeSessionId` for multi-turn conversations; the session's in-memory state survives between turns.
+- Stream responses (async-generator entrypoint) for anything user-facing.
+- Use Bedrock prompt caching (`cache_config=CacheConfig(strategy="auto")` on Strands `BedrockModel`) for long, stable system prompts.
 
 ### 4. Monitoring
 
-```python
-from bedrock_agentcore import MetricsPublisher
+AgentCore Observability uses OpenTelemetry. For Python agents, add the AWS Distro for OpenTelemetry and run the agent under `opentelemetry-instrument`; Strands emits spans for model calls, tool calls and agent loops automatically.
 
-metrics = MetricsPublisher(namespace='MyAgents')
-
-# Publish custom metrics
-metrics.put_metric(
-    metric_name='AnalysisLatency',
-    value=response_time_ms,
-    unit='Milliseconds',
-    dimensions=[
-        {'Name': 'AgentId', 'Value': agent_id},
-        {'Name': 'Environment', 'Value': 'production'}
-    ]
-)
+```dockerfile
+RUN pip install aws-opentelemetry-distro
+CMD ["opentelemetry-instrument", "python", "main.py"]
 ```
+
+Custom business metrics can still go straight to CloudWatch with `boto3.client("cloudwatch").put_metric_data(...)`.
 
 ---
 
@@ -1093,93 +861,58 @@ metrics.put_metric(
 
 ### Deployment Checklist
 
-- [ ] Code tested in sandbox environment
-- [ ] IAM roles and policies configured
-- [ ] Encryption enabled for data at rest and in transit
-- [ ] Logging and monitoring configured
-- [ ] Resource limits set appropriately
-- [ ] Backup and disaster recovery plan in place
-- [ ] Security scan completed
-- [ ] Load testing performed
-- [ ] Documentation updated
+- [ ] Agent tested locally against `POST /invocations`
+- [ ] Execution role scoped to the specific models, memories and gateways used
+- [ ] Inbound auth chosen (IAM or JWT) and tested
+- [ ] Lifecycle timeouts set to match the workload
+- [ ] VPC networking configured if the agent reaches private resources
+- [ ] Observability (Transaction Search, OTEL) enabled
+- [ ] Memory expiry and KMS settings reviewed
+- [ ] Load test against concurrent-session quotas
 
-### Blue-Green Deployment
+### Versions and Endpoints (blue/green)
+
+Every create or update produces an immutable runtime version. Endpoints are named pointers to versions, so blue/green is a matter of moving an endpoint:
 
 ```python
-from bedrock_agentcore import DeploymentManager
+control = boto3.client("bedrock-agentcore-control")
 
-deployer = DeploymentManager()
-
-# Create new version (green)
-new_version = deployer.create_version(
-    agent_id='agent-123',
-    code_source='s3://code/agent-v2.zip',
-    description='Version 2.0 with improved analysis'
+# Stage the new version behind its own endpoint
+control.create_agent_runtime_endpoint(
+    agentRuntimeId=runtime_id,
+    name="canary",
+    agentRuntimeVersion="7",
 )
 
-# Test new version
-test_results = deployer.run_tests(
-    agent_id='agent-123',
-    version=new_version,
-    test_suite='integration_tests'
+# ... run tests against qualifier="canary" ...
+
+# Promote: point the (previously created) production endpoint at the tested version
+control.update_agent_runtime_endpoint(
+    agentRuntimeId=runtime_id,
+    endpointName="production",
+    agentRuntimeVersion="7",
 )
 
-if test_results['success_rate'] > 0.95:
-    # Switch traffic to new version
-    deployer.update_alias(
-        agent_id='agent-123',
-        alias='production',
-        version=new_version
-    )
-    print("✓ Deployment successful")
-else:
-    # Rollback
-    deployer.delete_version(
-        agent_id='agent-123',
-        version=new_version
-    )
-    print("✗ Deployment failed, rolled back")
+# Roll back by pointing it at the previous version again
 ```
+
+Callers select an endpoint with the `qualifier` argument of `invoke_agent_runtime`.
 
 ### Cost Optimization
 
-```python
-# Monitor and optimize costs
-from bedrock_agentcore import CostAnalyzer
+AgentCore has no cost-analysis API of its own. Use Cost Explorer (filter on the Amazon Bedrock AgentCore service) and these levers:
 
-analyzer = CostAnalyzer()
-
-# Get cost breakdown
-costs = analyzer.get_monthly_costs(
-    agent_id='agent-123',
-    month='2025-03'
-)
-
-print(f"Compute: ${costs['compute']}")
-print(f"Storage: ${costs['storage']}")
-print(f"Data Transfer: ${costs['data_transfer']}")
-
-# Get optimization recommendations
-recommendations = analyzer.get_recommendations(
-    agent_id='agent-123'
-)
-
-for rec in recommendations:
-    print(f"{rec['type']}: {rec['description']}")
-    print(f"Estimated savings: ${rec['estimated_savings']}/month")
-```
+- Runtime bills for active CPU and memory per session; short idle timeouts stop idle sessions accruing charges.
+- Pick the smallest model that holds quality for each step; Claude Haiku-class models suit routing and extraction.
+- Memory long-term strategies run extraction on every event — enable only the strategies you query.
+- Code Interpreter and Browser sessions bill while open; always `stop()` them (the `code_session` / `browser_session` context managers do this).
 
 ---
 
 ## Conclusion
 
-Amazon Bedrock AgentCore provides a powerful, secure, and flexible platform for building enterprise-grade AI agents. With support for multiple frameworks, secure sandbox execution, and comprehensive AWS integration, AgentCore simplifies agent development while maintaining enterprise security and compliance requirements.
+AgentCore is the AWS-recommended place to run agents on Bedrock: bring an agent written in any framework, wrap it in `BedrockAgentCoreApp`, deploy it with the AgentCore CLI, and add Memory, Gateway, Identity and the sandboxed tools as you need them.
 
-**Free Trial:** Available until September 16, 2025
-**Getting Started:** https://docs.aws.amazon.com/bedrock/agentcore/
-
----
-
-**Last Updated:** March 2025
-**Status:** Generally Available
-
+**Documentation:** https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/
+**Python SDK:** https://github.com/aws/bedrock-agentcore-sdk-python
+**CLI:** https://github.com/aws/agentcore-cli

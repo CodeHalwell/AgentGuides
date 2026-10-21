@@ -8,7 +8,7 @@ sidebar:
   order: 23
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/knowledge/knowledge.py`, `crewai/knowledge/source/*.py`, `crewai/knowledge/knowledge_config.py`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/knowledge/knowledge.py`, `crewai/knowledge/source/*.py`, `crewai/knowledge/knowledge_config.py`).
 
 Knowledge is a read-mostly vector store attached to an `Agent` or `Crew`. Unlike [Memory](./crewai_memory_python/) it's populated ahead of time and isn't automatically written to during a run.
 

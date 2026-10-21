@@ -1,20 +1,19 @@
 ---
 title: "AWS Strands Agents SDK: Comprehensive Technical Guide"
-description: "A complete technical reference for the AWS Strands Agents SDK, a lightweight, open-source Python framework for building collaborative AI agent systems on Amazon Bedrock. Strands pr"
+description: "Technical reference for Strands Agents, the open-source, model-driven agent SDK from AWS: agents, tools, multi-agent patterns (agents as tools, swarms, graphs, workflows), sessions, memory and deployment to AgentCore."
 framework: amazon-bedrock-agents
 ---
 
 # AWS Strands Agents SDK: Comprehensive Technical Guide
 
-**Framework Name:** strands_agents_sdk
+Strands Agents is an open-source (Apache 2.0) SDK from AWS for building agents with a model-driven loop: you give an agent a model, a system prompt and tools, and the model decides which tools to call. It runs on Amazon Bedrock by default but also supports Anthropic, OpenAI, Gemini, Ollama, LiteLLM and others. There are Python and TypeScript SDKs; this guide covers Python.
 
-A complete technical reference for the AWS Strands Agents SDK, a lightweight, open-source Python framework for building collaborative AI agent systems on Amazon Bedrock. Strands provides four collaboration patterns: Agents as Tools, Swarms, Agent Graphs, and Workflows.
+> **Verified against:** `strands-agents` %%version=strands-agents%% (checked %%versions-checked%%). Every import, class and parameter below was checked against that installed package. `strands-agents-tools` is versioned separately.
 
-**Version:** 1.42.0 (June 2026)
-**Last Updated:** June 7, 2026
-**Status:** Open Source, Generally Available
-**Language:** Python
-**GitHub:** https://github.com/awslabs/strands-agents (hypothetical)
+**Status:** Open source, generally available (1.0 released July 2025)
+**Language:** Python 3.10+ (TypeScript SDK: `@strands-agents/sdk`)
+**GitHub:** https://github.com/strands-agents
+**Documentation:** https://strandsagents.com
 **License:** Apache 2.0
 
 ---
@@ -38,25 +37,26 @@ A complete technical reference for the AWS Strands Agents SDK, a lightweight, op
 
 ## Introduction to Strands
 
-AWS Strands is a **lightweight, open-source Python framework** designed specifically for building agent systems on Amazon Bedrock. Unlike heavier frameworks, Strands focuses on simplicity, performance, and deep AWS integration.
+Strands keeps the agent loop small and lets the model do the planning. The SDK supplies the loop, tool execution, conversation management, session persistence, hooks, multi-agent primitives and OpenTelemetry tracing.
 
 ### Key Features
 
-| Feature | Description | Benefit |
-|---------|-------------|---------|
-| **Four Collaboration Patterns** | Agents as Tools, Swarms, Graphs, Workflows | Flexible architecture for any use case |
-| **Lightweight** | Minimal dependencies, fast startup | Low overhead, quick development |
-| **AWS-Native** | Built for Bedrock, seamless integration | Optimized for AWS services |
-| **Open Source** | Apache 2.0 license, community-driven | Transparent, extensible |
-| **Type-Safe** | Full Python type hints | Better IDE support, fewer bugs |
+| Feature | Description |
+|---------|-------------|
+| **Model-driven loop** | The model chooses tools and when to stop; no hand-written state machine required |
+| **`@tool` decorator** | Plain Python functions become tools; type hints and docstrings become the schema |
+| **Multi-agent primitives** | Agents as tools, `Swarm`, `GraphBuilder` graphs, and the `workflow` tool |
+| **Model providers** | Bedrock (default), Anthropic, OpenAI, Gemini, Ollama, LiteLLM, SageMaker, Mistral, Writer and more |
+| **MCP** | `MCPClient` loads tools from any MCP server |
+| **Sessions and memory** | File, S3 and AgentCore Memory session managers; sliding-window and summarising conversation managers |
+| **Observability** | OpenTelemetry spans for agent, model and tool calls |
 
 ### Use Cases
 
-- **Customer Service**: Multi-agent systems for routing and handling requests
-- **Data Analysis**: Collaborative analysis with specialized agents
-- **Content Generation**: Teams of agents for content creation and review
-- **Business Automation**: Complex workflows with human-in-the-loop
-- **Research**: Multi-agent research and synthesis systems
+- **Customer service**: a supervisor routing to specialist agents
+- **Data analysis**: agents with code execution and data tools
+- **Content pipelines**: graphs of drafting, review and formatting agents
+- **Research**: swarms of agents handing work to each other
 
 ---
 
@@ -65,55 +65,56 @@ AWS Strands is a **lightweight, open-source Python framework** designed specific
 ### Installation
 
 ```bash
-# Install from PyPI
-pip install strands-agents
+pip install "strands-agents==%%version=strands-agents%%" strands-agents-tools
 
-# Or install with all optional dependencies
-pip install "strands-agents[all]"
-
-# Or install from source
-git clone https://github.com/awslabs/strands-agents
-cd strands-agents
-pip install -e .
+# Optional extras, for example
+pip install "strands-agents[openai,a2a,otel]==%%version=strands-agents%%"
 ```
 
 ### Prerequisites
 
 ```bash
-# Required Python version
-python --version  # Python 3.8+
+python --version   # 3.10 or later
 
-# Required AWS configuration
+# Bedrock is the default provider: configure AWS credentials and a region
 aws configure
-
-# Required environment variables
-export AWS_DEFAULT_REGION=us-east-1
-export AWS_PROFILE=default
+export AWS_REGION=us-west-2
 ```
+
+Enable access to the Claude models you plan to use in the Bedrock console (Model access) before the first call.
 
 ### Quick Verification
 
 ```python
 import importlib.metadata
+
 from strands import Agent, tool
 
-# strands does not expose __version__; use importlib.metadata instead
-print(f"Strands version: {importlib.metadata.version('strands-agents')}")
+print("strands-agents", importlib.metadata.version("strands-agents"))
 
-# Create a simple agent
+
 @tool
 def hello(name: str) -> str:
-    """Say hello to someone"""
+    """Say hello to someone.
+
+    Args:
+        name: Person to greet.
+    """
     return f"Hello, {name}!"
 
+
 agent = Agent(
+    model="us.anthropic.claude-sonnet-5-5",  # Bedrock cross-Region inference profile ID
     tools=[hello],
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0"
 )
 
-response = agent("Say hello to Alice")
-print(response)
+result = agent("Say hello to Alice")
+print(result)  # AgentResult; str() gives the final text
 ```
+
+If you omit `model`, Strands uses its default Bedrock model. Pin the model explicitly in anything you deploy so behaviour doesn't change when that default moves.
+
+**Bedrock model IDs.** Current Claude models on Bedrock use IDs such as `anthropic.claude-sonnet-5-5`, `anthropic.claude-opus-5-5` and `anthropic.claude-haiku-5-5`; prefix them with `us.`, `eu.`, `jp.`, `au.` or `global.` to use a cross-Region inference profile. Check the [Bedrock model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for the profiles available in your Region.
 
 ---
 
@@ -121,116 +122,104 @@ print(response)
 
 ### Agent Class
 
-The `Agent` class is the foundation of Strands:
+`Agent` takes keyword arguments; the common ones are:
 
 ```python
-from strands import Agent, tool
-from typing import List
+from strands import Agent
+from strands.agent.conversation_manager import SlidingWindowConversationManager
+from strands.models import BedrockModel, CacheConfig
 
-class Agent:
-    """
-    Core agent class for Strands
+model = BedrockModel(
+    model_id="us.anthropic.claude-sonnet-5-5",
+    region_name="us-west-2",
+    max_tokens=4096,
+    cache_config=CacheConfig(strategy="auto"),  # Bedrock prompt caching
+)
 
-    Args:
-        name: Unique agent identifier
-        model: Bedrock model ID
-        tools: List of tools available to the agent
-        instructions: System prompt for the agent
-        temperature: Model temperature (0.0-1.0)
-        max_tokens: Maximum response tokens
-        memory: Memory configuration
-    """
-    def __init__(
-        self,
-        name: str,
-        model: str,
-        tools: List[callable] = None,
-        instructions: str = "",
-        temperature: float = 1.0,
-        max_tokens: int = 4096,
-        memory: dict = None
-    ):
-        self.name = name
-        self.model = model
-        self.tools = tools or []
-        self.instructions = instructions
-        self.temperature = temperature
-        self.max_tokens = max_tokens
-        self.memory = memory or {}
+agent = Agent(
+    model=model,                         # a Model instance or a model ID string
+    name="Analyst",                      # used when the agent is a tool or swarm member
+    description="Answers questions about sales data",
+    system_prompt="You are a careful sales analyst.",
+    tools=[],                            # @tool functions, modules, MCP clients, other agents
+    conversation_manager=SlidingWindowConversationManager(window_size=40),
+    state={"tenant": "acme"},            # JSON-serialisable agent state (not sent to the model)
+)
 
-    def run(self, input: str, **kwargs) -> str:
-        """Execute the agent with given input"""
-        pass
+result = agent("What drove Q4 revenue?")         # synchronous
+print(result.stop_reason, result.metrics.accumulated_usage)
+```
 
-    def stream(self, input: str, **kwargs):
-        """Stream agent responses"""
-        pass
+Async and streaming:
+
+```python
+import asyncio
+
+
+async def main():
+    async for event in agent.stream_async("Summarise Q4 in three bullets"):
+        if "data" in event:
+            print(event["data"], end="", flush=True)
+
+asyncio.run(main())
 ```
 
 ### Tool Decorator
 
-The `@tool` decorator converts functions into agent tools:
-
 ```python
 from strands import tool
-from typing import List
+
 
 @tool
-def calculate_sum(numbers: List[float]) -> float:
-    """
-    Calculate the sum of a list of numbers
+def calculate_sum(numbers: list[float]) -> float:
+    """Calculate the sum of a list of numbers.
 
     Args:
-        numbers: List of numbers to sum
-
-    Returns:
-        The sum of all numbers
+        numbers: Numbers to add up.
     """
     return sum(numbers)
 
+
 @tool
-def search_database(query: str, limit: int = 10) -> List[dict]:
-    """
-    Search the product database
+def search_products(query: str, limit: int = 10) -> list[dict]:
+    """Search the product catalogue.
 
     Args:
-        query: Search query string
-        limit: Maximum number of results (default: 10)
-
-    Returns:
-        List of matching products
+        query: Free-text search query.
+        limit: Maximum number of results.
     """
-    # Implementation
-    return results
+    return [{"sku": "A-1", "name": "Widget"}][:limit]
 ```
+
+The function name becomes the tool name, the docstring becomes its description, and the `Args:` section documents each parameter.
 
 ### Context Management
 
+There is no separate `Context` object. Pass per-request data with `invocation_state` and read it — together with the calling agent — from a tool by asking for a `ToolContext`:
+
 ```python
-from strands import Context
+from strands import Agent, ToolContext, tool
 
-# Create context for sharing data between agents
-context = Context(
-    session_id="session-123",
-    user_id="user-456",
-    metadata={
-        "customer_tier": "premium",
-        "region": "us-east-1"
-    }
-)
 
-# Use context with agent
-response = agent.run(
-    input="Check my account status",
-    context=context
-)
+@tool(context=True)
+def account_status(tool_context: ToolContext) -> str:
+    """Look up the current customer's account status."""
+    customer_id = tool_context.invocation_state["customer_id"]
+    tier = tool_context.agent.state.get("tier")
+    return f"Customer {customer_id} ({tier}) is ACTIVE"
+
+
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[account_status], state={"tier": "premium"})
+agent("Check my account status", invocation_state={"customer_id": "C-456"})
 ```
+
+`invocation_state` is not shown to the model, so it is the right place for user IDs, credentials handles and request metadata.
 
 ---
 
 ## Collaboration Pattern 1: Agents as Tools
 
-In this pattern, **agents become tools** that other agents can invoke. This creates a hierarchical structure where a supervisor agent delegates tasks to specialist agents.
+A supervisor agent calls specialist agents as if they were tools.
 
 ### Architecture
 
@@ -252,596 +241,335 @@ In this pattern, **agents become tools** that other agents can invoke. This crea
 ### Complete Example
 
 ```python
-from strands import Agent, tool, as_tool
-import boto3
+from strands import Agent, tool
 
-# Create specialist agents
+SONNET = "us.anthropic.claude-sonnet-5-5"
+HAIKU = "us.anthropic.claude-haiku-5-5"
+
+
+@tool
+def get_invoice(invoice_id: str) -> dict:
+    """Fetch an invoice.
+
+    Args:
+        invoice_id: Invoice identifier.
+    """
+    return {"invoice_id": invoice_id, "amount": 1200.0, "status": "OVERDUE"}
+
+
+@tool
+def get_plan_details(plan: str) -> dict:
+    """Return pricing and features for a plan.
+
+    Args:
+        plan: Plan name, e.g. "enterprise".
+    """
+    return {"plan": plan, "price_per_seat": 45, "sso": True}
+
+
 sales_agent = Agent(
-    name="SalesAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="""You are a sales specialist.
-    Help customers with product information, pricing, and purchases.
-    Be friendly, knowledgeable, and persuasive.""",
-    tools=[
-        get_product_info,
-        calculate_price,
-        create_quote
-    ]
-)
-
-support_agent = Agent(
-    name="SupportAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="""You are a technical support specialist.
-    Help customers troubleshoot issues and resolve problems.
-    Be patient, methodical, and solution-oriented.""",
-    tools=[
-        check_system_status,
-        create_support_ticket,
-        search_knowledge_base
-    ]
+    model=SONNET,
+    name="sales_specialist",
+    description="Answers questions about plans, pricing and purchases.",
+    system_prompt="You are a sales specialist. Be accurate and concise.",
+    tools=[get_plan_details],
 )
 
 billing_agent = Agent(
-    name="BillingAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="""You are a billing specialist.
-    Help customers with invoices, payments, and account billing.
-    Be accurate, thorough, and professional.""",
-    tools=[
-        get_invoice_details,
-        process_payment,
-        update_billing_info
-    ]
+    model=HAIKU,
+    name="billing_specialist",
+    description="Answers questions about invoices and payments.",
+    system_prompt="You are a billing specialist. Be precise about amounts and dates.",
+    tools=[get_invoice],
 )
 
-# Convert agents to tools
-sales_tool = as_tool(sales_agent, description="Handle sales inquiries and product information")
-support_tool = as_tool(support_agent, description="Handle technical support and troubleshooting")
-billing_tool = as_tool(billing_agent, description="Handle billing and payment questions")
-
-# Create supervisor agent that uses other agents as tools
 supervisor = Agent(
-    name="SupervisorAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="""You are a customer service supervisor.
-    Route customer requests to the appropriate specialist:
-    - Use sales_agent for product questions, pricing, and purchases
-    - Use support_agent for technical issues and troubleshooting
-    - Use billing_agent for invoices, payments, and billing questions
-
-    Coordinate between specialists when needed.""",
-    tools=[sales_tool, support_tool, billing_tool]
+    model=SONNET,
+    system_prompt=(
+        "You are a customer service supervisor. Delegate plan and pricing questions to "
+        "sales_specialist and invoice questions to billing_specialist, then combine their answers."
+    ),
+    tools=[
+        sales_agent.as_tool(),     # name/description default to the agent's own
+        billing_agent.as_tool(),
+    ],
 )
 
-# Use the system
-response = supervisor.run(
-    "I need help with my invoice and also want to know about your enterprise plan"
-)
-print(response)
+print(supervisor("Invoice INV-77 looks wrong, and what does the enterprise plan cost?"))
 ```
+
+`Agent.as_tool()` accepts `name`, `description` and `preserve_context` (keep the specialist's conversation between calls; off by default). You can also put an `Agent` directly in `tools=[...]`; it is wrapped the same way.
 
 ### Advanced Pattern: Multi-Level Hierarchy
 
 ```python
-from strands import Agent, as_tool
+tier1 = Agent(model=HAIKU, name="tier1_support", description="Basic how-to questions.")
+tier2 = Agent(model=SONNET, name="tier2_support", description="Configuration and integration issues.")
+tier3 = Agent(model="us.anthropic.claude-opus-5-5", name="tier3_support", description="Complex incidents and root-cause analysis.")
 
-# Level 3: Specialist agents
-tier1_support = Agent(name="Tier1Support", model="anthropic.claude-3-haiku-20240307-v1:0", ...)
-tier2_support = Agent(name="Tier2Support", model="anthropic.claude-3-5-sonnet-20241022-v2:0", ...)
-tier3_support = Agent(name="Tier3Support", model="anthropic.claude-3-opus-20240229-v1:0", ...)
-
-# Level 2: Department supervisors
-support_supervisor = Agent(
-    name="SupportSupervisor",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Route support requests by complexity: Tier 1 (basic), Tier 2 (moderate), Tier 3 (complex)",
-    tools=[
-        as_tool(tier1_support, "Handle basic support questions"),
-        as_tool(tier2_support, "Handle moderate complexity issues"),
-        as_tool(tier3_support, "Handle complex technical problems")
-    ]
+support_lead = Agent(
+    model=SONNET,
+    name="support_lead",
+    description="Handles all technical support requests.",
+    system_prompt="Route each request to the lowest tier that can resolve it.",
+    tools=[tier1, tier2, tier3],
 )
 
-sales_supervisor = Agent(
-    name="SalesSupervisor",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    tools=[...],
-    ...
+front_desk = Agent(
+    model=SONNET,
+    system_prompt="Route requests to the right department.",
+    tools=[support_lead, sales_agent],
 )
 
-# Level 1: Global supervisor
-global_supervisor = Agent(
-    name="GlobalSupervisor",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Route requests to the appropriate department",
-    tools=[
-        as_tool(support_supervisor, "Handle all support-related requests"),
-        as_tool(sales_supervisor, "Handle all sales-related requests")
-    ]
-)
-
-# Execute
-response = global_supervisor.run("My enterprise deployment is experiencing high latency")
+front_desk("Our enterprise deployment is seeing high latency since yesterday's upgrade.")
 ```
 
 ---
 
 ## Collaboration Pattern 2: Swarms
 
-In the **Swarm pattern**, multiple agents work in parallel on the same task, and their responses are aggregated. This is useful for diverse perspectives, redundancy, or consensus-building.
+A `Swarm` is a team of agents that hand work to one another. Each member automatically receives a `handoff_to_agent` tool and a shared view of the task and of what other agents have done; the swarm ends when an agent finishes without handing off, or when a limit is hit. It is collaborative and sequential — one agent active at a time — rather than "run everyone in parallel and vote".
 
 ### Architecture
 
 ```
-                    ┌─────────────┐
-                    │   Input     │
-                    └──────┬──────┘
-                           │
-         ┌─────────────────┼─────────────────┐
-         │                 │                 │
-    ┌────▼────┐       ┌────▼────┐       ┌────▼────┐
-    │ Agent 1 │       │ Agent 2 │       │ Agent 3 │
-    └────┬────┘       └────┬────┘       └────┬────┘
-         │                 │                 │
-         └─────────────────┼─────────────────┘
-                           │
-                    ┌──────▼──────┐
-                    │  Aggregator │
-                    └──────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │   Output    │
-                    └─────────────┘
+            ┌──────────────┐  handoff   ┌──────────────┐
+  task ───▶ │  researcher  │──────────▶ │   analyst    │
+            └──────────────┘            └──────┬───────┘
+                    ▲                          │ handoff
+                    │       handoff     ┌──────▼───────┐
+                    └────────────────── │   reviewer   │ ──▶ final answer
+                                        └──────────────┘
 ```
 
 ### Complete Example
 
 ```python
-from strands import Swarm, Agent, aggregator
-from typing import List
-import asyncio
+from strands import Agent
+from strands.multiagent import Swarm
 
-# Create specialist agents with different perspectives
-financial_analyst = Agent(
-    name="FinancialAnalyst",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Analyze from a financial perspective. Focus on costs, ROI, and budget impact."
+SONNET = "us.anthropic.claude-sonnet-5-5"
+
+financial = Agent(
+    model=SONNET,
+    name="financial_analyst",
+    system_prompt="Assess costs, ROI and budget impact. Hand off to technical_analyst when done.",
+)
+technical = Agent(
+    model=SONNET,
+    name="technical_analyst",
+    system_prompt="Assess architecture, scalability and delivery risk. Hand off to risk_analyst when done.",
+)
+risk = Agent(
+    model=SONNET,
+    name="risk_analyst",
+    system_prompt="Assess security and compliance, then write the final balanced recommendation.",
 )
 
-technical_analyst = Agent(
-    name="TechnicalAnalyst",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Analyze from a technical perspective. Focus on architecture, scalability, and implementation."
+swarm = Swarm(
+    [financial, technical, risk],
+    entry_point=financial,
+    max_handoffs=10,
+    max_iterations=15,
+    execution_timeout=900.0,   # seconds, whole swarm
+    node_timeout=300.0,        # seconds, per agent
 )
 
-risk_analyst = Agent(
-    name="RiskAnalyst",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Analyze from a risk perspective. Focus on security, compliance, and potential issues."
+result = swarm(
+    "Proposal: migrate our monolith to microservices on EKS. "
+    "$50k implementation, $10k/month to run, six months."
 )
 
-# Define custom aggregator
-@aggregator
-def consensus_aggregator(responses: List[dict]) -> str:
-    """
-    Aggregate responses to find consensus and highlight disagreements
-
-    Args:
-        responses: List of agent responses with format:
-                   [{'agent': 'name', 'response': 'text'}, ...]
-
-    Returns:
-        Aggregated analysis
-    """
-    # Use another agent to synthesize the responses
-    synthesizer = Agent(
-        name="Synthesizer",
-        model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-        instructions="""Analyze the following expert opinions and:
-        1. Identify areas of consensus
-        2. Highlight key disagreements
-        3. Provide a balanced recommendation
-        4. Note any critical concerns from any analyst"""
-    )
-
-    # Format responses for synthesis
-    formatted = "\n\n".join([
-        f"{r['agent']} Analysis:\n{r['response']}"
-        for r in responses
-    ])
-
-    return synthesizer.run(
-        f"Synthesize these expert analyses:\n\n{formatted}"
-    )
-
-# Create swarm
-analysis_swarm = Swarm(
-    agents=[financial_analyst, technical_analyst, risk_analyst],
-    aggregator=consensus_aggregator,
-    parallel=True  # Run agents in parallel
-)
-
-# Use swarm
-proposal = """
-We propose migrating our monolithic application to a microservices
-architecture using AWS EKS. Estimated cost: $50k implementation +
-$10k/month operating costs. Timeline: 6 months.
-"""
-
-result = analysis_swarm.run(proposal)
-print(result)
+print(result.status)                                   # Status.COMPLETED, FAILED, ...
+print([node.node_id for node in result.node_history])  # who handled it, in order
+for node_id, node_result in result.results.items():
+    print(node_id, node_result.result)
 ```
 
-### Voting Aggregator
+Swarm members cannot have their own `session_manager`; pass one to the `Swarm` instead if you need to persist swarm state.
+
+### Parallel opinions and voting
+
+If you want several independent opinions combined — the old "aggregator" idea — you don't need a swarm. Run the agents concurrently yourself and aggregate:
 
 ```python
-from strands import aggregator
+import asyncio
 from collections import Counter
 
-@aggregator
-def voting_aggregator(responses: List[dict]) -> str:
-    """
-    Aggregate by majority vote (useful for classification tasks)
-    """
-    # Extract classifications from responses
-    votes = [r['response'].strip().upper() for r in responses]
+from strands import Agent
 
-    # Count votes
-    vote_counts = Counter(votes)
-    winner = vote_counts.most_common(1)[0]
+classifiers = [
+    Agent(model="us.anthropic.claude-haiku-5-5",
+          system_prompt="Classify the request as BILLING, SALES or SUPPORT. Reply with one word.",
+          callback_handler=None)          # silence console streaming
+    for _ in range(5)
+]
 
-    return {
-        'decision': winner[0],
-        'confidence': winner[1] / len(votes),
-        'vote_breakdown': dict(vote_counts)
-    }
 
-# Create classification swarm
-classifier_swarm = Swarm(
-    agents=[
-        Agent(name=f"Classifier{i}", model="anthropic.claude-3-haiku-20240307-v1:0", ...)
-        for i in range(5)
-    ],
-    aggregator=voting_aggregator
-)
+async def vote(text: str) -> dict:
+    results = await asyncio.gather(*(a.invoke_async(text) for a in classifiers))
+    votes = Counter(str(r).strip().upper() for r in results)
+    label, count = votes.most_common(1)[0]
+    return {"decision": label, "confidence": count / len(classifiers), "votes": dict(votes)}
 
-result = classifier_swarm.run("Classify this customer request: ...")
-print(f"Classification: {result['decision']}")
-print(f"Confidence: {result['confidence']:.2%}")
+print(asyncio.run(vote("I was charged twice this month")))
 ```
 
 ---
 
 ## Collaboration Pattern 3: Agent Graphs
 
-**Agent Graphs** define complex workflows where agents are nodes and edges represent information flow. This enables sophisticated multi-step processes with conditional branching.
+`GraphBuilder` builds a directed graph whose nodes are agents (or other multi-agent systems). Edges can carry conditions, nodes with no unmet dependencies run in parallel, and cycles are allowed when bounded.
 
 ### Architecture
 
 ```
-┌─────┐     ┌─────┐     ┌─────┐
-│  A  │────▶│  B  │────▶│  D  │
-└─────┘     └─────┘     └─────┘
-              │
-              ▼
-            ┌─────┐
-            │  C  │
-            └─────┘
+┌─────────┐     ┌──────────┐     ┌─────────┐     ┌────────┐
+│ collect │────▶│ validate │────▶│ analyse │────▶│ report │
+└─────────┘     └────┬─────┘     └─────────┘     └────────┘
+     ▲               │ (validation failed)
+     └───────────────┘
 ```
 
 ### Complete Example
 
 ```python
-from strands import AgentGraph, Agent, Edge
+from strands import Agent
+from strands.multiagent import GraphBuilder
+from strands.multiagent.graph import GraphState
 
-# Create agents
-data_collector = Agent(
-    name="DataCollector",
-    model="anthropic.claude-3-haiku-20240307-v1:0",
-    instructions="Collect and structure raw data from various sources",
-    tools=[fetch_from_api, query_database, read_file]
-)
+HAIKU = "us.anthropic.claude-haiku-5-5"
+SONNET = "us.anthropic.claude-sonnet-5-5"
 
-data_validator = Agent(
-    name="DataValidator",
-    model="anthropic.claude-3-haiku-20240307-v1:0",
-    instructions="Validate data quality and completeness",
-    tools=[check_schema, validate_ranges, detect_anomalies]
-)
+collector = Agent(model=HAIKU, name="collector",
+                  system_prompt="Collect and structure the raw data described in the task.")
+validator = Agent(model=HAIKU, name="validator",
+                  system_prompt="Check the data for completeness. Start your reply with PASS or FAIL.")
+analyst = Agent(model=SONNET, name="analyst",
+                system_prompt="Perform the statistical analysis and identify trends.")
+reporter = Agent(model=SONNET, name="reporter",
+                 system_prompt="Write a concise report with the key insights.")
 
-data_analyzer = Agent(
-    name="DataAnalyzer",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Perform statistical analysis and identify trends",
-    tools=[calculate_statistics, run_regression, detect_patterns]
-)
 
-report_generator = Agent(
-    name="ReportGenerator",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Generate comprehensive reports with insights",
-    tools=[create_charts, format_report, generate_summary]
-)
+def text_of(state: GraphState, node_id: str) -> str:
+    node = state.results.get(node_id)
+    return str(node.result) if node else ""
 
-quality_checker = Agent(
-    name="QualityChecker",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Review report quality and accuracy"
-)
 
-# Create graph
-analysis_graph = AgentGraph()
+def validation_passed(state: GraphState) -> bool:
+    return text_of(state, "validate").strip().upper().startswith("PASS")
 
-# Add nodes
-analysis_graph.add_node("collect", data_collector)
-analysis_graph.add_node("validate", data_validator)
-analysis_graph.add_node("analyze", data_analyzer)
-analysis_graph.add_node("report", report_generator)
-analysis_graph.add_node("quality_check", quality_checker)
 
-# Add edges with conditions
-analysis_graph.add_edge("collect", "validate")
+def validation_failed(state: GraphState) -> bool:
+    return not validation_passed(state)
 
-# Conditional edge based on validation results
-analysis_graph.add_conditional_edge(
-    source="validate",
-    condition=lambda state: state['validation_passed'],
-    if_true="analyze",
-    if_false="collect",  # Re-collect if validation fails
-    max_retries=3
-)
 
-analysis_graph.add_edge("analyze", "report")
-analysis_graph.add_edge("report", "quality_check")
+builder = GraphBuilder()
+builder.add_node(collector, "collect")
+builder.add_node(validator, "validate")
+builder.add_node(analyst, "analyse")
+builder.add_node(reporter, "report")
 
-# Conditional edge for quality check
-analysis_graph.add_conditional_edge(
-    source="quality_check",
-    condition=lambda state: state['quality_score'] > 0.85,
-    if_true="end",
-    if_false="report"  # Regenerate report if quality is low
-)
+builder.add_edge("collect", "validate")
+builder.add_edge("validate", "analyse", condition=validation_passed)
+builder.add_edge("validate", "collect", condition=validation_failed)   # retry loop
+builder.add_edge("analyse", "report")
 
-# Set entry and exit points
-analysis_graph.set_entry_point("collect")
-analysis_graph.set_exit_point("end")
+builder.set_entry_point("collect")
+builder.reset_on_revisit(True)          # re-run nodes cleanly when the loop revisits them
+builder.set_max_node_executions(10)     # bound the loop
+builder.set_execution_timeout(900)
 
-# Execute graph
-result = analysis_graph.run(
-    input_data={
-        'data_sources': ['s3://bucket/data.csv', 'api://endpoint/data'],
-        'analysis_type': 'trend_analysis',
-        'time_period': 'Q4_2024'
-    }
-)
+graph = builder.build()
 
-print(result['final_report'])
+result = graph("Trend analysis of Q4 sales from s3://sales-bucket/q4.csv")
+print(result.status, result.execution_order)
+print(result.results["report"].result)
 ```
 
 ### State Management in Graphs
 
-```python
-from strands import AgentGraph, State
-
-# Define custom state
-class AnalysisState(State):
-    """State object passed between graph nodes"""
-
-    def __init__(self):
-        self.raw_data = None
-        self.validated_data = None
-        self.analysis_results = None
-        self.report = None
-        self.validation_passed = False
-        self.quality_score = 0.0
-        self.retry_count = 0
-        self.errors = []
-
-    def update(self, **kwargs):
-        """Update state with new values"""
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-# Use state in graph
-analysis_graph = AgentGraph(state_class=AnalysisState)
-
-# Agents can read and update state
-def collect_node(state: AnalysisState) -> AnalysisState:
-    result = data_collector.run(state.input_query)
-    state.update(raw_data=result)
-    return state
-
-analysis_graph.add_node("collect", collect_node)
-```
+Each node receives the original task plus the outputs of the nodes that feed it. Conditions read the shared `GraphState` (`state.results`, `state.completed_nodes`, `state.execution_count`), as in `validation_passed` above. For data that should not go through the model, pass `invocation_state` when calling the graph; it reaches every node's tools via `ToolContext`.
 
 ### Parallel Execution in Graphs
 
+Fan-out is expressed with edges; nodes whose dependencies are satisfied run concurrently:
+
 ```python
-from strands import AgentGraph, ParallelNode
+builder = GraphBuilder()
+builder.add_node(Agent(model=HAIKU, name="prepare"), "prepare")
+builder.add_node(Agent(model=HAIKU, name="sentiment"), "sentiment")
+builder.add_node(Agent(model=HAIKU, name="entities"), "entities")
+builder.add_node(Agent(model=HAIKU, name="category"), "category")
+builder.add_node(Agent(model=SONNET, name="synthesise"), "synthesise")
 
-# Create graph with parallel execution
-parallel_graph = AgentGraph()
+for branch in ("sentiment", "entities", "category"):
+    builder.add_edge("prepare", branch)      # fan out
+    builder.add_edge(branch, "synthesise")   # fan in
 
-# Add sequential nodes
-parallel_graph.add_node("prepare", preparation_agent)
-
-# Add parallel nodes
-parallel_node = ParallelNode([
-    ("analyze_sentiment", sentiment_agent),
-    ("extract_entities", entity_agent),
-    ("classify_category", classification_agent)
-])
-
-parallel_graph.add_node("parallel_analysis", parallel_node)
-
-# Continue with sequential processing
-parallel_graph.add_node("synthesize", synthesis_agent)
-
-# Define edges
-parallel_graph.add_edge("prepare", "parallel_analysis")
-parallel_graph.add_edge("parallel_analysis", "synthesize")
-
-# Execute - parallel nodes run concurrently
-result = parallel_graph.run(input_text)
+builder.set_entry_point("prepare")
+builder.set_execution_timeout(600)
+result = builder.build()("Customer email: 'The new dashboard is great but exports keep failing.'")
 ```
 
 ---
 
 ## Collaboration Pattern 4: Workflows
 
-**Workflows** are high-level orchestrations that combine multiple patterns and integrate with AWS services like Step Functions.
-
-### Complete Example: Document Processing Workflow
+For a fixed pipeline you know in advance, a graph without conditional edges is usually the clearest option. When you want the *model* to plan and run a multi-task workflow — with dependencies, priorities and per-task models — use the `workflow` tool from `strands-agents-tools`:
 
 ```python
-from strands import Workflow, Agent, tool
-import boto3
+from strands import Agent
+from strands_tools import workflow
 
-# Define tools
-@tool
-def extract_text_from_pdf(s3_uri: str) -> str:
-    """Extract text from PDF using Textract"""
-    textract = boto3.client('textract')
-    response = textract.analyze_document(
-        Document={'S3Object': {'Bucket': bucket, 'Name': key}},
-        FeatureTypes=['TABLES', 'FORMS']
-    )
-    return extract_text(response)
+coordinator = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[workflow])
 
-@tool
-def store_in_database(data: dict) -> str:
-    """Store processed data in DynamoDB"""
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('ProcessedDocuments')
-    table.put_item(Item=data)
-    return data['document_id']
-
-# Create agents
-extraction_agent = Agent(
-    name="ExtractionAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Extract structured information from documents",
-    tools=[extract_text_from_pdf]
+coordinator.tool.workflow(
+    action="create",
+    workflow_id="document_processing",
+    tasks=[
+        {
+            "task_id": "extract",
+            "description": "Extract invoice fields from the document text provided.",
+            "priority": 5,
+        },
+        {
+            "task_id": "classify",
+            "description": "Classify the document as invoice, contract, report or other.",
+            "dependencies": ["extract"],
+            "model_provider": "bedrock",
+            "model_settings": {"model_id": "us.anthropic.claude-haiku-5-5"},
+        },
+        {
+            "task_id": "validate",
+            "description": "Validate the extracted fields for completeness.",
+            "dependencies": ["extract"],
+        },
+    ],
 )
 
-classification_agent = Agent(
-    name="ClassificationAgent",
-    model="anthropic.claude-3-haiku-20240307-v1:0",
-    instructions="Classify documents by type: invoice, contract, report, or other"
-)
-
-validation_agent = Agent(
-    name="ValidationAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    instructions="Validate extracted data for completeness and accuracy"
-)
-
-storage_agent = Agent(
-    name="StorageAgent",
-    model="anthropic.claude-3-haiku-20240307-v1:0",
-    instructions="Store processed documents in the appropriate system",
-    tools=[store_in_database]
-)
-
-# Create workflow
-doc_processing_workflow = Workflow(name="DocumentProcessing")
-
-# Add workflow steps
-doc_processing_workflow.add_step(
-    name="extract",
-    agent=extraction_agent,
-    input_source="s3_event",
-    output_key="extracted_data"
-)
-
-doc_processing_workflow.add_step(
-    name="classify",
-    agent=classification_agent,
-    depends_on="extract",
-    input_key="extracted_data",
-    output_key="document_type"
-)
-
-doc_processing_workflow.add_step(
-    name="validate",
-    agent=validation_agent,
-    depends_on="extract",
-    input_key="extracted_data",
-    output_key="validation_results"
-)
-
-# Conditional routing based on document type
-doc_processing_workflow.add_conditional_step(
-    name="route",
-    depends_on=["classify", "validate"],
-    conditions={
-        "invoice": "process_invoice_workflow",
-        "contract": "process_contract_workflow",
-        "report": "process_report_workflow",
-        "other": "manual_review"
-    },
-    condition_key="document_type"
-)
-
-# Add human-in-the-loop for manual review
-doc_processing_workflow.add_human_task(
-    name="manual_review",
-    task_type="review_and_classify",
-    timeout_hours=24,
-    assignee_role="document_reviewer"
-)
-
-# Store results
-doc_processing_workflow.add_step(
-    name="store",
-    agent=storage_agent,
-    depends_on="route",
-    input_keys=["extracted_data", "document_type", "validation_results"]
-)
-
-# Deploy workflow to Step Functions
-doc_processing_workflow.deploy_to_step_functions(
-    role_arn="arn:aws:iam::ACCOUNT:role/StepFunctionsRole",
-    name="DocumentProcessingWorkflow"
-)
-
-# Trigger workflow from S3 event
-doc_processing_workflow.create_s3_trigger(
-    bucket="document-intake",
-    prefix="incoming/",
-    events=["s3:ObjectCreated:*"]
-)
+coordinator.tool.workflow(action="start", workflow_id="document_processing")
+print(coordinator.tool.workflow(action="status", workflow_id="document_processing"))
 ```
+
+`agent.tool.<name>(...)` calls a tool directly, without going through the model — useful for deterministic set-up steps like these.
+
+Durable, long-running business processes with human approval steps and S3/EventBridge triggers belong in AWS Step Functions, with each step invoking an agent (for example one hosted on AgentCore Runtime — see [AgentCore integration patterns](../bedrock_agentcore_comprehensive_guide/#integration-patterns)). For pauses for human input inside an agent, Strands supports interrupts raised from hooks and tools.
 
 ### Error Handling in Workflows
 
+Graphs and swarms report failures in their results rather than raising for every node error:
+
 ```python
-from strands import Workflow, ErrorHandler
+from strands.multiagent.base import Status
 
-# Define error handlers
-@ErrorHandler
-def handle_extraction_error(error, context):
-    """Handle extraction failures"""
-    if error.type == 'UnsupportedFormat':
-        # Send to manual processing
-        return {'action': 'manual_processing', 'priority': 'high'}
-    else:
-        # Retry with different settings
-        return {'action': 'retry', 'max_attempts': 3}
-
-@ErrorHandler
-def handle_validation_error(error, context):
-    """Handle validation failures"""
-    if context['retry_count'] < 3:
-        return {'action': 'retry'}
-    else:
-        return {'action': 'alert', 'recipients': ['ops-team@example.com']}
-
-# Add error handlers to workflow
-doc_processing_workflow.add_error_handler("extract", handle_extraction_error)
-doc_processing_workflow.add_error_handler("validate", handle_validation_error)
+result = graph("...")
+if result.status != Status.COMPLETED:
+    for node_id in result.failed_nodes:
+        print("failed:", node_id)
 ```
+
+Bound every multi-agent run with timeouts and execution limits (shown above) so a misbehaving loop fails fast.
 
 ---
 
@@ -850,90 +578,85 @@ doc_processing_workflow.add_error_handler("validate", handle_validation_error)
 ### Creating Tools
 
 ```python
-from strands import tool
-from typing import List, Optional
+from typing import Optional
+
 import boto3
+from strands import tool
+
+products = boto3.resource("dynamodb").Table("Products")
+
 
 @tool
-def search_products(
-    query: str,
-    category: Optional[str] = None,
-    max_results: int = 10
-) -> List[dict]:
-    """
-    Search product catalog
+def get_product(sku: str, include_stock: Optional[bool] = False) -> dict:
+    """Look up a product by SKU.
 
     Args:
-        query: Search query text
-        category: Optional product category filter
-        max_results: Maximum number of results to return (default: 10)
-
-    Returns:
-        List of matching products with details
+        sku: Product SKU.
+        include_stock: Also return the current stock level.
     """
-    # Implementation
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table('Products')
-
-    # Perform search
-    results = []
-    # ... search logic ...
-
-    return results[:max_results]
-
-@tool
-def get_weather(location: str, units: str = "fahrenheit") -> dict:
-    """
-    Get current weather for a location
-
-    Args:
-        location: City name or zip code
-        units: Temperature units - "fahrenheit" or "celsius" (default: fahrenheit)
-
-    Returns:
-        Weather data including temperature, conditions, humidity
-    """
-    # Call weather API
-    weather_data = call_weather_api(location, units)
-    return weather_data
+    item = products.get_item(Key={"sku": sku}).get("Item", {})
+    if not include_stock:
+        item.pop("stock", None)
+    return item
 ```
+
+Tools can be sync or async functions. Raise an exception to report a failure; Strands returns it to the model as an error result so it can recover.
+
+### Tools from MCP servers
+
+```python
+from mcp import StdioServerParameters, stdio_client
+from strands import Agent
+from strands.tools.mcp import MCPClient
+
+docs_server = MCPClient(lambda: stdio_client(
+    StdioServerParameters(command="uvx", args=["awslabs.aws-documentation-mcp-server@latest"])
+))
+
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[docs_server])  # client is managed by the agent
+agent("How do I configure VPC networking for AgentCore Runtime?")
+```
+
+For HTTP MCP servers (including AgentCore Gateway), pass `url=` (and `headers=` or `auth=`) to `MCPClient` instead of a transport callable.
 
 ### AWS Service Integration Tools
 
 ```python
-from strands import tool
-import boto3
+import json
 
-@tool
-def query_dynamodb(table_name: str, key: dict) -> dict:
-    """Query DynamoDB table"""
-    dynamodb = boto3.resource('dynamodb')
-    table = dynamodb.Table(table_name)
-    response = table.get_item(Key=key)
-    return response.get('Item', {})
+import boto3
+from strands import tool
+
 
 @tool
 def invoke_lambda(function_name: str, payload: dict) -> dict:
-    """Invoke Lambda function"""
-    lambda_client = boto3.client('lambda')
-    response = lambda_client.invoke(
+    """Invoke a Lambda function synchronously and return its JSON result.
+
+    Args:
+        function_name: Lambda function name or ARN.
+        payload: JSON payload to send.
+    """
+    response = boto3.client("lambda").invoke(
         FunctionName=function_name,
-        InvocationType='RequestResponse',
-        Payload=json.dumps(payload)
+        InvocationType="RequestResponse",
+        Payload=json.dumps(payload),
     )
-    return json.loads(response['Payload'].read())
+    return json.loads(response["Payload"].read())
+
 
 @tool
-def send_sns_notification(topic_arn: str, message: str, subject: str) -> str:
-    """Send SNS notification"""
-    sns = boto3.client('sns')
-    response = sns.publish(
-        TopicArn=topic_arn,
-        Message=message,
-        Subject=subject
-    )
-    return response['MessageId']
+def send_sns_notification(topic_arn: str, subject: str, message: str) -> str:
+    """Publish a notification to an SNS topic.
+
+    Args:
+        topic_arn: SNS topic ARN.
+        subject: Message subject.
+        message: Message body.
+    """
+    return boto3.client("sns").publish(TopicArn=topic_arn, Subject=subject, Message=message)["MessageId"]
 ```
+
+`strands-agents-tools` also ships a general `use_aws` tool; prefer narrow, purpose-built tools like the ones above in production so the agent's permissions stay obvious.
 
 ---
 
@@ -941,105 +664,131 @@ def send_sns_notification(topic_arn: str, message: str, subject: str) -> str:
 
 ### Conversation Memory
 
+Within one `Agent` object, the conversation is kept in `agent.messages` and trimmed by the conversation manager. To persist it across processes, give the agent a session manager:
+
 ```python
-from strands import Agent, ConversationMemory
+from strands import Agent
+from strands.session import S3SessionManager
 
-# Create agent with memory
+session = S3SessionManager(session_id="session-123", bucket="agent-sessions", prefix="support/")
+
 agent = Agent(
-    name="CustomerServiceAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    memory=ConversationMemory(
-        backend="dynamodb",
-        table_name="agent-conversations",
-        ttl_hours=24
-    )
+    model="us.anthropic.claude-sonnet-5-5",
+    session_manager=session,
 )
 
-# Use agent with session
-response1 = agent.run(
-    "My name is John and I need help with order #12345",
-    session_id="session-123"
-)
-
-# Agent remembers context in subsequent calls
-response2 = agent.run(
-    "What's the status of my order?",
-    session_id="session-123"  # Same session
-)
-# Agent knows to check order #12345 for John
+agent("My name is John and I need help with order #12345")
+# Later, in another process, a new Agent with the same session_id resumes the conversation
+agent("What's the status of my order?")
 ```
+
+`FileSessionManager(session_id=..., storage_dir=...)` does the same on local disk.
+
+### AgentCore Memory
+
+For managed short- and long-term memory, use the session manager shipped in `bedrock-agentcore`:
+
+```python
+# pip install bedrock-agentcore
+from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig, RetrievalConfig
+from bedrock_agentcore.memory.integrations.strands.session_manager import AgentCoreMemorySessionManager
+from strands import Agent
+
+config = AgentCoreMemoryConfig(
+    memory_id="CustomerMemory-abc123",
+    session_id="session-123",
+    actor_id="customer-42",
+    retrieval_config={"/facts/{actorId}/": RetrievalConfig(top_k=5, relevance_score=0.3)},
+)
+
+agent = Agent(
+    model="us.anthropic.claude-sonnet-5-5",
+    session_manager=AgentCoreMemorySessionManager(config, region_name="us-west-2"),
+)
+```
+
+Turns are written to AgentCore Memory as events; long-term records extracted by the memory's strategies are retrieved and added to context on each turn.
 
 ### Persistent State
 
-```python
-from strands import Agent, PersistentState
+`agent.state` is a key-value store for application data that is not sent to the model. It is saved and restored by the session manager along with the conversation:
 
-# Create agent with persistent state
+```python
 agent = Agent(
-    name="OnboardingAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    state=PersistentState(
-        backend="s3",
-        bucket="agent-state",
-        encryption=True
-    )
+    model="us.anthropic.claude-sonnet-5-5",
+    state={"onboarding_step": 1},
+    session_manager=S3SessionManager(session_id="onboard-john", bucket="agent-sessions"),
 )
 
-# State persists across invocations
-agent.state.set("onboarding_step", 1)
 agent.state.set("user_info", {"name": "John", "email": "john@example.com"})
+step = agent.state.get("onboarding_step")
+```
 
-# Later invocation
-current_step = agent.state.get("onboarding_step")
-user_info = agent.state.get("user_info")
+### Long conversations
+
+```python
+from strands.agent.conversation_manager import SummarizingConversationManager
+
+agent = Agent(
+    model="us.anthropic.claude-sonnet-5-5",
+    conversation_manager=SummarizingConversationManager(
+        summary_ratio=0.3,             # summarise the oldest 30% when the context fills
+        preserve_recent_messages=10,
+    ),
+)
 ```
 
 ---
 
 ## AWS Integration
 
-### S3 Integration
+### S3 and other services
+
+There is no special "integration" object: an agent reaches AWS through tools, using the IAM permissions of whatever runs it. A read-only S3 tool:
 
 ```python
-from strands import Agent, S3Integration
+import boto3
+from strands import Agent, tool
 
-agent = Agent(
-    name="DocumentAnalyzer",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    integrations=[
-        S3Integration(
-            bucket="documents",
-            read_access=True,
-            write_access=True
-        )
-    ]
-)
+s3 = boto3.client("s3")
 
-# Agent can now access S3 directly
-response = agent.run(
-    "Analyze the document at s3://documents/report.pdf"
+
+@tool
+def read_s3_text(bucket: str, key: str, max_bytes: int = 200_000) -> str:
+    """Read a UTF-8 text object from S3.
+
+    Args:
+        bucket: Bucket name.
+        key: Object key.
+        max_bytes: Maximum number of bytes to read.
+    """
+    body = s3.get_object(Bucket=bucket, Key=key, Range=f"bytes=0-{max_bytes - 1}")["Body"]
+    return body.read().decode("utf-8", errors="replace")
+
+
+analyst = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[read_s3_text])
+analyst("Summarise s3://documents/report.txt")
+```
+
+### Bedrock Guardrails
+
+`BedrockModel` applies a guardrail to every model call:
+
+```python
+from strands.models import BedrockModel
+
+model = BedrockModel(
+    model_id="us.anthropic.claude-sonnet-5-5",
+    guardrail_id="gr-abc123",
+    guardrail_version="1",
+    guardrail_trace="enabled",
+    guardrail_redact_output=True,
 )
 ```
 
-### EventBridge Integration
+### Event-driven agents
 
-```python
-from strands import Workflow, EventBridgeIntegration
-
-workflow = Workflow(
-    name="OrderProcessing",
-    integrations=[
-        EventBridgeIntegration(
-            event_bus="order-events",
-            rule_patterns=[
-                {"source": ["order.service"], "detail-type": ["OrderPlaced"]}
-            ]
-        )
-    ]
-)
-
-# Workflow automatically triggered by EventBridge events
-```
+To run an agent from EventBridge or S3 events, host it in Lambda (short tasks) or AgentCore Runtime (long or stateful tasks) and point the event rule at that function. See [Production Deployment](#production-deployment).
 
 ---
 
@@ -1048,144 +797,149 @@ workflow = Workflow(
 ### 1. Agent Design
 
 ```python
-# Good: Focused, specialized agents
-sales_agent = Agent(
-    name="ProductSpecialist",
-    instructions="You are an expert on our product line. Focus only on product features, pricing, and comparisons.",
-    tools=[get_product_info, calculate_price]
+# Good: focused agent, few well-described tools
+product_specialist = Agent(
+    model="us.anthropic.claude-sonnet-5-5",
+    name="product_specialist",
+    system_prompt="You are an expert on our product line. Only discuss features, pricing and comparisons.",
+    tools=[get_plan_details],
 )
 
-# Bad: Overly broad agents
-everything_agent = Agent(
-    name="DoEverything",
-    instructions="Do anything the user asks",
-    tools=[tool1, tool2, ..., tool100]  # Too many tools
-)
+# Avoid: one agent with dozens of loosely related tools — split into specialists
 ```
 
 ### 2. Error Handling
 
 ```python
-from strands import Agent
 import logging
 
-def run_agent_safely(agent, input_text, max_retries=3):
-    """Run agent with error handling and retries"""
+from strands.types.exceptions import ContextWindowOverflowException, ModelThrottledException
 
-    for attempt in range(max_retries):
-        try:
-            response = agent.run(input_text)
-            return response
+log = logging.getLogger(__name__)
 
-        except Exception as e:
-            logging.error(f"Agent error (attempt {attempt + 1}): {e}")
 
-            if attempt == max_retries - 1:
-                # Final attempt failed
-                return {
-                    'error': str(e),
-                    'fallback_response': 'I encountered an error. Please try again later.'
-                }
+def run_agent_safely(agent, text: str) -> str:
+    try:
+        return str(agent(text))
+    except ModelThrottledException:
+        log.warning("Bedrock throttled the request after retries")
+        raise
+    except ContextWindowOverflowException:
+        log.warning("Conversation too long; consider SummarizingConversationManager")
+        raise
 ```
 
-### 3. Cost Optimization
+Strands already retries throttled model calls (configurable with `retry_strategy=ModelRetryStrategy(...)` on the agent), so avoid wrapping every call in another blanket retry loop.
+
+### 3. Cost Optimisation
 
 ```python
 from strands import Agent
+from strands.models import BedrockModel, CacheConfig
 
-# Use appropriate models for task complexity
-simple_tasks_agent = Agent(
-    name="SimpleTaskAgent",
-    model="anthropic.claude-3-haiku-20240307-v1:0",  # Fast, cheap
-    temperature=0.3
-)
+router = Agent(model=BedrockModel(model_id="us.anthropic.claude-haiku-5-5", max_tokens=256),
+               system_prompt="Reply SIMPLE or COMPLEX only.", callback_handler=None)
+simple = Agent(model="us.anthropic.claude-haiku-5-5")
+complex_ = Agent(model=BedrockModel(model_id="us.anthropic.claude-sonnet-5-5",
+                                    cache_config=CacheConfig(strategy="auto")))
 
-complex_tasks_agent = Agent(
-    name="ComplexTaskAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",  # More capable
-    temperature=0.7
-)
 
-# Route appropriately
-def route_request(request):
-    if is_simple(request):
-        return simple_tasks_agent.run(request)
-    else:
-        return complex_tasks_agent.run(request)
+def route_request(text: str) -> str:
+    target = complex_ if "COMPLEX" in str(router(text)).upper() else simple
+    return str(target(text))
+```
+
+Prompt caching (`cache_config=CacheConfig(...)`; the older `cache_prompt` and `cache_tools` options are deprecated) is usually the cheapest saving for agents with long system prompts and many tools.
+
+### 4. Hooks for cross-cutting concerns
+
+```python
+from strands.hooks import BeforeToolCallEvent, HookProvider, HookRegistry
+
+
+class ToolAudit(HookProvider):
+    def register_hooks(self, registry: HookRegistry, **kwargs) -> None:
+        registry.add_callback(BeforeToolCallEvent, self.log_tool)
+
+    def log_tool(self, event: BeforeToolCallEvent) -> None:
+        print("tool:", event.tool_use["name"], event.tool_use["input"])
+
+
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", hooks=[ToolAudit()])
 ```
 
 ---
 
 ## Production Deployment
 
-### Deployment Example
+### Deploying to AgentCore Runtime
+
+The recommended home for Strands agents on AWS is Amazon Bedrock AgentCore Runtime:
 
 ```python
-from strands import Agent, deploy_to_lambda
+from bedrock_agentcore import BedrockAgentCoreApp
+from strands import Agent
 
-# Create agent
-agent = Agent(
-    name="ProductionAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    tools=[...],
-    memory=ConversationMemory(backend="dynamodb")
-)
+app = BedrockAgentCoreApp()
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[get_plan_details])
 
-# Deploy to Lambda
-deployment = deploy_to_lambda(
-    agent=agent,
-    function_name="production-agent",
-    role_arn="arn:aws:iam::ACCOUNT:role/LambdaExecutionRole",
-    timeout=300,
-    memory_size=1024,
-    environment={
-        'LOG_LEVEL': 'INFO',
-        'REGION': 'us-east-1'
-    }
-)
 
-print(f"Deployed to Lambda: {deployment['function_arn']}")
+@app.entrypoint
+async def invoke(payload, context):
+    async for event in agent.stream_async(payload["prompt"]):
+        if "data" in event:
+            yield event["data"]
+
+
+if __name__ == "__main__":
+    app.run()
+```
+
+Deploy with `agentcore create` / `agentcore deploy` (npm `@aws/agentcore`). Full details are in the [AgentCore guide](../bedrock_agentcore_comprehensive_guide/#getting-started).
+
+### Deploying to Lambda
+
+For short, stateless requests, a Lambda handler is enough (keep the function timeout above your longest expected agent run, and the package within Lambda size limits):
+
+```python
+from strands import Agent
+
+agent = Agent(model="us.anthropic.claude-sonnet-5-5", callback_handler=None)
+
+
+def handler(event, context):
+    return {"result": str(agent(event["prompt"]))}
 ```
 
 ### Monitoring and Logging
 
+Strands emits OpenTelemetry traces for agent invocations, model calls and tool calls. Install the extra and configure an exporter:
+
 ```python
-from strands import Agent, CloudWatchLogger
+# pip install "strands-agents[otel]"
+from strands.telemetry import StrandsTelemetry
 
-agent = Agent(
-    name="MonitoredAgent",
-    model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-    logger=CloudWatchLogger(
-        log_group="/aws/strands/agents",
-        log_level="INFO"
-    )
-)
-
-# Agent automatically logs to CloudWatch
-response = agent.run("Process this request")
+StrandsTelemetry().setup_otlp_exporter()   # honours OTEL_EXPORTER_OTLP_ENDPOINT
 ```
+
+On AgentCore Runtime, use the AWS Distro for OpenTelemetry (`opentelemetry-instrument`) and the traces appear in CloudWatch. Standard Python `logging` works too: `logging.getLogger("strands").setLevel(logging.DEBUG)`.
 
 ---
 
 ## Conclusion
 
-AWS Strands provides a powerful, lightweight framework for building collaborative AI agent systems on Amazon Bedrock. With four distinct collaboration patterns, comprehensive AWS integration, and production-ready features, Strands enables rapid development of sophisticated agent systems.
+Strands keeps the agent itself small — model, prompt, tools — and provides the pieces you need around it: multi-agent patterns, sessions, memory, hooks and telemetry. Pair it with AgentCore Runtime for hosting.
 
-**GitHub:** https://github.com/awslabs/strands-agents (hypothetical)
-**Documentation:** https://docs.aws.amazon.com/bedrock/strands/
-**Community:** https://github.com/awslabs/strands-agents/discussions
+**GitHub:** https://github.com/strands-agents
+**Documentation:** https://strandsagents.com
 
 ---
-
-**Last Updated:** June 7, 2026
-**Status:** Open Source, Generally Available
 
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.42.0 | June 7, 2026 | Version bumped 1.36.0 → 1.42.0 (six minor releases: 1.37.0–1.42.0); version header updated; broken `__version__` import fixed (symbol absent from 1.42.0; replaced with `importlib.metadata.version`); guide header "Last Updated" corrected; revision history entry added. Core symbols (`Agent`, `tool`, `AgentBase`, `AgentSkills`, `Plugin`, `Skill`, `Snapshot`, `ToolContext`, `ModelRetryStrategy`, `MultiAgentPlugin`) verified against installed `strands-agents==1.42.0` (`.routine-envs/refresh-py`, 2026-06-07); 23 top-level exports confirmed; no `DeprecationWarning` emissions. |
-| 1.36.0 | April 17, 2026 | Incremental improvements; multi-agent graph workflows; interrupt propagation through nested nodes; `AgentCoreMemorySessionManager` integration; Steering Hooks |
-| 1.35.0 | April 2026 | Previous documented version |
-| 1.0 | March 2025 | Initial guide created |
-
+| %%version=strands-agents%% | %%versions-checked%% | Guide rewritten against the real SDK: removed APIs that never existed in Strands (`as_tool` function, `aggregator`, `AgentGraph`, `Workflow`, `Context`, `ConversationMemory`, `PersistentState`, `S3Integration`, `deploy_to_lambda`, `CloudWatchLogger`, `Agent(instructions=…)`, `agent.run`); replaced with `Agent.as_tool`, `Swarm`, `GraphBuilder`, the `workflow` tool, `ToolContext`/`invocation_state`, session managers, `AgentCoreMemorySessionManager`, hooks and OTEL. Model IDs moved from Claude 3/3.5 to current Claude Bedrock IDs. |
+| 1.42.0 | 7 June 2026 | Version bump from 1.36.0; `__version__` replaced with `importlib.metadata.version`. |
+| 1.36.0 | 17 April 2026 | Multi-agent graph workflows; interrupt propagation through nested nodes; `AgentCoreMemorySessionManager` integration; steering hooks. |
+| 1.0 | March 2025 | Initial guide created. |

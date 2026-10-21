@@ -5,8 +5,9 @@ framework: langgraph
 language: typescript
 ---
 
-Latest: @langchain/langgraph 1.3.5 | Updated: June 5, 2026
 # LangChain.js and LangGraph.js Comprehensive Technical Guide
+
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%). First written for 1.0.
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**
 
@@ -20,14 +21,15 @@ Latest: @langchain/langgraph 1.3.5 | Updated: June 5, 2026
 4. [Multi-Agent Systems](#multi-agent-systems)
 5. [Tools Integration](#tools-integration)
 6. [Structured Output](#structured-output)
-7. [Type-Safe `.stream()` Method (v0.3+)](#type-safe-stream-method-v03)
+7. [Type-Safe `.stream()` Method](#type-safe-stream-method)
 8. [`.addNode()` and `.addSequence()` Methods](#addnode-and-addsequence-methods)
 9. [Node Caching](#node-caching)
 10. [Deferred Nodes](#deferred-nodes)
 11. [Pre/Post Model Hooks](#prepost-model-hooks)
 12. [Cross-Thread Memory Support](#cross-thread-memory-support)
-13. [New Type Utilities (v1.2.x)](#new-type-utilities-v12x)
+13. [StateSchema, ReducedValue and UntrackedValue](#stateschema-reducedvalue-and-untrackedvalue)
 14. [New APIs in v1.3.0](#new-apis-in-v130)
+15. [Later additions (1.4 – 1.5)](#later-additions-14--15)
 
 **Continue elsewhere in this guide:** [Middleware](/langgraph-guide/typescript/langgraph_middleware_typescript/) · [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/) for tracing and metrics · [Streaming server (Express)](/langgraph-guide/typescript/langgraph_streaming_server_express/) · [Production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/) for deployment, security and persistence · [Recipes](/langgraph-guide/typescript/langchain_langgraph_recipes/) for RAG, supervisors and human-in-the-loop.
 
@@ -88,11 +90,14 @@ Create or update your `tsconfig.json` with appropriate settings for modern TypeS
 #### Step 3: Install Core Packages
 
 ```bash
-# Core LangChain.js packages
-npm install @langchain/core @langchain/community
+# LangGraph.js for state orchestration (pin to the version this guide was verified against)
+npm install @langchain/langgraph@%%version=@langchain/langgraph%% @langchain/core
 
-# LangGraph.js for state orchestration
-npm install @langchain/langgraph
+# LangChain.js v1: createAgent, tool(), middleware
+npm install langchain
+
+# Community integrations (optional)
+npm install @langchain/community
 
 # Popular LLM provider integrations
 npm install @langchain/openai
@@ -101,7 +106,6 @@ npm install @langchain/google-vertexai
 
 # Utilities and validation
 npm install zod dotenv
-npm install --save-dev @types/dotenv
 ```
 
 #### Step 4: Environment Configuration
@@ -111,7 +115,7 @@ Create a `.env` file in your project root:
 ```env
 # OpenAI Configuration
 OPENAI_API_KEY=sk-your-api-key-here
-OPENAI_MODEL=gpt-4-turbo
+OPENAI_MODEL=gpt-4o
 
 # Anthropic Configuration
 ANTHROPIC_API_KEY=sk-ant-your-api-key-here
@@ -119,7 +123,7 @@ ANTHROPIC_API_KEY=sk-ant-your-api-key-here
 # LangSmith Observability (Optional)
 LANGSMITH_API_KEY=your-langsmith-key
 LANGSMITH_PROJECT=my-project
-LANGSMITH_TRACING_V2=true
+LANGSMITH_TRACING=true
 
 # Other Configuration
 NODE_ENV=development
@@ -137,7 +141,7 @@ dotenv.config();
 export const config = {
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
-    model: process.env.OPENAI_MODEL || 'gpt-4-turbo',
+    model: process.env.OPENAI_MODEL || 'gpt-4o',
   },
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
@@ -250,13 +254,21 @@ LangChain.js and LangGraph.js serve different but complementary purposes:
 
 ```typescript
 // LangChain.js components power LangGraph.js workflows
-import { StateGraph, START, END } from '@langchain/langgraph';
+import { StateGraph, Annotation, START, END } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 
 // LangChain.js tool
 const calculator = tool(
+  ({ operation, a, b }) => {
+    switch (operation) {
+      case 'add': return a + b;
+      case 'subtract': return a - b;
+      case 'multiply': return a * b;
+      case 'divide': return b !== 0 ? a / b : 0;
+    }
+  },
   {
     name: 'calculator',
     description: 'Perform arithmetic operations',
@@ -265,14 +277,6 @@ const calculator = tool(
       a: z.number(),
       b: z.number(),
     }),
-  },
-  ({ operation, a, b }) => {
-    switch (operation) {
-      case 'add': return a + b;
-      case 'subtract': return a - b;
-      case 'multiply': return a * b;
-      case 'divide': return b !== 0 ? a / b : 0;
-    }
   }
 );
 
@@ -282,25 +286,18 @@ const model = new ChatOpenAI({
 });
 
 // LangGraph.js state structure
-interface MathState {
-  problem: string;
-  solution?: number;
-  steps: string[];
-}
-
-// LangGraph.js workflow using LangChain.js components
-const graph = new StateGraph<MathState>({
-  channels: {
-    problem: { value_type: 'string' },
-    solution: { value_type: 'number', optional: true },
-    steps: { value_type: 'array', default: () => [] },
-  },
+const MathState = Annotation.Root({
+  problem: Annotation<string>,
+  solution: Annotation<number | undefined>,
+  steps: Annotation<string[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
 });
 
+// LangGraph.js workflow using LangChain.js components
+const graph = new StateGraph(MathState);
+
 graph.addNode('solve', async (state) => {
-  state.steps.push('Solving: ' + state.problem);
-  // Use LangChain.js model and tools here
-  return state;
+  // Use the LangChain.js model and tools here; return only what changed
+  return { steps: ['Solving: ' + state.problem] };
 });
 
 graph.addEdge(START, 'solve');
@@ -323,7 +320,7 @@ import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages
 // OpenAI ChatModel
 const openaiModel = new ChatOpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  model: 'gpt-4-turbo',
+  model: 'gpt-4o',
   temperature: 0.7,
   maxTokens: 2000,
   topP: 0.9,
@@ -332,8 +329,7 @@ const openaiModel = new ChatOpenAI({
 // Anthropic ChatModel
 const anthropicModel = new ChatAnthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  model: 'claude-3-opus-20240229',
-  temperature: 0.5,
+  model: 'claude-sonnet-5-5', // newer Claude models reject non-default sampling params, so no temperature
 });
 
 // Invoke with message array
@@ -393,9 +389,8 @@ const chatFormatted = await chatTemplate.formatMessages({
 Output parsers transform model responses into structured, usable formats.
 
 ```typescript
-import { StringOutputParser } from '@langchain/core/output_parsers';
+import { StringOutputParser, StructuredOutputParser } from '@langchain/core/output_parsers';
 import { z } from 'zod';
-import { ZodOutputParser } from 'langchain/output_parsers';
 
 // Simple string parser
 const simpleParser = new StringOutputParser();
@@ -409,7 +404,7 @@ const personSchema = z.object({
   hobbies: z.array(z.string()),
 });
 
-const zodParser = new ZodOutputParser(personSchema);
+const zodParser = StructuredOutputParser.fromZodSchema(personSchema);
 
 const jsonOutput = `{
   "name": "Alice Johnson",
@@ -423,6 +418,8 @@ console.log(parsed.name); // TypeScript knows this is a string
 console.log(parsed.age); // TypeScript knows this is a number
 ```
 
+For model output, `model.withStructuredOutput(schema)` (see [Structured Output](#structured-output)) is usually simpler than a parser.
+
 #### Tools
 
 Tools extend agent capabilities by providing access to external functionalities.
@@ -433,6 +430,10 @@ import { z } from 'zod';
 
 // Define tools with Zod schemas
 const weatherTool = tool(
+  async ({ location, unit }) => {
+    // In a real application, call an actual weather API
+    return `Weather in ${location}: 22°${unit === 'celsius' ? 'C' : 'F'}, Sunny`;
+  },
   {
     name: 'get_weather',
     description: 'Get the current weather for a location',
@@ -440,23 +441,11 @@ const weatherTool = tool(
       location: z.string().describe('City or location name'),
       unit: z.enum(['celsius', 'fahrenheit']).default('celsius'),
     }),
-  },
-  async ({ location, unit }) => {
-    // In a real application, call an actual weather API
-    return `Weather in ${location}: 22°${unit === 'celsius' ? 'C' : 'F'}, Sunny`;
   }
 );
 
 // Tool with validation and error handling
 const databaseTool = tool(
-  {
-    name: 'query_database',
-    description: 'Query application database for user information',
-    schema: z.object({
-      userId: z.string().describe('The unique user identifier'),
-      fields: z.array(z.string()).describe('Fields to retrieve'),
-    }),
-  },
   async ({ userId, fields }) => {
     try {
       // Validate user ID format
@@ -479,6 +468,14 @@ const databaseTool = tool(
     } catch (error) {
       return `Error querying database: ${error}`;
     }
+  },
+  {
+    name: 'query_database',
+    description: 'Query application database for user information',
+    schema: z.object({
+      userId: z.string().describe('The unique user identifier'),
+      fields: z.array(z.string()).describe('Fields to retrieve'),
+    }),
   }
 );
 
@@ -494,27 +491,26 @@ console.log(toolDescriptions);
 
 #### Agents
 
-Agents are autonomous entities that use language models and tools to solve problems.
+In LangChain.js v1 the ready-made agent loop is `createAgent` from the `langchain` package. It is built on LangGraph and returns a compiled graph, so it takes the same `invoke`/`stream` calls and the same checkpointer configuration as any graph you write yourself.
 
 ```typescript
-// DEPRECATED: createReactAgent from '@langchain/langgraph/prebuilt' moved to '@langgraphjs/toolkit' in v1.2.x
-// Use instead: import { createReactAgent } from '@langgraphjs/toolkit';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
-import { AgentExecutor } from '@langchain/core/agents';
+import { createAgent } from 'langchain';
 
-// Agents are created by combining a model, tools, and execution strategy
-const basicAgent = createReactAgent({
-  llm: openaiModel,
+const basicAgent = createAgent({
+  model: openaiModel,
   tools: [weatherTool, databaseTool],
+  systemPrompt: 'You are a concise assistant.',
 });
 
-// Execute the agent
+// Agents take and return message state, not an `input` string
 const result = await basicAgent.invoke({
-  input: 'What is the weather in London and who is user_12345678?',
+  messages: [{ role: 'user', content: 'What is the weather in London and who is user_12345678?' }],
 });
 
-console.log(result.output);
+console.log(result.messages.at(-1)?.content);
 ```
+
+> `createReactAgent` in `@langchain/langgraph/prebuilt` still exists but is deprecated in favour of `createAgent` from `langchain`. Do not install `@langgraphjs/toolkit`: earlier revisions of this guide pointed to it, but that npm name is now a security placeholder, not a LangGraph package.
 
 ### LangGraph Classes
 
@@ -533,26 +529,25 @@ const StateAnnotation = Annotation.Root({
     default: () => [],
     reducer: (x, y) => x.concat(y),
   }),
-  output: Annotation<string | null>({ default: () => null }),
+  output: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 // Create graph with type-safe state
 const graph = new StateGraph(StateAnnotation);
 
-// Define nodes as TypeScript functions
+// Define nodes as TypeScript functions. Return only the keys that change:
+// intermediateSteps has a concat reducer, so returning the whole array would duplicate it.
 graph.addNode('validateInput', (state) => {
   if (state.input.length === 0) {
-    return { ...state, output: 'Error: empty input' };
+    return { output: 'Error: empty input' };
   }
-  return { ...state, intermediateSteps: ['Input validated'] };
+  return { intermediateSteps: ['Input validated'] };
 });
 
 graph.addNode('processData', (state) => {
-  const result = state.input.toUpperCase();
   return {
-    ...state,
-    intermediateSteps: [...state.intermediateSteps, 'Data processed'],
-    output: result,
+    intermediateSteps: ['Data processed'],
+    output: state.input.toUpperCase(),
   };
 });
 
@@ -569,214 +564,138 @@ console.log(result.output); // "HELLO"
 console.log(result.intermediateSteps); // ['Input validated', 'Data processed']
 ```
 
-#### MessageGraph
+#### MessagesAnnotation
 
-MessageGraph specialises in workflows centred around message passing.
+For chat-style workflows use the prebuilt `MessagesAnnotation` state (or `MessagesZodState` if you prefer Zod). Its `messages` channel uses the `messagesStateReducer`, which appends new messages and replaces ones with a matching ID. The older `MessageGraph` class is still exported but is legacy; prefer a `StateGraph` over `MessagesAnnotation`.
 
 ```typescript
-import { MessageGraph } from '@langchain/langgraph';
-import { HumanMessage, AIMessage } from '@langchain/core/messages';
+import { StateGraph, MessagesAnnotation, START, END } from '@langchain/langgraph';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
 
-const messageGraph = new MessageGraph();
+const messageGraph = new StateGraph(MessagesAnnotation)
+  .addNode('respondAgent', (state) => {
+    const lastMessage = state.messages[state.messages.length - 1];
+    return { messages: [new AIMessage(`Response to: ${lastMessage.content}`)] };
+  })
+  .addEdge(START, 'respondAgent')
+  .addEdge('respondAgent', END)
+  .compile();
 
-messageGraph.addNode('respondAgent', (state) => {
-  // State is an array of messages
-  const lastMessage = state[state.length - 1];
-  return [
-    new AIMessage({
-      content: 'Response to: ' + lastMessage.content,
-    }),
-  ];
-});
-
-messageGraph.addEdge('respondAgent', END);
-messageGraph.setEntryPoint('respondAgent');
-
-const messageRunnable = messageGraph.compile();
-const messages = [new HumanMessage('Hello there')];
-const output = await messageRunnable.invoke(messages);
+const output = await messageGraph.invoke({ messages: [new HumanMessage('Hello there')] });
 ```
 
 #### Command
 
-Command objects allow dynamic control flow within graph execution.
+A node can return a `Command` to update state and choose the next node in one step. Declare the possible destinations with `ends` so the graph (and its diagram) knows about the dynamic edges.
 
 ```typescript
-import { Command } from '@langchain/langgraph';
+import { StateGraph, Annotation, Command, START, END } from '@langchain/langgraph';
 
-interface WorkflowState {
-  counter: number;
-  shouldContinue: boolean;
-}
-
-graph.addNode('increment', (state: WorkflowState) => {
-  const newCount = state.counter + 1;
-  
-  if (newCount > 5) {
-    // Command for immediate termination
-    return new Command({
-      goto: END,
-      update: { counter: newCount },
-    });
-  }
-  
-  return { counter: newCount, shouldContinue: true };
+const CounterState = Annotation.Root({
+  counter: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
 });
 
-graph.addNode('process', (state: WorkflowState) => {
-  console.log('Processing with counter:', state.counter);
-  return state;
-});
+const counterGraph = new StateGraph(CounterState)
+  .addNode(
+    'increment',
+    (state) => {
+      const next = state.counter + 1;
+      return new Command({
+        update: { counter: next },
+        goto: next > 5 ? END : 'increment',
+      });
+    },
+    { ends: ['increment', END] }
+  )
+  .addEdge(START, 'increment')
+  .compile();
 
-graph.addEdge(START, 'increment');
-graph.addEdge('increment', 'process');
-graph.addEdge('process', 'increment');
+console.log(await counterGraph.invoke({ counter: 0 })); // { counter: 6 }
 ```
 
 ---
 
 ## Simple Agents (LangChain.js)
 
-Agents in LangChain.js are autonomous systems that make decisions about which tools to use to accomplish tasks.
+Agents decide which tools to call, in a loop, until they can answer. In LangChain.js v1 the standard implementation is `createAgent` from the `langchain` package (`npm install langchain`). The older chain-style agents (`AgentExecutor`, `createOpenAIFunctionsAgent`, `createStructuredChatAgent`) are not part of LangChain v1; they survive only in the `@langchain/classic` compatibility package and should not be used for new code.
 
-### Creating Basic Agents with createReactAgent
-
-The ReAct (Reasoning + Acting) paradigm is the most common agent pattern. It interleaves thought steps with tool invocations.
+### Creating a Basic Agent with createAgent
 
 ```typescript
-// DEPRECATED: createReactAgent from '@langchain/langgraph/prebuilt' moved to '@langgraphjs/toolkit' in v1.2.x
-// Use instead: import { createReactAgent } from '@langgraphjs/toolkit';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent, tool } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 
-// Define tools
-const addTool = tool(
-  {
-    name: 'add',
-    description: 'Add two numbers',
-    schema: z.object({
-      a: z.number(),
-      b: z.number(),
-    }),
-  },
-  ({ a, b }) => a + b
-);
-
-const multiplyTool = tool(
-  {
-    name: 'multiply',
-    description: 'Multiply two numbers',
-    schema: z.object({
-      a: z.number(),
-      b: z.number(),
-    }),
-  },
-  ({ a, b }) => a * b
-);
-
-// Create agent
-const model = new ChatOpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  temperature: 0.7,
+const addTool = tool(({ a, b }) => String(a + b), {
+  name: 'add',
+  description: 'Add two numbers',
+  schema: z.object({ a: z.number(), b: z.number() }),
 });
 
-const agent = createReactAgent({
-  llm: model,
+const multiplyTool = tool(({ a, b }) => String(a * b), {
+  name: 'multiply',
+  description: 'Multiply two numbers',
+  schema: z.object({ a: z.number(), b: z.number() }),
+});
+
+const model = new ChatOpenAI({ model: 'gpt-4o-mini', temperature: 0 });
+
+const agent = createAgent({
+  model,                     // or a string such as 'openai:gpt-4o-mini'
   tools: [addTool, multiplyTool],
+  systemPrompt: 'Use the tools for arithmetic.',
 });
 
-// Execute
 const result = await agent.invoke({
-  input: 'What is (5 + 3) * 2?',
+  messages: [{ role: 'user', content: 'What is (5 + 3) * 2?' }],
 });
 
-console.log('Agent result:', result);
+console.log(result.messages.at(-1)?.content);
 ```
 
-### Agent Types
-
-#### ReAct Agents
-
-ReAct agents are the most versatile, suitable for complex reasoning tasks.
-
-```typescript
-// Already demonstrated above - createReactAgent implements ReAct pattern
-```
-
-#### OpenAI Functions Agents
-
-These agents use OpenAI's function-calling API for more reliable tool invocation.
-
-```typescript
-import { createOpenAIFunctionsAgent } from '@langchain/langgraph/prebuilt';
-import { AgentExecutor } from '@langchain/core/agents';
-
-const functionsAgent = createOpenAIFunctionsAgent({
-  llm: model,
-  tools: [addTool, multiplyTool],
-});
-
-const executor = new AgentExecutor({
-  agent: functionsAgent,
-  tools: [addTool, multiplyTool],
-  verbose: true,
-});
-
-const result = await executor.invoke({
-  input: 'Calculate 10 + 5 and then multiply by 2',
-});
-```
-
-#### Structured Chat Agents
-
-These agents work with JSON-formatted tool calls and are particularly good for consistent output formatting.
-
-```typescript
-import { createStructuredChatAgent } from '@langchain/langgraph/prebuilt';
-
-const chatAgent = createStructuredChatAgent({
-  llm: model,
-  tools: [addTool, multiplyTool],
-});
-```
+The agent is a ReAct-style loop: the model either answers or emits tool calls; tool calls run, their results are appended as `ToolMessage`s, and the model is called again.
 
 ### Tool Integration and Usage
 
 #### Creating Custom Tools
 
-```typescript
-import { DynamicStructuredTool } from '@langchain/core/tools';
+`tool()` takes the implementation first and the metadata second. Throwing inside a tool surfaces as an error `ToolMessage` the model can react to.
 
-// More advanced tool creation with validation
-const databaseTool = new DynamicStructuredTool({
-  name: 'query_users',
-  description: 'Query user database with filtering options',
-  schema: z.object({
-    age_min: z.number().describe('Minimum age to filter'),
-    age_max: z.number().describe('Maximum age to filter'),
-    limit: z.number().default(10).describe('Number of results'),
-  }),
-  func: async (input) => {
-    // Validate inputs
-    if (input.age_min < 0 || input.age_max < 0) {
-      throw new Error('Age values must be positive');
-    }
-    if (input.age_min > input.age_max) {
-      throw new Error('age_min must be less than or equal to age_max');
-    }
-    
-    // Simulate database query
-    return `Found ${Math.floor(Math.random() * 100)} users between ${input.age_min} and ${input.age_max}`;
+```typescript
+import { tool } from 'langchain';
+import { z } from 'zod';
+
+const queryUsers = tool(
+  async ({ age_min, age_max, limit }) => {
+    if (age_min < 0 || age_max < 0) throw new Error('Age values must be positive');
+    if (age_min > age_max) throw new Error('age_min must be less than or equal to age_max');
+    return `Found ${Math.min(limit, 42)} users between ${age_min} and ${age_max}`;
   },
-});
+  {
+    name: 'query_users',
+    description: 'Query user database with filtering options',
+    schema: z.object({
+      age_min: z.number().describe('Minimum age to filter'),
+      age_max: z.number().describe('Maximum age to filter'),
+      limit: z.number().default(10).describe('Number of results'),
+    }),
+  }
+);
 ```
+
+`DynamicStructuredTool` (from `@langchain/core/tools`) is the class `tool()` builds; you rarely need to construct it directly.
 
 #### Async Tool Execution
 
 ```typescript
 const apiTool = tool(
+  async ({ url, method }) => {
+    const response = await fetch(url, { method });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+    return JSON.stringify(await response.json());
+  },
   {
     name: 'call_external_api',
     description: 'Call an external API with a URL',
@@ -784,17 +703,6 @@ const apiTool = tool(
       url: z.string().url(),
       method: z.enum(['GET', 'POST']).default('GET'),
     }),
-  },
-  async ({ url, method }) => {
-    try {
-      const response = await fetch(url, { method });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      return await response.json();
-    } catch (error) {
-      return { error: `API call failed: ${error}` };
-    }
   }
 );
 ```
@@ -802,79 +710,77 @@ const apiTool = tool(
 ### Single-Task Agent Execution
 
 ```typescript
-// Simple one-off agent execution
 async function executeSimpleTask(prompt: string): Promise<string> {
-  const agent = createReactAgent({
-    llm: model,
-    tools: [addTool, multiplyTool],
-  });
-
-  const result = await agent.invoke({ input: prompt });
-  return result.output || '';
+  const result = await agent.invoke({ messages: [{ role: 'user', content: prompt }] });
+  return String(result.messages.at(-1)?.content ?? '');
 }
 
-const result = await executeSimpleTask('Multiply 7 by 8');
+const answer = await executeSimpleTask('Multiply 7 by 8');
 ```
 
-### Agent Executors and Configuration
+### Agent Configuration
+
+`createAgent` takes its limits and persistence as options and per-call config, rather than through a separate executor object:
 
 ```typescript
-import { AgentExecutor } from '@langchain/core/agents';
+import { MemorySaver } from '@langchain/langgraph';
 
-const executor = new AgentExecutor({
-  agent: basicAgent,
+const configuredAgent = createAgent({
+  model,
   tools: [addTool, multiplyTool],
-  maxIterations: 10, // Prevent infinite loops
-  returnIntermediateSteps: true, // Capture thought process
-  handleParsingErrors: true, // Gracefully handle malformed tool calls
-  verbose: true, // Enable detailed logging
+  checkpointer: new MemorySaver(), // conversation memory per thread_id
 });
 
-const result = await executor.invoke({
-  input: 'Your task here',
-});
+const out = await configuredAgent.invoke(
+  { messages: [{ role: 'user', content: 'Your task here' }] },
+  {
+    configurable: { thread_id: 'session-1' },
+    recursionLimit: 10, // caps the number of graph steps (prevents runaway loops)
+  }
+);
 
-console.log('Final output:', result.output);
-console.log('Steps taken:', result.intermediateSteps);
+// Every intermediate step is in the message history
+for (const m of out.messages) console.log(m.type, m.content);
 ```
+
+Middleware (`modelCallLimitMiddleware`, `toolRetryMiddleware`, `humanInTheLoopMiddleware`, `summarizationMiddleware` and others exported from `langchain`) is passed as `middleware: [...]`.
 
 ### Streaming Responses
 
 ```typescript
-// Stream tokens as they arrive
 async function streamAgentResponse(prompt: string): Promise<void> {
-  const stream = await agent.stream({
-    input: prompt,
-  });
+  // "updates" yields one chunk per step, keyed by node name ("model_request", "tools")
+  const stream = await agent.stream(
+    { messages: [{ role: 'user', content: prompt }] },
+    { streamMode: 'updates' }
+  );
 
-  for await (const event of stream) {
-    if (event.type === 'tool_start') {
-      console.log(`Using tool: ${event.tool}`);
-    } else if (event.type === 'tool_end') {
-      console.log(`Tool result: ${event.result}`);
-    } else if (event.type === 'agent_message') {
-      console.log(`Agent: ${event.message.content}`);
+  for await (const chunk of stream) {
+    for (const [node, update] of Object.entries(chunk)) {
+      const last = (update as any)?.messages?.at(-1);
+      if (last) console.log(`[${node}]`, last.content || last.tool_calls);
     }
   }
+
+  // For token-by-token output use streamMode: 'messages'
 }
 ```
 
 ### Error Handling
 
 ```typescript
+import { GraphRecursionError } from '@langchain/langgraph';
+
 async function robustAgentExecution(prompt: string): Promise<string> {
   try {
-    const result = await agent.invoke({ input: prompt });
-    return result.output || 'No output generated';
+    const result = await agent.invoke(
+      { messages: [{ role: 'user', content: prompt }] },
+      { recursionLimit: 15 }
+    );
+    return String(result.messages.at(-1)?.content ?? 'No output generated');
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message.includes('API')) {
-        console.error('LLM API error:', error.message);
-        return 'Unable to connect to LLM service. Please try again.';
-      } else if (error.message.includes('Tool')) {
-        console.error('Tool execution error:', error.message);
-        return 'Tool execution failed. Please check your input.';
-      }
+    if (error instanceof GraphRecursionError) {
+      return 'The agent did not finish within the step limit.';
     }
     console.error('Unexpected agent error:', error);
     return 'An unexpected error occurred.';
@@ -890,107 +796,55 @@ LangGraph.js provides more granular control over agent workflows through explici
 
 ### Creating Basic StateGraph Instances
 
+A `StateGraph` needs a state schema. Pass either an `Annotation.Root(...)` or a Zod object schema; a bare TypeScript generic is not enough, because the graph needs runtime channel definitions.
+
 ```typescript
-import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
+import { StateGraph, START, END } from '@langchain/langgraph';
 import { z } from 'zod';
 
-// Define state schema
 const agentStateSchema = z.object({
   input: z.string(),
   thoughts: z.array(z.string()).default(() => []),
-  actions: z.array(z.object({
-    tool: z.string(),
-    input: z.any(),
-    timestamp: z.number(),
-  })).default(() => []),
+  actions: z
+    .array(z.object({ tool: z.string(), input: z.any(), timestamp: z.number() }))
+    .default(() => []),
   result: z.string().optional(),
   isComplete: z.boolean().default(false),
 });
 
 type AgentState = z.infer<typeof agentStateSchema>;
 
-// Create state graph
-const graph = new StateGraph<AgentState>({
-  channels: {
-    input: { value_type: 'string' },
-    thoughts: { 
-      value_type: 'array',
-      default: () => [],
-    },
-    actions: { 
-      value_type: 'array',
-      default: () => [],
-    },
-    result: { value_type: 'string', optional: true },
-    isComplete: { value_type: 'boolean', default: () => false },
-  },
-});
+const graph = new StateGraph(agentStateSchema);
 ```
+
+Fields without a reducer behave as "last value wins", so nodes below return whole arrays. For append semantics, define the field with an `Annotation` reducer (next section).
 
 ### Node Definitions with TypeScript Functions
 
-Nodes are the fundamental building blocks of LangGraph workflows.
+Nodes are the fundamental building blocks of LangGraph workflows. A node returns a partial update — only the keys it changed.
 
 ```typescript
-// Node that analyzes the input
+// Node that analyses the input
 graph.addNode('analyzeInput', async (state: AgentState) => {
-  console.log('Analysing input:', state.input);
-  
-  const thoughts = [
-    ...state.thoughts,
-    `Received input: ${state.input}`,
-  ];
-  
-  return {
-    ...state,
-    thoughts,
-  };
+  return { thoughts: [...state.thoughts, `Received input: ${state.input}`] };
 });
 
-// Node that selects appropriate tools
+// Node that selects an appropriate tool
 graph.addNode('selectTool', async (state: AgentState) => {
-  const thoughts = [
-    ...state.thoughts,
-    'Determining appropriate tool to use...',
-  ];
-  
-  let selectedTool = 'calculator';
-  if (state.input.includes('search')) {
-    selectedTool = 'search';
-  }
-  
+  const selectedTool = state.input.includes('search') ? 'search' : 'calculator';
   return {
-    ...state,
-    thoughts,
-    actions: [
-      ...state.actions,
-      {
-        tool: selectedTool,
-        input: state.input,
-        timestamp: Date.now(),
-      },
-    ],
+    thoughts: [...state.thoughts, 'Determining appropriate tool to use...'],
+    actions: [...state.actions, { tool: selectedTool, input: state.input, timestamp: Date.now() }],
   };
 });
 
-// Node that executes selected tool
+// Node that executes the selected tool
 graph.addNode('executeToolAction', async (state: AgentState) => {
   const lastAction = state.actions[state.actions.length - 1];
-  
-  let result = '';
-  if (lastAction.tool === 'calculator') {
-    // Simulate tool execution
-    result = 'Calculation result: 42';
-  } else if (lastAction.tool === 'search') {
-    result = 'Search results: 10 items found';
-  }
-  
+  const result =
+    lastAction.tool === 'calculator' ? 'Calculation result: 42' : 'Search results: 10 items found';
   return {
-    ...state,
-    thoughts: [
-      ...state.thoughts,
-      `Executed ${lastAction.tool}: ${result}`,
-    ],
+    thoughts: [...state.thoughts, `Executed ${lastAction.tool}: ${result}`],
     result,
     isComplete: true,
   };
@@ -1012,9 +866,11 @@ const StateAnnotation = Annotation.Root({
   }),
   currentNode: Annotation<string>,
   metadata: Annotation<Record<string, any>>({
+    reducer: (_prev, next) => next,
     default: () => ({}),
   }),
   iterationCount: Annotation<number>({
+    reducer: (_prev, next) => next,
     default: () => 0,
   }),
 });
@@ -1048,18 +904,13 @@ interface ComplexAgentState {
 Sometimes you need just one processing step:
 
 ```typescript
-const simpleGraph = new StateGraph<AgentState>();
-
-simpleGraph.addNode('process', async (state: AgentState) => {
-  return {
-    ...state,
+const simpleGraph = new StateGraph(agentStateSchema)
+  .addNode('process', async (state: AgentState) => ({
     result: `Processed: ${state.input.toUpperCase()}`,
     isComplete: true,
-  };
-});
-
-simpleGraph.addEdge(START, 'process');
-simpleGraph.addEdge('process', END);
+  }))
+  .addEdge(START, 'process')
+  .addEdge('process', END);
 
 const compiled = simpleGraph.compile();
 const output = await compiled.invoke({ input: 'hello world' });
@@ -1126,7 +977,7 @@ console.log('Final result:', result.result);
 console.log('Thought process:', result.thoughts);
 
 // Streaming execution
-const stream = compiled.stream({
+const stream = await compiled.stream({
   input: 'Find information about TypeScript',
   thoughts: [],
   actions: [],
@@ -1181,9 +1032,11 @@ const MultiAgentStateAnnotation = Annotation.Root({
     reducer: (x, y) => ({ ...x, ...y }),
   }),
   supervisorDecision: Annotation<string | null>({
+    reducer: (_prev, next) => next,
     default: () => null,
   }),
   finalResult: Annotation<string | null>({
+    reducer: (_prev, next) => next,
     default: () => null,
   }),
   messageLog: Annotation<string[]>({
@@ -1302,144 +1155,114 @@ multiAgentGraph.addEdge('writingAgent', 'supervisor');
 
 ### Agent-to-Agent Communication
 
+Agents communicate through shared state. Give the queue an appending reducer so each agent returns only the messages it adds.
+
 ```typescript
-// Agents communicate through shared state
-interface CommunicationState {
-  messageQueue: Array<{
-    from: string;
-    to: string;
-    content: string;
-    timestamp: number;
-  }>;
-  agentStates: Record<string, any>;
-}
+import { StateGraph, Annotation, START, END } from '@langchain/langgraph';
 
-const commGraph = new StateGraph<CommunicationState>();
+type AgentMessage = { from: string; to: string; content: string; timestamp: number };
 
-commGraph.addNode('agent1', async (state) => {
-  // Agent 1 processes and sends message to Agent 2
-  const message = {
-    from: 'agent1',
-    to: 'agent2',
-    content: 'Here are my findings...',
-    timestamp: Date.now(),
-  };
-  
-  return {
-    messageQueue: [...state.messageQueue, message],
-    agentStates: {
-      ...state.agentStates,
-      agent1: { status: 'completed', output: 'processed' },
-    },
-  };
+const CommunicationState = Annotation.Root({
+  messageQueue: Annotation<AgentMessage[]>({
+    reducer: (left, right) => left.concat(right),
+    default: () => [],
+  }),
+  agentStates: Annotation<Record<string, unknown>>({
+    reducer: (left, right) => ({ ...left, ...right }),
+    default: () => ({}),
+  }),
 });
 
-commGraph.addNode('agent2', async (state) => {
-  // Agent 2 receives message from queue
-  const messagesForMe = state.messageQueue.filter((m) => m.to === 'agent2');
-  
-  // Process messages
-  const response = {
-    from: 'agent2',
-    to: 'agent1',
-    content: 'I received and processed your findings',
-    timestamp: Date.now(),
-  };
-  
-  return {
-    messageQueue: [...state.messageQueue, response],
-    agentStates: {
-      ...state.agentStates,
-      agent2: { status: 'processed', inputCount: messagesForMe.length },
-    },
-  };
-});
+const commGraph = new StateGraph(CommunicationState)
+  .addNode('agent1', async () => ({
+    messageQueue: [
+      { from: 'agent1', to: 'agent2', content: 'Here are my findings...', timestamp: Date.now() },
+    ],
+    agentStates: { agent1: { status: 'completed' } },
+  }))
+  .addNode('agent2', async (state) => {
+    const messagesForMe = state.messageQueue.filter((m) => m.to === 'agent2');
+    return {
+      messageQueue: [
+        { from: 'agent2', to: 'agent1', content: 'Received your findings', timestamp: Date.now() },
+      ],
+      agentStates: { agent2: { status: 'processed', inputCount: messagesForMe.length } },
+    };
+  })
+  .addEdge(START, 'agent1')
+  .addEdge('agent1', 'agent2')
+  .addEdge('agent2', END)
+  .compile();
 ```
 
 ### Shared State Management
 
+Keep shared state serialisable: anything in state is written to the checkpointer. Live objects (vector stores, caches, clients) belong in closures or in the run's `context`, not in state.
+
 ```typescript
-// Shared state that persists across agent executions
-interface SharedWorkflowState {
-  // Global configuration
-  config: {
-    maxRetries: number;
-    timeout: number;
-    region: string;
-  };
-  
-  // Shared resources
-  resources: {
-    vectorStore: any;
-    cache: Map<string, any>;
-    tokenBudget: number;
-  };
-  
-  // Coordination
-  executionPlan: string[];
-  currentIndex: number;
-  
-  // Results accumulation
-  results: Record<string, any>;
-}
-
-const sharedStateGraph = new StateGraph<SharedWorkflowState>();
-
-sharedStateGraph.addNode('consumeResource', async (state) => {
-  // Check and consume shared resource
-  const tokensAvailable = state.resources.tokenBudget;
-  
-  if (tokensAvailable < 100) {
-    throw new Error('Insufficient token budget');
-  }
-  
-  return {
-    ...state,
-    resources: {
-      ...state.resources,
-      tokenBudget: tokensAvailable - 100,
-    },
-  };
+const SharedWorkflowState = Annotation.Root({
+  config: Annotation<{ maxRetries: number; timeout: number; region: string }>,
+  tokenBudget: Annotation<number>({ reducer: (_, b) => b, default: () => 10_000 }),
+  executionPlan: Annotation<string[]>,
+  currentIndex: Annotation<number>({ reducer: (_, b) => b, default: () => 0 }),
+  results: Annotation<Record<string, unknown>>({
+    reducer: (left, right) => ({ ...left, ...right }),
+    default: () => ({}),
+  }),
 });
+
+const sharedStateGraph = new StateGraph(SharedWorkflowState).addNode(
+  'consumeResource',
+  async (state) => {
+    if (state.tokenBudget < 100) {
+      throw new Error('Insufficient token budget');
+    }
+    return { tokenBudget: state.tokenBudget - 100 };
+  }
+);
 ```
 
 ### Hierarchical Agent Structures
 
-```typescript
-// Parent-child agent hierarchy
-interface HierarchicalState {
-  level: number; // 0 = top level, 1+ = sub-agents
-  parentId: string | null;
-  childrenIds: string[];
-  result: string;
-}
+A compiled graph can be used inside another graph. Calling the child from a parent node keeps the two state schemas independent, which avoids a common trap: when a subgraph is added directly as a node and shares a key that has an appending reducer, its full output is merged back and earlier entries are duplicated.
 
-const createAgentAtLevel = (
-  level: number,
-  parentId: string | null = null
-): StateGraph<HierarchicalState> => {
-  const graph = new StateGraph<HierarchicalState>();
-  
-  graph.addNode('process', async (state) => {
-    if (state.level === 0) {
-      // Top-level coordinator
-      return {
-        ...state,
-        result: 'Coordinating sub-agents',
-        childrenIds: ['child1', 'child2'],
-      };
-    } else {
-      // Sub-agent
-      return {
-        ...state,
-        result: `Processed at level ${state.level}`,
-      };
-    }
-  });
-  
-  return graph;
-};
+```typescript
+const ChildState = Annotation.Root({
+  task: Annotation<string>,
+  notes: Annotation<string[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
+});
+
+// Child team: its own graph, compiled once
+const researchTeam = new StateGraph(ChildState)
+  .addNode('searcher', async (s) => ({ notes: [`search notes on ${s.task}`] }))
+  .addNode('summariser', async (s) => ({ notes: [`summary of ${s.notes.length} notes`] }))
+  .addEdge(START, 'searcher')
+  .addEdge('searcher', 'summariser')
+  .addEdge('summariser', END)
+  .compile();
+
+const ParentState = Annotation.Root({
+  task: Annotation<string>,
+  results: Annotation<string[]>({ reducer: (a, b) => a.concat(b), default: () => [] }),
+});
+
+// Parent coordinator delegates to the child graph and maps its output
+const organisation = new StateGraph(ParentState)
+  .addNode('plan', async (s) => ({ results: [`plan for ${s.task}`] }))
+  .addNode('researchTeam', async (s) => {
+    const child = await researchTeam.invoke({ task: s.task });
+    return { results: child.notes };
+  })
+  .addEdge(START, 'plan')
+  .addEdge('plan', 'researchTeam')
+  .addEdge('researchTeam', END)
+  .compile();
+
+const out = await organisation.invoke({ task: 'LangGraph adoption' });
+// out.results: ['plan for ...', 'search notes on ...', 'summary of 1 notes']
 ```
+
+For prebuilt supervisor and swarm topologies see `@langchain/langgraph-supervisor` and `@langchain/langgraph-swarm`.
 
 ---
 
@@ -1466,27 +1289,15 @@ const advancedSearchTool = new DynamicStructuredTool({
       }).optional(),
     }).optional(),
   }),
-  func: async (input, runManager) => {
-    try {
-      // Add logging callback
-      await runManager?.handleToolStart(
-        { name: 'semantic_search' },
-        input.query,
-      );
-      
-      // Simulate semantic search
-      const results = Array.from({ length: input.topK }).map((_, i) => ({
-        id: `doc_${i}`,
-        score: 0.95 - i * 0.1,
-        content: `Relevant document ${i + 1}`,
-      }));
-      
-      await runManager?.handleToolEnd(JSON.stringify(results));
-      return JSON.stringify(results);
-    } catch (error) {
-      await runManager?.handleToolError(error);
-      throw error;
-    }
+  // Tool start/end/error callbacks are emitted by the framework; no manual calls needed
+  func: async (input) => {
+    // Simulate semantic search
+    const results = Array.from({ length: input.topK }).map((_, i) => ({
+      id: `doc_${i}`,
+      score: 0.95 - i * 0.1,
+      content: `Relevant document ${i + 1}`,
+    }));
+    return JSON.stringify(results);
   },
 });
 ```
@@ -1584,15 +1395,6 @@ const resourceManagementTool = new DynamicStructuredTool({
 ```typescript
 // Tool with comprehensive error handling
 const robustAPITool = tool(
-  {
-    name: 'call_robust_api',
-    description: 'Call external API with error recovery',
-    schema: z.object({
-      endpoint: z.string().url(),
-      timeout: z.number().default(30000),
-      retries: z.number().default(3),
-    }),
-  },
   async ({ endpoint, timeout, retries }) => {
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
@@ -1644,6 +1446,15 @@ const robustAPITool = tool(
     }
     
     return { error: true, message: 'Exhausted all retries' };
+  },
+  {
+    name: 'call_robust_api',
+    description: 'Call external API with error recovery',
+    schema: z.object({
+      endpoint: z.string().url(),
+      timeout: z.number().default(30000),
+      retries: z.number().default(3),
+    }),
   }
 );
 ```
@@ -1653,6 +1464,16 @@ const robustAPITool = tool(
 ```typescript
 // Tools that handle long-running operations
 const longRunningTool = tool(
+  async ({ jobId, priority }, config) => {
+    // Simulate async job execution with progress updates.
+    // When the tool runs inside a LangGraph graph, `config.writer` sends
+    // progress to callers streaming with streamMode: 'custom'.
+    for (let i = 1; i <= 5; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      config?.writer?.({ jobId, priority, progress: i * 20 });
+    }
+    return `Job ${jobId} completed successfully`;
+  },
   {
     name: 'background_job',
     description: 'Execute long-running background job',
@@ -1660,27 +1481,6 @@ const longRunningTool = tool(
       jobId: z.string(),
       priority: z.enum(['low', 'medium', 'high']).default('medium'),
     }),
-  },
-  async ({ jobId, priority }, runManager) => {
-    try {
-      // Report progress
-      await runManager?.handleToolStart(
-        { name: 'background_job' },
-        jobId,
-      );
-      
-      // Simulate async job execution with progress updates
-      for (let i = 1; i <= 5; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        console.log(`Job ${jobId} progress: ${i * 20}%`);
-      }
-      
-      await runManager?.handleToolEnd(`Job ${jobId} completed`);
-      return `Job completed successfully`;
-    } catch (error) {
-      await runManager?.handleToolError(error);
-      throw error;
-    }
   }
 );
 ```
@@ -1688,21 +1488,20 @@ const longRunningTool = tool(
 ### LangChain Community Tools
 
 ```typescript
-// Using tools from @langchain/community
-import { SerpAPITool } from '@langchain/community/tools/google_serper';
+// Using tools from @langchain/community (npm install @langchain/community)
+import { SerpAPI } from '@langchain/community/tools/serpapi';
 import { Calculator } from '@langchain/community/tools/calculator';
+import { createAgent } from 'langchain';
 
 // SerpAPI for web search
-const searchTool = new SerpAPITool({
-  apiKey: process.env.SERP_API_KEY,
-});
+const searchTool = new SerpAPI(process.env.SERPAPI_API_KEY);
 
 // Calculator tool
 const calculatorTool = new Calculator();
 
 // Integrate into agent
-const agent = createReactAgent({
-  llm: model,
+const agent = createAgent({
+  model,
   tools: [searchTool, calculatorTool],
 });
 ```
@@ -1744,7 +1543,7 @@ class IntegratedToolSuite {
           }
           
           const response = await fetch(endpoint, { headers });
-          return await response.json();
+          return JSON.stringify(await response.json());
         },
       })
     );
@@ -1773,7 +1572,7 @@ class IntegratedToolSuite {
           const response = await fetch(`${endpoint}?${params}`, {
             headers,
           });
-          return await response.json();
+          return JSON.stringify(await response.json());
         },
       })
     );
@@ -1791,7 +1590,7 @@ class IntegratedToolSuite {
 
 ```typescript
 import { JsonOutputParser } from '@langchain/core/output_parsers';
-import { StringOutputParser } from '@langchain/core/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { z } from 'zod';
 
 // JSON output parser with schema
@@ -1809,13 +1608,13 @@ type AnalysisOutput = z.infer<typeof analysisSchema>;
 
 // Use parser with model
 const chain = ChatPromptTemplate.fromTemplate(
-  'Analyse this text: {text}'
+  'Analyse this text and reply with JSON only: {text}'
 )
   .pipe(model)
   .pipe(jsonParser);
 
 const result = await chain.invoke({ text: 'Your text here' });
-console.log(result); // Fully typed as Record<string, any>
+console.log(result); // Record<string, any>; validate with analysisSchema.parse(result) if needed
 ```
 
 ### Zod Schemas for Type Safety
@@ -1842,8 +1641,9 @@ const articleSchema = z.object({
 
 type Article = z.infer<typeof articleSchema>;
 
-// Parser that validates against schema
-const articleParser = new JsonOutputParser<Article>();
+// JsonOutputParser<Article> only types the result; it does not validate.
+// StructuredOutputParser validates against the schema at parse time.
+const articleParser = StructuredOutputParser.fromZodSchema(articleSchema);
 ```
 
 ### withStructuredOutput() Method
@@ -1896,8 +1696,7 @@ async function validateAndRefine<T>(
         
         Error: ${error}
         
-        Schema requirements:
-        ${JSON.stringify(schema)}
+        Reply with corrected JSON only.
         
         Please provide corrected output that matches the schema.
       `;
@@ -1907,7 +1706,7 @@ async function validateAndRefine<T>(
     }
   }
   
-  throw new Error('Validation validation exhausted');
+  throw new Error('Validation retries exhausted');
 }
 ```
 
@@ -1951,11 +1750,11 @@ type ComplexProject = z.infer<typeof complexDataSchema>;
 
 ---
 
-## Type-Safe .stream() Method (v0.3+)
+## Type-Safe .stream() Method
 
 ### Overview
 
-LangGraph v0.3+ introduces a powerful type-safe streaming API that provides real-time state updates and values during graph execution. The `.stream()` method returns different types of information based on the `streamMode` parameter, enabling developers to observe and respond to workflow execution in real-time.
+Compiled graphs expose a typed `.stream()` method. It returns a promise of an async iterable (so `await` the call, then `for await` over the result), and what each chunk contains depends on `streamMode`: `values`, `updates`, `messages`, `custom`, `tasks`, `checkpoints`, `debug`, or `tools`. Pass an array of modes to receive `[mode, chunk]` tuples.
 
 ### Stream Modes
 
@@ -1971,9 +1770,11 @@ const WorkflowStateAnnotation = Annotation.Root({
     reducer: (x, y) => [...x, ...y],
   }),
   output: Annotation<string | null>({
+    reducer: (_prev, next) => next,
     default: () => null,
   }),
   metadata: Annotation<Record<string, any>>({
+    reducer: (_prev, next) => next,
     default: () => ({}),
   }),
 });
@@ -2021,7 +1822,7 @@ Returns the complete state after each node execution, ideal for tracking full wo
 
 ```typescript
 async function streamWithValues(): Promise<void> {
-  const stream = workflow.stream(
+  const stream = await workflow.stream(
     {
       input: 'Hello world',
       steps: [],
@@ -2045,7 +1846,8 @@ async function streamWithValues(): Promise<void> {
   }
 }
 
-// Example output:
+// Example output (the first chunk is the input state, before any node has run):
+// Current state: { steps: [], output: null, metadata: {} }
 // Current state: { steps: ['Preprocessing completed'], output: null, metadata: { preprocessed: true } }
 // Current state: { steps: ['Preprocessing completed', 'Analysis completed'], output: null, metadata: { preprocessed: true, analyzed: true } }
 // Current state: { steps: ['Preprocessing completed', 'Analysis completed', 'Generation completed'], output: 'Processed: Hello world', metadata: { preprocessed: true, analyzed: true } }
@@ -2057,7 +1859,7 @@ Returns only the updates made by each node, perfect for tracking changes without
 
 ```typescript
 async function streamWithUpdates(): Promise<void> {
-  const stream = workflow.stream(
+  const stream = await workflow.stream(
     {
       input: 'Hello world',
       steps: [],
@@ -2089,7 +1891,7 @@ Returns detailed execution metadata including node names, timestamps, and state 
 
 ```typescript
 async function streamWithDebug(): Promise<void> {
-  const stream = workflow.stream(
+  const stream = await workflow.stream(
     {
       input: 'Hello world',
       steps: [],
@@ -2103,21 +1905,18 @@ async function streamWithDebug(): Promise<void> {
 
   console.log('=== Streaming with DEBUG mode ===');
 
-  for await (const debugInfo of stream) {
-    // debugInfo contains execution metadata
-    console.log('Debug info:', {
-      type: debugInfo.type,
-      node: debugInfo.node,
-      state: debugInfo.state,
-      timestamp: new Date().toISOString(),
-    });
+  for await (const event of stream) {
+    // Each debug event is { step, type, timestamp, payload }
+    // type is 'checkpoint', 'task' (node starting) or 'task_result' (node finished)
+    console.log('Debug event:', event.type, event.step, event.payload?.name);
   }
 }
 
 // Example output:
-// Debug info: { type: 'task', node: 'preprocess', state: {...}, timestamp: '2025-01-15T10:30:00.000Z' }
-// Debug info: { type: 'task', node: 'analyze', state: {...}, timestamp: '2025-01-15T10:30:00.100Z' }
-// Debug info: { type: 'task', node: 'generate', state: {...}, timestamp: '2025-01-15T10:30:00.200Z' }
+// Debug event: checkpoint 0 undefined
+// Debug event: task 1 preprocess
+// Debug event: task_result 1 preprocess
+// ...
 ```
 
 ### StreamMode: "messages" - Message-Focused Streaming
@@ -2154,7 +1953,7 @@ chatGraph.addEdge('chatbot', END);
 const chatWorkflow = chatGraph.compile();
 
 async function streamWithMessages(): Promise<void> {
-  const stream = chatWorkflow.stream(
+  const stream = await chatWorkflow.stream(
     {
       messages: [new HumanMessage('What is TypeScript?')],
     },
@@ -2165,10 +1964,10 @@ async function streamWithMessages(): Promise<void> {
 
   console.log('=== Streaming with MESSAGES mode ===');
 
-  for await (const message of stream) {
-    // message contains only message updates
-    if (message instanceof AIMessage) {
-      console.log('AI Response:', message.content);
+  // "messages" mode yields [messageChunk, metadata] tuples as the LLM produces tokens
+  for await (const [chunk, metadata] of stream) {
+    if (metadata.langgraph_node === 'chatbot') {
+      process.stdout.write(String(chunk.content));
     }
   }
 }
@@ -2180,7 +1979,7 @@ You can stream using multiple modes simultaneously for comprehensive monitoring.
 
 ```typescript
 async function streamWithMultipleModes(): Promise<void> {
-  const stream = workflow.stream(
+  const stream = await workflow.stream(
     {
       input: 'Complex workflow',
       steps: [],
@@ -2194,24 +1993,14 @@ async function streamWithMultipleModes(): Promise<void> {
 
   console.log('=== Streaming with MULTIPLE modes ===');
 
-  for await (const chunk of stream) {
-    // chunk contains data from all requested modes
-    console.log('Stream chunk:', {
-      hasValues: 'values' in chunk,
-      hasUpdates: 'updates' in chunk,
-      hasDebug: 'debug' in chunk,
-    });
-
-    if ('values' in chunk) {
-      console.log('Complete state:', chunk.values);
-    }
-
-    if ('updates' in chunk) {
-      console.log('Node updates:', chunk.updates);
-    }
-
-    if ('debug' in chunk) {
-      console.log('Debug info:', chunk.debug);
+  // With several modes, each chunk is a [mode, payload] tuple
+  for await (const [mode, payload] of stream) {
+    if (mode === 'values') {
+      console.log('Complete state:', payload);
+    } else if (mode === 'updates') {
+      console.log('Node updates:', payload);
+    } else if (mode === 'debug') {
+      console.log('Debug event:', payload.type, payload.payload?.name);
     }
   }
 }
@@ -2232,7 +2021,7 @@ interface ProgressUpdate {
 async function* streamWithProgress(
   input: string
 ): AsyncGenerator<ProgressUpdate, void, unknown> {
-  const stream = workflow.stream(
+  const stream = await workflow.stream(
     { input, steps: [], output: null, metadata: {} },
     { streamMode: 'updates' }
   );
@@ -2342,7 +2131,7 @@ async function streamCustomWorkflow(
   userId: string,
   requestId: string
 ): Promise<void> {
-  const stream = customWorkflow.stream(
+  const stream = await customWorkflow.stream(
     {
       userId,
       requestId,
@@ -2372,7 +2161,7 @@ Robust error handling patterns for streaming workflows.
 ```typescript
 async function streamWithErrorHandling(): Promise<void> {
   try {
-    const stream = workflow.stream(
+    const stream = await workflow.stream(
       {
         input: 'Test input',
         steps: [],
@@ -2414,7 +2203,7 @@ async function streamWithErrorHandling(): Promise<void> {
 
 ### Overview
 
-LangGraph v1.0+ introduces convenient builder methods that significantly reduce boilerplate when constructing workflows. The `.addNode()` and `.addSequence()` methods provide ergonomic APIs for defining graph structures with less code while maintaining full type safety.
+`.addNode()` and `.addSequence()` are chainable builder methods: each returns the graph, with its type widened to include the new node names, so later `addEdge` calls are checked against the nodes you have actually added.
 
 ### .addNode() Method
 
@@ -2431,7 +2220,7 @@ interface SimpleState {
 
 const StateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  count: Annotation<number>({ default: () => 0 }),
+  count: Annotation<number>({ reducer: (_prev, next) => next, default: () => 0 }),
   messages: Annotation<string[]>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
@@ -2470,9 +2259,9 @@ The builder pattern allows chaining multiple node definitions for cleaner code.
 ```typescript
 const DataProcessingStateAnnotation = Annotation.Root({
   rawData: Annotation<string>,
-  cleanedData: Annotation<string | null>({ default: () => null }),
-  validatedData: Annotation<string | null>({ default: () => null }),
-  transformedData: Annotation<string | null>({ default: () => null }),
+  cleanedData: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  validatedData: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  transformedData: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
   errors: Annotation<string[]>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
@@ -2522,15 +2311,15 @@ const dataWorkflow = dataGraph.compile();
 
 ### .addSequence() Method
 
-The `.addSequence()` method creates a linear sequence of nodes with automatic edge connections, perfect for pipelines.
+`.addSequence()` adds several nodes and the edges between consecutive ones. It takes an array of `[name, fn]` (or `[name, fn, options]`) tuples, or an object mapping names to functions. It does not connect the sequence to `START` or `END`; add those edges yourself.
 
 ```typescript
 const PipelineStateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  stage1Result: Annotation<string | null>({ default: () => null }),
-  stage2Result: Annotation<string | null>({ default: () => null }),
-  stage3Result: Annotation<string | null>({ default: () => null }),
-  finalOutput: Annotation<string | null>({ default: () => null }),
+  stage1Result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  stage2Result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  stage3Result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  finalOutput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const pipelineGraph = new StateGraph(PipelineStateAnnotation);
@@ -2554,31 +2343,34 @@ pipelineGraph.addEdge('stage3', END);
 const sequenceGraph = new StateGraph(PipelineStateAnnotation);
 
 sequenceGraph.addSequence([
-  {
-    name: 'stage1',
-    handler: (state) => ({
+  [
+    'stage1',
+    (state) => ({
       stage1Result: `Stage1: ${state.input}`,
     }),
-  },
-  {
-    name: 'stage2',
-    handler: (state) => ({
+  ],
+  [
+    'stage2',
+    (state) => ({
       stage2Result: `Stage2: ${state.stage1Result}`,
     }),
-  },
-  {
-    name: 'stage3',
-    handler: (state) => ({
+  ],
+  [
+    'stage3',
+    (state) => ({
       stage3Result: `Stage3: ${state.stage2Result}`,
     }),
-  },
-  {
-    name: 'finalize',
-    handler: (state) => ({
+  ],
+  [
+    'finalize',
+    (state) => ({
       finalOutput: state.stage3Result,
     }),
-  },
+  ],
 ]);
+
+sequenceGraph.addEdge(START, 'stage1');
+sequenceGraph.addEdge('finalize', END);
 
 const sequenceWorkflow = sequenceGraph.compile();
 ```
@@ -2601,7 +2393,7 @@ interface DocumentProcessingState {
 
 const DocStateAnnotation = Annotation.Root({
   document: Annotation<string>,
-  chunks: Annotation<string[]>({ default: () => [] }),
+  chunks: Annotation<string[]>({ reducer: (_prev, next) => next, default: () => [] }),
   summaries: Annotation<string[]>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
@@ -2610,7 +2402,7 @@ const DocStateAnnotation = Annotation.Root({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
   }),
-  finalReport: Annotation<string | null>({ default: () => null }),
+  finalReport: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const docGraph = new StateGraph(DocStateAnnotation);
@@ -2621,9 +2413,9 @@ const model = new ChatOpenAI({
 });
 
 docGraph.addSequence([
-  {
-    name: 'chunk',
-    handler: async (state) => {
+  [
+    'chunk',
+    async (state) => {
       // Split document into chunks
       const chunkSize = 1000;
       const chunks: string[] = [];
@@ -2634,10 +2426,10 @@ docGraph.addSequence([
 
       return { chunks };
     },
-  },
-  {
-    name: 'summarize',
-    handler: async (state) => {
+  ],
+  [
+    'summarize',
+    async (state) => {
       // Summarize each chunk
       const summaries: string[] = [];
 
@@ -2650,10 +2442,10 @@ docGraph.addSequence([
 
       return { summaries };
     },
-  },
-  {
-    name: 'extractKeywords',
-    handler: async (state) => {
+  ],
+  [
+    'extractKeywords',
+    async (state) => {
       // Extract keywords from summaries
       const response = await model.invoke(
         `Extract 5 keywords from these summaries: ${state.summaries.join(' ')}`
@@ -2665,10 +2457,10 @@ docGraph.addSequence([
 
       return { keywords };
     },
-  },
-  {
-    name: 'generateReport',
-    handler: async (state) => {
+  ],
+  [
+    'generateReport',
+    async (state) => {
       const report = `
 Document Analysis Report
 ========================
@@ -2684,8 +2476,11 @@ Keywords: ${state.keywords.join(', ')}
 
       return { finalReport: report };
     },
-  },
+  ],
 ]);
+
+docGraph.addEdge(START, 'chunk');
+docGraph.addEdge('generateReport', END);
 
 const docWorkflow = docGraph.compile();
 
@@ -2710,11 +2505,11 @@ You can combine both methods for flexible workflow construction.
 ```typescript
 const HybridStateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  preprocessed: Annotation<string | null>({ default: () => null }),
-  analyzed: Annotation<string | null>({ default: () => null }),
-  enhanced: Annotation<string | null>({ default: () => null }),
-  validated: Annotation<string | null>({ default: () => null }),
-  output: Annotation<string | null>({ default: () => null }),
+  preprocessed: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  analyzed: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  enhanced: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  validated: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  output: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const hybridGraph = new StateGraph(HybridStateAnnotation);
@@ -2736,18 +2531,18 @@ hybridGraph
 
 // Add a sequence of simple transformations
 hybridGraph.addSequence([
-  {
-    name: 'analyze',
-    handler: async (state) => ({
+  [
+    'analyze',
+    async (state) => ({
       analyzed: `Analyzed: ${state.preprocessed}`,
     }),
-  },
-  {
-    name: 'enhance',
-    handler: async (state) => ({
+  ],
+  [
+    'enhance',
+    async (state) => ({
       enhanced: `Enhanced: ${state.analyzed}`,
     }),
-  },
+  ],
 ]);
 
 // Connect everything
@@ -2767,45 +2562,45 @@ Using .addSequence() with conditional routing.
 const ConditionalStateAnnotation = Annotation.Root({
   inputType: Annotation<'text' | 'data' | 'image'>,
   input: Annotation<string>,
-  processed: Annotation<string | null>({ default: () => null }),
-  result: Annotation<string | null>({ default: () => null }),
+  processed: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const conditionalGraph = new StateGraph(ConditionalStateAnnotation);
 
 // Define separate sequences for different input types
-const textSequence = [
-  {
-    name: 'processText',
-    handler: async (state: any) => ({
+const textSequence: [string, (state: any) => Promise<any>][] = [
+  [
+    'processText',
+    async (state: any) => ({
       processed: `Text processed: ${state.input}`,
     }),
-  },
-  {
-    name: 'finalizeText',
-    handler: async (state: any) => ({
+  ],
+  [
+    'finalizeText',
+    async (state: any) => ({
       result: `Text result: ${state.processed}`,
     }),
-  },
+  ],
 ];
 
-const dataSequence = [
-  {
-    name: 'processData',
-    handler: async (state: any) => ({
+const dataSequence: [string, (state: any) => Promise<any>][] = [
+  [
+    'processData',
+    async (state: any) => ({
       processed: `Data processed: ${state.input}`,
     }),
-  },
-  {
-    name: 'finalizeData',
-    handler: async (state: any) => ({
+  ],
+  [
+    'finalizeData',
+    async (state: any) => ({
       result: `Data result: ${state.processed}`,
     }),
-  },
+  ],
 ];
 
-// Add routing node
-conditionalGraph.addNode('route', (state) => state);
+// Add a routing node (returns no update)
+conditionalGraph.addNode('route', () => ({}));
 
 // Add sequences
 conditionalGraph.addSequence(textSequence);
@@ -2841,217 +2636,109 @@ const conditionalWorkflow = conditionalGraph.compile();
 
 ### Overview
 
-LangGraph v1.0+ introduces node caching to skip redundant computations when the same node is invoked with identical inputs. This feature dramatically improves performance for workflows with repeated operations or deterministic transformations.
+Node caching lets LangGraph skip a node when it has already run on the same input. You opt in per node with `cachePolicy` and give the compiled graph a cache backend with `compile({ cache })`. Cached results are keyed by node and input; a hit returns the stored update without running the node.
 
 ### Basic Node Caching
 
-Enable caching at the node level to automatically cache results.
-
 ```typescript
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-
-interface CachedState {
-  input: string;
-  expensiveResult: string | null;
-  computeCount: number;
-}
+import { InMemoryCache } from '@langchain/langgraph-checkpoint';
 
 const CachedStateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  expensiveResult: Annotation<string | null>({ default: () => null }),
-  computeCount: Annotation<number>({ default: () => 0 }),
+  expensiveResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const graph = new StateGraph(CachedStateAnnotation);
+let computeCount = 0;
 
-// Expensive computation that benefits from caching
-graph.addNode(
-  'expensiveComputation',
-  async (state) => {
-    console.log('Performing expensive computation...');
+const workflow = new StateGraph(CachedStateAnnotation)
+  .addNode(
+    'expensiveComputation',
+    async (state) => {
+      computeCount += 1;
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // simulate slow work
+      return { expensiveResult: `Computed: ${state.input.toUpperCase()}` };
+    },
+    { cachePolicy: true } // cache with the default key (the node's input)
+  )
+  .addEdge(START, 'expensiveComputation')
+  .addEdge('expensiveComputation', END)
+  .compile({ cache: new InMemoryCache() });
 
-    // Simulate expensive operation
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    const result = `Computed: ${state.input.toUpperCase()}`;
-
-    return {
-      expensiveResult: result,
-      computeCount: state.computeCount + 1,
-    };
-  },
-  {
-    // Enable caching for this node
-    cache: true,
-  }
-);
-
-graph.addEdge(START, 'expensiveComputation');
-graph.addEdge('expensiveComputation', END);
-
-const workflow = graph.compile();
-
-// First invocation - performs computation
-const result1 = await workflow.invoke({
-  input: 'test',
-  expensiveResult: null,
-  computeCount: 0,
-});
-console.log('First result:', result1.expensiveResult); // Takes 2 seconds
-console.log('Compute count:', result1.computeCount); // 1
-
-// Second invocation with same input - uses cache
-const result2 = await workflow.invoke({
-  input: 'test',
-  expensiveResult: null,
-  computeCount: 0,
-});
-console.log('Second result:', result2.expensiveResult); // Instant
-console.log('Compute count:', result2.computeCount); // 0 (cached)
+await workflow.invoke({ input: 'test' }); // runs the node (~2 s)
+await workflow.invoke({ input: 'test' }); // served from cache
+console.log(computeCount); // 1
 ```
 
-### Custom Cache Key Functions
+`InMemoryCache` lives in `@langchain/langgraph-checkpoint`, which `@langchain/langgraph` already depends on. It is per-process; for a shared cache implement `BaseCache` from the same package over Redis or similar.
 
-Define custom cache key generation for fine-grained control.
+### Custom Cache Keys
+
+`keyFunc` receives the node's input arguments as an array and returns a string. Use it to leave volatile fields (timestamps, request IDs) out of the key.
 
 ```typescript
-interface DataState {
-  userId: string;
-  timestamp: number;
-  data: Record<string, any>;
-  processedData: Record<string, any> | null;
-}
-
 const DataStateAnnotation = Annotation.Root({
   userId: Annotation<string>,
   timestamp: Annotation<number>,
-  data: Annotation<Record<string, any>>,
-  processedData: Annotation<Record<string, any> | null>({ default: () => null }),
+  data: Annotation<Record<string, unknown>>,
+  processedData: Annotation<Record<string, unknown> | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const dataGraph = new StateGraph(DataStateAnnotation);
+const dataWorkflow = new StateGraph(DataStateAnnotation)
+  .addNode(
+    'processData',
+    async (state) => ({
+      processedData: Object.fromEntries(
+        Object.entries(state.data).map(([k, v]) => [k, typeof v === 'string' ? v.toUpperCase() : v])
+      ),
+    }),
+    {
+      cachePolicy: {
+        // Only userId and data matter, not timestamp
+        keyFunc: ([state]: any[]) => `${state.userId}:${JSON.stringify(state.data)}`,
+      },
+    }
+  )
+  .addEdge(START, 'processData')
+  .addEdge('processData', END)
+  .compile({ cache: new InMemoryCache() });
 
-dataGraph.addNode(
-  'processData',
-  async (state) => {
-    console.log('Processing data for user:', state.userId);
-
-    // Complex data transformation
-    const processed = Object.entries(state.data).reduce(
-      (acc, [key, value]) => ({
-        ...acc,
-        [key]: typeof value === 'string' ? value.toUpperCase() : value,
-      }),
-      {}
-    );
-
-    return {
-      processedData: processed,
-    };
-  },
-  {
-    cache: true,
-    // Custom cache key - only userId and data matter, not timestamp
-    cacheKey: (state: DataState) => {
-      return `${state.userId}:${JSON.stringify(state.data)}`;
-    },
-  }
-);
-
-dataGraph.addEdge(START, 'processData');
-dataGraph.addEdge('processData', END);
-
-const dataWorkflow = dataGraph.compile();
-
-// These will use the same cache despite different timestamps
-await dataWorkflow.invoke({
-  userId: 'user123',
-  timestamp: Date.now(),
-  data: { name: 'john', age: 30 },
-  processedData: null,
-});
-
-await dataWorkflow.invoke({
-  userId: 'user123',
-  timestamp: Date.now() + 1000, // Different timestamp
-  data: { name: 'john', age: 30 }, // Same data
-  processedData: null,
-}); // Uses cache
+await dataWorkflow.invoke({ userId: 'user123', timestamp: Date.now(), data: { name: 'john' } });
+await dataWorkflow.invoke({ userId: 'user123', timestamp: Date.now() + 1000, data: { name: 'john' } }); // cache hit
 ```
 
 ### Cache TTL (Time-To-Live)
 
-Set expiration times for cached results.
+`ttl` is in **seconds**. Without it, entries never expire.
 
 ```typescript
-interface ApiState {
-  endpoint: string;
-  response: string | null;
-  cachedAt: number | null;
-}
-
 const ApiStateAnnotation = Annotation.Root({
   endpoint: Annotation<string>,
-  response: Annotation<string | null>({ default: () => null }),
-  cachedAt: Annotation<number | null>({ default: () => null }),
+  response: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const apiGraph = new StateGraph(ApiStateAnnotation);
+const apiWorkflow = new StateGraph(ApiStateAnnotation)
+  .addNode(
+    'fetchApi',
+    async (state) => {
+      const response = await fetch(state.endpoint);
+      return { response: await response.text() };
+    },
+    { cachePolicy: { ttl: 5 * 60 } } // five minutes
+  )
+  .addEdge(START, 'fetchApi')
+  .addEdge('fetchApi', END)
+  .compile({ cache: new InMemoryCache() });
 
-apiGraph.addNode(
-  'fetchApi',
-  async (state) => {
-    console.log('Fetching from API:', state.endpoint);
-
-    // Simulate API call
-    const response = await fetch(state.endpoint);
-    const data = await response.text();
-
-    return {
-      response: data,
-      cachedAt: Date.now(),
-    };
-  },
-  {
-    cache: true,
-    // Cache expires after 5 minutes
-    cacheTTL: 5 * 60 * 1000, // 5 minutes in milliseconds
-  }
-);
-
-apiGraph.addEdge(START, 'fetchApi');
-apiGraph.addEdge('fetchApi', END);
-
-const apiWorkflow = apiGraph.compile();
-
-// First call - fetches from API
-await apiWorkflow.invoke({
-  endpoint: 'https://api.example.com/data',
-  response: null,
-  cachedAt: null,
-});
-
-// Call within 5 minutes - uses cache
-await apiWorkflow.invoke({
-  endpoint: 'https://api.example.com/data',
-  response: null,
-  cachedAt: null,
-});
-
-// Wait 5 minutes...
-await new Promise((resolve) => setTimeout(resolve, 5 * 60 * 1000));
-
-// Call after TTL expires - fetches again
-await apiWorkflow.invoke({
-  endpoint: 'https://api.example.com/data',
-  response: null,
-  cachedAt: null,
-});
+await apiWorkflow.invoke({ endpoint: 'https://api.example.com/data' }); // fetches
+await apiWorkflow.invoke({ endpoint: 'https://api.example.com/data' }); // cached for 5 minutes
 ```
 
-### Distributed Caching with Redis
+Graph-wide defaults can be set once with `graph.setNodeDefaults({ cachePolicy: { ttl: 300 } })`; a node can opt out with `cachePolicy: false`.
 
-Implement distributed caching for multi-instance deployments.
+### Application-Level Caching (Redis)
+
+The built-in node cache is the first thing to reach for. When you need explicit control — cross-service sharing, manual invalidation, caching only part of a node's work — cache inside the node yourself, as below.
 
 ```typescript
 import Redis from 'ioredis';
@@ -3099,7 +2786,7 @@ interface MLState {
 
 const MLStateAnnotation = Annotation.Root({
   inputText: Annotation<string>,
-  embedding: Annotation<number[] | null>({ default: () => null }),
+  embedding: Annotation<number[] | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const mlGraph = new StateGraph(MLStateAnnotation);
@@ -3161,8 +2848,8 @@ interface UserDataState {
 const UserDataStateAnnotation = Annotation.Root({
   userId: Annotation<string>,
   operation: Annotation<'read' | 'write' | 'delete'>,
-  data: Annotation<Record<string, any> | null>({ default: () => null }),
-  result: Annotation<string | null>({ default: () => null }),
+  data: Annotation<Record<string, any> | null>({ reducer: (_prev, next) => next, default: () => null }),
+  result: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const userGraph = new StateGraph(UserDataStateAnnotation);
@@ -3315,8 +3002,8 @@ class CacheMonitor {
 
 const cacheMonitor = new CacheMonitor();
 
-// Use monitor in nodes
-mlGraph.addNode('monitoredComputation', async (state) => {
+// Use the monitor inside any node function
+async function monitoredComputation(state: { inputText: string }) {
   const cacheKey = `computation:${state.inputText}`;
   const startTime = Date.now();
 
@@ -3336,7 +3023,7 @@ mlGraph.addNode('monitoredComputation', async (state) => {
   await cacheManager.set(cacheKey, result);
 
   return { result };
-});
+}
 
 async function expensiveComputation(input: string): Promise<string> {
   await new Promise((resolve) => setTimeout(resolve, 500));
@@ -3355,7 +3042,7 @@ setInterval(() => {
 
 ### Overview
 
-Deferred nodes in LangGraph v1.0+ allow you to delay the execution of specific nodes until all upstream paths have completed. This is particularly useful for aggregation operations, final processing steps, or scenarios where you need to ensure all parallel branches have finished before proceeding.
+A node added with `{ defer: true }` waits until every other pending branch in the run has finished before it executes. That makes it a natural fan-in point when branches have different lengths, and when a conditional edge fans out to a variable number of branches.
 
 ### Basic Deferred Node
 
@@ -3374,10 +3061,10 @@ interface ParallelProcessingState {
 
 const ParallelStateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  branchAResult: Annotation<string | null>({ default: () => null }),
-  branchBResult: Annotation<string | null>({ default: () => null }),
-  branchCResult: Annotation<string | null>({ default: () => null }),
-  aggregatedResult: Annotation<string | null>({ default: () => null }),
+  branchAResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  branchBResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  branchCResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  aggregatedResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const graph = new StateGraph(ParallelStateAnnotation);
@@ -3420,8 +3107,8 @@ graph.addNode(
     };
   },
   {
-    // Mark as deferred - will wait for all upstream paths
-    deferred: true,
+    // Run only after all other pending branches have finished
+    defer: true,
   }
 );
 
@@ -3473,11 +3160,11 @@ interface DataAnalysisState {
 
 const AnalysisStateAnnotation = Annotation.Root({
   dataset: Annotation<number[]>,
-  sumResult: Annotation<number | null>({ default: () => null }),
-  avgResult: Annotation<number | null>({ default: () => null }),
-  maxResult: Annotation<number | null>({ default: () => null }),
-  minResult: Annotation<number | null>({ default: () => null }),
-  statistics: Annotation<DataAnalysisState['statistics']>({ default: () => null }),
+  sumResult: Annotation<number | null>({ reducer: (_prev, next) => next, default: () => null }),
+  avgResult: Annotation<number | null>({ reducer: (_prev, next) => next, default: () => null }),
+  maxResult: Annotation<number | null>({ reducer: (_prev, next) => next, default: () => null }),
+  minResult: Annotation<number | null>({ reducer: (_prev, next) => next, default: () => null }),
+  statistics: Annotation<DataAnalysisState['statistics']>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const analysisGraph = new StateGraph(AnalysisStateAnnotation);
@@ -3518,7 +3205,7 @@ analysisGraph.addNode(
     };
   },
   {
-    deferred: true,
+    defer: true,
   }
 );
 
@@ -3569,17 +3256,17 @@ interface MultiStageState {
 
 const MultiStageAnnotation = Annotation.Root({
   stage: Annotation<'preprocessing' | 'processing' | 'postprocessing'>,
-  paths: Annotation<string[]>({ default: () => [] }),
-  pathAResult: Annotation<string | null>({ default: () => null }),
-  pathBResult: Annotation<string | null>({ default: () => null }),
-  pathCResult: Annotation<string | null>({ default: () => null }),
-  finalResult: Annotation<string | null>({ default: () => null }),
+  paths: Annotation<string[]>({ reducer: (_prev, next) => next, default: () => [] }),
+  pathAResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  pathBResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  pathCResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  finalResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const multiStageGraph = new StateGraph(MultiStageAnnotation);
 
-// Router node
-multiStageGraph.addNode('router', (state) => state);
+// Router node (no state update)
+multiStageGraph.addNode('router', () => ({}));
 
 // Parallel paths
 multiStageGraph
@@ -3611,7 +3298,7 @@ multiStageGraph.addNode(
     };
   },
   {
-    deferred: true,
+    defer: true,
   }
 );
 
@@ -3686,7 +3373,7 @@ const ResilientStateAnnotation = Annotation.Root({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
   }),
-  summary: Annotation<string | null>({ default: () => null }),
+  summary: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const resilientGraph = new StateGraph(ResilientStateAnnotation);
@@ -3749,7 +3436,7 @@ ${failed.length > 0 ? `Failed Tasks:\n${failed.map((r) => `- ${r.task}: ${r.erro
     return { summary };
   },
   {
-    deferred: true,
+    defer: true,
   }
 );
 
@@ -3778,82 +3465,51 @@ console.log(result.summary);
 
 ### Timeout Handling for Deferred Nodes
 
-Add timeout protection for deferred nodes waiting on slow upstream paths.
+A deferred node waits for its upstream branches however long they take, so bound the slow branch rather than the aggregator. The `timeout` node option (milliseconds, or a `TimeoutPolicy` with `runTimeout` / `idleTimeout`) fails a node attempt that runs too long with a `NodeTimeoutError`; an `errorHandler` can turn that failure into a state update so the deferred node still runs.
 
 ```typescript
-interface TimeoutState {
-  input: string;
-  fastResult: string | null;
-  slowResult: string | null;
-  timedOut: boolean;
-  finalResult: string | null;
-}
-
 const TimeoutStateAnnotation = Annotation.Root({
   input: Annotation<string>,
-  fastResult: Annotation<string | null>({ default: () => null }),
-  slowResult: Annotation<string | null>({ default: () => null }),
-  timedOut: Annotation<boolean>({ default: () => false }),
-  finalResult: Annotation<string | null>({ default: () => null }),
+  fastResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  slowResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  timedOut: Annotation<boolean>({ reducer: (_prev, next) => next, default: () => false }),
+  finalResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const timeoutGraph = new StateGraph(TimeoutStateAnnotation);
-
-timeoutGraph
+const timeoutWorkflow = new StateGraph(TimeoutStateAnnotation)
   .addNode('fastPath', async (state) => {
     await new Promise((resolve) => setTimeout(resolve, 100));
     return { fastResult: `Fast: ${state.input}` };
   })
-  .addNode('slowPath', async (state) => {
-    await new Promise((resolve) => setTimeout(resolve, 5000)); // 5 seconds
-    return { slowResult: `Slow: ${state.input}` };
-  });
-
-timeoutGraph.addNode(
-  'aggregateWithTimeout',
-  async (state) => {
-    // This node is deferred but has timeout logic
-    const hasAllResults = state.fastResult && state.slowResult;
-
-    if (!hasAllResults && state.timedOut) {
-      return {
-        finalResult: `Partial results (timeout): Fast=${state.fastResult}, Slow=TIMEOUT`,
-      };
+  .addNode(
+    'slowPath',
+    async (state) => {
+      await new Promise((resolve) => setTimeout(resolve, 5000)); // 5 seconds
+      return { slowResult: `Slow: ${state.input}` };
+    },
+    {
+      timeout: 3000, // fail this node after 3 seconds
+      errorHandler: () => ({ timedOut: true }), // record the timeout instead of failing the run
     }
+  )
+  .addNode(
+    'aggregateWithTimeout',
+    async (state) => ({
+      finalResult: state.timedOut
+        ? `Partial results: ${state.fastResult}, slow path timed out`
+        : `All results: ${state.fastResult}, ${state.slowResult}`,
+    }),
+    { defer: true }
+  )
+  .addEdge(START, 'fastPath')
+  .addEdge(START, 'slowPath')
+  .addEdge('fastPath', 'aggregateWithTimeout')
+  .addEdge('slowPath', 'aggregateWithTimeout')
+  .addEdge('aggregateWithTimeout', END)
+  .compile();
 
-    return {
-      finalResult: `All results: Fast=${state.fastResult}, Slow=${state.slowResult}`,
-    };
-  },
-  {
-    deferred: true,
-    timeout: 3000, // Wait maximum 3 seconds for all upstream nodes
-  }
-);
-
-timeoutGraph.addEdge(START, 'fastPath');
-timeoutGraph.addEdge(START, 'slowPath');
-
-timeoutGraph.addEdge('fastPath', 'aggregateWithTimeout');
-timeoutGraph.addEdge('slowPath', 'aggregateWithTimeout');
-
-timeoutGraph.addEdge('aggregateWithTimeout', END);
-
-const timeoutWorkflow = timeoutGraph.compile();
-
-try {
-  const result = await timeoutWorkflow.invoke({
-    input: 'test',
-    fastResult: null,
-    slowResult: null,
-    timedOut: false,
-    finalResult: null,
-  });
-
-  console.log(result.finalResult);
-} catch (error) {
-  console.error('Workflow timeout:', error);
-}
+const result = await timeoutWorkflow.invoke({ input: 'test' });
+console.log(result.finalResult); // "Partial results: Fast: test, slow path timed out" (after ~3 s)
 ```
 
 ---
@@ -3862,11 +3518,42 @@ try {
 
 ### Overview
 
-LangGraph v1.0+ introduces pre and post-model hooks that allow you to inject custom logic before and after model invocations. This enables request transformation, response modification, logging, caching, and other cross-cutting concerns without modifying core node logic.
+"Hooks" around a model call come in two forms:
 
-### Basic Model Hooks
+- **Agent middleware (recommended).** `createAgent` from `langchain` accepts `middleware`, built with `createMiddleware`. A middleware can define `beforeModel` and `afterModel` (which see and may update agent state) and `wrapModelCall` (which wraps the actual call, so it can change the request, retry, or short-circuit with a cached response). The deprecated `createReactAgent` exposed a narrower `preModelHook` / `postModelHook` pair.
+- **Plain wrappers in your own nodes.** In a hand-written `StateGraph` you call the model yourself, so a hook is just a function around `model.invoke`. The rest of this section shows that pattern; it is ordinary TypeScript, not a LangGraph API.
 
-Define hooks that execute before and after model calls.
+### Agent Middleware
+
+```typescript
+import { createAgent, createMiddleware } from 'langchain';
+
+const logging = createMiddleware({
+  name: 'Logging',
+  beforeModel: (state) => {
+    console.log(`[before] ${state.messages.length} messages`);
+    return undefined; // no state change
+  },
+  wrapModelCall: async (request, handler) => {
+    const started = Date.now();
+    const response = await handler(request); // request.messages, request.tools, request.systemPrompt ...
+    console.log(`[model] ${Date.now() - started} ms`);
+    return response;
+  },
+  afterModel: (state) => {
+    console.log('[after]', state.messages.at(-1)?.content);
+    return undefined;
+  },
+});
+
+const agent = createAgent({ model: 'openai:gpt-4o-mini', tools: [], middleware: [logging] });
+```
+
+`langchain` also ships ready-made middleware, including `summarizationMiddleware`, `modelRetryMiddleware`, `modelFallbackMiddleware`, `modelCallLimitMiddleware`, `piiMiddleware`, `humanInTheLoopMiddleware` and `toolRetryMiddleware`.
+
+### Basic Model Hooks (hand-rolled)
+
+A small hook registry for graphs where you call the model directly.
 
 ```typescript
 import { ChatOpenAI } from '@langchain/openai';
@@ -4001,7 +3688,7 @@ const result = await invokeModelWithHooks(
   model,
   [new HumanMessage('What is TypeScript?')],
   {
-    modelName: 'gpt-4-turbo',
+    modelName: 'gpt-4o',
     temperature: 0.7,
     timestamp: Date.now(),
     metadata: {},
@@ -4106,8 +3793,8 @@ interface ChatState {
 }
 
 const ChatStateAnnotation = Annotation.Root({
-  messages: Annotation<any[]>({ default: () => [] }),
-  response: Annotation<any>({ default: () => null }),
+  messages: Annotation<any[]>({ reducer: (_prev, next) => next, default: () => [] }),
+  response: Annotation<any>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const chatGraph = new StateGraph(ChatStateAnnotation);
@@ -4464,14 +4151,54 @@ async function moderatedModelCall(
 
 ### Overview
 
-LangGraph v1.0+ introduces cross-thread memory support, allowing memory persistence across different conversation threads. This enables shared context, user preferences, and knowledge to be accessible across multiple independent conversations.
+Checkpointers keep state per thread. To share information across threads (user preferences, learned facts, a knowledge base) use a store: pass `store` to `compile()` and read or write it from nodes. `InMemoryStore` ships with `@langchain/langgraph`; production deployments typically use a database-backed store.
 
-### Basic Cross-Thread Memory
+### Cross-Thread Memory with a Store
 
-Implement shared memory across multiple threads.
+The built-in way: a `BaseStore` passed to `compile()` is available to every node as `config.store`. Items are grouped by namespace (an array of strings), so per-user memory is just a namespace that includes the user ID.
 
 ```typescript
-import { MemorySaver } from '@langchain/langgraph';
+import {
+  StateGraph, MessagesAnnotation, Annotation, InMemoryStore, MemorySaver, START, END,
+} from '@langchain/langgraph';
+
+const State = Annotation.Root({ ...MessagesAnnotation.spec, userId: Annotation<string> });
+
+const memoryGraph = new StateGraph(State)
+  .addNode('remember', async (state, config) => {
+    const namespace = ['users', state.userId, 'facts'];
+    const last = state.messages.at(-1);
+    if (String(last?.content).includes('prefer')) {
+      await config.store!.put(namespace, `fact-${Date.now()}`, { text: String(last?.content) });
+    }
+    const facts = await config.store!.search(namespace, { limit: 10 });
+    return {
+      messages: [{ role: 'ai', content: `I know ${facts.length} thing(s) about you.` }],
+    };
+  })
+  .addEdge(START, 'remember')
+  .addEdge('remember', END)
+  .compile({ checkpointer: new MemorySaver(), store: new InMemoryStore() });
+
+// Thread 1 records a preference ...
+await memoryGraph.invoke(
+  { userId: 'user123', messages: [{ role: 'user', content: 'I prefer TypeScript' }] },
+  { configurable: { thread_id: 'thread1' } }
+);
+// ... thread 2 (a separate conversation) can read it
+await memoryGraph.invoke(
+  { userId: 'user123', messages: [{ role: 'user', content: 'Help me with my project' }] },
+  { configurable: { thread_id: 'thread2' } }
+);
+```
+
+`InMemoryStore` also supports semantic search when constructed with an `index` (embeddings and dimensions). For persistence across restarts, use a database-backed store.
+
+### Hand-Rolled Cross-Thread Memory
+
+The same idea without a store, using an application-level manager. This is useful when memory already lives in your own service.
+
+```typescript
 
 interface UserMemory {
   userId: string;
@@ -4572,8 +4299,8 @@ const ConversationStateAnnotation = Annotation.Root({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
   }),
-  userContext: Annotation<string>({ default: () => '' }),
-  response: Annotation<any>({ default: () => null }),
+  userContext: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
+  response: Annotation<any>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const conversationGraph = new StateGraph(ConversationStateAnnotation);
@@ -4606,7 +4333,7 @@ conversationGraph.addNode('processWithContext', async (state) => {
 });
 
 // Extract and save learnings
-conversationGraph.addNode('savelearnings', async (state) => {
+conversationGraph.addNode('saveLearnings', async (state) => {
   // Extract user preferences from conversation
   const responseText =
     typeof state.response?.content === 'string' ? state.response.content : '';
@@ -4619,7 +4346,7 @@ conversationGraph.addNode('savelearnings', async (state) => {
     );
   }
 
-  return state;
+  return {}; // no state change (returning `state` would re-append messages via the reducer)
 });
 
 conversationGraph.addEdge(START, 'loadContext');
@@ -4922,7 +4649,7 @@ ${JSON.stringify(state.messages)}
     console.error('Failed to extract knowledge:', error);
   }
 
-  return state;
+  return {};
 });
 
 // Node that retrieves relevant knowledge
@@ -4945,35 +4672,47 @@ conversationGraph.addNode('retrieveKnowledge', async (state) => {
 
 ---
 
-## New Type Utilities (v1.2.x)
+## StateSchema, ReducedValue and UntrackedValue
 
-### ReducedValue — Fields with Separate Input/Output Schemas
+Added in 1.2. `StateSchema` is a third way to declare state (alongside `Annotation.Root` and plain Zod objects). Fields can be any Standard Schema (Zod 4, Valibot, ArkType) for last-value channels, or one of the value helpers below.
+
+### ReducedValue — fields with a reducer and a separate input type
 
 ```typescript
-import { StateGraph, ReducedValue } from "@langchain/langgraph";
-import { z } from "zod";
+import { StateGraph, StateSchema, ReducedValue, MessagesValue, START, END } from '@langchain/langgraph';
+import { z } from 'zod';
 
-// ReducedValue lets you define separate schemas for reading vs writing a field
-const StateAnnotation = {
-  // Input: accepts string[], Output: returns concatenated string
-  results: ReducedValue<string[], string>({
-    input: z.array(z.string()),
-    output: z.string(),
-    reducer: (existing, update) => [...existing, ...update],
+const AgentState = new StateSchema({
+  messages: MessagesValue,          // prebuilt messages channel
+  currentStep: z.string().optional(),
+  // Stored as string[], but each update is a single string
+  history: new ReducedValue(z.array(z.string()).default(() => []), {
+    inputSchema: z.string(),
+    reducer: (current, next) => [...current, next],
   }),
-};
+});
+
+const graph = new StateGraph(AgentState)
+  .addNode('a', () => ({ history: 'step a' }))
+  .addNode('b', () => ({ history: 'step b' }))
+  .addEdge(START, 'a')
+  .addEdge('a', 'b')
+  .addEdge('b', END)
+  .compile();
+
+// (await graph.invoke({ messages: [] })).history -> ['step a', 'step b']
 ```
 
-### UntrackedValue — Transient State (Not Checkpointed)
+### UntrackedValue — transient state (not checkpointed)
 
 ```typescript
-import { StateGraph, UntrackedValue } from "@langchain/langgraph";
+import { StateSchema, UntrackedValue, MessagesValue } from '@langchain/langgraph';
 
-const StateAnnotation = {
-  messages: { ... },
-  // This field is transient — never saved to checkpoints
-  tempCache: UntrackedValue<Record<string, unknown>>(),
-};
+const State = new StateSchema({
+  messages: MessagesValue,
+  // Visible to nodes during a run, never written to checkpoints
+  tempCache: new UntrackedValue<Record<string, unknown>>(),
+});
 ```
 
 ---
@@ -4982,16 +4721,15 @@ const StateAnnotation = {
 
 ### MessagesZodState — Zod-Based Message State
 
-`MessagesZodState` is the Zod-schema companion to `MessagesAnnotation`. Use it when you want full Zod type inference rather than the `Annotation`-based state definition. `MessagesZodMeta` provides the reducer and JSON-schema metadata for the channel.
+`MessagesZodState` is the Zod-schema companion to `MessagesAnnotation`. Use it when you want Zod type inference rather than the `Annotation`-based state definition. `MessagesZodMeta` provides the reducer and JSON-schema metadata for the channel, for when you build your own Zod state with a messages field.
 
 ```typescript
 import { StateGraph, MessagesZodState, START, END } from "@langchain/langgraph";
-import { BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 
-// MessagesZodState is a Zod object schema; use .shape to access the channel
 const graph = new StateGraph(MessagesZodState)
   .addNode("respond", async (state) => ({
-    messages: [/* new messages */],
+    messages: [new AIMessage(`You said: ${state.messages.at(-1)?.content}`)],
   }))
   .addEdge(START, "respond")
   .addEdge("respond", END)
@@ -5002,11 +4740,9 @@ const result = await graph.invoke({
 });
 ```
 
-Source: `@langchain/langgraph@1.3.0`, `dist/index.js` — `MessagesZodState`, `MessagesZodMeta` exported at top level. Verified 2026-05-05.
-
 ### STREAM_EVENTS_V3_MODES
 
-A constant array listing all valid v3 streaming modes. Use it to validate or enumerate modes at runtime without hard-coding strings.
+A constant array listing the modes accepted by the v3 event stream. Use it to validate or enumerate modes at runtime without hard-coding strings.
 
 ```typescript
 import { STREAM_EVENTS_V3_MODES } from "@langchain/langgraph";
@@ -5014,26 +4750,39 @@ import { STREAM_EVENTS_V3_MODES } from "@langchain/langgraph";
 // ["values", "updates", "messages", "tools", "custom", "tasks"]
 console.log(STREAM_EVENTS_V3_MODES);
 
-// Useful for validating user-supplied mode strings:
 function isValidMode(mode: string): boolean {
   return (STREAM_EVENTS_V3_MODES as readonly string[]).includes(mode);
 }
 ```
 
-### pushMessage — Convenience Message Appender
+### pushMessage — Emit a Message Before the Node Finishes
 
-`pushMessage` is a helper for appending a single message to a messages-state channel without manually spreading arrays.
+`pushMessage(message, config)` sends a message to the `messages` stream immediately and persists it to the `messages` state key when the node completes. The message must have an `id`. Pass `{ ...config, stateKey: null }` to stream without persisting.
 
 ```typescript
 import { pushMessage } from "@langchain/langgraph";
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, type BaseMessage } from "@langchain/core/messages";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 
-// Inside a node, push a single message to state
-async function myNode(state: { messages: BaseMessage[] }) {
-  const reply = new AIMessage("Hello from my node.");
-  return { messages: pushMessage(reply) };
+async function myNode(state: { messages: BaseMessage[] }, config: LangGraphRunnableConfig) {
+  pushMessage(new AIMessage({ id: "progress-1", content: "Working on it..." }), config);
+  // ... long-running work ...
+  return {}; // the pushed message is already part of the update
 }
 ```
+
+---
+
+## Later additions (1.4 – 1.5)
+
+Features added to `@langchain/langgraph` since 1.3, all present in %%version=@langchain/langgraph%%:
+
+- **Node policies** (1.4.0): per-node `timeout` (milliseconds or a `TimeoutPolicy` with `runTimeout` / `idleTimeout`) raising `NodeTimeoutError`; per-node `errorHandler` that runs after `retryPolicy` is exhausted and may return an update or a `Command`; `StateGraph.setNodeDefaults({ retryPolicy, cachePolicy })` for graph-wide defaults.
+- **`RunControl` / `GraphDrained`** (1.4.0): cooperative draining of a run between supersteps, for graceful shutdown.
+- **`DeltaChannel`** (1.4.0, beta): channels that checkpoint only the writes since the last snapshot, for large append-only state.
+- **`GraphCallbackHandler`** (1.4.17): typed callback handler for graph lifecycle events.
+- **Per-node `tracePolicy`** (1.4.15) for controlling what is sent to tracing.
+- **1.5.0** orders parallel writes by task path (matching Python) and fixes a series of `DeltaChannel`, durability and node-cache persistence edge cases. No API removals.
 
 ---
 
@@ -5041,11 +4790,12 @@ async function myNode(state: { messages: BaseMessage[] }) {
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.2 | 2026-10-21 | Verified against `@langchain/langgraph` 1.5.2 and `langchain` 1.5.18. Replaced invented or removed APIs (`AgentExecutor`, `createOpenAIFunctionsAgent`, `createStructuredChatAgent`, `@langgraphjs/toolkit`, `value_type` channels, `cache`/`cacheKey`/`cacheTTL`/`deferred` node options, `ZodOutputParser`, `SerpAPITool`) with real ones (`createAgent`, `cachePolicy`, `defer`, `timeout`/`errorHandler`, `StructuredOutputParser`, `SerpAPI`); fixed `tool()` argument order; added `await` to `.stream()` calls and corrected multi-mode/messages/debug chunk shapes; fixed `Annotation` fields that had a default but no reducer; added store-based cross-thread memory, agent middleware and 1.4–1.5 notes. |
 | 1.3.5 | June 5, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.4 → 1.3.5; revision history entry added. `@langchain/langgraph@1.3.5` confirmed latest stable via npm registry (2026-06-05). Export count: 82 — PASS. | Claude routine |
 | 1.3.4 | June 3, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.3 → 1.3.4; revision history entry added. All key symbols (`StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, `Command`, `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `createGraphRunStream`) verified against installed `@langchain/langgraph@1.3.4` (`/tmp/npm-0603`). Export count: 82 — PASS. | Claude routine |
 | 1.3.3 | June 2, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 1.3.2 → 1.3.3; revision history entry added. All key symbols (`StateGraph`, `START`, `END`, `MemorySaver`, `interrupt`, `Command`, `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `createGraphRunStream`) verified against installed `@langchain/langgraph@1.3.3` (`/tmp/npm-0602`). Export count: 82 — PASS. | Claude routine |
 | 1.3.2 | May 19, 2026 | Patch releases 1.3.1 and 1.3.2; stability and dependency updates. All key symbols verified against installed `@langchain/langgraph@1.3.2` (`.routine-envs/check-0519-node`). | Claude routine |
 | 1.3.0 | May 5, 2026 | Minor release: `MessagesZodState`/`MessagesZodMeta` (Zod-based message state), `STREAM_EVENTS_V3_MODES` constant, `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream` streaming API, stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`), schema type guards (`isSerializableSchema`, `isStandardSchema`), `pushMessage` helper. All new symbols verified against installed `@langchain/langgraph@1.3.0` (`.routine-envs/check-0505-node`, Node 22). `STREAM_EVENTS_V3_MODES = ["values","updates","messages","tools","custom","tasks"]`. |
 | 1.2.9 | April 19, 2026 | Stability improvements and bug fixes following 1.2.8 |
-| 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type; `createReactAgent` moved to `@langgraphjs/toolkit` |
+| 1.2.8 | April 11, 2026 | Standard JSON Schema support (Zod 4, Valibot, ArkType); `ReducedValue` type; `UntrackedValue` type. (This entry previously said `createReactAgent` moved to `@langgraphjs/toolkit`; that was wrong — it is deprecated in favour of `createAgent` in `langchain`.) |
 | 1.0.2 | November 2025 | Previous documented version |

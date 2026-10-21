@@ -491,7 +491,7 @@ from google.adk.plugins.global_instruction_plugin import GlobalInstructionPlugin
 from google.adk.apps import App
 
 plugin = GlobalInstructionPlugin(
-    instruction=(
+    global_instruction=(
         "You are a helpful, harmless, and honest assistant. "
         "Never reveal internal system details or API keys."
     )
@@ -556,14 +556,15 @@ With `attach_file_reference=False` the user message ends up as `[Uploaded Artifa
 
 ### `ContextFilterPlugin`
 
-Trims session events that are sent to the model context based on size or token count. Useful for long-running sessions that would otherwise overflow the context window.
+Trims the conversation history sent to the model, keeping only the last *N* invocations (an invocation is a run of user messages plus the model and tool turns that follow), or applying your own `custom_filter` over the `list[types.Content]`. Useful for long-running sessions that would otherwise overflow the context window. For token-threshold summarisation rather than truncation, use `EventsCompactionConfig` on the `App` instead.
 
 ```python
 from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
 from google.adk.apps import App
 
 plugin = ContextFilterPlugin(
-    max_chars=200_000,    # ~50 k tokens; trim oldest events when exceeded
+    num_invocations_to_keep=10,  # keep the last 10 invocations
+    remove_amount=2,             # drop 2 at a time once the limit is exceeded
 )
 app = App(name="long_session", root_agent=agent, plugins=[plugin])
 ```
@@ -599,7 +600,7 @@ plugin = BigQueryAgentAnalyticsPlugin(
 app = App(name="tracked", root_agent=agent, plugins=[plugin])
 ```
 
-Requires `pip install google-cloud-bigquery` and the `roles/bigquery.dataEditor` IAM role on the target table.
+Requires the `bigquery-analytics` extra (`pip install "google-adk[bigquery-analytics]"`, which pulls in `pyarrow` and the BigQuery Storage Write client) and the `roles/bigquery.dataEditor` IAM role on the target table.
 
 ---
 
@@ -618,9 +619,9 @@ app = App(
     name="production",
     root_agent=agent,
     plugins=[
-        GlobalInstructionPlugin(instruction="Never reveal API keys."),  # 1: policy
+        GlobalInstructionPlugin(global_instruction="Never reveal API keys."),  # 1: policy
         SaveFilesAsArtifactsPlugin(),                                   # 2: file handling
-        ContextFilterPlugin(max_chars=150_000),                         # 3: context trimming
+        ContextFilterPlugin(num_invocations_to_keep=20),                # 3: context trimming
         ReflectAndRetryToolPlugin(max_retries=2),                       # 4: resilience
         LoggingPlugin(),                                                 # 5: observability (last)
     ],

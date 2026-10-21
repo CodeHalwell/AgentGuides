@@ -338,8 +338,8 @@ agent = LlmAgent(name="root", tools=[fs_a, fs_b])
 
 ```python
 import httpx
+from fastapi.openapi.models import APIKey, APIKeyIn
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import APIKeyScheme
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 
@@ -351,13 +351,13 @@ async def call_external_api(endpoint: str, tool_context: ToolContext) -> dict:
     Returns:
       A dict with the API response data.
     """
-    auth_config = AuthConfig(auth_scheme=APIKeyScheme(name="X-Api-Key"))
+    auth_config = AuthConfig(auth_scheme=APIKey(**{"in": APIKeyIn.header}, name="X-Api-Key"))
     cred = tool_context.get_auth_response(auth_config)
     if cred is None:
         # First call — trigger the credential collection flow
         tool_context.request_credential(auth_config)
         return {"status": "auth_required"}
-    api_key = cred.api_key.value
+    api_key = cred.api_key  # AuthCredential.api_key is a plain str
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"https://analytics.example.com{endpoint}",

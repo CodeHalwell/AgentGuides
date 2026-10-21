@@ -1,12 +1,14 @@
 ---
-title: "CrewAI Flows - Comprehensive Guide (2025)"
+title: "CrewAI Flows - Comprehensive Guide"
 description: "Event-driven CrewAI Flows — decorators, state management, conditional routing, loops, and combining flows with crews."
 framework: crewai
 ---
 
-Latest: crewai 1.14.6 | Updated: May 29, 2026
-# CrewAI Flows - Comprehensive Guide (2025)
-## Event-Driven Workflows for Agentic AI Automation
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%).
+
+**Event-driven workflows for agentic AI automation.**
+
+> **New in the 1.15 line:** besides the Python `Flow` class covered here, flows can now be written as declarative definition files (`crewai create flow <name> --declarative`, run with `crewai run --definition <file>`), and conversational flows are stable from 1.15.18. `crewai run` now runs flows as well as crews; `crewai flow kickoff` still works. Flow state is accessed directly — the old `StateProxy` wrapper was removed in 1.15.0.
 
 ---
 
@@ -105,12 +107,12 @@ Each method can trigger one or more listeners, creating a directed acyclic graph
 
 ### Installation
 
-Flows have shipped in CrewAI since 1.6.0; the examples on this page are verified against 1.14.6:
+Flows arrived as an experimental feature in the 0.x releases of autumn 2024 and have been a core part of CrewAI throughout 1.x. The examples on this page are checked against %%version=crewai%%:
 
 ```bash
-pip install crewai>=1.14.6
+pip install "crewai>=%%version=crewai%%"
 # Or with UV:
-uv pip install crewai>=1.14.6
+uv pip install "crewai>=%%version=crewai%%"
 ```
 
 ### Your First Flow

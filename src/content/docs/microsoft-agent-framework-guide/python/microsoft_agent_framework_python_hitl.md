@@ -15,7 +15,7 @@ Agent Framework ships three human-in-the-loop (HITL) patterns:
 
 All three surface the same `"request_info"` / `"function_approval_request"` events, so a single event loop in the caller can handle any of them.
 
-Verified against `agent-framework-core==1.5.0`.
+Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.5.0).
 
 ## Workflow-level `request_info`
 
@@ -262,31 +262,50 @@ Useful when the default prompts produce plans that are too generic, too verbose,
 
 #### Bring your own manager
 
-For deterministic planning, subclass `MagenticManagerBase` and pass `manager=`. This is the right escape hatch when the LLM-driven planner makes the same mistake every time and your domain has a clear policy:
+For deterministic planning, subclass `MagenticManagerBase` and pass `manager=`. This is the right escape hatch when the LLM-driven planner makes the same mistake every time and your domain has a clear policy. The base class has four abstract methods — `plan`, `replan`, `create_progress_ledger` and `prepare_final_answer` — and the orchestrator reads the next speaker from the `MagenticProgressLedger` you return:
 
 ```python
-from agent_framework_orchestrations import MagenticManagerBase, MagenticContext
+from agent_framework import Message
+from agent_framework.orchestrations import (
+    MagenticBuilder,
+    MagenticContext,
+    MagenticManagerBase,
+    MagenticProgressLedger,
+    MagenticProgressLedgerItem,
+)
+
+PLAN = ["researcher", "analyst", "writer"]   # participant names, in order
 
 
 class PolicyManager(MagenticManagerBase):
     """Hard-coded plan: researcher first, analyst second, writer last."""
 
-    async def plan(self, context: MagenticContext) -> list[str]:
-        return [
-            "researcher: collect 5 reference papers",
-            "analyst: extract claims and evidence",
-            "writer: produce one-page brief",
-        ]
+    async def plan(self, magentic_context: MagenticContext) -> Message:
+        return Message("assistant", ["Plan: researcher -> analyst -> writer."])
 
-    async def select_next_speaker(self, context: MagenticContext) -> str | None:
+    async def replan(self, magentic_context: MagenticContext) -> Message:
+        return await self.plan(magentic_context)
+
+    async def create_progress_ledger(self, magentic_context: MagenticContext) -> MagenticProgressLedger:
         # Round-robin in plan order — no LLM needed.
-        for step in context.progress_ledger.steps:
-            if not step.completed:
-                return step.assignee
-        return None    # all steps complete
+        step = magentic_context.round_count
+        done = step >= len(PLAN)
+        speaker = PLAN[min(step, len(PLAN) - 1)]
 
-    async def assess_progress(self, context: MagenticContext) -> bool:
-        return all(s.completed for s in context.progress_ledger.steps)
+        def item(answer, reason="fixed policy"):
+            return MagenticProgressLedgerItem(reason=reason, answer=answer)
+
+        return MagenticProgressLedger(
+            is_request_satisfied=item(done),
+            is_in_loop=item(False),
+            is_progress_being_made=item(True),
+            next_speaker=item(speaker, "round-robin in plan order"),
+            instruction_or_question=item(f"{speaker}: complete your step of the plan."),
+        )
+
+    async def prepare_final_answer(self, magentic_context: MagenticContext) -> Message:
+        history = magentic_context.chat_history
+        return Message("assistant", [history[-1].text if history else ""])
 
 
 workflow = MagenticBuilder(
@@ -316,21 +335,28 @@ def delete_file(path: str) -> str:
 agent = Agent(client=OpenAIChatClient(), tools=[delete_file])
 ```
 
-Driving approval from the caller:
+Driving approval from the caller. The run returns with the pending calls in `response.user_input_requests`; reply on the same session with a message carrying the approval responses:
 
 ```python
-stream = agent.run("Please remove /tmp/temp.log", stream=True)
-async for update in stream:
-    if update.type == "function_approval_request":
-        # Inspect the proposed call and decide
-        proposal = update.data
-        approval = proposal.to_function_approval_response(approved=True)
-        await stream.send_response(approval)  # resume
-    elif update.type == "message":
-        print(update.text)
+from agent_framework import Message
+
+session = agent.create_session()
+response = await agent.run("Please remove /tmp/temp.log", session=session)
+
+while response.user_input_requests:
+    replies = []
+    for request in response.user_input_requests:      # Content of type "function_approval_request"
+        call = request.function_call
+        print(f"Approve {call.name}({call.arguments})?")
+        replies.append(request.to_function_approval_response(approved=True))
+    response = await agent.run(Message("user", replies), session=session)
+
+print(response.text)
 ```
 
-For MCP tools, combine `approval_mode="always_require"` (or the per-tool dict form) on the MCP tool constructor with the same loop — every MCP call emits the same event type.
+When streaming, each `AgentResponseUpdate` exposes the same `user_input_requests` property, and `await stream.get_final_response()` gives you the joined response to run the loop above on. There is no `stream.send_response()` — earlier drafts of this page showed one.
+
+For MCP tools, combine `approval_mode="always_require"` (or the per-tool dict form) on the MCP tool constructor with the same loop — every MCP call surfaces as the same `function_approval_request` content.
 
 ## Patterns
 
@@ -349,7 +375,7 @@ Checkpointing and HITL compose:
 ```python
 from agent_framework import FileCheckpointStorage, WorkflowBuilder
 
-storage = FileCheckpointStorage(base_path="/var/lib/agents/checkpoints")
+storage = FileCheckpointStorage("/var/lib/agents/checkpoints")
 workflow = WorkflowBuilder(start_executor=Researcher(), checkpoint_storage=storage).build()
 
 # First run — human walks away mid-flow.

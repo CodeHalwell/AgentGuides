@@ -72,7 +72,7 @@ def log_request(
     return None
 
 agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="my_agent",
     instruction="You are a helpful assistant.",
     before_model_callback=log_request,
@@ -208,7 +208,7 @@ async def stream_example():
     # InMemoryRunner creates its own session service; no session_service arg.
     runner = InMemoryRunner(
         agent=LlmAgent(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             name="streamer",
             instruction="Explain async generators in Python.",
         ),
@@ -319,7 +319,7 @@ async def run_echo():
             name="echo_agent",
             instruction="You are an echo.",
         ),
-        session_service=InMemorySessionService(),
+        app_name="demo",
     )
     session = await runner.session_service.create_session(
         app_name="demo", user_id="u1"
@@ -348,7 +348,7 @@ asyncio.run(run_echo())
 ```python
 # "litellm:gpt-4o" resolves to LiteLlm(model="gpt-4o")
 # "openai:gpt-4o"  resolves to OpenAILlm (prefix matches class name "OpenAI", minus trailing "Llm")
-agent = LlmAgent(model="litellm:claude-3-5-haiku-20241022", ...)
+agent = LlmAgent(name="assistant", model="litellm:anthropic/claude-sonnet-4-5")
 ```
 
 ---
@@ -399,7 +399,7 @@ def log_invocation(callback_context: CallbackContext) -> types.Content | None:
     return None  # continue normally
 
 agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="debug_agent",
     instruction="Answer the user.",
     before_agent_callback=log_invocation,
@@ -447,7 +447,7 @@ def count_up() -> dict:
 async def run_with_limit():
     runner = InMemoryRunner(
         agent=LlmAgent(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             name="limited_agent",
             instruction="Call count_up three times and report the total.",
             tools=[FunctionTool(func=count_up)],
@@ -513,7 +513,7 @@ def increment_counter(tool_context: ToolContext) -> dict:
     return {"counter": tool_context.state["counter"]}
 
 agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="counter_agent",
     instruction="Call increment_counter on every turn.",
     tools=[increment_counter],
@@ -608,7 +608,7 @@ from google.adk.sessions import InMemorySessionService
 
 # A specialised sub-agent
 math_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="math_agent",
     description="Solves maths problems and returns numerical answers.",
     instruction="You are a maths expert. Return only numbers.",
@@ -620,7 +620,7 @@ math_tool = AgentTool(agent=math_agent)
 
 # Parent agent uses it via tool-call
 coordinator = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="coordinator",
     instruction="Use the math_agent tool for all calculations.",
     tools=[math_tool],
@@ -629,7 +629,7 @@ coordinator = LlmAgent(
 async def run():
     runner = InMemoryRunner(
         agent=coordinator,
-        session_service=InMemorySessionService(),
+        app_name="demo",
     )
     session = await runner.session_service.create_session(
         app_name="demo", user_id="u1"
@@ -664,7 +664,7 @@ class TranslationRequest(BaseModel):
     target_language: str = Field(description="ISO 639-1 language code")
 
 translator = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="translator",
     description="Translates text into a target language.",
     instruction="Translate the provided text into the target language. "
@@ -715,21 +715,21 @@ from google.adk.runners import InMemoryRunner
 from google.adk.sessions import InMemorySessionService
 
 billing_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="billing_agent",
     description="Handles billing and invoice queries.",
     instruction="You specialise in billing. Answer only billing questions.",
 )
 
 tech_agent = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="tech_agent",
     description="Handles technical support queries.",
     instruction="You specialise in technical support.",
 )
 
 router = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="router",
     instruction=(
         "Route the user to the correct specialist. "
@@ -813,7 +813,7 @@ from google.adk.agents import LlmAgent
 from google.adk.code_executors import UnsafeLocalCodeExecutor
 
 data_analyst = LlmAgent(
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     name="data_analyst",
     instruction=(
         "You are a data analyst. Write Python code to answer the user's question "
@@ -999,7 +999,7 @@ Source-verified from `google/adk/live/_cascade_live.py`:
 
 | Field | Type | Purpose |
 |---|---|---|
-| `model` | `str` | The underlying text model name (e.g. `"gemini-2.0-flash"`) |
+| `model` | `str` | The underlying text model name (e.g. `"gemini-2.5-flash"`) |
 | `stt` | `LiveIngress` | Speech-to-text transform; consumes `AsyncIterator[types.Blob]` audio, yields `IngressEvent` |
 | `tts` | `LiveEgress` | Text-to-speech transform; consumes streamed text deltas, yields `EgressEvent` (audio chunks) |
 
@@ -1038,7 +1038,7 @@ from my_tts_package import ElevenLabsTTS
 
 voice_agent = LlmAgent(
     model=CascadeLive(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         stt=ElevenLabsSTT(language="en"),
         tts=ElevenLabsTTS(voice_id="Rachel"),
     ),

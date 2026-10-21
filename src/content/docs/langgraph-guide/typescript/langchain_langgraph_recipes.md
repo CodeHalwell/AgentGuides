@@ -9,6 +9,8 @@ language: typescript
 
 **Production-Ready Code Examples and Practical Implementations**
 
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
+
 ---
 
 ## Table of Contents
@@ -20,7 +22,7 @@ language: typescript
 5. [RAG Chatbot](#rag-chatbot)
 6. [Streaming Chat API](#streaming-chat-api)
 7. [Error Recovery Agent](#error-recovery-agent)
-8. [Advanced Streaming Agent (v0.3+)](#advanced-streaming-agent-v03)
+8. [Advanced Streaming Agent](#advanced-streaming-agent)
 9. [Cached RAG Pipeline](#cached-rag-pipeline)
 10. [Parallel Data Processing with Deferred Aggregation](#parallel-data-processing-with-deferred-aggregation)
 11. [Content Moderation Pipeline with Pre/Post Hooks](#content-moderation-pipeline-with-prepost-hooks)
@@ -31,77 +33,15 @@ language: typescript
 
 ## Basic Chatbot
 
-### Simple Conversational Chatbot with Memory
+### LangGraph Chatbot with Persistent Messages
+
+The legacy `ConversationChain` + `BufferMemory` combination is not part of LangChain.js v1 (it survives only in `@langchain/classic`). In current code, conversation memory is a checkpointer plus a `thread_id`: the graph stores the message history, and each call sends only the new user message.
 
 ```typescript
-// recipes/basicChatbot.ts
+// recipes/langgraphChatbot.ts
+import { StateGraph, MessagesAnnotation, MemorySaver, START, END } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
-import { BufferMemory } from '@langchain/core/memory';
-import { ConversationChain } from '@langchain/core/chains';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { HumanMessage } from '@langchain/core/messages';
-
-export async function basicChatbot(): Promise<void> {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    temperature: 0.7,
-  });
-
-  const memory = new BufferMemory({
-    memoryKey: 'history',
-    inputKey: 'input',
-  });
-
-  const template = `You are a helpful and friendly assistant.
-
-Previous conversation:
-{history}
-
-Current input: {input}`;
-
-  const prompt = new PromptTemplate({
-    inputVariables: ['history', 'input'],
-    template,
-  });
-
-  const chain = new ConversationChain({
-    llm: model,
-    memory,
-    prompt,
-  });
-
-  // Run conversation
-  const conversations = [
-    'What is TypeScript?',
-    'How does it differ from JavaScript?',
-    'Can you give me an example of using types?',
-  ];
-
-  for (const userInput of conversations) {
-    console.log(`\nUser: ${userInput}`);
-    const response = await chain.call({ input: userInput });
-    console.log(`Assistant: ${response.response}`);
-  }
-}
-
-// Usage
-// basicChatbot().catch(console.error);
-```
-
-### LangGraph-based Chatbot with Stateful Messages
-
-```typescript
-// recipes/langraphChatbot.ts
-import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
-
-const ChatStateAnnotation = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    default: () => [],
-    reducer: (x, y) => [...x, ...y],
-  }),
-});
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 export async function langgraphChatbot(): Promise<void> {
   const model = new ChatOpenAI({
@@ -109,36 +49,28 @@ export async function langgraphChatbot(): Promise<void> {
     temperature: 0.7,
   });
 
-  const graph = new StateGraph(ChatStateAnnotation);
+  const compiled = new StateGraph(MessagesAnnotation)
+    .addNode('chatNode', async (state) => {
+      const response = await model.invoke([
+        new SystemMessage('You are a helpful and friendly assistant.'),
+        ...state.messages,
+      ]);
+      return { messages: [response] };
+    })
+    .addEdge(START, 'chatNode')
+    .addEdge('chatNode', END)
+    .compile({ checkpointer: new MemorySaver() });
 
-  graph.addNode('chatNode', async (state) => {
-    const response = await model.invoke(state.messages);
-    return {
-      messages: [response],
-    };
-  });
+  const config = { configurable: { thread_id: 'chat-1' } };
 
-  graph.addEdge(START, 'chatNode');
-  graph.addEdge('chatNode', END);
-
-  const compiled = graph.compile();
-
-  const messages: BaseMessage[] = [];
-
-  const userInputs = [
-    'Hello, how are you?',
-    'Tell me about LangChain',
-  ];
-
-  for (const userInput of userInputs) {
-    messages.push(new HumanMessage(userInput));
-    const result = await compiled.invoke({ messages });
-    
-    const lastMessage = result.messages[result.messages.length - 1];
+  for (const userInput of [
+    'What is TypeScript?',
+    'How does it differ from JavaScript?',
+    'Can you give me an example of using types?',
+  ]) {
+    const result = await compiled.invoke({ messages: [new HumanMessage(userInput)] }, config);
     console.log(`User: ${userInput}`);
-    console.log(`Assistant: ${lastMessage.content}`);
-    
-    messages.push(...result.messages);
+    console.log(`Assistant: ${result.messages.at(-1)?.content}`);
   }
 }
 ```
@@ -151,28 +83,30 @@ export async function langgraphChatbot(): Promise<void> {
 
 ```typescript
 // recipes/researchAgent.ts
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent, tool } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 
 export async function researchAgent(): Promise<void> {
   // Define research tools
   const searchWikipedia = tool(
+    async ({ query }) => {
+      // Simulate Wikipedia search
+      return `Wikipedia results for "${query}": [Mock search results]`;
+    },
     {
       name: 'search_wikipedia',
       description: 'Search Wikipedia for information about a topic',
       schema: z.object({
         query: z.string().describe('Search query'),
       }),
-    },
-    async ({ query }) => {
-      // Simulate Wikipedia search
-      return `Wikipedia results for "${query}": [Mock search results]`;
     }
   );
 
   const synthesizeInformation = tool(
+    async ({ sources, topic }) => {
+      return `Synthesised report on ${topic}: [Summary combining all sources]`;
+    },
     {
       name: 'synthesise_information',
       description: 'Combine information from multiple sources',
@@ -180,9 +114,6 @@ export async function researchAgent(): Promise<void> {
         sources: z.array(z.string()).describe('Information sources'),
         topic: z.string().describe('Topic to synthesise'),
       }),
-    },
-    async ({ sources, topic }) => {
-      return `Synthesised report on ${topic}: [Summary combining all sources]`;
     }
   );
 
@@ -190,16 +121,18 @@ export async function researchAgent(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const agent = createReactAgent({
-    llm: model,
+  const agent = createAgent({
+    model,
     tools: [searchWikipedia, synthesizeInformation],
   });
 
   const result = await agent.invoke({
-    input: 'Research the history of TypeScript and provide a comprehensive report',
+    messages: [
+      { role: 'user', content: 'Research the history of TypeScript and provide a comprehensive report' },
+    ],
   });
 
-  console.log('Research Result:', result.output);
+  console.log('Research Result:', result.messages.at(-1)?.content);
 }
 ```
 
@@ -228,8 +161,9 @@ const DocumentStateAnnotation = Annotation.Root({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
   }),
-  summary: Annotation<string>({ default: () => '' }),
+  summary: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
   sentiment: Annotation<'positive' | 'negative' | 'neutral'>({
+    reducer: (_prev, next) => next,
     default: () => 'neutral',
   }),
 });
@@ -322,8 +256,8 @@ const SupervisorStateAnnotation = Annotation.Root({
     default: () => ({}),
     reducer: (x, y) => ({ ...x, ...y }),
   }),
-  supervisorDecision: Annotation<string>({ default: () => '' }),
-  finalOutput: Annotation<string>({ default: () => '' }),
+  supervisorDecision: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
+  finalOutput: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
 });
 
 export async function multiAgentSupervisor(): Promise<void> {
@@ -414,7 +348,7 @@ export async function multiAgentSupervisor(): Promise<void> {
   const compiled = graph.compile();
 
   const result = await compiled.invoke({
-    task: 'Provide a comprehensive analysis of artificial intelligence trends in 2024',
+    task: 'Provide a comprehensive analysis of current artificial intelligence trends',
     agentResults: {},
     supervisorDecision: '',
     finalOutput: '',
@@ -433,7 +367,7 @@ export async function multiAgentSupervisor(): Promise<void> {
 ```typescript
 // recipes/ragChatbot.ts
 import { ChatOpenAI } from '@langchain/openai';
-import { MemoryVectorStore } from '@langchain/core/vectorstores';
+import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory'; // npm install @langchain/classic
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { Document } from '@langchain/core/documents';
 
@@ -508,7 +442,7 @@ export async function ragChatbot(): Promise<void> {
 ```typescript
 // recipes/streamingAPI.ts
 import express from 'express';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
 
 export function setupStreamingAPI(): express.Application {
@@ -519,8 +453,8 @@ export function setupStreamingAPI(): express.Application {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const agent = createReactAgent({
-    llm: model,
+  const agent = createAgent({
+    model,
     tools: [],
   });
 
@@ -532,11 +466,16 @@ export function setupStreamingAPI(): express.Application {
     res.setHeader('Connection', 'keep-alive');
 
     try {
-      // Stream from agent
-      const stream = await agent.stream({ input: message });
+      // Stream tokens from the agent: "messages" mode yields [chunk, metadata] tuples
+      const stream = await agent.stream(
+        { messages: [{ role: 'user', content: message }] },
+        { streamMode: 'messages' }
+      );
 
-      for await (const chunk of stream) {
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      for await (const [chunk] of stream) {
+        if (chunk.content) {
+          res.write(`data: ${JSON.stringify({ token: chunk.content })}\n\n`);
+        }
       }
 
       res.write('data: [DONE]\n\n');
@@ -574,19 +513,19 @@ interface RetryConfig {
 export async function errorRecoveryAgent(): Promise<void> {
   // Unreliable tool that sometimes fails
   const unreliableTool = tool(
-    {
-      name: 'unreliable_operation',
-      description: 'Performs an operation that may fail',
-      schema: z.object({
-        operation: z.string(),
-      }),
-    },
     async ({ operation }) => {
       const random = Math.random();
       if (random < 0.5) {
         throw new Error('Random operation failure');
       }
       return `Successfully completed: ${operation}`;
+    },
+    {
+      name: 'unreliable_operation',
+      description: 'Performs an operation that may fail',
+      schema: z.object({
+        operation: z.string(),
+      }),
     }
   );
 
@@ -644,7 +583,7 @@ export async function errorRecoveryAgent(): Promise<void> {
 
 ---
 
-## Advanced Streaming Agent (v0.3+)
+## Advanced Streaming Agent
 
 ### Real-Time Progress Tracking with Type-Safe Streaming
 
@@ -664,10 +603,10 @@ interface AnalysisState {
 
 const AnalysisStateAnnotation = Annotation.Root({
   documentUrl: Annotation<string>,
-  downloadStatus: Annotation<string | null>({ default: () => null }),
-  processStatus: Annotation<string | null>({ default: () => null }),
-  analysisResult: Annotation<string | null>({ default: () => null }),
-  error: Annotation<string | null>({ default: () => null }),
+  downloadStatus: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  processStatus: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  analysisResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  error: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 const analysisGraph = new StateGraph(AnalysisStateAnnotation);
@@ -720,7 +659,7 @@ app.post('/analyze', async (req, res) => {
   const { documentUrl } = req.body;
 
   try {
-    const stream = analysisWorkflow.stream(
+    const stream = await analysisWorkflow.stream(
       {
         documentUrl,
         downloadStatus: null,
@@ -765,13 +704,15 @@ export default app;
 
 ## Cached RAG Pipeline
 
-### Implementing Node Caching for Expensive Embeddings
+### Caching Expensive Embeddings
+
+This recipe caches embeddings explicitly in Redis so the cache is shared across processes and survives restarts. For per-process caching of whole node results, the built-in `cachePolicy` node option with `compile({ cache: new InMemoryCache() })` needs no extra code (see the comprehensive guide's Node Caching section).
 
 ```typescript
 // recipes/cachedRagPipeline.ts
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { MemoryVectorStore } from '@langchain/core/vectorstores';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
+import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory'; // npm install @langchain/classic
 import { Document } from '@langchain/core/documents';
 import Redis from 'ioredis';
 
@@ -784,9 +725,9 @@ interface RAGState {
 
 const RAGStateAnnotation = Annotation.Root({
   query: Annotation<string>,
-  embedding: Annotation<number[] | null>({ default: () => null }),
-  retrievedDocs: Annotation<Document[]>({ default: () => [] }),
-  answer: Annotation<string | null>({ default: () => null }),
+  embedding: Annotation<number[] | null>({ reducer: (_prev, next) => next, default: () => null }),
+  retrievedDocs: Annotation<Document[]>({ reducer: (_prev, next) => next, default: () => [] }),
+  answer: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 // Redis cache for embeddings
@@ -831,7 +772,7 @@ ragGraph.addNode('generateEmbedding', async (state) => {
 
 // Retrieve relevant documents
 ragGraph.addNode('retrieve', async (state) => {
-  // Simulate vector store search
+  // Illustrative only: in practice, build and populate the vector store once, outside the node
   const vectorStore = new MemoryVectorStore(
     new OpenAIEmbeddings({
       apiKey: process.env.OPENAI_API_KEY,
@@ -885,17 +826,20 @@ interface DataBatch {
 
 interface ParallelProcessingState {
   batches: DataBatch[];
-  processedBatches: Map<string, any>;
+  processedBatches: Record<string, any[]>;
   aggregatedResult: any | null;
   errors: Array<{ batchId: string; error: string }>;
 }
 
 const ParallelStateAnnotation = Annotation.Root({
   batches: Annotation<DataBatch[]>,
-  processedBatches: Annotation<Map<string, any>>({
-    default: () => new Map(),
+  // Parallel branches write in the same step, so merge their updates.
+  // Use plain objects rather than Map: state must be serialisable for checkpointing.
+  processedBatches: Annotation<Record<string, any[]>>({
+    reducer: (prev, next) => ({ ...prev, ...next }),
+    default: () => ({}),
   }),
-  aggregatedResult: Annotation<any | null>({ default: () => null }),
+  aggregatedResult: Annotation<any | null>({ reducer: (_prev, next) => next, default: () => null }),
   errors: Annotation<Array<{ batchId: string; error: string }>>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
@@ -920,11 +864,8 @@ function createProcessingGraph() {
           timestamp: Date.now(),
         }));
 
-        const newMap = new Map(state.processedBatches);
-        newMap.set(batch.id, processed);
-
         return {
-          processedBatches: newMap,
+          processedBatches: { [batch.id]: processed },
         };
       } catch (error) {
         return {
@@ -946,7 +887,7 @@ function createProcessingGraph() {
   graph.addNode(
     'aggregate',
     async (state) => {
-      const allProcessed = Array.from(state.processedBatches.values()).flat();
+      const allProcessed = Object.values(state.processedBatches).flat();
 
       return {
         aggregatedResult: {
@@ -958,7 +899,7 @@ function createProcessingGraph() {
       };
     },
     {
-      deferred: true, // Wait for all batch processors
+      defer: true, // Wait for all batch processors
     }
   );
 
@@ -980,7 +921,7 @@ function createProcessingGraph() {
 export const parallelProcessor = createProcessingGraph();
 
 // Usage
-async function processLargeDatasset(dataset: any[]): Promise<any> {
+async function processLargeDataset(dataset: any[]): Promise<any> {
   const batchSize = Math.ceil(dataset.length / 3);
 
   const batches: DataBatch[] = [
@@ -991,9 +932,6 @@ async function processLargeDatasset(dataset: any[]): Promise<any> {
 
   const result = await parallelProcessor.invoke({
     batches,
-    processedBatches: new Map(),
-    aggregatedResult: null,
-    errors: [],
   });
 
   return result.aggregatedResult;
@@ -1021,9 +959,9 @@ interface ModeratedChatState {
 
 const ModeratedStateAnnotation = Annotation.Root({
   userMessage: Annotation<string>,
-  moderatedInput: Annotation<string | null>({ default: () => null }),
-  aiResponse: Annotation<string | null>({ default: () => null }),
-  moderatedOutput: Annotation<string | null>({ default: () => null }),
+  moderatedInput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  aiResponse: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  moderatedOutput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
   flags: Annotation<string[]>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
@@ -1132,9 +1070,9 @@ const UserConversationAnnotation = Annotation.Root({
   userId: Annotation<string>,
   threadId: Annotation<string>,
   message: Annotation<string>,
-  userProfile: Annotation<Record<string, any>>({ default: () => ({}) }),
-  conversationHistory: Annotation<string[]>({ default: () => [] }),
-  response: Annotation<string | null>({ default: () => null }),
+  userProfile: Annotation<Record<string, any>>({ reducer: (_prev, next) => next, default: () => ({}) }),
+  conversationHistory: Annotation<string[]>({ reducer: (_prev, next) => next, default: () => [] }),
+  response: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 class MultiUserMemorySystem {
@@ -1246,7 +1184,7 @@ conversationGraph.addNode('saveContext', async (state) => {
     });
   }
 
-  return state;
+  return {};
 });
 
 conversationGraph.addEdge(START, 'loadUserContext');
@@ -1386,4 +1324,4 @@ export function createMonitoredWorkflow<T>(
 
 ---
 
-These recipes provide practical, production-ready implementations that you can adapt to your specific use cases. Each recipe demonstrates key patterns and best practices for building with LangChain.js and LangGraph.js, including the latest v1.0+ and v0.3+ features such as type-safe streaming, node caching, deferred nodes, model hooks, and cross-thread memory support.
+These recipes are starting points to adapt rather than drop-in production code. They were checked against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).

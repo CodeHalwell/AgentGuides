@@ -7,44 +7,65 @@ language: typescript
 
 # LangGraph Streaming Server (Express)
 
-Latest: @langchain/langgraph 1.3.5 | Updated: June 5, 2026
-Last verified: 2025-11
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
+
+`graph.stream()` returns a promise of an async iterable, so `await` it and use `for await`. Stop the run when the client disconnects by passing an `AbortSignal`.
 
 ```ts
 import express from "express";
-import { StateGraph, END } from "@langchain/langgraph";
+import { StateGraph, Annotation, START, END } from "@langchain/langgraph";
+
+const State = Annotation.Root({
+  input: Annotation<string>,
+  output: Annotation<string>,
+});
+
+const graph = new StateGraph(State)
+  .addNode("echo", (s) => ({ output: s.input }))
+  .addEdge(START, "echo")
+  .addEdge("echo", END)
+  .compile();
 
 const app = express();
 
-function build(){
-  const g = new StateGraph<{ input: string; output?: string }>();
-  g.addNode("echo", (s) => ({ ...s, output: s.input }));
-  g.setEntryPoint("echo");
-  g.addEdge("echo", END);
-  return g.compile();
-}
-
-const graph = build();
-
-app.get("/stream", (req, res) => {
+app.get("/stream", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
-  const q = String(req.query.q || "");
-  for (const ev of graph.stream({ input: q })) {
-    res.write(`data: ${JSON.stringify(ev)}\n\n`);
+  res.setHeader("Connection", "keep-alive");
+
+  const controller = new AbortController();
+  req.on("close", () => controller.abort());
+
+  try {
+    const q = String(req.query.q ?? "");
+    const stream = await graph.stream(
+      { input: q },
+      { streamMode: "updates", signal: controller.signal }
+    );
+    for await (const ev of stream) {
+      res.write(`data: ${JSON.stringify(ev)}\n\n`);
+    }
+    res.write("event: done\ndata: {}\n\n");
+  } catch (err) {
+    if (!controller.signal.aborted) {
+      res.write(`event: error\ndata: ${JSON.stringify({ message: String(err) })}\n\n`);
+    }
+  } finally {
+    res.end();
   }
-  res.end();
 });
 
 app.listen(8080, () => console.log("listening on 8080"));
 ```
+
+For token streaming from an LLM node use `streamMode: "messages"`, which yields `[messageChunk, metadata]` tuples.
 
 ## Deployment
 
 ### Dockerfile
 
 ```dockerfile
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
@@ -97,7 +118,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - run: npm ci --omit=dev
       - uses: docker/login-action@v3
         with: { registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }} }

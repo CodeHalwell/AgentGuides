@@ -195,12 +195,22 @@ agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-kn
 
 ## MCP server from ADK agent
 
-To expose an ADK toolset (not a whole agent) as an MCP server, ADK includes helpers in `google.adk.tools.mcp_tool.conversion_utils`:
+Since 2.5.0, `to_mcp_server` (in `google.adk.tools.mcp_tool`) exposes a whole agent as an MCP server — the MCP counterpart of `to_a2a`. It returns a `FastMCP` server with a single tool that runs the agent; one ADK session is kept per MCP connection, so successive calls on the same connection form one conversation. Requires the `mcp` extra.
 
-- `adk_to_mcp_tool_type(tool: BaseTool)` — convert a `BaseTool` to an MCP tool definition.
-- `gemini_to_json_schema(schema)` — normalise Gemini schemas.
+```python
+from google.adk.agents import LlmAgent
+from google.adk.tools.mcp_tool import to_mcp_server
 
-Wire these into a standard `mcp` server implementation. (There's no one-line `to_mcp` helper yet — the pattern is to run an `mcp.Server`, register tool definitions produced from your ADK tools, and dispatch tool calls back through `BaseTool.run_async`.)
+agent = LlmAgent(name="assistant", model="gemini-2.5-flash", instruction="Be helpful.")
+
+server = to_mcp_server(agent, instructions="Ask the assistant anything.")
+server.run(transport="stdio")              # local hosts (IDEs, CLI agents)
+# server.run(transport="streamable-http")  # networked hosts
+```
+
+Pass `runner=` to reuse a `Runner` with persistent services; otherwise in-memory services are created.
+
+To expose individual ADK tools rather than an agent, `google.adk.tools.mcp_tool.conversion_utils` has `adk_to_mcp_tool_type(tool)` (a `BaseTool` to an MCP tool definition) and `gemini_to_json_schema(schema)`. Register those definitions on your own `mcp` server and dispatch calls back through `BaseTool.run_async`.
 
 ## Patterns
 
@@ -251,7 +261,7 @@ async def main():
 
     agent = LlmAgent(
         name="file_assistant",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         instruction=(
             "Help the user navigate and read files. "
             "Use fs_list_directory to explore and fs_read_file to read content."
@@ -303,7 +313,7 @@ async def main():
 
     agent = LlmAgent(
         name="kb_agent",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         instruction="Search and retrieve documents from the knowledge base.",
         tools=[toolset],
     )
@@ -338,7 +348,7 @@ from google.adk.apps import App
 
 agent = LlmAgent(
     name="weather_agent",
-    model="gemini-2.0-flash",
+    model="gemini-2.5-flash",
     description="Provides weather information for any city.",
     instruction=(
         "You are a weather specialist. "
@@ -383,7 +393,7 @@ async def main():
     # Orchestrator routes questions to the remote agent via A2A protocol
     orchestrator = LlmAgent(
         name="orchestrator",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         instruction=(
             "Route weather questions to weather_specialist. "
             "Handle other questions yourself."
@@ -443,7 +453,7 @@ async def main():
 
     agent = LlmAgent(
         name="api_agent",
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         instruction="Help users interact with the API.",
         tools=[toolset],
     )

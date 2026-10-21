@@ -1004,19 +1004,15 @@ agent = Agent(
 SHARED_SESSION_ID = "user-42-main"
 
 async def main() -> None:
-    session = AgentSession(
-        session_id=SHARED_SESSION_ID,
-        state={"user_id": "user-42"},
-    )
+    session = AgentSession(session_id=SHARED_SESSION_ID)
+    session.state["user_id"] = "user-42"   # AgentSession takes no state= argument
 
     # Session 1: create todos
     await agent.run("Create todos for: research, draft, review.", session=session)
 
     # Session 2: same session_id + owner → same backing file → todos persist
-    session2 = AgentSession(
-        session_id=SHARED_SESSION_ID,
-        state={"user_id": "user-42"},
-    )
+    session2 = AgentSession(session_id=SHARED_SESSION_ID)
+    session2.state["user_id"] = "user-42
     response = await agent.run("What todos do I have?", session=session2)
     print(response.text)
 

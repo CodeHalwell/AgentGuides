@@ -4,8 +4,9 @@ description: "A complete reference for building production-ready multi-agent AI 
 framework: openai-agents-sdk
 ---
 
-Latest: openai-agents 0.17.4 | Updated: May 27, 2026
 # OpenAI Agents SDK: Comprehensive Technical Guide
+
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Python 3.10+, `openai` v3.
 
 A complete reference for building production-ready multi-agent AI applications with the OpenAI Agents SDK. This guide covers everything from installation through advanced patterns.
 
@@ -38,10 +39,10 @@ A complete reference for building production-ready multi-agent AI applications w
 The OpenAI Agents SDK requires Python 3.10 or newer and can be installed via pip:
 
 ```bash
-pip install openai-agents>=0.17.4
+pip install "openai-agents==%%version=openai-agents%%"
 ```
 
-> **Requirements:** `openai>=2.0.0` is required (breaking change from v1.x — see [Breaking Changes](#breaking-changes-in-v014x) below). Python 3.9 has been dropped; minimum supported version is Python 3.10.
+> **Requirements:** Python 3.10 or newer. Since 0.21.0 the SDK requires `openai>=3.0.0,<4` (the `openai` v3 client uses HTTPX2); pip resolves this for you. See [Breaking changes by version](#breaking-changes-by-version) below.
 
 For development with optional features, install with extras:
 
@@ -52,15 +53,17 @@ pip install 'openai-agents[voice]'
 # Redis session support for distributed deployments
 pip install 'openai-agents[redis]'
 
-# All features
-pip install 'openai-agents[all]'
+# SQLAlchemy-backed sessions (Postgres, MySQL, SQLite via async drivers)
+pip install 'openai-agents[sqlalchemy]'
 
 # LiteLLM support for multi-provider model access
 pip install 'openai-agents[litellm]'
 
-# Code interpreter support
-pip install 'openai-agents[code-interpreter]'
+# Sandbox backends (Docker shown; also e2b, modal, daytona, vercel, cloudflare, blaxel)
+pip install 'openai-agents[docker]'
 ```
+
+There is no `[all]` extra; install the extras you need. Hosted tools such as `CodeInterpreterTool` and `WebSearchTool` need no extra.
 
 ### Using uv Package Manager
 
@@ -135,15 +138,24 @@ my_agent_app/
     └── test_tools.py
 ```
 
-### Breaking Changes in v0.14.x
+### Breaking changes by version
 
-| Change | Details |
-|--------|---------|
-| **`openai` v2 required** | `openai>=2.0.0` is a hard requirement; v1.x raises `ImportError` at import time |
-| **Python 3.9 dropped** | Minimum Python version is now 3.10 |
-| **Sync tools auto-wrapped** | Synchronous tool functions are automatically wrapped with `asyncio.to_thread`; no manual wrapping needed |
-| **MCP tool errors** | MCP tool errors now propagate as exceptions (not strings) |
-| **`as_tool()` type narrowed** | `Agent.as_tool()` return type is now `FunctionTool` (previously `Tool`) |
+The SDK uses `0.Y.Z` versioning: a minor (`Y`) bump may break public interfaces, so pin a minor range in production. The changes most likely to affect code written against older releases, taken from the upstream release notes:
+
+| Version | Change |
+|---------|--------|
+| 0.4.0 | `openai` v1.x no longer supported (v2 required). |
+| 0.7.0 | Nested handoff history is opt-in; set `RunConfig(nest_handoff_history=True)` to restore the 0.6 behaviour. |
+| 0.8.0 | Synchronous function tools run on worker threads via `asyncio.to_thread`. Local MCP tool failures are returned to the model as error output by default; set `mcp_config={"failure_error_function": None}` for fail-fast behaviour. |
+| 0.9.0 | Python 3.9 dropped (3.10+). `Agent.as_tool()` return type narrowed to `FunctionTool`. |
+| 0.15.0 | Model refusals raise `ModelRefusalError` instead of producing an empty `final_output`; handle with `error_handlers={"model_refusal": ...}`. |
+| 0.16.0 | Default model changed from `gpt-4.1` to `gpt-5.4-mini`. `max_turns=None` disables the turn limit. |
+| 0.17.0 | Sandbox `LocalFile`/`LocalDir` sources must sit under the working directory unless granted with `Manifest(extra_path_grants=...)`. |
+| 0.20.0 | Default model is now `gpt-5.6-luna`. MCP Python SDK v2 supported (`mcp>=1.19,<3`); custom `httpx` auth/client factories must move to `httpx2` under MCP v2. |
+| 0.21.0 | Requires `openai>=3.0.0,<4`; OpenAI HTTP integrations move to HTTPX2. Custom `http_client=` objects must migrate from `httpx` to `httpx2`. |
+| 0.22.0 | Non-streaming Responses calls with status `failed`/`incomplete` raise `ModelBehaviorError`. `OpenAIProvider(openai_client=...)` rejects `organization`/`project` arguments. |
+
+0.23.0 and 0.24.0 carry no documented breaking changes (MCP listing page limits, opt-in Docker removal protection, MCP tool annotations, run-wide tool error formatting, and many fixes).
 
 ---
 
@@ -213,20 +225,22 @@ The foundational primitive representing an LLM configured with instructions, too
 **Basic Structure:**
 
 ```python
-from agents import Agent
+from agents import Agent, ModelSettings
 
 agent = Agent(
     name="Assistant",
     instructions="You are a helpful assistant that provides accurate information",
-    model="gpt-4o",
-    temperature=0.7
+    model="gpt-5.6-sol",
+    model_settings=ModelSettings(temperature=0.7),
 )
 ```
+
+Sampling parameters such as `temperature` and `max_tokens` live on `ModelSettings`, not on `Agent` itself. If `model` is omitted, the SDK uses its default (`gpt-5.6-luna` at the time of writing) or the `OPENAI_DEFAULT_MODEL` environment variable.
 
 **Complete Agent Definition:**
 
 ```python
-from agents import Agent, function_tool
+from agents import Agent, ModelSettings, function_tool
 from pydantic import BaseModel
 
 class TaskResult(BaseModel):
@@ -243,11 +257,10 @@ agent = Agent(
     instructions="""You manage and execute tasks. 
     When given a task, use the execute_task tool to run it.
     Provide updates on completion status.""",
-    model="gpt-4o",
+    model="gpt-5.6-sol",
     tools=[execute_task],
     output_type=TaskResult,
-    temperature=0.5,
-    max_tokens=1000
+    model_settings=ModelSettings(temperature=0.5, max_tokens=1000),
 )
 ```
 
@@ -255,16 +268,18 @@ agent = Agent(
 
 - `name` (str): Unique identifier for the agent within the system
 - `instructions` (str | Callable): Agent's system prompt or dynamic instruction generator
-- `model` (str): Model identifier (e.g., "gpt-4o", "gpt-5", "gpt-5-nano")
+- `model` (str | Model): Model identifier (e.g., "gpt-5.6-sol", "gpt-5.6-luna") or a `Model` instance
 - `tools` (list): Function tools available to the agent
 - `handoffs` (list): Other agents this agent can delegate to
 - `input_guardrails` (list): Validation functions for inputs
 - `output_guardrails` (list): Validation functions for outputs
-- `output_type` (type): Pydantic model for structured output
-- `temperature` (float): Sampling temperature (0.0 to 2.0)
-- `max_tokens` (int): Maximum response tokens
-- `model_settings` (ModelSettings): Advanced model configuration
-- `context_type` (type): Type hint for injected context
+- `output_type` (type): Pydantic model (or other type) for structured output
+- `model_settings` (ModelSettings): Sampling and model configuration — `temperature`, `max_tokens`, `reasoning`, `tool_choice`, etc.
+- `handoff_description` (str): Description used when another agent can hand off to this one
+- `tool_use_behavior`: Whether tool results go back to the model or end the run (`"run_llm_again"`, `"stop_on_first_tool"`, `StopAtTools(...)`)
+- `mcp_servers` (list): MCP servers whose tools the agent can use
+
+Agents are generic over the context type: `Agent[MyContext](...)`.
 
 ### Runner
 
@@ -299,9 +314,11 @@ asyncio.run(main())
 - `input`: User input (string or list of message items)
 - `session`: Optional session for conversation memory
 - `context`: Optional context object passed to agents and tools
-- `max_turns`: Maximum agent loop iterations (default: 10)
-- `model_settings`: Override agent's model settings
-- `debug`: Enable debug output
+- `max_turns`: Maximum agent loop iterations (default: 10; `None` disables the limit)
+- `run_config`: `RunConfig` for run-wide settings — model override, model settings, tracing, guardrails, handoff history
+- `hooks`: `RunHooks` lifecycle callbacks
+- `error_handlers`: Run error handlers, e.g. `{"max_turns": ..., "model_refusal": ...}`
+- `previous_response_id` / `conversation_id`: Server-side conversation state for the Responses API
 
 **Runner Result:**
 
@@ -311,13 +328,14 @@ from agents import Agent, Runner
 result = await Runner.run(agent, "message")
 
 # Access results
-print(result.final_output)          # Processed output
-print(result.output_type)           # Output schema type
-print(result.messages)              # Conversation history
-print(result.messages_to_input())   # Format for next run
-print(result.agent)                 # Final active agent
-print(result.custom_output)         # Custom runner output
-print(result.output_reasoning)      # Reasoning trace
+print(result.final_output)               # Final output (str or your output_type)
+print(result.final_output_as(str))       # Typed cast of the final output
+print(result.new_items)                  # Items generated during this run
+print(result.to_input_list())            # Input for the next turn (manual history)
+print(result.last_agent)                 # Agent that produced the final output
+print(result.raw_responses)              # Raw model responses
+print(result.context_wrapper.usage)      # Token usage for the run
+print(result.last_response_id)           # For previous_response_id chaining
 ```
 
 ### Handoff
@@ -358,7 +376,7 @@ asyncio.run(main())
 **Handoff with Structured Input:**
 
 ```python
-from agents import Agent, handoff, RunContextWrapper
+from agents import Agent, Runner, handoff, RunContextWrapper
 from pydantic import BaseModel
 import asyncio
 
@@ -534,12 +552,14 @@ asyncio.run(main())
 
 **In-Memory Session:**
 
+`SQLiteSession` defaults to an in-memory database when no path is given, which is handy for tests:
+
 ```python
-from agents import Agent, Runner, InMemorySession
+from agents import Agent, Runner, SQLiteSession
 import asyncio
 
 async def main():
-    session = InMemorySession()
+    session = SQLiteSession("test_session")  # db_path defaults to ":memory:"
     agent = Agent(name="Assistant")
     
     # Temporary session for testing
@@ -894,7 +914,7 @@ async def main():
     for query in test_queries:
         print(f"\nCustomer: {query}")
         result = await Runner.run(triage_agent, query)
-        print(f"Agent: {result.agent.name}")
+        print(f"Agent: {result.last_agent.name}")
         print(f"Response: {result.final_output[:200]}")
 
 asyncio.run(main())
@@ -1295,7 +1315,7 @@ asyncio.run(main())
 
 **Code Interpreter Tool:**
 
-> **Note:** `CodeInterpreterTool` is OpenAI's built-in code interpreter tool and is imported directly from `agents`. If the tool is not bundled with your install, add the extra: `pip install 'openai-agents[code-interpreter]'`.
+> **Note:** `CodeInterpreterTool` is a hosted OpenAI tool imported directly from `agents`; it needs no extra install, but it runs only with OpenAI Responses models. Pass a `tool_config` to choose the container if the default does not suit.
 
 ```python
 from agents import Agent, Runner, CodeInterpreterTool
@@ -1317,16 +1337,23 @@ async def main():
 asyncio.run(main())
 ```
 
-**Computer Control Tool (38.1% OSWorld benchmark):**
+**Computer Use Tool:**
+
+`ComputerTool` lets the model drive a screen through an environment you supply. You implement `AsyncComputer` (or `Computer`) — screenshot, click, type, scroll and so on — typically on top of Playwright or a VM; the SDK translates the model's actions into calls on that object.
 
 ```python
-from agents import Agent, Runner, ComputerControlTool
+from agents import Agent, Runner, ComputerTool, AsyncComputer
 import asyncio
+
+class MyBrowser(AsyncComputer):
+    """Implement screenshot(), click(), type(), scroll(), keypress(), etc.
+    See examples/tools/computer_use.py in the SDK repository for a Playwright version."""
+    ...
 
 agent = Agent(
     name="Automation Agent",
     instructions="Automate computer tasks",
-    tools=[ComputerControlTool()]
+    tools=[ComputerTool(computer=MyBrowser())]
 )
 
 async def main():
@@ -1565,10 +1592,9 @@ class TaskBreakdown(BaseModel):
 agent = Agent(
     name="Project Planner",
     instructions="Break down projects into tasks",
-    output_type=TaskBreakdown,
+    output_type=TaskBreakdown,  # the SDK sends a strict JSON schema for you
     model_settings=ModelSettings(
         temperature=0,  # Ensure consistency
-        response_format="json_object"
     )
 )
 
@@ -2238,34 +2264,24 @@ asyncio.run(main())
 Database-agnostic session backend:
 
 ```python
+# pip install 'openai-agents[sqlalchemy]' asyncpg
 from agents import Agent, Runner
 from agents.extensions.memory import SQLAlchemySession
-from sqlalchemy import create_engine, Column, String, Text, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker
-from datetime import datetime
 import asyncio
-
-Base = declarative_base()
-
-class ConversationRecord(Base):
-    __tablename__ = "conversations"
-    id = Column(String, primary_key=True)
-    session_id = Column(String)
-    message_content = Column(Text)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-engine = create_engine("postgresql://user:password@localhost/conversations")
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
 
 async def main():
     agent = Agent(name="Assistant")
 
-    session = SQLAlchemySession(
+    # The SDK manages its own tables (agent_sessions / agent_messages).
+    # Use an async driver URL; create_tables=True is convenient in development.
+    session = SQLAlchemySession.from_url(
         "user_456",
-        Session(),
-        ConversationRecord
+        url="postgresql+asyncpg://user:password@localhost/conversations",
+        create_tables=True,
     )
+
+    # Or share an existing AsyncEngine:
+    # session = SQLAlchemySession("user_456", engine=async_engine, create_tables=True)
 
     result = await Runner.run(agent, "Hello", session=session)
     print(result.final_output)
@@ -2526,7 +2542,7 @@ asyncio.run(main())
 Use the Responses API for advanced features:
 
 ```python
-from agents import Agent, Runner, ModelSettings
+from agents import Agent, Runner, ModelSettings, ReasoningItem
 from openai.types.shared import Reasoning
 import asyncio
 
@@ -2534,7 +2550,7 @@ agent = Agent(
     name="Research Assistant",
     instructions="Perform thorough research and analysis",
     model_settings=ModelSettings(
-        reasoning=Reasoning(effort="high")
+        reasoning=Reasoning(effort="high", summary="auto")
     )
 )
 
@@ -2544,8 +2560,12 @@ async def main():
         "Analyse the implications of quantum computing on cryptography"
     )
     
+    # Reasoning summaries arrive as ReasoningItem entries in new_items
     print("Reasoning:")
-    print(result.output_reasoning)
+    for item in result.new_items:
+        if isinstance(item, ReasoningItem):
+            for part in item.raw_item.summary:
+                print(part.text)
     print("\nFinal Response:")
     print(result.final_output)
 
@@ -2667,28 +2687,44 @@ asyncio.run(main())
 Export and analyse traces:
 
 ```python
-from agents import Agent, Runner, trace, get_trace_context
+from agents import Agent, Runner, trace, add_trace_processor, TracingProcessor
 import asyncio
 import json
+
+class JsonFileExporter(TracingProcessor):
+    """Collects finished spans and writes them to a JSON file per trace."""
+
+    def __init__(self):
+        self.spans: dict[str, list[dict]] = {}
+
+    def on_trace_start(self, trace):
+        self.spans[trace.trace_id] = []
+
+    def on_span_start(self, span):
+        pass
+
+    def on_span_end(self, span):
+        self.spans.setdefault(span.trace_id, []).append(span.export())
+
+    def on_trace_end(self, trace):
+        data = {"trace": trace.export(), "spans": self.spans.pop(trace.trace_id, [])}
+        with open(f"trace_{trace.trace_id}.json", "w") as f:
+            json.dump(data, f, indent=2, default=str)
+
+    def shutdown(self):
+        pass
+
+    def force_flush(self):
+        pass
+
+# Runs alongside the default OpenAI exporter; use set_trace_processors() to replace it
+add_trace_processor(JsonFileExporter())
 
 async def main():
     agent = Agent(name="Assistant")
 
     with trace("Analysis Run"):
         result = await Runner.run(agent, "Perform analysis")
-
-    # Export trace
-    trace_context = get_trace_context()
-    
-    if trace_context:
-        trace_data = {
-            "trace_id": trace_context.trace_id,
-            "spans": trace_context.spans,
-            "metadata": trace_context.metadata
-        }
-        
-        with open("trace_export.json", "w") as f:
-            json.dump(trace_data, f, indent=2)
 
 asyncio.run(main())
 ```
@@ -2733,11 +2769,12 @@ async def main():
 
     result = await Runner.run(agent, "Explain quantum computing")
 
-    # Access usage information
-    if hasattr(result, 'usage'):
-        print(f"Input tokens: {result.usage.input_tokens}")
-        print(f"Output tokens: {result.usage.output_tokens}")
-        print(f"Total tokens: {result.usage.input_tokens + result.usage.output_tokens}")
+    # Usage is aggregated on the run context
+    usage = result.context_wrapper.usage
+    print(f"Requests: {usage.requests}")
+    print(f"Input tokens: {usage.input_tokens}")
+    print(f"Output tokens: {usage.output_tokens}")
+    print(f"Total tokens: {usage.total_tokens}")
 
 asyncio.run(main())
 ```
@@ -2821,21 +2858,21 @@ os.environ["GOOGLE_API_KEY"] = "..."
 claude_agent = Agent(
     name="Claude Assistant",
     instructions="You are Claude",
-    model="litellm/anthropic/claude-3-5-sonnet-20240620"
+    model="litellm/anthropic/claude-sonnet-4-5"
 )
 
 # Use Gemini via LiteLLM
 gemini_agent = Agent(
     name="Gemini Assistant",
     instructions="You are Gemini",
-    model="litellm/gemini/gemini-2.0-flash"
+    model="litellm/gemini/gemini-2.5-flash"
 )
 
 # Use Llama via LiteLLM
 llama_agent = Agent(
     name="Llama Assistant",
     instructions="You are Llama",
-    model="litellm/replicate/meta-llama/llama-2-70b-chat"
+    model="litellm/ollama/llama3.1"
 )
 
 async def main():
@@ -2994,32 +3031,26 @@ if __name__ == "__main__":
 
 ### Cost Optimization Strategies
 
-Minimize API costs:
+Route simple work to a small model and keep the larger model for queries that need it:
 
 ```python
 from agents import Agent, Runner, ModelSettings
 import asyncio
 
-# Fast, cheap model for simple queries
+# Small, cheap model for simple queries (also the SDK default)
 fast_agent = Agent(
     name="Budget Agent",
     instructions="Answer quickly",
-    model="gpt-4o-mini",
-    model_settings=ModelSettings(
-        temperature=0,
-        max_tokens=200
-    )
+    model="gpt-5.6-luna",
+    model_settings=ModelSettings(max_tokens=200, verbosity="low"),
 )
 
-# Premium model for complex queries
+# Frontier model for complex queries
 premium_agent = Agent(
     name="Premium Agent",
     instructions="Analyse thoroughly",
-    model="gpt-4o",
-    model_settings=ModelSettings(
-        temperature=0.7,
-        max_tokens=2000
-    )
+    model="gpt-5.6-sol",
+    model_settings=ModelSettings(max_tokens=2000),
 )
 
 async def main():
@@ -3031,82 +3062,94 @@ async def main():
     
     for complexity, query, agent in queries:
         result = await Runner.run(agent, query)
-        print(f"{complexity}: Cost optimised ✓")
+        usage = result.context_wrapper.usage
+        print(f"{complexity}: {usage.total_tokens} tokens")
 
 asyncio.run(main())
 ```
 
-### SandboxAgent (v0.14.0+) — Isolated Execution Environment
+### Sandbox Agents — Isolated Execution Environment
 
-SandboxAgent provides agents with a persistent, isolated workspace for file operations, code execution, and long-running tasks. This is a beta feature launching first in Python.
+Added in 0.14.0 (the docs no longer label it beta as of 0.23). A `SandboxAgent` is an ordinary agent plus a workspace: a `Manifest` describes the files, directories, repos and mounts to stage, capabilities add sandbox-native tools (filesystem, shell, skills, memory), and `SandboxRunConfig` chooses where the work runs. You still run it with `Runner`.
 
 ```python
-from agents import SandboxAgent, Manifest
 import asyncio
+from pathlib import Path
+
+from agents import Runner
+from agents.run import RunConfig
+from agents.sandbox import Manifest, SandboxAgent, SandboxRunConfig
+from agents.sandbox.capabilities import Capabilities
+from agents.sandbox.entries import Dir, LocalDir
+from agents.sandbox.sandboxes.unix_local import UnixLocalSandboxClient
+
+agent = SandboxAgent(
+    name="Data Analyst",
+    model="gpt-5.6-sol",
+    instructions=(
+        "Analyse the CSV files in data/. Write summaries and charts to output/ "
+        "and mention the exact commands you ran."
+    ),
+    default_manifest=Manifest(
+        entries={
+            "data": LocalDir(src=Path("data")),       # copied from the host (must sit under the CWD)
+            "output": Dir(description="Generated artefacts."),
+        }
+    ),
+    capabilities=Capabilities.default(),             # filesystem + shell tools
+)
 
 async def main():
-    # Define the sandbox manifest
-    manifest = Manifest(
-        name="data-analysis-sandbox",
-        description="Isolated environment for data analysis tasks",
-        python_version="3.11",
-        packages=["pandas", "matplotlib", "numpy"],
-    )
-
-    # Create a SandboxAgent with persistent workspace
-    agent = SandboxAgent(
-        name="Data Analyst",
-        instructions="Analyse data and create visualisations. Save outputs to /workspace/output/.",
-        manifest=manifest,
-    )
-
-    result = await agent.run(
-        "Load the CSV at /workspace/data.csv, calculate summary statistics, "
-        "and create a histogram saved as /workspace/output/histogram.png"
+    result = await Runner.run(
+        agent,
+        "Calculate summary statistics for data/sales.csv and save a histogram to output/.",
+        run_config=RunConfig(
+            sandbox=SandboxRunConfig(client=UnixLocalSandboxClient()),
+            workflow_name="Sandbox analysis",
+        ),
     )
     print(result.final_output)
 
 asyncio.run(main())
 ```
 
-**Key SandboxAgent features:**
-- Persistent workspace across agent turns
-- Configurable resource limits (CPU, memory, network)
-- File I/O between agent and workspace
-- Automatic cleanup on completion
-- Works with any tool including file operations and code execution
+`UnixLocalSandboxClient` runs commands with your own user's permissions (on Linux it adds no OS-level confinement), so use it only for trusted local development. For untrusted input use `DockerSandboxClient` (`pip install 'openai-agents[docker]'`) or a hosted backend (E2B, Modal, Daytona, Vercel, Cloudflare, Blaxel). Later runs can reconnect to prior work through `SandboxRunConfig(session=..., session_state=..., snapshot=...)` or a saved `RunState`.
+
+### WebSocket Transport for the Responses API
+
+Since 0.10.0 OpenAI Responses models can use a WebSocket transport instead of HTTP, which lowers per-turn overhead in multi-turn and tool-heavy runs. It is opt-in, and it is a model transport — not a server for your own browser clients.
 
 ```python
-# Access sandbox output files
-for artifact in result.artifacts:
-    print(f"File: {artifact.path}, Size: {artifact.size_bytes} bytes")
-    content = artifact.read()
-```
-
-### WebSocket Streaming (v0.13.0+)
-
-For real-time bidirectional streaming:
-
-```python
-from agents import Agent, Runner
-from agents.transports import responses_websocket_session
 import asyncio
+from agents import Agent, responses_websocket_session
 
 agent = Agent(
-    name="Realtime Assistant",
-    instructions="You are a helpful assistant that responds in real time.",
+    name="Assistant",
+    instructions="You are a helpful assistant.",
 )
 
-async def handle_websocket_session(websocket):
-    async with responses_websocket_session(agent, websocket) as session:
-        async for event in session:
-            if event.type == "text_delta":
-                await websocket.send(event.delta)
-            elif event.type == "tool_call":
-                print(f"Tool called: {event.tool_name}")
+async def main():
+    # Shares one websocket-capable provider and RunConfig across turns
+    async with responses_websocket_session() as ws:
+        result = ws.run_streamed(agent, "Plan a three-day trip to Lisbon.")
+        async for event in result.stream_events():
+            if event.type == "raw_response_event" and event.data.type == "response.output_text.delta":
+                print(event.data.delta, end="", flush=True)
 
-# Use with your WebSocket server (aiohttp, fastapi, etc.)
+        # Follow-up turn on the same connection
+        follow_up = ws.run_streamed(
+            agent,
+            "Make day two cheaper.",
+            previous_response_id=result.last_response_id,
+        )
+        async for _ in follow_up.stream_events():
+            pass
+        print("\n", follow_up.final_output)
+
+asyncio.run(main())
 ```
+
+To switch transport globally instead, call `set_default_openai_responses_transport("websocket")`, or pass `OpenAIProvider(use_responses_websocket=True)` as the run's `model_provider`.
 
 ---
 
@@ -3133,20 +3176,7 @@ This comprehensive framework enables developers to build production-grade AI app
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.17.4 | May 27, 2026 | Patch release; stability and dependency improvements. Version bumped 0.17.3 → 0.17.4. No new public symbols. All key symbols (`Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) verified against installed `openai-agents 0.17.4` (`.routine-envs/openai-agents`); no `DeprecationWarning` emissions. | Claude routine |
-| 0.17.3 | May 19, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified against installed `openai-agents 0.17.3` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
-| 0.17.2 | May 12, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.2` (`.routine-envs/check-0512-py`): `Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`. |
-| 0.17.1 | May 11, 2026 | Patch release; stability and dependency improvements. No new public symbols. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`). |
-| 0.17.0 | May 9, 2026 | Four releases (0.15.3, 0.16.0, 0.16.1, 0.17.0). New: `ShellTool`/`LocalShellTool` (sandboxed shell execution), `ToolSearchTool` (dynamic tool discovery), `ApplyPatchTool` (code-patch application), `RetryPolicy` type alias for per-agent retry configuration, `Session`/`SessionABC` session abstractions. Version confirmed against installed `openai-agents 0.17.0` (`.routine-envs/check-0509-py`); `Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC` all verified in `agents` module. |
-| 0.15.1 | May 2, 2026 | Patch release; stability and dependency updates. Version confirmed against installed `openai-agents 0.15.1` (`.routine-envs/check-openai-0502`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified with `-W error::DeprecationWarning`. |
-| 0.15.0 | May 1, 2026 | Minor release; stability and dependency updates. Version confirmed against installed `openai-agents 0.15.0` (`.routine-envs/check-openai-0501`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified with `-W error::DeprecationWarning`. |
-| 0.14.8 | April 29, 2026 | Patch release; stability improvements. Version confirmed against installed `openai-agents 0.14.8` (`.routine-envs/main-py-0429`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified. |
-| 0.14.7 | April 28, 2026 | Patch release; stability improvements. Version confirmed against installed `openai-agents 0.14.7` (`.routine-envs/main-py-0428`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified. |
-| 0.14.6 | April 25, 2026 | Patch release; stability improvements. Version confirmed against installed `openai-agents 0.14.6` (`.routine-envs/main-py-0425`); `Agent`, `Runner`, `Handoff`, `guardrail` imports verified. |
-| 0.14.5 | April 23, 2026 | Patch releases (0.14.3–0.14.5); stability improvements. Version confirmed against PyPI `openai-agents 0.14.5`. |
-| 0.14.2 | April 18, 2026 | Default Realtime model updated to `gpt-realtime-1.5`; `MCPServer` exposes `list_resources()`, `list_resource_templates()`, `read_resource()`; `MCPServerStreamableHttp` exposes `session_id` for resuming sessions across reconnects; Chat Completions opt-in reasoning-content replay via `should_replay_reasoning_content`; runtime and session edge case fixes; no breaking changes |
-| 0.14.1 | April 2026 | Patch release for SandboxAgent stability improvements |
-| 0.14.0 | April 2026 | **SandboxAgent** (beta) for persistent isolated workspaces; `openai` v2.x hard requirement; Python 3.9 dropped; sync tools auto-wrapped with `asyncio.to_thread`; MCP errors as exceptions |
-| 0.13.x | March 2026 | WebSocket transport (`responses_websocket_session()`); realtime streaming |
-| 0.6.1 | November 2025 | Previous documented version |
-
+| %%version=openai-agents%% | %%versions-checked%% | Re-verified against the current release (first written for 0.6.x, last revised for 0.17.4). Replaced APIs that never existed or were removed (`InMemorySession`, `ComputerControlTool`, `get_trace_context`, `result.output_reasoning`/`.messages`/`.agent`/`.usage`, `temperature`/`max_tokens` on `Agent`, `response_format` on `ModelSettings`, `agents.transports`); rewrote the Sandbox Agents and WebSocket sections against the real API; replaced the breaking-changes table with the upstream changelog (0.4–0.22); updated model names and install extras. |
+| 0.17.4 | May 27, 2026 | Version bump; key symbols re-checked. |
+| 0.14.0 | April 2026 | Sandbox Agents section added. |
+| 0.6.1 | November 2025 | First version of this guide. |

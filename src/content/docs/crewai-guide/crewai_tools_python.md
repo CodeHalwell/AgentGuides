@@ -8,7 +8,7 @@ sidebar:
   order: 24
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/tools/base_tool.py`, `crewai/tools/__init__.py`, `crewai/mcp/config.py`, `crewai/tools/agent_tools/`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/tools/base_tool.py`, `crewai/tools/__init__.py`, `crewai/mcp/config.py`, `crewai/tools/agent_tools/`).
 
 There are three ways to give an agent a tool:
 

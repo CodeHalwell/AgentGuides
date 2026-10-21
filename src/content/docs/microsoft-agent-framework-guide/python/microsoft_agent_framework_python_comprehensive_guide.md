@@ -368,7 +368,7 @@ async def main():
         "Classify the sentiment: 'The product is amazing!'",
         options={"model": "gpt-4o-mini", "temperature": 0.0},
         tools=[],                          # no tools needed for classification
-        compaction_strategy=TruncationStrategy(keep_last_groups=5),
+        compaction_strategy=TruncationStrategy(max_n=20, compact_to=10),
         function_invocation_kwargs={"tenant_id": "acme", "user_id": "u-42"},
     )
     print(label.text)
@@ -2042,7 +2042,7 @@ Wire it up exactly like `MemoryFileStore` — pass it as the `store=` argument t
 
 > **Experimental.** `TodoProvider` and its backing stores are `ExperimentalFeature.HARNESS` in 1.4.0.
 
-`TodoProvider` gives an agent a structured task list it can manage itself. The agent receives five tools — `add_todos`, `complete_todos`, `remove_todos`, `get_remaining_todos`, and `get_all_todos` — and a default system-prompt injection that tells it how to use them. The provider stores state in the session (in-memory by default) or on disk via `TodoFileStore`.
+`TodoProvider` gives an agent a structured task list it can manage itself. The agent receives five tools — `todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, and `todos_get_all` — and a default system-prompt injection that tells it how to use them. The provider stores state in the session (in-memory by default) or on disk via `TodoFileStore`.
 
 ### Quickstart — in-session todos
 
@@ -2067,7 +2067,7 @@ async def main() -> None:
     )
     print(r1.text)
 
-    # Turn 2 — agent checks get_remaining_todos and marks items complete as it works
+    # Turn 2 — agent checks todos_get_remaining and marks items complete as it works
     r2 = await agent.run(
         "Draft the engineering checklist and mark those tasks done.",
         session=session,
@@ -2078,7 +2078,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-The agent sees instructions like "Break complex work into trackable items… Use `add_todos`… `complete_todos`… `get_remaining_todos`…". It manages the list autonomously — no application code needed to drive it.
+The agent sees instructions like "Break complex work into trackable items… Use `todos_add`… `todos_complete`… `todos_get_remaining`…". It manages the list autonomously — no application code needed to drive it.
 
 ### Persisting todos to disk with `TodoFileStore`
 
@@ -2142,8 +2142,8 @@ from agent_framework.openai import OpenAIChatClient
 
 focused_provider = TodoProvider(
     instructions=(
-        "You have a task list. Use `add_todos` to create tasks when the user asks you to plan. "
-        "Use `complete_todos` when a task is done. "
+        "You have a task list. Use `todos_add` to create tasks when the user asks you to plan. "
+        "Use `todos_complete` when a task is done. "
         "Never remove tasks unless the user explicitly says to drop them."
     ),
 )
@@ -2196,7 +2196,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-**`TodoItem` fields:** `id` (int), `title` (str), `description` (str | None), `is_complete` (bool). The agent calls `complete_todos([id, ...])` and `remove_todos([id, ...])` using the integer IDs.
+**`TodoItem` fields:** `id` (int), `title` (str), `description` (str | None), `is_complete` (bool). The agent calls `todos_complete([id, ...])` and `todos_remove([id, ...])` using the integer IDs.
 
 ---
 
@@ -2206,7 +2206,7 @@ asyncio.run(main())
 
 `AgentModeProvider` lets an agent switch between named operating modes at runtime. Two modes ship out of the box — **plan** (interactive, ask questions) and **execute** (autonomous, minimise interruptions). You can define any set of modes and inject custom descriptions for each.
 
-The provider exposes `get_mode` and `set_mode` tools to the agent, and injects the current mode into the system prompt so the agent knows how to behave.
+The provider exposes `mode_get` and `mode_set` tools to the agent, and injects the current mode into the system prompt so the agent knows how to behave.
 
 ### Quickstart — plan / execute cycle
 
@@ -2243,7 +2243,7 @@ In **plan** mode the agent is encouraged to ask for clarification before acting.
 
 ### Custom modes
 
-Define your own mode names and descriptions when the defaults don't fit. Mode names come from the keys of `mode_descriptions`:
+Define your own mode names and descriptions when the defaults don't fit. Mode names come from the keys of `mode_instructions`:
 
 ```python
 from agent_framework import Agent, AgentModeProvider
@@ -2255,7 +2255,7 @@ agent = Agent(
     context_providers=[
         AgentModeProvider(
             default_mode="review",
-            mode_descriptions={
+            mode_instructions={
                 "review":  "Read the diff and identify issues. Do not suggest fixes yet.",
                 "suggest": "For each issue, propose a concrete code fix.",
                 "approve": "All issues resolved. Write the approval comment and exit.",
@@ -2285,7 +2285,7 @@ print(current)   # "review"
 set_agent_mode(session, "suggest", available_modes=["review", "suggest", "approve"])
 ```
 
-Use `set_agent_mode` from your application layer when an external event (e.g. a CI gate passing) should trigger a mode transition, rather than relying on the agent to call `set_mode` itself.
+Use `set_agent_mode` from your application layer when an external event (e.g. a CI gate passing) should trigger a mode transition, rather than relying on the agent to call `mode_set` itself.
 
 ### `AgentModeProvider` constructor reference
 
@@ -2293,8 +2293,8 @@ Use `set_agent_mode` from your application layer when an external event (e.g. a 
 AgentModeProvider(
     source_id="agent_mode",  # session.state partition key
     *,
-    default_mode=None,       # starting mode; defaults to first key in mode_descriptions
-    mode_descriptions=None,  # Mapping[mode_name, description]; defaults to plan/execute
+    default_mode=None,       # starting mode; defaults to first key in mode_instructions
+    mode_instructions=None,  # Mapping[mode_name, description]; defaults to plan/execute
     instructions=None,       # override the default system-prompt block (must contain
                              # {available_modes} and {current_mode} placeholders)
 )
@@ -2618,7 +2618,7 @@ FunctionalWorkflowAgent(workflow: FunctionalWorkflow, *, name=None, description=
 StepWrapper(func: Callable[..., Awaitable[R]], *, name: str | None = None)   # raises TypeError if func isn't async
 ```
 
-`@step` caches results by `(step_name, call_index)` for checkpoint replay; a cache hit emits `executor_bypassed` instead of re-running. `RunContext` (injected by parameter name `ctx` or type annotation) exposes `await ctx.request_info(request_data, *, response_type, request_id=None)` (raises `WorkflowInterrupted` internally to suspend), `await ctx.add_event(WorkflowEvent(...))`, `ctx.get_state(key, default=None)` / `ctx.set_state(key, value)`, `ctx.is_streaming`. `WorkflowInterrupted` subclasses `BaseException` (not `Exception`) — a caller's `except Exception:` cannot accidentally swallow it.
+`@step` caches results by `(step_name, call_index)` for checkpoint replay; a cache hit emits `executor_bypassed` instead of re-running. `RunContext` (injected by parameter name `ctx` or type annotation) exposes `await ctx.request_info(request_data, *, response_type, request_id=None)` (raises `WorkflowInterrupted` internally to suspend), `await ctx.add_event(WorkflowEvent(...))`, `ctx.get_state(key, default=None)` / `ctx.set_state(key, value)`, `ctx.is_streaming()`. `WorkflowInterrupted` subclasses `BaseException` (not `Exception`) — a caller's `except Exception:` cannot accidentally swallow it.
 
 ```python
 from agent_framework import workflow, step, RunContext
@@ -2632,9 +2632,10 @@ async def approval_workflow(requirements: str, ctx: RunContext) -> str:
     approval: str = await ctx.request_info({"draft": text}, request_id="approval", response_type=str)
     return text if approval.lower().startswith("approve") else "revise"
 
-result = await approval_workflow.run("Build a feature")
+wf = approval_workflow.build()   # @workflow returns a definition since 1.14.0
+result = await wf.run("Build a feature")
 pending = result.get_request_info_events()
-result2 = await approval_workflow.run(responses={"approval": "Approved!"})
+result2 = await wf.run(responses={"approval": "Approved!"})
 ```
 
 #### `WorkflowGraphValidator` + `EdgeDuplicationError` + `GraphConnectivityError` + `TypeCompatibilityError`
@@ -2728,7 +2729,7 @@ get_agent_mode(session: AgentSession, *, source_id="agent_mode", default_mode=No
 set_agent_mode(session: AgentSession, mode: str, *, source_id="agent_mode", available_modes=None) -> str
 ```
 
-> **Correction:** the constructor keyword is `mode_instructions` (not `mode_descriptions`, as several older per-volume pages named it — and as the "Agent Mode Provider" section of this guide's own body currently still shows). Confirmed against the installed signature; see this guide's "Agent Mode Provider" section above for the older, superseded `mode_descriptions=` examples — those should be updated to `mode_instructions=` when you copy them.
+> **Correction:** the constructor keyword is `mode_instructions` (not `mode_descriptions`, as several older per-volume pages named it). The "Agent Mode Provider" section above has been updated to match the installed signature.
 
 #### `AgentLoopMiddleware` + `JudgeVerdict`
 **Module:** `agent_framework._harness._loop`

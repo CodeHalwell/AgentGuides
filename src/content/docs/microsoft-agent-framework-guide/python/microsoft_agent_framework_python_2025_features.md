@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
-description: "Verified feature set in agent-framework-core 1.5.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
+description: "Verified feature set across agent-framework-core and its stable and beta sub-packages: A2A, graph workflows, declarative agents, MCP, Magentic orchestration and custom executors."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -13,25 +13,30 @@ language: python
 > - [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/)
 > - [A2A Protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/)
 
-## Package status (April 2026)
+## Package status
 
-| Package | Version | Status |
-|---|---|---|
-| `agent-framework-core` | 1.4.0 | Stable |
-| `agent-framework-foundry` | 1.4.0 | Stable |
-| `agent-framework-openai` | 1.4.0 | Stable |
-| `agent-framework-a2a` | 1.0.0b260514 | Beta |
-| `agent-framework-declarative` | 1.0.0b260514 | Beta |
-| `agent-framework-copilotstudio` | 1.0.0b260514 | Beta |
-| `agent-framework-mem0` | 1.0.0b260514 | Beta |
-| `agent-framework-anthropic` | 1.0.0b260514 | Beta |
-| `agent-framework-bedrock` | 1.0.0b260514 | Beta |
-| `agent-framework-azurefunctions` | 1.0.0b260514 | Beta |
-| `agent-framework-durabletask` | 1.0.0b260514 | Beta |
-| `agent-framework-orchestrations` | 1.0.0b260514 | Beta |
-| `agent-framework-redis` | 1.0.0b260514 | Beta |
+Checked %%versions-checked%% by installing `agent-framework` %%version=agent-framework%% and reading the resolved sub-package versions. Sub-packages version independently of the meta package; run `pip index versions <package>` for today's numbers.
 
-The `agent-framework` meta package (1.4.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
+| Package | Status |
+|---|---|
+| `agent-framework-core` | Stable — always released in lockstep with `agent-framework` |
+| `agent-framework-foundry` | Stable |
+| `agent-framework-openai` | Stable |
+| `agent-framework-declarative` | Stable (left beta during 2026) |
+| `agent-framework-orchestrations` | Stable (left beta during 2026) |
+| `agent-framework-ag-ui` | Stable |
+| `agent-framework-github-copilot` | Stable |
+| `agent-framework-a2a` | Beta (`1.0.0bYYMMDD` line) |
+| `agent-framework-copilotstudio` | Beta |
+| `agent-framework-mem0` | Beta |
+| `agent-framework-anthropic` | Beta |
+| `agent-framework-bedrock` | Beta |
+| `agent-framework-gemini`, `agent-framework-mistral`, `agent-framework-ollama` | Beta |
+| `agent-framework-azurefunctions` | Beta |
+| `agent-framework-durabletask` | Beta |
+| `agent-framework-redis` | Beta |
+
+The `agent-framework` meta package installs core plus the provider packages above in one go — including the beta ones, so no `--pre` flag is needed for the meta package. When you're ready to prune dependencies, install the sub-packages directly (stable ones plainly, beta ones with `--pre`, e.g. `pip install agent-framework-foundry` and `pip install --pre agent-framework-mem0`).
 
 ## Agent2Agent (A2A) protocol
 
@@ -370,19 +375,26 @@ For hosted MCP (the provider runs the MCP client server-side), feature-detect vi
 `MagenticBuilder` is the most sophisticated of the orchestration patterns: a manager agent maintains a task ledger, dispatches to workers, and can replan when a stall is detected.
 
 ```python
-from agent_framework_orchestrations import MagenticBuilder, StandardMagenticManager
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+from agent_framework_orchestrations import MagenticBuilder
 
-workflow = (
-    MagenticBuilder(
-        participants=[researcher, analyst, writer],
-        manager_agent=StandardMagenticManager(client=OpenAIChatClient(model="gpt-4o")),
-        enable_plan_review=True,        # pause after the initial plan for human review
-        checkpoint_storage=storage,     # resume across process restarts
-    )
-    .with_human_input_on_stall()        # ask a human when the manager loops
-    .build()
+manager = Agent(
+    client=OpenAIChatClient(),
+    name="manager",
+    instructions="You coordinate a research team. Plan, delegate, and verify.",
 )
+
+workflow = MagenticBuilder(
+    participants=[researcher, analyst, writer],
+    manager_agent=manager,          # wrapped in a StandardMagenticManager for you
+    max_stall_count=3,              # replan after three rounds without progress
+    enable_plan_review=True,        # pause after the initial plan for human review
+    checkpoint_storage=storage,     # resume across process restarts
+).build()
 ```
+
+To tune the ledger prompts, pass `StandardMagenticManager(agent=manager, ...)` as `manager=` instead of `manager_agent=`. There is no `with_human_input_on_stall()` method — an earlier draft of this page showed one; stall handling is `max_stall_count` / `max_reset_count` and the manager's replanning.
 
 The plan-review HITL event is durable — combined with checkpointing, a user can come back hours later in a different pod and approve the plan, and the workflow resumes from the exact superstep that paused.
 

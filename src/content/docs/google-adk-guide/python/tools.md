@@ -1435,16 +1435,15 @@ agent = LlmAgent(
 
 ```python
 from google.adk.tools.skill_toolset import SkillToolset
-from google.adk.skills import Skill, SkillFrontmatter
+from google.adk.skills import Frontmatter, Skill
 from google.adk.agents import LlmAgent
 
-# Build a skill from content in memory
+# Build a skill from content in memory (Skill.name comes from its frontmatter)
 python_skill = Skill(
-    name="python_helper",
-    frontmatter=SkillFrontmatter(
+    frontmatter=Frontmatter(
         name="python_helper",
         description="Helps write and explain Python code.",
-        version="1.0.0",
+        metadata={"version": "1.0.0"},
     ),
     instructions="""
 # Python Helper
@@ -1476,7 +1475,7 @@ agent = LlmAgent(
 | `load_skill(skill_name)` | Reads the full `SKILL.md` for a given skill |
 | `load_skill_resource(skill_name, file_path)` | Reads a file from `references/`, `assets/`, or `scripts/` |
 | `run_skill_script(skill_name, script_path, ...)` | Runs a script from `scripts/` (requires `code_executor`) |
-| `search_skills(query)` | Semantic search (requires `registry=`) |
+| `search_skills(query)` | Registry search — only added when `registry=` is set |
 
 **Constructor args:**
 
@@ -1485,21 +1484,27 @@ agent = LlmAgent(
 | `skills` | `list[Skill]` | `[]` | Statically-defined skills |
 | `registry` | `SkillRegistry \| None` | `None` | Dynamic skill registry (enables `search_skills`) |
 | `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for `run_skill_script` |
+| `environment` | `BaseEnvironment \| None` | `None` | Execution environment for scripts (alternative to `code_executor`) |
+| `skills_folder` | `Path \| str \| None` | `None` | Load every skill under a directory |
 | `script_timeout` | `int` | `300` | Shell-script timeout in seconds |
-| `additional_tools` | `list[ToolUnion] \| None` | `None` | Extra tools unlocked when a skill is activated |
+| `save_output_artifacts` | `bool` | `False` | Persist script outputs as artifacts (added in 2.12.0) |
+| `additional_tools` | `Sequence[ToolUnion \| BaseNode] \| None` | `None` | Extra tools unlocked when a skill is activated |
+| `tool_name_prefix`, `tool_filter` | | `None` | Rename / filter the generated tools |
+| `discovery_mode`, `lifecycle_config` | | `LAZY`, `None` | How skills are surfaced and unloaded (lifecycle is experimental; `ADK_ENABLE_SKILL_LIFECYCLE=1`) |
 
 **Loading from disk:**
 
 ```python
-from google.adk.skills import Skill
-import pathlib
+from google.adk.skills import load_skill_from_dir
 
-skill_dir = pathlib.Path("my_skills/python_helper")
-skill = Skill.from_directory(skill_dir)   # reads SKILL.md + subfolders
+skill = load_skill_from_dir("my_skills/python_helper")   # reads SKILL.md + subfolders
 toolset = SkillToolset(skills=[skill])
+
+# or every skill in a folder
+toolset = SkillToolset(skills_folder="my_skills")
 ```
 
-> **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress the warning with `GOOGLE_ADK_IGNORE_WARNINGS=skill_toolset`.
+> **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
 
 ## Agent transfer
 

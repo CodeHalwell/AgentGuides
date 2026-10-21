@@ -1929,7 +1929,7 @@ sim_config = EnvironmentSimulationConfig(
             ],
         ),
     ],
-    simulation_model="gemini-2.0-flash",
+    simulation_model="gemini-2.5-flash",
     environment_data=json.dumps({
         "stocks": [
             {"symbol": "GOOG", "price": 185.50, "change_pct": 1.2},

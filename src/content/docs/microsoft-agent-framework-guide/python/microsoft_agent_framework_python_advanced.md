@@ -760,11 +760,11 @@ async def my_pipeline(data: str) -> str:
     return data.upper()
 
 
-result = asyncio.run(my_pipeline.run("hello"))
+result = asyncio.run(my_pipeline.build().run("hello"))
 print(result.get_outputs())  # ['HELLO']
 ```
 
-`my_pipeline` is now a `FunctionalWorkflow` instance. It exposes the same `run(message, *, stream=False, responses=..., checkpoint_id=...)` surface as graph workflows and returns a `WorkflowRunResult`.
+`my_pipeline` is now a `FunctionalWorkflowDefinition`; `.build()` turns it into a runnable `FunctionalWorkflow` (since 1.14.0 — before that the decorator returned the runnable workflow directly). The built instance exposes the same `run(message, *, stream=False, responses=..., checkpoint_id=...)` surface as graph workflows and returns a `WorkflowRunResult`.
 
 A workflow function takes **at most one** non-`RunContext` parameter. That single parameter is the message you pass to `.run()`. Bundle multiple inputs into a dict or Pydantic model.
 
@@ -823,7 +823,7 @@ async def pipeline(x: int) -> int:
 
 
 # Inside a workflow: each call site is cached on (step_name, call_index).
-# A second `pipeline.run(...)` with the same input rebuilds the cache from
+# A second `pipeline.build().run(...)` with the same input rebuilds the cache from
 # scratch — caching is per run, not global.
 ```
 
@@ -869,11 +869,12 @@ On the first call to `request_info` the workflow **suspends** by raising an inte
 
 ```python
 async def main():
-    first = await review_workflow.run("draft v1")
+    wf = review_workflow.build()          # keep the instance: it holds the pending request
+    first = await wf.run("draft v1")
     pending = first.get_request_info_events()
     request_id = pending[0].request_id
 
-    final = await review_workflow.run(
+    final = await wf.run(
         responses={request_id: "Tighten the third paragraph."},
     )
     print(final.get_outputs()[-1])
@@ -890,7 +891,7 @@ The same `request_id` round-trip works under streaming too — pass `stream=True
 
 ### Hooking up checkpointing
 
-Pass `checkpoint_storage=` to the decorator or to `.run()`. The framework checkpoints after each completed step:
+Pass `checkpoint_storage=` to `.build()` or to `.run()` (the decorator stopped accepting it in 1.14.0). The framework checkpoints after each completed step:
 
 ```python
 from agent_framework import workflow, step, FileCheckpointStorage
@@ -898,7 +899,7 @@ from agent_framework import workflow, step, FileCheckpointStorage
 storage = FileCheckpointStorage("/var/lib/checkpoints")
 
 
-@workflow(name="research", checkpoint_storage=storage)
+@workflow(name="research")
 async def research(topic: str) -> str:
     notes = await gather_notes(topic)
     summary = await summarise(notes)
@@ -908,7 +909,7 @@ async def research(topic: str) -> str:
 # Resume from the latest checkpoint of this workflow definition.
 latest = await storage.get_latest(workflow_name="research")
 if latest is not None:
-    result = await research.run(checkpoint_id=latest.checkpoint_id)
+    result = await research.build(checkpoint_storage=storage).run(checkpoint_id=latest.checkpoint_id)
 ```
 
 Checkpoints are keyed on the workflow definition (name + `graph_signature_hash`), not on a specific instance — any process running the same `@workflow` function can resume them.
@@ -918,7 +919,7 @@ Checkpoints are keyed on the workflow definition (name + `graph_signature_hash`)
 `FunctionalWorkflow.as_agent()` returns a `FunctionalWorkflowAgent` that satisfies `SupportsAgentRun`. Pending HITL requests surface as `FunctionApprovalRequestContent` items, exactly like the graph `WorkflowAgent`:
 
 ```python
-agent = review_workflow.as_agent(name="reviewer")
+agent = review_workflow.build().as_agent(name="reviewer")
 response = await agent.run("Please review this draft.")
 ```
 

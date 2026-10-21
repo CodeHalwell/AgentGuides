@@ -1,12 +1,12 @@
 ---
 title: "Claude Agent SDK - Architecture & Flow Diagrams"
-description: "> Visual Explanations of System Architecture, Data Flow, and Execution Patterns"
+description: "Architecture, agent loop, permission, session and deployment diagrams for the Python Claude Agent SDK."
 framework: anthropic-claude-agent-sdk
 ---
 
 # Claude Agent SDK - Architecture & Flow Diagrams
 
-> **Visual Explanations of System Architecture, Data Flow, and Execution Patterns**
+> Architecture and flow diagrams. Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).
 
 ---
 
@@ -31,36 +31,34 @@ framework: anthropic-claude-agent-sdk
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│                    Your Application Layer                          │
-│  (Frontend, API Server, Scheduled Jobs, Internal Services)        │
-└────────────────────┬─────────────────────────────────────────────┘
-                     │
+│                    Your application                                │
+│  (API server, worker, scheduled job, CLI tool)                     │
+└────────────────────┬───────────────────────────────────────────────┘
+                     │ query() / ClaudeSDKClient
         ┌────────────▼─────────────────┐
-        │   Claude Agent SDK           │
-        │  (TypeScript / Python)       │
-        └────────────┬──────────────────┘
+        │   claude-agent-sdk (Python)  │
+        │   options, typed messages,   │
+        │   in-process MCP tools,      │
+        │   hook + can_use_tool calls  │
+        └────────────┬─────────────────┘
+                     │ JSON stream over stdin/stdout
+        ┌────────────▼──────────────────────────────────────────┐
+        │   Claude Code CLI (subprocess, bundled in the wheel)  │
+        │   agent loop · built-in tools · permissions ·         │
+        │   compaction · sessions on disk · external MCP        │
+        └────────────┬──────────────────────────────────────────┘
+                     │ HTTPS
+          ┌──────────▼─────────────────────┐
+          │   Claude API / Bedrock / Vertex│
+          └──────────┬─────────────────────┘
                      │
-         ┌───────────┼───────────────────────────────────┐
-         │           │           │          │            │
-         ▼           ▼           ▼          ▼            ▼
-    ┌────────┐ ┌──────────┐ ┌──────┐ ┌────────┐ ┌─────────────┐
-    │ Agent  │ │ Tool     │ │ MCP  │ │Context │ │ Session     │
-    │Engine  │ │Ecosystem │ │Server│ │Manager │ │ Management  │
-    └────────┘ └──────────┘ └──────┘ └────────┘ └─────────────┘
-         │           │           │          │            │
-         └───────────┼───────────┬──────────┴────────────┘
-                     │           │
-          ┌──────────▼───────────▼─────────┐
-          │   Claude API (Anthropic)       │
-          │  (Vision, Tool Use, Streaming) │
-          └────────────────────────────────┘
-                     │
-        ┌────────────▼────────────┐
-        │  Claude 3.5 Models      │
-        │  • Sonnet (Recommended) │
-        │  • Opus (Complex)       │
-        │  • Haiku (Fast)         │
-        └─────────────────────────┘
+        ┌────────────▼───────────────────────┐
+        │  Claude models                     │
+        │  • claude-opus-5-5   (default)     │
+        │  • claude-sonnet-5-5 (balanced)    │
+        │  • claude-haiku-5-5  (cheapest)    │
+        │  • claude-fable-5-1  (most capable)│
+        └────────────────────────────────────┘
 ```
 
 ### Component Responsibilities
@@ -82,8 +80,8 @@ framework: anthropic-claude-agent-sdk
 │ • File Operations (Read, Write, Edit)                  │
 │ • Command Execution (Bash)                             │
 │ • Search Operations (Glob, Grep)                       │
-│ • Web Search Integration                               │
-│ • Computer Use (Mouse, Keyboard, Screen)               │
+│ • Web (WebSearch, WebFetch)                            │
+│ • Subagents (Agent tool), TodoWrite, skills            │
 └─────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────┐
@@ -264,7 +262,7 @@ TOOL EXECUTION
   ├─ Commands: Bash/Terminal
   ├─ Search: Glob/Grep/Web
   ├─ Custom: MCP tools
-  ├─ Computer: Mouse/Keyboard
+  ├─ Subagents: Agent tool
   └─ Custom hooks (Pre/Post)
   │
   ├─ SUCCESS ──→ Capture output
@@ -313,19 +311,16 @@ COMMAND EXECUTION:
   ├─ Return stderr
   └─ Exit code
 
-WEB SEARCH:
-  Search
-  ├─ Query internet
-  ├─ Parse results
-  └─ Summarise info
+WEB:
+  WebSearch              │ WebFetch
+  ├─ Query the web       │ ├─ Fetch a URL
+  └─ Return results      │ └─ Return page content
 
-COMPUTER USE:
-  Screen          │ Mouse         │ Keyboard
-  ├─ Screenshot   │ ├─ Move       │ ├─ Type text
-  ├─ Record video │ ├─ Click      │ ├─ Key press
-  └─ Analyse UI   │ ├─ Double     │ ├─ Shortcuts
-                  │ └─ Drag       │ └─ Selection
-```
+DELEGATION:
+  Agent
+  ├─ Start a subagent defined in options.agents
+  ├─ Own context window, tools and model
+  └─ Returns a summary to the parent
 
 ---
 
@@ -589,26 +584,16 @@ CLOSE SESSION
 ### Session State Persistence
 
 ```
-MEMORY                   DISK/DATABASE
-┌──────────────┐         ┌────────────────────┐
-│ Session ID   │────┐    │ Session Record     │
-│ Context      │    │    ├─ ID               │
-│ History      │    ├──→ ├─ Created Time     │
-│ Tools State  │    │    ├─ Last Activity    │
-│ Variables    │    │    ├─ Conversation Log │
-└──────────────┘    │    ├─ State Snapshot   │
-                    │    └─ Metadata        │
-              Recovery   └────────────────────┘
-              Checkpoint
+LOCAL (default)                       EXTERNAL (session_store=...)
+┌──────────────────────────┐          ┌────────────────────────────┐
+│ ~/.claude/projects/<key>/│  mirror  │ SessionStore implementation│
+│   <session_id>.jsonl     │ ───────▶ │ (Redis, S3, database...)   │
+│ one JSON line per entry  │          │ append() per batch/entry   │
+└──────────────────────────┘          └────────────────────────────┘
 
-When Session Suspends:
-  Memory State → Serialised → Stored to Disk
-  
-When Session Resumes:
-  Disk State → Deserialised → Loaded to Memory
-  
-If Process Crashes:
-  Disk State → Recovery → Rebuild Memory State
+resume=<id>:   read local transcript, or rebuild it from the store
+fork_session:  copy history into a new session ID
+list_sessions / get_session_messages: read transcripts without the CLI
 ```
 
 ---
@@ -618,93 +603,60 @@ If Process Crashes:
 ### Permission Architecture Layers
 
 ```
-REQUEST
+TOOL CALL REQUESTED
   │
   ▼
-POLICY EVALUATION
-  ├─ Is tool allowed?
-  ├─ Check whitelist
-  └─ Check blacklist
-  │
-  ├─ DENY ────→ Reject immediately
-  │
-  ├─ ALLOW ───→ Continue
-  │
-  └─ ASK ─────→ Need approval
+1. HOOKS (PreToolUse)
+  │   may allow, deny, ask, or rewrite the input
+  ▼
+2. DENY RULES (disallowed_tools, settings)
+  │   match → rejected, Claude is told why
+  ▼
+3. PERMISSION MODE
+  │   bypassPermissions → run
+  │   acceptEdits       → file edits run
+  │   plan              → nothing executes
+  │   dontAsk           → anything not pre-approved is denied
+  ▼
+4. ALLOW RULES (allowed_tools, settings)
+  │   match → run, can_use_tool is NOT called
+  ▼
+5. can_use_tool CALLBACK
+  │   PermissionResultAllow(updated_input=...) → run
+  │   PermissionResultDeny(message=..., interrupt=...) → reject
+  ▼
+EXECUTION (optionally inside the Bash sandbox)
   │
   ▼
-PATTERN MATCHING
-  ├─ Path patterns (for file ops)
-  │  └─ /home/user/** → Allowed
-  │     /etc/** → Denied
-  │
-  ├─ Command patterns (for bash)
-  │  └─ npm * → Allowed
-  │     rm -rf * → Denied
-  │
-  └─ Resource restrictions
-     └─ Max file size: 10MB
-        Max execution time: 30s
-  │
-  ▼
-INPUT VALIDATION
-  ├─ Type checking
-  ├─ Format checking
-  ├─ Security scanning
-  └─ Sanitisation
-  │
-  ├─ INVALID ──→ Reject
-  │
-  └─ VALID ────→ Continue
-  │
-  ▼
-EXECUTION APPROVAL
-  ├─ Permission callback check
-  ├─ User approval workflow
-  └─ Rate limiting checks
-  │
-  ├─ APPROVED ─→ Execute
-  │
-  └─ DENIED ───→ Reject
-  │
-  ▼
-EXECUTION
-  └─ Tool runs with approved parameters
+HOOKS (PostToolUse / PostToolUseFailure)
 ```
 
 ### Permission Modes
 
 ```
-MODE: ACCEPT_EDITS
-  ├─ Auto-approve file modifications
-  ├─ Skip confirmation prompts
-  ├─ Trust agent completely
-  └─ Use when: Fully automated, trusted tasks
+MODE: default
+  ├─ Unapproved tools go to can_use_tool
+  └─ Use when: production, with a callback or narrow allow rules
 
-MODE: DEFAULT
-  ├─ Evaluate each tool call
-  ├─ Apply policies
-  ├─ Prompt for approvals
-  └─ Use when: Standard production use
+MODE: acceptEdits
+  ├─ File edits auto-approved
+  └─ Use when: trusted coding tasks in a disposable checkout
 
-MODE: PLAN
-  ├─ Show planned actions
-  ├─ Request approval before execution
-  ├─ Review complete plan
-  └─ Use when: Safety critical tasks
+MODE: plan
+  ├─ Claude plans; no edits or commands execute
+  └─ Use when: you want a plan to review first
 
-MODE: BYPASS_PERMISSIONS
-  ├─ Skip all permission checks
-  ├─ No policies applied
-  ├─ No user prompts
-  └─ Use when: Testing, development (DANGER!)
+MODE: dontAsk
+  ├─ Anything not pre-approved is denied
+  └─ Use when: unattended jobs with a fixed tool set
 
-CUSTOM MODE:
-  └─ Implement custom callback for fine control
-     ├─ Tool-specific rules
-     ├─ Conditional approval
-     ├─ Dynamic restrictions
-     └─ Use when: Complex requirements
+MODE: auto
+  ├─ The CLI's classifier decides whether a call is safe
+  └─ Use when: interactive tools that want fewer prompts
+
+MODE: bypassPermissions
+  ├─ Everything runs, no checks
+  └─ Use when: inside a throwaway sandbox only
 ```
 
 ---
@@ -828,33 +780,28 @@ CONVERSATION GROWS
 ### Token Budget Tracking
 
 ```
-REQUEST ARRIVES
+EACH TURN
       │
       ▼
-CALCULATE TOKEN ESTIMATE
+CONTEXT USAGE  (client.get_context_usage())
       │
-      ├─ System prompt tokens
-      ├─ Conversation history tokens
-      ├─ New message tokens
-      ├─ Tool output tokens
-      └─ Reserve for output
+      ├─ system prompt + tools
+      ├─ memory files (CLAUDE.md)
+      ├─ conversation history
+      └─ tool results
             │
             ▼
-      TOTAL TOKENS NEEDED
+      totalTokens vs maxTokens (1M on the Claude 5 family)
             │
-            ├─ < 150K tokens → OK
-            │   └─ Proceed normally
+            ├─ below autoCompactThreshold → continue
             │
-            ├─ 150K-180K tokens → WARNING
-            │   └─ Begin compaction prep
-            │
-            ├─ 180K-200K tokens → URGENT
-            │   ├─ Apply compaction now
-            │   └─ Reduce context aggressively
-            │
-            └─ > 200K tokens → ERROR
-                └─ Cannot proceed
-                   └─ Must split into new session
+            └─ above it → automatic compaction
+                  └─ PreCompact hook fires first
+
+SEPARATE LIMITS (per run)
+      ├─ max_turns       → ResultMessage subtype "error_max_turns"
+      ├─ max_budget_usd  → "error_max_budget_usd"
+      └─ task_budget     → advisory: the model paces itself
 ```
 
 ---

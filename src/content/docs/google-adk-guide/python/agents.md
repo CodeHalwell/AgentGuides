@@ -677,7 +677,7 @@ import asyncio
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage
-from google.adk.agents import LangGraphAgent
+from google.adk.agents.langgraph_agent import LangGraphAgent  # not re-exported from google.adk.agents
 from google.adk.runners import InMemoryRunner
 
 # --- Build a minimal LangGraph ------------------------------------------------
@@ -942,11 +942,11 @@ asyncio.run(main())
 
 | Planner | Requires thinking model | Latency overhead | Reasoning visible in traces | Cost |
 |---|---|---|---|---|
-| `BuiltInPlanner(thinking_config=...)` | Yes (Gemini 2.5 Pro/Flash only) | Low (native) | Yes (thought parts) | Thinking tokens charged separately |
+| `BuiltInPlanner(thinking_config=...)` | Yes (thinking-capable Gemini models, 2.5 and later) | Low (native) | Yes (thought parts) | Thinking tokens charged separately |
 | `PlanReActPlanner()` | No (any Gemini model) | Higher (extra output tokens) | Yes (thought parts) | Normal output token rate |
 
 Use `PlanReActPlanner` when:
-- You need structured planning on a non-thinking model (e.g. `gemini-2.0-flash`).
+- You need structured planning on a non-thinking model, or through `LiteLlm` to a non-Gemini model.
 - You want the plan/reasoning explicitly tagged and capturable via callbacks.
 - You need to debug multi-step tool chains — the `/*REASONING*/` blocks reveal the model's intent at each step.
 

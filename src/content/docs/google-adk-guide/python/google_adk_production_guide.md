@@ -344,8 +344,9 @@ spec:
 import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor
+from google.cloud import firestore
 from google.adk import Agent, Runner
-from google.adk.sessions import FirestoreSessionService
+from google.adk.integrations.firestore import FirestoreSessionService
 from google.genai import types
 
 class LoadTestSuite:
@@ -354,7 +355,9 @@ class LoadTestSuite:
     def __init__(self, agent: Agent, concurrent_users: int = 100):
         self.agent = agent
         self.concurrent_users = concurrent_users
-        self.session_service = FirestoreSessionService(project_id="test-project")
+        self.session_service = FirestoreSessionService(
+            client=firestore.AsyncClient(project="test-project")
+        )
         self.results = {
             "total_requests": 0,
             "successful": 0,
@@ -372,7 +375,8 @@ class LoadTestSuite:
             runner = Runner(
                 app_name="load_test_app",
                 agent=self.agent,
-                session_service=self.session_service
+                session_service=self.session_service,
+                auto_create_session=True,  # sessions are created on first use
             )
             
             message = types.Content(
@@ -480,7 +484,7 @@ async def run_benchmarks():
 
 ```python
 from google.cloud import firestore
-from google.adk.sessions import FirestoreSessionService
+from google.adk.integrations.firestore import FirestoreSessionService
 import asyncio
 
 class PooledSessionService:
@@ -490,7 +494,7 @@ class PooledSessionService:
         self.project_id = project_id
         self.pool_size = pool_size
         self.session_services = [
-            FirestoreSessionService(project_id=project_id)
+            FirestoreSessionService(client=firestore.AsyncClient(project=project_id))
             for _ in range(pool_size)
         ]
         self.current_index = 0
@@ -1136,7 +1140,7 @@ class CostOptimizedModelSelector:
     MODELS = {
         "gemini-2.5-flash": {"cost": 1, "quality": 8, "speed": 10},
         "gemini-2.5-pro": {"cost": 40, "quality": 10, "speed": 7},
-        "gemini-1.5-flash": {"cost": 1, "quality": 7, "speed": 10}
+        "gemini-2.5-flash-lite": {"cost": 0.5, "quality": 7, "speed": 10}
     }
     
     @staticmethod
@@ -1421,7 +1425,8 @@ async def test_agent_execution(test_agent):
     runner = Runner(
         app_name="test",
         agent=test_agent,
-        session_service=InMemorySessionService()
+        session_service=InMemorySessionService(),
+        auto_create_session=True,
     )
     
     message = types.Content(
@@ -1450,18 +1455,15 @@ from google.cloud import firestore
 @pytest.fixture
 def firestore_db():
     """Firestore test instance."""
-    return firestore.Client()
+    return firestore.AsyncClient(project="test-project")
 
 @pytest.mark.asyncio
 async def test_agent_with_firestore(firestore_db):
     """Test agent with Firestore session management."""
-    from google.adk.sessions import FirestoreSessionService
+    from google.adk.integrations.firestore import FirestoreSessionService
     from google.adk import Agent, Runner
     
-    session_service = FirestoreSessionService(
-        project_id="test-project",
-        db=firestore_db
-    )
+    session_service = FirestoreSessionService(client=firestore_db)
     
     agent = Agent(
         name="test_agent",

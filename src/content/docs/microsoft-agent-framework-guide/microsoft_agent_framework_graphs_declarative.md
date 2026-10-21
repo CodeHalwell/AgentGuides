@@ -6,7 +6,7 @@ framework: microsoft-agent-framework
 
 # Workflows & Declarative Agents
 
-> **Errata (April 2026).** An earlier draft of this page described an `agent_framework.graphs` module with classes like `AgentGraph`, `GraphNode`, `GraphEdge`, `ConditionalEdge`, `CheckpointConfig`, `HITLConfig`, `TimeTravelConfig`, `ErrorPolicy`, and `ObservabilityConfig`. **None of those classes exist** in the `agent-framework` package. This page was rewritten after direct introspection of `agent-framework-core==1.1.0` and `agent-framework-declarative==1.0.0b260421`.
+> **Errata (April 2026).** An earlier draft of this page described an `agent_framework.graphs` module with classes like `AgentGraph`, `GraphNode`, `GraphEdge`, `ConditionalEdge`, `CheckpointConfig`, `HITLConfig`, `TimeTravelConfig`, `ErrorPolicy`, and `ObservabilityConfig`. **None of those classes exist** in the `agent-framework` package. This page was rewritten after direct introspection of `agent-framework-core` 1.1.0 and `agent-framework-declarative` 1.0.0b260421, and re-verified against `agent-framework` %%version=agent-framework%% on %%versions-checked%%.
 
 Two real capabilities ship under this umbrella:
 
@@ -23,7 +23,7 @@ pip install agent-framework
 
 The workflow types are exported from the top-level `agent_framework` package.
 
-### Primitives (verified against `agent-framework-core==1.5.0`)
+### Primitives (verified against `agent-framework` %%version=agent-framework%%)
 
 | Class / function | Purpose |
 |---|---|
@@ -54,7 +54,7 @@ WorkflowBuilder(
 )
 ```
 
-> **`output_executors` is deprecated** in 1.5.0. Replace with `output_from=`. The old parameter still works but emits a deprecation warning.
+> **`output_executors` has been deprecated since 1.5.0.** Replace with `output_from=`. The old parameter still works but emits a deprecation warning.
 
 Builder methods (all return `Self` for chaining):
 
@@ -191,7 +191,7 @@ The `condition` callable receives the output value of the source executor and mu
 
 ### Controlling workflow outputs — `output_from` and `intermediate_output_from`
 
-`result.get_outputs()` collects only values explicitly emitted via `ctx.yield_output()` — plain function return values are **not** captured. In 1.5.0 two new parameters give you fine-grained control over which nodes contribute to the result:
+`result.get_outputs()` collects only values explicitly emitted via `ctx.yield_output()` — plain function return values are **not** captured. Two parameters (added in 1.5.0) give you fine-grained control over which nodes contribute to the result:
 
 | Parameter | Type | Effect |
 |---|---|---|
@@ -239,7 +239,7 @@ workflow = (
 
 result = asyncio.run(workflow.run("latest AI news"))
 outputs       = result.get_outputs()               # ['web: ...', 'db: ...']
-intermediates = [e for e in result.events if e.type == "intermediate"]
+intermediates = [e for e in result if e.type == "intermediate"]   # WorkflowRunResult is a list of events
 print(outputs)       # ['web: latest AI news', 'db: latest AI news']
 print(len(intermediates))  # 1  (the audit event)
 ```
@@ -400,10 +400,12 @@ For switch/case routing the output is identical in shape; conditions live inside
 ### Install
 
 ```bash
-pip install agent-framework-declarative --pre
+pip install agent-framework-declarative
 ```
 
-### Primitives (verified against `agent-framework-declarative==1.0.0b260429`)
+### Primitives (verified against the `agent-framework-declarative` release installed by `agent-framework` %%version=agent-framework%%)
+
+`agent-framework-declarative` left beta and no longer needs `--pre`. `AgentFactory` methods are instance methods — construct the factory (optionally with `client=`, `bindings=`, `connections=`) and call `create_agent_from_yaml_path`, `create_agent_from_yaml` or `create_agent_from_dict` (each has an `_async` twin).
 
 | Class | Purpose |
 |---|---|
@@ -417,7 +419,7 @@ pip install agent-framework-declarative --pre
 ```python
 from agent_framework.declarative import AgentFactory
 
-agent = AgentFactory.create_from_yaml_path("agent.yaml")
+agent = AgentFactory().create_agent_from_yaml_path("agent.yaml")
 result = await agent.run("Hello")
 ```
 
@@ -910,7 +912,7 @@ async def pipeline(topic: str) -> str:
 
 
 import asyncio
-result = asyncio.run(pipeline.run("quantum networking"))
+result = asyncio.run(pipeline.build().run("quantum networking"))
 print(result.get_outputs()[-1])
 ```
 

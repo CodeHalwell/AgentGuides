@@ -506,7 +506,7 @@ Hosted Tools
     │  └──> Python sandbox execution
     │       Results captured
     │
-    ├─ ComputerControlTool()
+    ├─ ComputerTool(computer)
     │  └──> Desktop automation
     │       Mouse/keyboard control
     │

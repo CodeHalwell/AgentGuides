@@ -226,7 +226,7 @@ ADK is built on the following architectural principles:
 
 #### The Agent Class
 
-The `Agent` class is the base abstraction for all agents in ADK:
+`Agent` (importable from `google.adk`) is the everyday name for `LlmAgent`, the LLM-backed agent:
 
 ```python
 from google.adk import Agent
@@ -240,8 +240,7 @@ search_agent = Agent(
     description="Researches topics using web search",
     instruction="You are a helpful research assistant. Use web search to find accurate, current information.",
     tools=[google_search],
-    max_iterations=5,
-    max_total_tokens=4096
+    generate_content_config=types.GenerateContentConfig(max_output_tokens=4096),
 )
 ```
 
@@ -252,12 +251,13 @@ search_agent = Agent(
 - `description`: Human-readable description of agent capabilities
 - `instruction`: System prompt defining agent behaviour and constraints
 - `tools`: List of tools the agent can invoke
-- `max_iterations`: Maximum reasoning steps before timeout
-- `max_total_tokens`: Maximum tokens for a single invocation
+- `generate_content_config`: Per-request Gemini settings (temperature, `max_output_tokens`, safety)
+
+`Agent` is an alias of `LlmAgent`; the abstract base is `BaseAgent`. There is no per-agent iteration cap. To bound how many model calls a single invocation may make, pass `RunConfig(max_llm_calls=...)` to `runner.run_async(...)`.
 
 #### The LlmAgent Class
 
-`LlmAgent` is a specialised subclass optimised for language model interactions:
+`LlmAgent` is the same class under its full name; this example shows more of its fields:
 
 ```python
 from google.adk.agents import LlmAgent
@@ -355,14 +355,16 @@ asyncio.run(execute_agent())
 
 #### Available Models
 
-ADK supports multiple Gemini models with different capabilities and costs:
+ADK passes the `model` string straight to the Gemini API (or Vertex AI), so any model your project can reach works. The examples in this guide use `gemini-2.5-flash` as a default because it is widely available; swap in a newer model where you have access.
 
-| Model | Input Cost | Output Cost | Context Window | Best For |
-|-------|-----------|-----------|-----------------|----------|
-| gemini-2.5-flash | $0.075/1M | $0.30/1M | 1M tokens | Fast responses, tool calling |
-| gemini-2.5-pro | $3/1M | $12/1M | 1M tokens | Complex reasoning, quality |
-| gemini-1.5-flash | $0.075/1M | $0.30/1M | 1M tokens | Cost-effective tasks |
-| gemini-1.5-pro | $3/1M | $12/1M | 1M tokens | Advanced reasoning |
+| Model | Context window | Typical use |
+|-------|----------------|-------------|
+| `gemini-2.5-flash` | 1M tokens | Default for tool calling and general agents |
+| `gemini-2.5-flash-lite` | 1M tokens | High-volume, latency-sensitive routing and classification |
+| `gemini-2.5-pro` | 1M tokens | Complex reasoning, long documents |
+| `gemini-3.5-flash`, `gemini-3.1-pro-preview` | see model card | Newer generations (ADK's own samples and defaults reference these) |
+
+Prices change often; check the [Gemini API pricing page](https://ai.google.dev/gemini-api/docs/pricing) or Vertex AI pricing rather than relying on figures in a guide. Non-Gemini models are reached through `LiteLlm`, `AnthropicLlm` or a registered `BaseLlm` subclass (see Advanced Python).
 
 #### Model Configuration
 
@@ -1081,8 +1083,10 @@ article_workflow = SequentialAgent(
     name="article_creation_workflow",
     description="Multi-step article creation process",
     sub_agents=[step1_research, step2_organise, step3_draft, step4_edit],
-    instruction="Execute each step in sequence, passing results forward"
 )
+# SequentialAgent has no instruction; each sub-agent's output reaches the next
+# through the shared session (use output_key to save it to state explicitly).
+# SequentialAgent / ParallelAgent / LoopAgent are deprecated in 2.x in favour of Workflow.
 ```
 
 #### Parallel Agent Execution
@@ -1114,7 +1118,6 @@ multi_processor = ParallelAgent(
     name="parallel_processor",
     description="Process input through multiple perspectives simultaneously",
     sub_agents=[parser, analyser, classifier],
-    instruction="Execute all agents in parallel and combine results"
 )
 ```
 
@@ -1134,7 +1137,6 @@ problem_solver = LlmAgent(
     3. Make progress towards solution
     4. Call exit_loop when complete""",
     tools=[exit_loop],
-    max_iterations=1  # Reset per loop iteration
 )
 
 # Create loop wrapper
@@ -1142,8 +1144,7 @@ iterative_solution = LoopAgent(
     name="iterative_problem_solver",
     description="Solve complex problems through iteration",
     sub_agents=[problem_solver],
-    max_iterations=10,
-    instruction="Keep iterating until solution found"
+    max_iterations=10,  # hard stop if exit_loop is never called
 )
 ```
 
@@ -1459,38 +1460,47 @@ calculator = Agent(
 
 #### Tool Grouping
 
+A toolset is a `BaseToolset` subclass whose `get_tools()` returns the tools to offer on each turn. Pass the toolset itself in `tools=`; the agent calls `get_tools()` for you.
+
 ```python
+from typing import Optional
+
 from google.adk import Agent
-from google.adk.tools import ToolSet
+from google.adk.agents.readonly_context import ReadonlyContext
+from google.adk.tools import FunctionTool
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.base_toolset import BaseToolset
 
-class MathToolSet(ToolSet):
+
+def add(a: float, b: float) -> float:
+    """Add two numbers."""
+    return a + b
+
+def subtract(a: float, b: float) -> float:
+    """Subtract b from a."""
+    return a - b
+
+def divide(a: float, b: float) -> float:
+    """Divide a by b."""
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+
+class MathToolset(BaseToolset):
     """Collection of mathematical tools."""
-    
-    def add(self, a: float, b: float) -> float:
-        """Add two numbers."""
-        return a + b
-    
-    def subtract(self, a: float, b: float) -> float:
-        """Subtract b from a."""
-        return a - b
-    
-    def multiply(self, a: float, b: float) -> float:
-        """Multiply two numbers."""
-        return a * b
-    
-    def divide(self, a: float, b: float) -> float:
-        """Divide a by b."""
-        if b == 0:
-            raise ValueError("Cannot divide by zero")
-        return a / b
 
-math_tools = MathToolSet()
+    async def get_tools(
+        self, readonly_context: Optional[ReadonlyContext] = None
+    ) -> list[BaseTool]:
+        return [FunctionTool(f) for f in (add, subtract, divide)]
+
 
 agent = Agent(
     name="math_assistant",
     model="gemini-2.5-flash",
     instruction="Help with mathematical calculations",
-    tools=math_tools.get_tools()
+    tools=[MathToolset()],
 )
 ```
 
@@ -1518,28 +1528,28 @@ search_agent = Agent(
 # - Discover new information not in training data
 ```
 
-#### Google Calendar (Simulated Integration)
+#### Google Calendar
+
+ADK ships OAuth-backed toolsets generated from the Google API discovery documents (`CalendarToolset`, `GmailToolset`, `DocsToolset`, `SheetsToolset`, `SlidesToolset`, `YoutubeToolset`). Each needs an OAuth client ID and secret (or a service account); the user is asked to consent on first use.
 
 ```python
 from google.adk import Agent
-from google.adk.tools import calendar_schedule_event, calendar_list_events
-from typing import Optional
+from google.adk.tools.google_api_tool import CalendarToolset
 
-# Create calendar agent
+calendar_tools = CalendarToolset(
+    client_id="YOUR_OAUTH_CLIENT_ID",
+    client_secret="YOUR_OAUTH_CLIENT_SECRET",
+    tool_filter=["calendar_events_list", "calendar_events_insert"],  # optional
+)
+
 calendar_agent = Agent(
     name="calendar_assistant",
     model="gemini-2.5-flash",
     description="Manages calendar events",
     instruction="""You are a calendar assistant. Help users schedule events,
-    check availability, and manage their calendar. Use calendar tools to
-    create events and retrieve schedule information.""",
-    tools=[calendar_schedule_event, calendar_list_events]
+    check availability, and manage their calendar.""",
+    tools=[calendar_tools],
 )
-
-# The agent can handle:
-# - "Schedule a meeting for tomorrow at 2pm"
-# - "What's on my calendar next week?"
-# - "Find a time slot for a meeting with three people"
 ```
 
 #### BigQuery Integration
@@ -2203,209 +2213,66 @@ complex_agent = Agent(
 
 ## Model Context Protocol (MCP)
 
-### MCP in ADK
+ADK works with MCP in both directions. MCP support is an optional extra: `pip install "google-adk[mcp]"`. The [MCP & A2A page](./mcp-and-a2a/) has the full constructor reference and more examples.
 
-#### Understanding MCP
+### Consuming MCP tools (`McpToolset`)
 
-Model Context Protocol (MCP) is a standardised protocol that enables:
-
-- **Tool Sharing:** Expose ADK agent tools as standardised MCP resources
-- **Client-Server Communication:** Allow external systems to access agent capabilities
-- **Standardised Interfaces:** Work with any MCP-compatible client
+`McpToolset` connects to an MCP server and offers its tools to an agent. Choose the transport with a connection-params object: `StdioConnectionParams` (local subprocess), `StreamableHTTPConnectionParams` or `SseConnectionParams` (remote).
 
 ```python
-from google.adk import Agent
+from google.adk.agents import LlmAgent
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool import StdioConnectionParams
+from mcp import StdioServerParameters
 
-# ADK agents can be exposed via MCP
-mcp_enabled_agent = Agent(
-    name="mcp_agent",
+filesystem_tools = McpToolset(
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp/workspace"],
+        ),
+        timeout=30,
+    ),
+    tool_filter=["read_file", "list_directory"],  # optional allow-list
+)
+
+agent = LlmAgent(
+    name="file_assistant",
     model="gemini-2.5-flash",
-    description="Agent exposed via Model Context Protocol",
-    instruction="Serve requests through MCP interface"
+    instruction="Help the user inspect files in the workspace.",
+    tools=[filesystem_tools],
 )
 ```
-
-### Exposing ADK Agents via MCP
-
-#### MCP Server Setup
 
 ```python
-from google.adk import Agent
-from google.adk.mcp import MCPServer, MCPResource
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool import StreamableHTTPConnectionParams
 
-# Create agents
-agent = Agent(
-    name="main_agent",
-    model="gemini-2.5-flash",
-    instruction="Main agent"
+remote_tools = McpToolset(
+    connection_params=StreamableHTTPConnectionParams(
+        url="https://mcp.example.com/mcp",
+        headers={"Authorization": "Bearer <token>"},
+    ),
 )
-
-# Set up MCP server
-mcp_server = MCPServer(
-    name="adk_agent_server",
-    version="1.0.0"
-)
-
-# Register agents as MCP resources
-mcp_server.add_resource(
-    MCPResource(
-        name="main_agent",
-        description="Main ADK agent via MCP",
-        agent=agent
-    )
-)
-
-# Start server
-async def start_mcp_server():
-    await mcp_server.start(
-        host="localhost",
-        port=5000,
-        ssl_enabled=False
-    )
 ```
 
-#### MCP Client Usage
+Close toolsets you create yourself with `await toolset.close()` on shutdown; when they are attached to an agent run by a `Runner`, `runner.close()` does it.
+
+### Exposing an ADK agent over MCP (`to_mcp_server`)
+
+`to_mcp_server` (added in 2.5.0) wraps an agent as a `FastMCP` server with a single tool, so MCP hosts such as IDEs and CLI coding agents can drive it. One ADK session is kept per MCP connection.
 
 ```python
-from google.adk.mcp import MCPClient
+from google.adk.agents import LlmAgent
+from google.adk.tools.mcp_tool import to_mcp_server
 
-# Connect to MCP server
-client = MCPClient(
-    server_url="http://localhost:5000",
-    name="adk_client"
-)
+agent = LlmAgent(name="assistant", model="gemini-2.5-flash", instruction="Be helpful.")
 
-# Use agent through MCP
-async def use_agent_via_mcp():
-    from google.genai import types
-    
-    message = types.Content(
-        role='user',
-        parts=[types.Part(text="What is 2+2?")]
-    )
-    
-    response = await client.call_resource(
-        resource_name="main_agent",
-        method="run",
-        parameters={"message": message}
-    )
-    
-    return response
+server = to_mcp_server(agent)
+server.run(transport="stdio")  # or transport="streamable-http"
 ```
 
-### Tool Sharing
-
-#### Expose Tools via MCP
-
-```python
-from google.adk.mcp import MCPServer, MCPTool
-
-def calculate_total(items: list[float], tax_rate: float) -> float:
-    """Calculate total with tax."""
-    subtotal = sum(items)
-    tax = subtotal * tax_rate
-    return subtotal + tax
-
-# Create MCP tool
-mcp_tool = MCPTool(
-    name="calculate_total",
-    description="Calculate total with tax",
-    function=calculate_total
-)
-
-# Register with MCP server
-mcp_server.add_tool(mcp_tool)
-```
-
-#### Shared Tool Registry
-
-```python
-from google.adk.mcp import MCPToolRegistry
-
-# Create registry
-registry = MCPToolRegistry()
-
-# Register multiple tools
-registry.register("calculate_total", calculate_total)
-registry.register("apply_discount", apply_discount)
-registry.register("format_currency", format_currency)
-
-# Create server with registry
-mcp_server = MCPServer(
-    name="shared_tools_server",
-    tool_registry=registry
-)
-```
-
-### Context Management
-
-#### Managing Context Over MCP
-
-```python
-from google.adk.mcp import MCPContextManager
-
-# Create context manager
-context_manager = MCPContextManager()
-
-# Store context
-context_manager.set("user_id", "user123")
-context_manager.set("session_id", "sess456")
-context_manager.set("preferences", {"language": "en"})
-
-# Retrieve context
-user_id = context_manager.get("user_id")
-preferences = context_manager.get("preferences")
-
-# Use in MCP calls
-async def make_context_aware_call():
-    response = await mcp_server.call_with_context(
-        resource="agent",
-        context=context_manager.get_all()
-    )
-    return response
-```
-
-### Integration Patterns
-
-#### MCP with Multiple Agents
-
-```python
-from google.adk.mcp import MCPServer
-
-# Create server with multiple agents
-server = MCPServer(name="multi_agent_server")
-
-# Register different agents
-for agent_config in agent_configs:
-    server.add_resource(
-        MCPResource(
-            name=agent_config["name"],
-            description=agent_config["description"],
-            agent=create_agent(agent_config)
-        )
-    )
-
-# Clients can access multiple agents through single MCP server
-```
-
-#### MCP Gateway Pattern
-
-```python
-from google.adk.mcp import MCPGateway
-
-# Create gateway
-gateway = MCPGateway(
-    name="adk_gateway",
-    default_model="gemini-2.5-flash"
-)
-
-# Add multiple backend servers
-gateway.add_backend_server("server_1", "http://backend1:5000")
-gateway.add_backend_server("server_2", "http://backend2:5000")
-
-# Route requests to appropriate backend
-# Clients connect to gateway instead of individual servers
-```
+To publish individual ADK tools instead of an agent, convert them with `adk_to_mcp_tool_type` (in `google.adk.tools.mcp_tool.conversion_utils`) and register them on your own `mcp` server.
 
 ---
 
@@ -2436,8 +2303,7 @@ react_agent = Agent(
 5. **FINAL ANSWER**: Provide your conclusion when you have enough information.
 
 Always follow this pattern explicitly in your reasoning.""",
-    tools=[google_search],
-    max_iterations=5
+    tools=[google_search]
 )
 
 # Example execution traces show the agent's thinking:
@@ -2468,8 +2334,7 @@ For each problem, think step-by-step:
 - Step 5: Verify the solution
 - Step 6: Present the final answer
 
-Show your complete reasoning process.""",
-    max_iterations=10
+Show your complete reasoning process."""
 )
 ```
 
@@ -2544,8 +2409,7 @@ Reason through each step carefully.""",
         evaluate_competition,
         assess_resources,
         generate_strategy
-    ],
-    max_iterations=10
+    ]
 )
 ```
 
@@ -2650,9 +2514,10 @@ autonomous_agent = Agent(
 6. Report on completion
 
 Work independently until the task is fully complete.""",
-    max_iterations=20,
-    max_total_tokens=8192
+    generate_content_config=types.GenerateContentConfig(max_output_tokens=8192),
 )
+# Bound the run itself at call time:
+# runner.run_async(..., run_config=RunConfig(max_llm_calls=20))
 ```
 
 ---
@@ -2754,7 +2619,6 @@ async def setup_persistent_storage():
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ContextCacheConfig
 
 # Large static context that doesn't change
 LARGE_SYSTEM_CONTEXT = """You are an expert in multiple domains:
@@ -2772,30 +2636,29 @@ cache_agent = Agent(
     model="gemini-2.5-pro",
     instruction="Provide expert advice on technical topics",
     static_instruction=LARGE_SYSTEM_CONTEXT,
-    max_total_tokens=8192
 )
 
-# The large system context is cached on first use
-# Subsequent requests reuse cached context, reducing latency and cost
+# static_instruction is sent as the stable system-instruction prefix, so it
+# can be reused by Gemini's implicit caching or by an explicit cache
+# configured on the App (next example).
 ```
 
-#### Dynamic Caching Configuration
+#### Explicit Caching Configuration
+
+Explicit context caching is configured once on the `App`, not per agent; it then applies to every `LlmAgent` in the app.
 
 ```python
-from google.adk.agents import ContextCacheConfig
+from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.apps import App
 
-cache_config = ContextCacheConfig(
-    enable_auto_caching=True,
-    ttl_seconds=3600,  # Cache for 1 hour
-    min_cache_size=1000,  # Minimum tokens for caching
-    max_cache_entries=10,  # Maximum concurrent cached contexts
-)
-
-cached_agent = Agent(
-    name="dynamic_cache_agent",
-    model="gemini-2.5-pro",
-    instruction="Respond to queries",
-    cache_config=cache_config
+app = App(
+    name="cached_app",
+    root_agent=cache_agent,
+    context_cache_config=ContextCacheConfig(
+        ttl_seconds=3600,     # cache lifetime (default 1800)
+        cache_intervals=10,   # refresh after this many invocations (default 10)
+        min_tokens=4096,      # skip caching for smaller requests (default 0)
+    ),
 )
 ```
 
@@ -2871,48 +2734,28 @@ memories = await memory_service.retrieve_memory(
 
 ### Vector Search with Vertex AI
 
-#### Vector-based Semantic Search
+ADK has two managed, semantic memory services, so you rarely need to hand-roll vector search:
+
+- `VertexAiRagMemoryService` stores session text in a Vertex AI RAG Engine corpus and retrieves by similarity.
+- `VertexAiMemoryBankService` uses Agent Engine Memory Bank, which extracts and consolidates memories with an LLM.
 
 ```python
-from google.adk.memory import VectorSearchMemory
-from google.cloud import aiplatform
-import numpy as np
+from google.adk.memory import VertexAiRagMemoryService, VertexAiMemoryBankService
 
-class SemanticMemoryService:
-    """Use vector search for semantic memory retrieval."""
-    
-    def __init__(self, project_id: str, index_endpoint_id: str):
-        self.project_id = project_id
-        self.index_endpoint_id = index_endpoint_id
-        self.client = aiplatform.MatchingEngineIndexEndpointClient()
-    
-    async def store_semantic_memory(
-        self,
-        text: str,
-        embedding: np.ndarray,
-        metadata: dict
-    ) -> str:
-        """Store text with embedding."""
-        # Store in vector index
-        doc_id = str(hash(text))
-        # Implementation depends on vector store
-        return doc_id
-    
-    async def retrieve_similar_memories(
-        self,
-        query_embedding: np.ndarray,
-        top_k: int = 5
-    ) -> list:
-        """Retrieve semantically similar memories."""
-        # Query vector store for similar embeddings
-        similar_docs = []  # Results from search
-        return similar_docs
-
-# Usage for RAG-style memory retrieval
-semantic_memory = SemanticMemoryService(
-    project_id="my-gcp-project",
-    index_endpoint_id="my-index-endpoint"
+rag_memory = VertexAiRagMemoryService(
+    rag_corpus="projects/my-gcp-project/locations/us-central1/ragCorpora/123",
+    similarity_top_k=5,
+    vector_distance_threshold=0.5,
 )
+
+bank_memory = VertexAiMemoryBankService(
+    project="my-gcp-project",
+    location="us-central1",
+    agent_engine_id="456",
+)
+
+# Pass either to Runner(memory_service=...), then let agents read it with the
+# load_memory / preload_memory tools. See the Memory & Artifacts page.
 ```
 
 ### Custom Memory Implementations
@@ -3175,7 +3018,8 @@ reviewer = Agent(
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ContextCacheConfig
+from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.apps import App
 
 # Strategy 1: Static long-form content caching
 LARGE_DOCUMENTATION = """
@@ -3187,10 +3031,11 @@ static_cache_agent = Agent(
     model="gemini-2.5-pro",
     static_instruction=LARGE_DOCUMENTATION,
     instruction="Answer questions about the API",
-    cache_config=ContextCacheConfig(
-        enable_auto_caching=True,
-        ttl_seconds=86400  # 24 hours
-    )
+)
+docs_app = App(
+    name="docs_app",
+    root_agent=static_cache_agent,
+    context_cache_config=ContextCacheConfig(ttl_seconds=86400),  # 24 hours
 )
 
 # Strategy 2: Dynamic context caching with large examples
@@ -3209,11 +3054,11 @@ example_cache_agent = Agent(
     model="gemini-2.5-pro",
     static_instruction=LARGE_CONTEXT_WITH_EXAMPLES,
     instruction="Generate code based on requirements",
-    cache_config=ContextCacheConfig(
-        enable_auto_caching=True,
-        ttl_seconds=3600,
-        min_cache_size=1000
-    )
+)
+codegen_app = App(
+    name="codegen_app",
+    root_agent=example_cache_agent,
+    context_cache_config=ContextCacheConfig(ttl_seconds=3600, min_tokens=1000),
 )
 ```
 
@@ -3526,105 +3371,48 @@ state = await state_manager.load_agent_state("agent_123")
 
 ### Cloud Storage for Artifacts
 
-#### Store and Retrieve Artifacts
+Use the built-in `GcsArtifactService` rather than writing your own. Artifacts are versioned `types.Part` objects keyed by app, user, session and filename (a filename starting with `user:` is shared across the user's sessions).
 
 ```python
-from google.cloud import storage
-from google.adk.artifacts import ArtifactService
+from google.adk.artifacts import GcsArtifactService
+from google.genai import types
 
-class CloudStorageArtifactService(ArtifactService):
-    """Store artifacts in Cloud Storage."""
-    
-    def __init__(self, project_id: str, bucket_name: str):
-        self.client = storage.Client(project=project_id)
-        self.bucket = self.client.bucket(bucket_name)
-    
-    async def save_artifact(
-        self,
-        artifact_id: str,
-        content: bytes,
-        content_type: str
-    ) -> str:
-        """Save artifact to Cloud Storage."""
-        blob = self.bucket.blob(artifact_id)
-        blob.upload_from_string(content, content_type=content_type)
-        return blob.public_url
-    
-    async def retrieve_artifact(self, artifact_id: str) -> bytes:
-        """Retrieve artifact from Cloud Storage."""
-        blob = self.bucket.blob(artifact_id)
-        return blob.download_as_bytes()
+artifact_service = GcsArtifactService(bucket_name="agent-artifacts")  # kwargs go to storage.Client
 
-# Usage
-artifact_service = CloudStorageArtifactService(
-    project_id="my-gcp-project",
-    bucket_name="agent-artifacts"
+version = await artifact_service.save_artifact(
+    app_name="reports",
+    user_id="user_456",
+    session_id="sess_1",
+    filename="report.txt",
+    artifact=types.Part.from_bytes(data=b"Report content", mime_type="text/plain"),
 )
 
-# Save artifact
-url = await artifact_service.save_artifact(
-    "report_2025_01",
-    b"Report content",
-    "text/plain"
+part = await artifact_service.load_artifact(
+    app_name="reports", user_id="user_456", session_id="sess_1", filename="report.txt",
 )
 
-# Retrieve artifact
-content = await artifact_service.retrieve_artifact("report_2025_01")
+# Usually you hand the service to the Runner (Runner(artifact_service=...)) and
+# tools call tool_context.save_artifact(...) / load_artifact(...).
 ```
 
 ### BigQuery for Analytics
 
-#### Logging Agent Interactions
+For logging agent activity to BigQuery, use `BigQueryAgentAnalyticsPlugin` (needs `pip install "google-adk[bigquery-analytics]"`). It streams invocation, model, tool and error events through the BigQuery Storage Write API.
 
 ```python
-from google.cloud import bigquery
-from google.adk.tools.bigquery_toolset import BigQueryToolset
+from google.adk.apps import App
+from google.adk.plugins.bigquery_agent_analytics_plugin import BigQueryAgentAnalyticsPlugin
 
-class AgentAnalytics:
-    """Track agent interactions in BigQuery."""
-    
-    def __init__(self, project_id: str, dataset_id: str):
-        self.client = bigquery.Client(project=project_id)
-        self.dataset_id = dataset_id
-        self.table_id = f"{project_id}.{dataset_id}.agent_interactions"
-    
-    async def log_interaction(
-        self,
-        agent_id: str,
-        user_id: str,
-        query: str,
-        response: str,
-        execution_time: float
-    ) -> None:
-        """Log interaction to BigQuery."""
-        rows_to_insert = [{
-            "agent_id": agent_id,
-            "user_id": user_id,
-            "query": query,
-            "response": response,
-            "execution_time": execution_time,
-            "timestamp": datetime.now().isoformat()
-        }]
-        
-        errors = self.client.insert_rows_json(self.table_id, rows_to_insert)
-        if errors:
-            print(f"Errors inserting rows: {errors}")
-
-# Usage
-analytics = AgentAnalytics(
+analytics = BigQueryAgentAnalyticsPlugin(
     project_id="my-gcp-project",
-    dataset_id="agent_analytics"
+    dataset_id="agent_analytics",
+    table_id="agent_events",   # optional
 )
 
-# Log interaction
-await analytics.log_interaction(
-    agent_id="agent_123",
-    user_id="user_456",
-    query="What is the weather?",
-    response="The weather is sunny and warm.",
-    execution_time=1.23
-)
+app = App(name="tracked_app", root_agent=agent, plugins=[analytics])
 ```
+
+To let an agent *query* BigQuery, give it `BigQueryToolset` from `google.adk.integrations.bigquery` (see Tools Integration above).
 
 ### Secret Manager for Credentials
 
@@ -3698,7 +3486,7 @@ import base64
 
 vision_agent = Agent(
     name="vision_analyst",
-    model="gemini-2.5-vision",
+    model="gemini-2.5-flash",  # Gemini models are natively multimodal,
     description="Analyzes images and multimedia",
     instruction="Analyse images and describe what you see"
 )
@@ -3748,7 +3536,7 @@ from google.genai import types
 
 video_agent = Agent(
     name="video_analyst",
-    model="gemini-2.5-vision",
+    model="gemini-2.5-flash",  # Gemini models are natively multimodal,
     instruction="Analyse videos and extract key information"
 )
 
@@ -3806,8 +3594,7 @@ code_agent = Agent(
     model="gemini-2.5-flash",
     description="Executes code to solve problems",
     instruction="When needed, write and execute Python code to solve problems",
-    code_executor=BuiltInCodeExecutor(),
-    max_iterations=10
+    code_executor=BuiltInCodeExecutor()
 )
 
 # Agent can now:
@@ -3858,7 +3645,8 @@ function_agent = Agent(
 
 ```python
 from google.adk import Agent
-from google.adk.agents import ContextCacheConfig
+from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.apps import App
 
 # Expensive cached context
 LARGE_KNOWLEDGE_BASE = """
@@ -3870,16 +3658,16 @@ cached_agent = Agent(
     model="gemini-2.5-pro",
     static_instruction=LARGE_KNOWLEDGE_BASE,
     instruction="Answer questions about the knowledge base",
-    cache_config=ContextCacheConfig(
-        enable_auto_caching=True,
-        ttl_seconds=86400
-    )
+)
+kb_app = App(
+    name="kb_app",
+    root_agent=cached_agent,
+    context_cache_config=ContextCacheConfig(ttl_seconds=86400),
 )
 
-# Benefits:
-# - First request: ~150ms (includes cache creation)
-# - Subsequent requests: ~50ms (uses cache)
-# - Cost savings: 90% reduction in token costs for cached content
+# Cached input tokens are billed at a reduced rate and cut time to first
+# token on later turns; the first request pays to create the cache.
+# Measure with your own workload before relying on a figure.
 ```
 
 ### Safety Settings
@@ -3931,7 +3719,6 @@ flash_agent = Agent(
     name="quick_agent",
     model="gemini-2.5-flash",
     instruction="Provide quick responses",
-    # Typical: 50-200ms latency, $0.075/1M input tokens
 )
 
 # Better quality, slightly slower
@@ -3939,15 +3726,13 @@ pro_agent = Agent(
     name="quality_agent",
     model="gemini-2.5-pro",
     instruction="Provide high-quality, detailed responses",
-    # Typical: 100-500ms latency, $3/1M input tokens
 )
 
-# Best quality, slowest
-ultra_agent = Agent(
+# Newer generation, where your project has access
+next_gen_agent = Agent(
     name="expert_agent",
-    model="gemini-2.5-ultra",
+    model="gemini-3.1-pro-preview",
     instruction="Provide expert-level responses",
-    # Typical: 500ms-2s latency, $15/1M input tokens
 )
 ```
 
@@ -3965,147 +3750,105 @@ ultra_agent = Agent(
 
 ### Custom Agent Types
 
-#### Creating Agent Variants
+#### Specialised `LlmAgent` configurations
+
+Agents are Pydantic models, so a subclass cannot simply assign new attributes in `__init__`. For "variants" of an LLM agent, a small factory is usually all you need:
 
 ```python
 from google.adk import Agent
-from abc import ABC, abstractmethod
 
-class SpecialisedAgent(Agent, ABC):
-    """Base class for specialised agents."""
-    
-    @abstractmethod
-    def get_specialty(self) -> str:
-        """Return agent specialty."""
-        pass
+def make_specialist(name: str, specialty: str, instruction: str) -> Agent:
+    return Agent(
+        name=name,
+        model="gemini-2.5-pro",
+        description=f"{specialty} specialist",
+        instruction=instruction,
+    )
 
-class DataAnalystAgent(SpecialisedAgent):
-    """Agent specialising in data analysis."""
-    
-    def __init__(self, name: str, project_id: str):
-        super().__init__(
-            name=name,
-            model="gemini-2.5-pro",
-            instruction="Analyse data and provide insights",
-            description="Data analysis specialist"
-        )
-        self.project_id = project_id
-    
-    def get_specialty(self) -> str:
-        return "Data Analysis"
-
-class CodeReviewAgent(SpecialisedAgent):
-    """Agent specialising in code review."""
-    
-    def __init__(self, name: str):
-        super().__init__(
-            name=name,
-            model="gemini-2.5-pro",
-            instruction="Review code for quality and best practices",
-            description="Code review specialist"
-        )
-    
-    def get_specialty(self) -> str:
-        return "Code Review"
+analyst = make_specialist("data_analyst", "Data analysis", "Analyse data and provide insights.")
+reviewer = make_specialist("code_reviewer", "Code review", "Review code for quality and best practices.")
 ```
+
+#### Custom control flow with `BaseAgent`
+
+When you need orchestration logic that is not an LLM call, subclass `BaseAgent`, declare extra fields as Pydantic fields, and implement `_run_async_impl` as an async generator of events:
+
+```python
+from typing import AsyncGenerator
+
+from google.adk.agents import BaseAgent, LlmAgent
+from google.adk.agents.invocation_context import InvocationContext
+from google.adk.events import Event
+
+
+class RetryUntilApproved(BaseAgent):
+    """Runs a writer, then a critic; repeats until the critic approves."""
+
+    writer: LlmAgent
+    critic: LlmAgent
+    max_rounds: int = 3
+
+    async def _run_async_impl(
+        self, ctx: InvocationContext
+    ) -> AsyncGenerator[Event, None]:
+        for _ in range(self.max_rounds):
+            async for event in self.writer.run_async(ctx):
+                yield event
+            async for event in self.critic.run_async(ctx):
+                yield event
+            if ctx.session.state.get("verdict") == "approved":
+                return
+```
+
+Pass the children as `sub_agents=[writer, critic]` as well if you want them to appear in the agent tree (for transfer and tracing). For most new pipelines a `Workflow` (below) is the simpler choice.
 
 ---
 
-## Graph-Based Agent Workflows (available since v1.25.0; use `Workflow` in 2.x)
+## Graph-Based Agent Workflows
 
-`GraphAgent` enables stateful, graph-based multi-agent orchestration with visual tooling:
+In ADK 2.x, graph orchestration is the `Workflow` class (`google.adk.workflow`). It replaces `SequentialAgent`, `ParallelAgent` and `LoopAgent`, which still work but are deprecated. A `Workflow` is a `BaseNode`, not a `BaseAgent`, so run it through an `App`:
 
 ```python
 from google.adk import Agent
-from google.adk.graph import GraphAgent, GraphEdge
+from google.adk.apps import App
+from google.adk.runners import InMemoryRunner
+from google.adk.workflow import Workflow, START
 
-# Define individual specialist agents
-research_agent = Agent(
-    name="researcher",
-    model="gemini-2.0-flash",
-    instruction="Research the given topic thoroughly.",
-)
+research_agent = Agent(name="researcher", model="gemini-2.5-flash",
+                       instruction="Research the given topic thoroughly.", mode="single_turn")
+analysis_agent = Agent(name="analyser", model="gemini-2.5-flash",
+                       instruction="Analyse the research and extract key insights.", mode="single_turn")
+writer_agent = Agent(name="writer", model="gemini-2.5-flash",
+                     instruction="Write a clear report based on the analysis.", mode="single_turn")
 
-analysis_agent = Agent(
-    name="analyser",
-    model="gemini-2.0-flash",
-    instruction="Analyse the research and extract key insights.",
-)
-
-writer_agent = Agent(
-    name="writer",
-    model="gemini-2.0-flash",
-    instruction="Write a clear report based on the analysis.",
-)
-
-# Build the graph
-graph = GraphAgent(
+report_pipeline = Workflow(
     name="report_pipeline",
-    agents=[research_agent, analysis_agent, writer_agent],
-    edges=[
-        GraphEdge(from_agent="researcher", to_agent="analyser"),
-        GraphEdge(from_agent="analyser", to_agent="writer"),
-    ],
+    edges=[(START, research_agent, analysis_agent, writer_agent)],  # a chain
 )
 
-# Run the graph
-result = await graph.run("Write a report on quantum computing trends in 2026")
-print(result.final_output)
+app = App(name="reports", root_agent=report_pipeline)
+runner = InMemoryRunner(app=app)
 ```
+
+Fan-out, routing maps, loops, `JoinNode`, retries, timeouts and human-in-the-loop pauses are covered on the [Workflows page](./workflows/).
 
 ---
 
-## Task API (v1.28.0+)
+## Session Rewind
 
-The Task API provides structured task management for complex, multi-step agent workflows:
-
-```python
-from google.adk import Agent
-from google.adk.tasks import TaskManager, Task, TaskStatus
-
-agent = Agent(name="task_agent", model="gemini-2.0-flash")
-task_manager = TaskManager(agent)
-
-# Create and track tasks
-task = await task_manager.create_task(
-    title="Market Analysis Report",
-    description="Analyse Q1 2026 market data",
-    priority="high",
-)
-
-# Run the task
-await task_manager.run_task(task.id)
-
-# Check status
-status = await task_manager.get_status(task.id)
-print(f"Status: {status}")  # TaskStatus.COMPLETED
-```
-
----
-
-## Session Rewind (v1.29.0+)
-
-Rewind a session to replay from a prior state — useful for debugging and exploring alternative paths:
+`Runner.rewind_async` (available since 1.17.0) rolls a session back to just before a given invocation, undoing the state and artifact changes made since — useful for "edit and retry" UIs and for debugging:
 
 ```python
-from google.adk.sessions import InMemorySessionService
-
-session_service = InMemorySessionService()
-
-# ... run agent session ...
-
-# Rewind to before the last 2 turns
-rewound_session = await session_service.rewind(
-    session_id="session_123",
-    steps_back=2,
+await runner.rewind_async(
+    user_id="u1",
+    session_id="s1",
+    rewind_before_invocation_id=invocation_id,  # from event.invocation_id
 )
 
-# Continue from the rewound point
-result = await agent.run(
-    "Try a different approach",
-    session=rewound_session,
-)
+# The next run_async on this session continues from the rewound point.
 ```
+
+Rewinding to an unknown invocation raises `InvocationNotFoundError`.
 
 ---
 
@@ -4271,7 +4014,7 @@ Trajectories persist across turns via `config.save_dir` — the harness writes a
 from google.adk.labs.antigravity import AntigravityAgent
 from google.antigravity import LocalAgentConfig
 
-config = LocalAgentConfig(model="gemini-2.0-flash", save_dir="~/.adk_antigravity_trajs")
+config = LocalAgentConfig(model="gemini-2.5-flash", save_dir="~/.adk_antigravity_trajs")
 agent = AntigravityAgent(name="my_ag_agent", config=config)   # root-only; no sub_agents
 ```
 
@@ -4753,7 +4496,7 @@ Like `UrlContextTool`, this injects a Gemini built-in (`types.Tool(enterprise_we
 from google.adk.agents import LlmAgent
 from google.adk.tools import enterprise_web_search
 
-agent = LlmAgent(name="search_agent", model="gemini-2.0-flash", tools=[enterprise_web_search])
+agent = LlmAgent(name="search_agent", model="gemini-2.5-flash", tools=[enterprise_web_search])
 ```
 
 #### Pre-built singleton tools (google_search, url_context, exit_loop, etc.)
@@ -7009,10 +6752,11 @@ All three extend `BaseGoogleCredentialsConfig` (which enforces mutual exclusivit
 Why it matters: configures Gemini's implicit/explicit context caching (system instruction + tool schema reuse across turns) to cut token cost on long-running agents. Field set confirmed unchanged from the docs.
 
 ```python
-from google.adk.models import ContextCacheConfig  # re-exported alongside model classes in some builds; confirm via your model module if this import fails, and fall back to google.adk.models.context_cache_config
+from google.adk.agents.context_cache_config import ContextCacheConfig
+from google.adk.models.gemini_context_cache_manager import GeminiContextCacheManager
 ```
 
-**Verified via live introspection (2.7.1):** `GeminiContextCacheManager` is real and lives at `google.adk.models.gemini_context_cache_manager.GeminiContextCacheManager` (constructor: `__init__(self, genai_client)`; methods `handle_context_caching`, `populate_cache_metadata_in_response`, `cleanup_cache`) — the internal engine `ContextCacheConfig` configures. `ContextCacheConfig` itself is **not** importable from `google.adk.models` in 2.7.1; its confirmed path is `google.adk.agents.context_cache_config.ContextCacheConfig`.
+**Verified via live introspection (2.7.1):** `GeminiContextCacheManager` is real and lives at `google.adk.models.gemini_context_cache_manager.GeminiContextCacheManager` (constructor: `__init__(self, genai_client)`; methods `handle_context_caching`, `populate_cache_metadata_in_response`, `cleanup_cache`) — the internal engine `ContextCacheConfig` configures. `ContextCacheConfig` is **not** importable from `google.adk.models` or `google.adk.agents` (still true in the current release); its confirmed path is `google.adk.agents.context_cache_config.ContextCacheConfig`.
 
 #### `ContextCacheConfig`
 **Source:** `google.adk.agents.context_cache_config` (verified 2.7.1)
@@ -7074,11 +6818,11 @@ if stats["status"] == "active":
 ```
 
 #### EventsCompactionConfig
-Why it matters: configures sliding-window + token-threshold compaction of old events to keep long conversations within context limits, with HITL-safety guards so a compaction pass never discards an un-acknowledged human-in-the-loop request. **Correction (repeats across nearly every source volume)**: the standard `from google.adk.apps import App, EventsCompactionConfig, ResumabilityConfig` import now fails — `google.adk.apps.__all__` in 2.7.1 only exports `App` and `ResumabilityConfig`. `EventsCompactionConfig` moved to the private `google.adk.apps._configs` module and is not re-exported.
+Why it matters: configures sliding-window + token-threshold compaction of old events to keep long conversations within context limits, with HITL-safety guards so a compaction pass never discards an un-acknowledged human-in-the-loop request. **Correction (repeats across nearly every source volume)**: the standard `from google.adk.apps import App, EventsCompactionConfig, ResumabilityConfig` import now fails — `google.adk.apps.__all__` only exports `App` and `ResumabilityConfig` (true since 2.7.1 and still the case in the current release). `EventsCompactionConfig` is defined in the private `google.adk.apps._configs` module; the supported public import is `google.adk.apps.app`, whose `__all__` lists it.
 
 ```python
 from google.adk.apps import App, ResumabilityConfig
-from google.adk.apps._configs import EventsCompactionConfig  # NOT from google.adk.apps directly
+from google.adk.apps.app import EventsCompactionConfig  # NOT from google.adk.apps directly
 
 config = EventsCompactionConfig(
     compaction_interval=20, event_retention_size=10, overlap_size=2, token_threshold=8000,
@@ -7816,9 +7560,6 @@ def is_enterprise_mode_enabled() -> bool: ...
 | 1.31.1 | April 2026 | Patch release; stability improvements. |
 | 1.31.0 | April 17, 2026 | Overhauled Web UI: live chat interface, session display names, structured execution traces, Graph View canvas, event filtering (by message/tool/error type), computer-use visualisation; memory bank event ingestion; Vertex AI Agent Engine Sandbox for computer use; Firestore database support; session ID tracking in LLM responses; user-agent headers for Parameter Manager and Secret Manager clients; minimum MCP version raised to 1.24.0; `FunctionDeclaration` JSON schema fallback improved; BigQuery plugin fixes (data transfers, metadata); console URL path corrections after Agent Engine deployment; event callback timing fix (plugin modifications now persist correctly) |
 | 1.30.0 | April 13, 2026 | A2A 1.0 spec compliance; `AgentEngineSandboxCodeExecutor`; YAML agent config support; authentication provider support in agent registry; Parameter Manager integration; Gemma 4 model support; artifact service integration via interceptor; `TaskStatusUpdateEvent` emission; live avatar support; BigQuery tools promoted to stable; path traversal validation for user/session IDs |
-| 1.29.0 | April 2026 | Session rewind for replay/debugging; `MCPToolset` async-first API (legacy sync API deprecated) |
-| 1.28.0 | March 2026 | Task API for structured task management |
-| 1.25.0 | February 2026 | `GraphAgent` for graph-based multi-agent workflows; Web UI for graph visualisation |
 | 1.18.0 | November 2025 | Previous documented version |
 
 ---

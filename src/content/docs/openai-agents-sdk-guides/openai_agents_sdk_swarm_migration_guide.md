@@ -1,15 +1,12 @@
 ---
 title: "OpenAI Agents SDK: Complete Migration Guide from Swarm"
-description: "Status: Production-Ready (2025) Swarm Status: Experimental - Deprecated Migration Priority: HIGH Last Updated: January 2025"
+description: "Moving from the experimental Swarm framework to the OpenAI Agents SDK — side-by-side code, checklist, testing and rollback."
 framework: openai-agents-sdk
 ---
 
 # OpenAI Agents SDK: Complete Migration Guide from Swarm
 
-**Status:** Production-Ready (2025)
-**Swarm Status:** Experimental - Deprecated
-**Migration Priority:** HIGH
-**Last Updated:** January 2025
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). First written in January 2025 for v0.2.9. Swarm itself is an experimental educational repository that is no longer developed.
 
 ---
 
@@ -91,7 +88,8 @@ agent = Agent(
 **Agents SDK**: Multiple session backends with automatic persistence
 
 ```python
-from agents import Agent, Runner, SQLiteSession, RedisSession
+from agents import Agent, Runner, SQLiteSession
+from agents.extensions.memory import RedisSession  # pip install 'openai-agents[redis]'
 
 # SQLite for local/small deployments
 session = SQLiteSession("user_123", "sessions.db")
@@ -157,21 +155,21 @@ agent = Agent(
 # Use Claude
 agent = Agent(
     name="Claude Agent",
-    model="litellm/anthropic/claude-3-5-sonnet-20240620",
+    model="litellm/anthropic/claude-sonnet-4-5",
     instructions="You are Claude"
 )
 
 # Use Gemini
 agent = Agent(
     name="Gemini Agent",
-    model="litellm/gemini/gemini-2.0-flash",
+    model="litellm/gemini/gemini-2.5-flash",
     instructions="You are Gemini"
 )
 
 # Use Llama
 agent = Agent(
     name="Llama Agent",
-    model="litellm/replicate/meta-llama/llama-2-70b-chat",
+    model="litellm/ollama/llama3.1",
     instructions="You are Llama"
 )
 ```
@@ -262,7 +260,7 @@ from agents import Agent, Runner
 agent = Agent(
     name="Assistant",
     instructions="You are a helpful assistant",
-    model="gpt-4o"
+    model="gpt-5.6-sol"
 )
 
 result = await Runner.run(agent, "Hello")
@@ -681,6 +679,10 @@ messages = [{"role": "user", "content": "Hello"}]
 # Simple string input
 result = await Runner.run(agent, "Hello")
 
+# A Swarm-style message list is also accepted as input
+result = await Runner.run(agent, [{"role": "user", "content": "Hello"}])
+next_input = result.to_input_list()  # carry history forward manually
+
 # Or with session for conversation history
 session = SQLiteSession("user_id", "db.sqlite")
 result = await Runner.run(agent, "Hello", session=session)
@@ -705,7 +707,7 @@ def my_function(param: str) -> str:
     """Function description for tool."""
     return "result"
 
-agent = Agent(tools=[my_function])
+agent = Agent(name="Assistant", tools=[my_function])
 ```
 
 ### 5. Agent Handoffs
@@ -789,7 +791,7 @@ async def test_multi_agent_workflow():
 
     result = await Runner.run(triage, "I need specialist help", session=session)
 
-    assert result.agent.name == "Specialist"
+    assert result.last_agent.name == "Specialist"
     assert result.final_output is not None
 ```
 
@@ -805,9 +807,9 @@ If migration issues occur:
 # Revert to pre-migration state
 git checkout migration-backup-branch
 
-# Reinstall Swarm
+# Reinstall Swarm (it was never published to PyPI under that name)
 pip uninstall openai-agents
-pip install swarm
+pip install git+https://github.com/openai/swarm.git
 ```
 
 ### 2. Gradual Rollout
@@ -894,7 +896,5 @@ The migration effort is justified by the significant improvements in stability, 
 
 ---
 
-**Last Updated:** January 2025
-**Migration Guide Version:** 1.0
-**Agents SDK Version:** v0.2.9+
+*First written January 2025 for v0.2.9; re-verified against `openai-agents` %%version=openai-agents%%.*
 

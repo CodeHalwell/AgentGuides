@@ -111,7 +111,7 @@ func main() {
     // Initialize model
     model, err := gemini.New(ctx, &gemini.Config{
         APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
     if err != nil {
         log.Fatal(err)
@@ -450,7 +450,7 @@ func main() {
     // Initialize model
     model, err := gemini.New(ctx, &gemini.Config{
         APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
     if err != nil {
         log.Fatal(err)
@@ -517,7 +517,7 @@ func createAdvancedAgent() *llmagent.Agent {
 
     model, _ := gemini.New(ctx, &gemini.Config{
         APIKey: os.Getenv("GOOGLE_API_KEY"),
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
 
     temp := 0.7
@@ -1970,7 +1970,7 @@ func TestAgent(t *testing.T) {
 
     model, err := gemini.New(ctx, &gemini.Config{
         APIKey: "test-key",
-        Model:  "gemini-2.0-flash",
+        Model:  "gemini-2.5-flash",
     })
     if err != nil {
         t.Fatal(err)
@@ -2214,7 +2214,7 @@ agent, err := adk.NewAgent(
 ```yaml
 # agent.yaml
 name: research-agent
-model: gemini-2.0-flash
+model: gemini-2.5-flash
 instruction: |
   You are a research assistant. Conduct thorough research
   on the given topic and provide well-sourced answers.

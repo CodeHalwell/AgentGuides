@@ -15,11 +15,11 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install "openai>=2.0" openai-agents
+    pip install "openai-agents==%%version=openai-agents%%"
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.17.4** · May 2026 · Python 3.10+
+    **v%%version=openai-agents%%** · checked %%versions-checked%% · Python 3.10+ · `openai` v3
   </Card>
   <Card title="Best for" icon="puzzle">
     Multi-agent handoffs, customer-service bots, tracing-first apps.
@@ -59,7 +59,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Responses API" href="./openai_agents_sdk_comprehensive_guide/#responses-api-integration" />
   <LinkCard title="Realtime experiences" href="./openai_agents_sdk_comprehensive_guide/#realtime-experiences" />
   <LinkCard title="Model providers (LiteLLM)" href="./openai_agents_sdk_comprehensive_guide/#model-providers" />
-  <LinkCard title="Sandbox agents (v0.14)" href="./openai_agents_sdk_2025_features/" />
+  <LinkCard title="Sandbox agents" href="./openai_agents_sdk_comprehensive_guide/#sandbox-agents--isolated-execution-environment" />
   <LinkCard title="Swarm migration" href="./openai_agents_sdk_swarm_migration_guide/" />
 </CardGrid>
 
@@ -67,7 +67,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard title="Comprehensive guide" href="./openai_agents_sdk_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="2025 features" href="./openai_agents_sdk_2025_features/" description="Sandbox agents, WebSocket transport, tracing, LiteLLM, MCP." />
+  <LinkCard title="2025 features" href="./openai_agents_sdk_2025_features/" description="Core features plus 2026 changes: sandbox agents, WebSocket transport, programmatic tool calling, openai v3." />
   <LinkCard title="Swarm migration guide" href="./openai_agents_sdk_swarm_migration_guide/" description="Side-by-side code comparisons + migration checklist." />
   <LinkCard title="Advanced multi-agent" href="./openai_agents_sdk_advanced_multi_agent_python/" />
   <LinkCard title="Middleware (Python)" href="./openai_agents_sdk_middleware_python/" />
@@ -77,29 +77,26 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (FastAPI)" href="./openai_agents_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v0.17.4 (May 2026)
+## What's new
 
-- **v0.17.4 (May 2026)** — Patch release; stability and dependency improvements. All key symbols (`Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) confirmed present in installed `openai-agents==0.17.4` (`.routine-envs/openai-agents`); no `DeprecationWarning` emissions.
-- **v0.17.3 (May 2026)** — Patch release; stability and dependency improvements.
-- **v0.17.2 (May 12)** — Patch release; stability and dependency improvements.
-- **v0.17.1 (May 11)** — Patch release; stability and dependency improvements.
-- **v0.17.0 (May 9)** — New tools and retry infrastructure. `ShellTool` and `LocalShellTool` for sandboxed shell command execution (from `agents.tool`); `ToolSearchTool` for dynamic tool discovery; `ApplyPatchTool` for code-patch application. `RetryPolicy` type alias (from `agents.retry`) for configurable per-agent retry strategies. `Session` / `SessionABC` abstractions (from `agents.memory.session`) for structured session management. All confirmed present in installed `openai-agents==0.17.0` (`.routine-envs/check-0509-py`).
-- **v0.16.1 (May 7)** — Patch; stability improvements.
-- **v0.16.0 (May 6)** — Minor release; session management restructured into `agents.memory.session`.
-- **v0.15.3 (May 5)** — Patch; dependency updates.
-- **v0.15.1 (May 2)** — Patch release; stability and dependency updates.
-- **v0.15.0 (May 1)** — Minor release; stability and dependency updates.
-- **v0.14.8 (April 29)** — Patch release; stability improvements.
-- **v0.14.7 (April 28)** — Patch release; stability improvements.
-- **Sandbox agents** — persistent isolated workspaces with files, directories, Git repos, snapshots. Backends: local Unix, Docker, Blaxel, E2B, Modal, Runloop, Vercel.
-- **WebSocket transport** for OpenAI Responses models — low-latency multi-turn conversations via `responses_websocket_session()`.
-- **Sync function tools** now run on worker threads via `asyncio.to_thread()`.
+This guide targets **`openai-agents` %%version=openai-agents%%**. Releases since the guide was last revised (0.17.4, May 2026), from the upstream changelog:
 
-<Aside type="caution" title="Breaking changes from v0.6.x">
-  - Requires `openai>=2.0` — v1.x is no longer supported.
-  - **Python 3.9 dropped**; minimum is now 3.10.
-  - MCP tool failures propagate as exceptions by default — configure `failure_error_function` to restore previous behaviour.
-  - `Agent#as_tool()` return type narrowed from `Tool` to `FunctionTool`.
+- **0.24** — MCP tool annotations exposed on converted tools; run-wide tool exception formatting; many session, sandbox and approval fixes.
+- **0.23** — Configurable MCP listing page limits; opt-in Docker removal protection for sandboxes; encrypted-history scan budget for sessions; Sandbox Agents no longer labelled beta.
+- **0.22** — Stricter failure handling: failed or incomplete non-streaming Responses raise `ModelBehaviorError`; `OpenAIProvider(openai_client=...)` rejects `organization`/`project`; blocked terminal tool output is withheld from history.
+- **0.21** — Requires `openai>=3.0.0,<4`; OpenAI HTTP integrations move to HTTPX2 (custom `http_client=` objects must migrate); provider-neutral testing utilities.
+- **0.20** — Default model is now `gpt-5.6-luna`; MCP Python SDK v2 supported; `RunState.add_input()`; retry policies can approve unsafe replays explicitly.
+- **0.19** — `ProgrammaticToolCallingTool`; `@tool` alias for `@function_tool`.
+- **0.18** — Default Realtime model `gpt-realtime-2.1`.
+
+See [What changed in 2026](./openai_agents_sdk_2025_features/#what-changed-in-2026) for the full table back to 0.7.
+
+<Aside type="caution" title="Upgrading from older releases">
+  - 0.21+ requires `openai` v3 (0.4–0.20 used v2). Code using the default client needs no change.
+  - Python 3.10+ (3.9 dropped in 0.9).
+  - Local MCP tool failures are returned to the model as error output by default (since 0.8); set `mcp_config={"failure_error_function": None}` for fail-fast behaviour.
+  - Model refusals raise `ModelRefusalError` (since 0.15).
+  - The default model changed in 0.16 and again in 0.20 — set `model=` explicitly if you depend on one.
 </Aside>
 
 ## Install, minimal example
@@ -124,20 +121,11 @@ Ready? **[Start Zero → Hero Step 1 →](./openai_agents_sdk_comprehensive_guid
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
-| 2026-05-27 | 0.17.4 | Version bumped 0.17.3 → 0.17.4; "What's new" updated; comprehensive guide header updated; revision history entry added. All key symbols (`Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.4` (`.routine-envs/openai-agents`); no `DeprecationWarning` emissions. | Claude routine |
-| 2026-05-19 | 0.17.3 | Version bumped 0.17.2 → 0.17.3; "What's new" updated; comprehensive guide header updated; revision history entry added. All key symbols verified against installed `openai-agents 0.17.3` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
-| 2026-05-12 | 0.17.2 | Version bumped 0.17.1 → 0.17.2; "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols (`Agent`, `Runner`, `Handoff`, `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC`, `RunState`, `StopAtTools`, `RunErrorHandlers`, `HostedMCPTool`, `ImageGenerationTool`, `OpenAIResponsesCompactionSession`, `OpenAIConversationsSession`, `ResponsesWebSocketSession`) verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.2` (`.routine-envs/check-0512-py`). | Claude routine |
-| 2026-05-11 | 0.17.1 | Version bumped 0.17.0 → 0.17.1; "What's new" section updated; comprehensive guide header updated; revision history entry added. All key symbols verified with `-W error::DeprecationWarning` against installed `openai-agents 0.17.1` (`.routine-envs/check-0511-py`). | Claude routine |
-| 2026-05-09 | 0.17.0 | Version bumped 0.15.1 → 0.17.0 (four releases: 0.15.3, 0.16.0, 0.16.1, 0.17.0); "What's new" section updated; comprehensive guide header updated; revision history entry added. New symbols `ShellTool`, `LocalShellTool`, `ToolSearchTool`, `ApplyPatchTool`, `RetryPolicy`, `Session`, `SessionABC` verified against installed `openai-agents 0.17.0` (`.routine-envs/check-0509-py`). | Claude routine |
-| 2026-05-02 | 0.15.1 | Version bumped 0.15.0 → 0.15.1; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `Handoff`, `guardrail` imports verified against installed 0.15.1 (`.routine-envs/check-openai-0502`). | Claude routine |
-| 2026-05-01 | 0.15.0 | Version bumped 0.14.8 → 0.15.0; "What's new" heading updated; comprehensive guide header updated; revision history entry added. `Agent`, `Runner`, `Handoff`, `guardrail` imports verified against installed 0.15.0 (`.routine-envs/check-openai-0501`). | Claude routine |
-| 2026-04-29 | 0.14.8 | Version bumped 0.14.7 → 0.14.8; "What's new" heading updated; comprehensive guide header updated; revision history entry added. Snippets verified against installed 0.14.8 (`.routine-envs/main-py-0429`). | Claude routine |
-| 2026-04-28 | 0.14.7 | Version bumped 0.14.6 → 0.14.7; "What's new" heading updated; comprehensive guide header updated; revision history entry added. Snippets verified against installed 0.14.7. | Claude routine |
-| 2026-04-25 | 0.14.6 | Version bumped 0.14.5 → 0.14.6; "What's new" heading updated; comprehensive guide header updated; revision history entry added. Snippets verified against installed 0.14.6. | Claude routine |
-| 2026-04-24 | 0.14.5 | Version bumped 0.14.4 → 0.14.5; "What's new" heading updated; comprehensive guide header updated; revision history entry added. | — |
+| 2026-10-21 | %%version=openai-agents%% | Re-verified all code against the current release; replaced non-existent APIs; corrected the breaking-changes summary (MCP failure default was stated backwards); "What's new" rewritten from the upstream changelog. | — |
+| 2026-04-24 – 2026-05-27 | 0.14.5 – 0.17.4 | Routine version bumps with symbol checks against each installed release. | Claude routine |
 | 2026-04-21 | 0.14.3 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
 | 2026-04-20 | 0.14.3 | Patch release; no breaking changes from 0.14.2. | — |
-| April 16, 2026 | 0.14.0 | Sandbox agents; WebSocket transport; openai v2 requirement; Python 3.9 dropped. | — |
+| April 16, 2026 | 0.14.0 | Sandbox agents and WebSocket transport sections added. | — |
 | November 2025 | 0.6.1 | Initial 2025 features; Swarm migration; MCP; guardrails; sessions. | — |
 
 **Note:** TypeScript implementation lives at [OpenAI Agents SDK (TypeScript)](/openai-agents-sdk-typescript-guide/).

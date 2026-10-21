@@ -8,6 +8,8 @@ framework: openai-agents-sdk
 
 A comprehensive guide to deploying, scaling, and operating agents in production environments. This guide covers deployment architectures, observability, security, performance optimisation, and operational best practices.
 
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Pin the minor version in production: `0.Y` bumps may contain breaking changes.
+
 ## Table of Contents
 
 1. [Deployment Architectures](#deployment-architectures)
@@ -102,7 +104,7 @@ async def health_check():
 Deploy with:
 
 ```bash
-pip install fastapi uvicorn openai-agents
+pip install fastapi uvicorn "openai-agents==%%version=openai-agents%%"
 uvicorn app:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
@@ -1006,22 +1008,20 @@ from agents import Agent, Runner, ModelSettings
 import asyncio
 
 class CostOptimiser:
-    # Model costs (per 1M tokens)
+    # Model costs (USD per 1M tokens). Placeholder figures — load current
+    # prices from configuration rather than hard-coding them.
     MODEL_COSTS = {
-        "gpt-4o-mini": {"input": 0.15, "output": 0.60},
-        "gpt-4o": {"input": 5.00, "output": 15.00},
-        "gpt-5": {"input": 15.00, "output": 60.00}
+        "gpt-5.6-luna": {"input": 0.0, "output": 0.0},
+        "gpt-5.6-sol": {"input": 0.0, "output": 0.0},
     }
     
     @staticmethod
     def select_model(task_complexity: str) -> str:
         """Select model based on task complexity."""
-        if task_complexity == "simple":
-            return "gpt-4o-mini"  # Cheapest
-        elif task_complexity == "medium":
-            return "gpt-4o"
+        if task_complexity in ("simple", "medium"):
+            return "gpt-5.6-luna"  # Small, cheap; the SDK default
         else:
-            return "gpt-5"
+            return "gpt-5.6-sol"   # Frontier model for hard tasks
     
     @staticmethod
     def create_cost_optimised_agent(
@@ -1037,7 +1037,6 @@ class CostOptimiser:
             instructions="Complete task efficiently",
             model=model,
             model_settings=ModelSettings(
-                temperature=0 if task_complexity == "simple" else 0.7,
                 max_tokens=200 if task_complexity == "simple" else 1000
             )
         )
@@ -1073,19 +1072,22 @@ class CostMonitor:
         self.total_tokens = 0
         self.total_cost = 0.0
     
-    def estimate_cost(self, tokens: int, model: str) -> float:
-        """Estimate cost for token usage."""
-        costs = {
-            "gpt-4o-mini": 0.00015 / 1000,  # $ per token
-            "gpt-4o": 0.005 / 1000,
-            "gpt-5": 0.015 / 1000
-        }
-        return tokens * costs.get(model, 0)
+    # USD per 1M tokens — placeholder figures; keep real prices in config
+    PRICES = {
+        "gpt-5.6-luna": {"input": 0.0, "output": 0.0},
+        "gpt-5.6-sol": {"input": 0.0, "output": 0.0},
+    }
+
+    def estimate_cost(self, usage, model: str) -> float:
+        """Estimate cost from a run's Usage object."""
+        price = self.PRICES.get(model, {"input": 0.0, "output": 0.0})
+        return (usage.input_tokens * price["input"] + usage.output_tokens * price["output"]) / 1_000_000
     
     def track_run(self, result, model: str):
         """Track usage and cost from run."""
-        tokens_used = getattr(result, "usage", {}).get("total_tokens", 0)
-        cost = self.estimate_cost(tokens_used, model)
+        usage = result.context_wrapper.usage
+        tokens_used = usage.total_tokens
+        cost = self.estimate_cost(usage, model)
         
         self.total_tokens += tokens_used
         self.total_cost += cost
@@ -1095,7 +1097,7 @@ class CostMonitor:
 cost_monitor = CostMonitor()
 
 async def main():
-    agent = Agent(name="Analyst", model="gpt-4o-mini")
+    agent = Agent(name="Analyst", model="gpt-5.6-luna")
     
     result = await Runner.run(agent, "Analyse this")
     cost_monitor.track_run(result, agent.model)
@@ -1208,7 +1210,7 @@ class TestMultiAgentSystem:
         
         result = await Runner.run(router, "Route this request")
         
-        assert result.agent in [agent_a, agent_b, router]
+        assert result.last_agent in [agent_a, agent_b, router]
     
     @pytest.mark.asyncio
     async def test_parallel_agents(self):
@@ -1530,12 +1532,12 @@ async def submit_support_request(request: ServiceRequest):
             session=session
         )
         
-        logger.info(f"Request handled by {result.agent.name}")
+        logger.info(f"Request handled by {result.last_agent.name}")
         
         return {
             "ticket_id": f"TKT-{request.customer_id}-{int(asyncio.time())}",
             "response": result.final_output,
-            "agent": result.agent.name
+            "agent": result.last_agent.name
         }
     
     except Exception as e:

@@ -7,7 +7,7 @@ framework: openai-agents-sdk
 # OpenAI Agents SDK Middleware & Guardrails (Python)
 
 
-Latest: openai-agents 0.17.4 | Updated: May 27, 2026
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).
 Upstream: https://github.com/openai/openai-agents-python | https://platform.openai.com/docs
 
 > The middleware and guardrail shapes below are framework-agnostic — they wrap any call, whether you dispatch through `openai-agents` or the base `openai` SDK.
