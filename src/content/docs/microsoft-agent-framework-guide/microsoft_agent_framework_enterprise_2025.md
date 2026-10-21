@@ -297,7 +297,7 @@ This version handles non-streaming runs. For `stream=True`, check `context.strea
 
 ### Custom actions on a violation
 
-Because the check is your own code, the action on a violation is too: log it, raise, route to a human, or count strikes per user. To make a block an error the caller handles, raise your own exception type — it propagates out of `agent.run()` unchanged. (Don't use a bare `MiddlewareTermination` for this: raised from agent middleware without `result=`, it makes `agent.run()` return `None` rather than raise.)
+Because the check is your own code, the action on a violation is too: log it, raise, route to a human, or count strikes per user. To make a block an error the caller handles, raise your own exception type — it propagates out of `agent.run()` unchanged. (Don't use `MiddlewareTermination` for this: in agent middleware it never reaches the caller, and `agent.run()` returns whatever is in `context.result`, or `None`.)
 
 ```python
 import logging

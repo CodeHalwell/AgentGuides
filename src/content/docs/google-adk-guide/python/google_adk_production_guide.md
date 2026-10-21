@@ -235,7 +235,7 @@ spec:
     metadata:
       labels:
         app: adk-agent
-        version: v1.0.0
+        version: stable
     spec:
       serviceAccountName: adk-agent-sa
       securityContext:

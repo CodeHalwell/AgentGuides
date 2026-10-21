@@ -724,13 +724,12 @@ class BudgetGuard(AgentMiddleware):
     async def process(self, context: AgentContext, call_next) -> None:
         tenant = context.kwargs.get("tenant_id", "default")
         if self.quotas.get(tenant, 0) <= 0:
-            raise MiddlewareTermination(
-                f"tenant={tenant} over quota",
-                result=AgentResponse(
-                    messages=[Message(role="assistant",
-                                      contents=[Content.from_text("Quota exhausted.")])],
-                ),
+            # The agent pipeline returns context.result; set it before raising.
+            context.result = AgentResponse(
+                messages=[Message(role="assistant",
+                                  contents=[Content.from_text("Quota exhausted.")])],
             )
+            raise MiddlewareTermination(f"tenant={tenant} over quota")
         self.quotas[tenant] -= 1
         await call_next()
 
@@ -754,7 +753,7 @@ agent = Agent(
 )
 ```
 
-`MiddlewareTermination(result=...)` lets you return a fully-formed synthetic response without invoking the model. See the [middleware guide](./microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
+Setting `context.result` and raising `MiddlewareTermination` returns a synthetic response without invoking the model. In agent middleware the exception's own `result=` argument is ignored, so set `context.result` first. See the [middleware guide](./microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
 
 ### Recipe 16 — Expose an agent over MCP
 

@@ -1484,7 +1484,7 @@ from google.adk.agents import LlmAgent
 # Build a skill from content in memory (Skill.name comes from its frontmatter)
 python_skill = Skill(
     frontmatter=Frontmatter(
-        name="python_helper",
+        name="python-helper",
         description="Helps write and explain Python code.",
         metadata={"version": "1.0.0"},
     ),
@@ -1549,12 +1549,12 @@ metadata:
 ---
 ```
 
-**Loading from disk:** a skill is a directory named after the skill, containing `SKILL.md` (YAML frontmatter with `name` ≤ 64 chars in kebab- or snake_case, and `description`, then the instruction body) plus optional `references/`, `assets/` and `scripts/`. The loaders parse and validate all of it into `Skill(frontmatter, instructions, resources)`:
+**Loading from disk:** a skill is a directory named after the skill, containing `SKILL.md` (YAML frontmatter with a kebab-case `name` of at most 64 chars, and `description`, then the instruction body; snake_case names need the experimental `SNAKE_CASE_SKILL_NAME` feature) plus optional `references/`, `assets/` and `scripts/`. The loaders parse and validate all of it into `Skill(frontmatter, instructions, resources)`:
 
 ```python
 from google.adk.skills import load_skill_from_dir, load_skills_from_dir
 
-skill = load_skill_from_dir("my_skills/python_helper")   # dir name must equal frontmatter name
+skill = load_skill_from_dir("my_skills/python-helper")   # dir name must equal frontmatter name
 all_skills = load_skills_from_dir("my_skills")            # every subdirectory with a SKILL.md
 toolset = SkillToolset(skills=all_skills)
 ```

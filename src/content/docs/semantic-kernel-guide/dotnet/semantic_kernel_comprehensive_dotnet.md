@@ -535,6 +535,11 @@ builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceH
 **Telemetry.** Semantic Kernel emits OpenTelemetry traces, metrics and logs under the `Microsoft.SemanticKernel*` sources:
 
 ```csharp
+// dotnet add package OpenTelemetry.Extensions.Hosting
+// dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Trace;
+
 AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics", true);
 // AppContext.SetSwitch("...EnableOTelDiagnosticsSensitive", true);  // includes prompts — dev only
 

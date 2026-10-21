@@ -32,7 +32,7 @@ Three ways to end execution:
 
 1. **Normal flow** — `await call_next()`, then optionally mutate `context.result`.
 2. **Short-circuit** — set `context.result = ...` and **return without calling `call_next`**. Downstream middleware and the actual model / tool call are skipped.
-3. **Hard termination** — `raise MiddlewareTermination("reason", result=...)`. Unwinds the pipeline; the agent returns the attached result. Always attach a `result=`: without one, agent-level termination makes `agent.run()` return `None`. To signal an error to the caller, raise your own exception type instead.
+3. **Hard termination** — `raise MiddlewareTermination("reason")`. Unwinds the pipeline. In **agent** middleware, set `context.result` first: the pipeline returns `context.result` and ignores the exception's `result=` argument, so without it `agent.run()` returns `None`. In **function** middleware, `MiddlewareTermination(result=...)` supplies the tool result and ends the tool loop. To signal an error to the caller, raise your own exception type instead.
 
 ## Decorator form
 
@@ -154,7 +154,7 @@ class ProfanityBlock(AgentMiddleware):
 
 ### Hard termination via `MiddlewareTermination`
 
-`MiddlewareTermination` is a control-flow exception that unwinds the entire pipeline immediately. Code that runs **after `await call_next()` under normal flow** is skipped in every outer middleware — but `try`/`finally` blocks and `async with` cleanup still execute as the exception propagates, so context-manager-based metric flushing, span-closing, or lock release still works as expected. `MiddlewareTermination` carries an optional `result=` payload that becomes the agent's final response.
+`MiddlewareTermination` is a control-flow exception that unwinds the entire pipeline immediately. Code that runs **after `await call_next()` under normal flow** is skipped in every outer middleware — but `try`/`finally` blocks and `async with` cleanup still execute as the exception propagates, so context-manager-based metric flushing, span-closing, or lock release still works as expected. What the caller gets back depends on the layer: agent middleware returns whatever is in `context.result` (the exception's `result=` is not read there), while function middleware uses `result=` as the tool's result.
 
 ```python
 from agent_framework import (
@@ -182,21 +182,21 @@ class HardBudgetGuard(AgentMiddleware):
     async def process(self, context: AgentContext, call_next) -> None:
         tenant = context.metadata.get("tenant_id")
         if tenant and self.quota.get(tenant, 0) <= 0:
-            raise MiddlewareTermination(
-                f"tenant {tenant} over quota",
-                result=AgentResponse(
-                    messages=[
-                        Message(
-                            role="assistant",
-                            contents=[Content.from_text("Quota exhausted.")],
-                        )
-                    ],
-                ),
+            # Agent middleware: the pipeline returns context.result, so set it
+            # before raising. A result= on the exception would be ignored here.
+            context.result = AgentResponse(
+                messages=[
+                    Message(
+                        role="assistant",
+                        contents=[Content.from_text("Quota exhausted.")],
+                    )
+                ],
             )
+            raise MiddlewareTermination(f"tenant {tenant} over quota")
         await call_next()
 ```
 
-When `MiddlewareTermination(result=R)` is raised the agent returns `R` as if it were the normal result. Raised **without** `result=` from agent middleware, it does not surface as an exception — `agent.run()` simply returns `None` (checked against %%version=agent-framework%%). If the caller should see an error, raise your own exception; ordinary exceptions propagate out of `agent.run()` unchanged:
+In agent middleware the termination never surfaces as an exception: `agent.run()` returns `context.result`, or `None` if you didn't set it. `MiddlewareTermination("…", result=R)` on its own also gives `None`, because the agent pipeline doesn't read `result=` (checked against %%version=agent-framework%%). If the caller should see an error, raise your own exception; ordinary exceptions propagate out of `agent.run()` unchanged:
 
 ```python
 class QuotaExceeded(Exception):

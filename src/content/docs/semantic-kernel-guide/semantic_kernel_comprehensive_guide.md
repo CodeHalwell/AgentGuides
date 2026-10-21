@@ -243,6 +243,8 @@ settings = OpenAIChatPromptExecutionSettings(response_format=MyPydanticModel)
 ```
 
 ```csharp
+public sealed record MyRecord(string Title, string[] Tags);   // any C# type describing the JSON shape
+
 var settings = new OpenAIPromptExecutionSettings { ResponseFormat = typeof(MyRecord) };
 ```
 

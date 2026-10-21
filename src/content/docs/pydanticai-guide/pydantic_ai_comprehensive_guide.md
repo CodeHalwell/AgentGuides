@@ -1,16 +1,15 @@
 ---
 title: "Pydantic AI: Comprehensive Technical Guide"
-description: "Version: 2.46.0 (September 2026) Framework: Pydantic AI - GenAI Agent Framework, the Pydantic Way Author Notes: Exhaustive technical documentation with production patterns, type safety"
+description: "Single-page technical guide to Pydantic AI V2: core concepts, installation, agents, structured output, tools, dependency injection, upgrading from V1, and a consolidated class and API reference."
 framework: pydanticai
 ---
 
-Latest: pydantic-ai 2.46.0 | Class & API Reference verified against: 2.33.0 · new classes in 2.43.0 addendum · 2.46.0 classes in companion guide | Updated: September 2026
 # Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
-**Version:** 2.46.0 (September 2026)  
-**Framework:** Pydantic AI - GenAI Agent Framework, the Pydantic Way  
-**Author Notes:** Exhaustive technical documentation with production patterns, type safety emphasis, and FastAPI-inspired developer experience.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). Requires Python 3.11+.
+
+Technical documentation with production patterns, an emphasis on type safety, and the FastAPI-inspired developer experience.
 
 ---
 
@@ -24,7 +23,7 @@ Latest: pydantic-ai 2.46.0 | Class & API Reference verified against: 2.33.0 · n
 6. [Structured Output](#structured-output)
 7. [Tools & Function Calling](#tools--function-calling)
 8. [Dependency Injection](#dependency-injection)
-9. [Advanced Features (April 2026)](#advanced-features-april-2026)
+9. [Upgrading from V1](#upgrading-from-v1)
 10. [Class & API Reference](#class--api-reference)
 
 For deployment and scaling see the [production guide](/pydanticai-guide/pydantic_ai_production_guide/); for topic pages (streaming, toolsets, testing, model providers, evals) see the [guide overview](/pydanticai-guide/).
@@ -39,7 +38,7 @@ Pydantic AI brings the ergonomic design of FastAPI to Generative AI development.
 
 - **Type Safety First**: Leveraging Python's type system and Pydantic v2 for automatic validation
 - **Developer Experience**: Familiar decorators, dependency injection, and structured patterns
-- **Pythonic Conventions**: Modern Python 3.10+ features like type hints and async/await
+- **Pythonic Conventions**: Modern Python (3.11+) features like type hints and async/await
 - **Reusability**: Agents are instantiated once and reused throughout the application
 - **Testability**: Built-in testing utilities and model mocking capabilities
 
@@ -74,15 +73,14 @@ Pydantic AI Philosophy:
 
 ## Installation & Setup
 
-### Option 1: Complete Installation with All Extras
+### Option 1: The standard package
 
 ```bash
-# Using pip
-pip install pydantic-ai[all]
-
-# Using uv (faster)
-uv add pydantic-ai[all]
+pip install pydantic-ai            # or: uv add pydantic-ai
+pip install "pydantic-ai==%%version=pydantic-ai%%"   # pinned
 ```
+
+Since 2.0 the standard package installs `pydantic-ai-slim[openai,anthropic,google,cli,mcp,evals,web,retries,logfire]` — the three frontier providers plus minimal integrations. Everything else is an extra: `pip install "pydantic-ai[bedrock,groq,mistral,cohere,xai,huggingface,temporal,dbos,prefect,ag-ui,ui,duckduckgo,web-fetch]"` (pick what you use). There is no `[all]` extra.
 
 ### Option 2: Minimal Installation (pydantic-ai-slim)
 
@@ -119,8 +117,9 @@ pip install "pydantic-ai-slim[openai,logfire]"
 pip install "pydantic-ai-slim[mcp]"
 
 # For durable execution
-pip install "pydantic-ai[prefect]"  # Prefect integration
-pip install "pydantic-ai[dbos]"     # DBOS integration
+pip install "pydantic-ai-slim[openai,prefect]"   # Prefect
+pip install "pydantic-ai-slim[openai,dbos]"      # DBOS
+pip install "pydantic-ai-slim[openai,temporal]"  # Temporal
 ```
 
 ### Environment Setup
@@ -160,7 +159,7 @@ result = agent.run_sync('What is 2 + 2?')
 print(result.output)
 #> 2 + 2 equals 4.
 
-# Check token usage (usage is a property in 2.33.0, not a method)
+# Check token usage (a property since 2.0; it was a method in V1)
 print(result.usage)
 #> RunUsage(input_tokens=14, output_tokens=5, requests=1)
 ```
@@ -396,11 +395,12 @@ mistral_agent = Agent('mistral:mistral-large-latest')
 # Grok
 grok_agent = Agent('xai:grok-4-latest')
 
-# Amazon Bedrock
-bedrock_agent = Agent('bedrock:anthropic.claude-3-sonnet-20240229-v1:0')
+# Amazon Bedrock (needs the `bedrock` extra)
+bedrock_agent = Agent('bedrock:us.anthropic.claude-sonnet-4-6')
 
 # Perplexity (OpenAI-compatible)
-from pydantic_ai.models.openai import OpenAIChatModel, OpenAIProvider
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 perplexity = OpenAIChatModel(
     'sonar-pro',
@@ -418,7 +418,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 
 fallback_model = FallbackModel(
     OpenAIChatModel('gpt-4o'),  # Primary
-    AnthropicModel('claude-3-5-sonnet-latest')  # Fallback
+    AnthropicModel('claude-sonnet-4-6')  # Fallback
 )
 fallback_agent = Agent(fallback_model)
 ```
@@ -1688,10 +1688,6 @@ asyncio.run(main())
 
 ---
 
-(This guide continues extensively - 50+ additional sections covering all requested topics with code examples)
-
----
-
 ## Where the rest of this guide lives
 
 The topics below are covered on their own pages rather than in this one:
@@ -1708,612 +1704,41 @@ The topics below are covered on their own pages rather than in this one:
 | Deployment, scaling, architecture | [Production guide](/pydanticai-guide/pydantic_ai_production_guide/) |
 | Worked examples | [Recipes](/pydanticai-guide/pydantic_ai_recipes/) · [Diagrams](/pydanticai-guide/pydantic_ai_diagrams/) |
 
-The [Class & API Reference](#class--api-reference) section below is the consolidated, source-verified class/API reference for this guide (it folds in what used to be 44 separate "class deep dive" volumes).
+The [Class & API Reference](#class--api-reference) section below is the consolidated class/API reference for this guide; topic pages link into it for details.
 
 ---
 
-## Advanced Features (April 2026)
-
-### EvaluationReport API
-
-Pydantic AI now includes a built-in evaluation API for LLM-based assessment:
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.eval import EvaluationReport, EvalCase
-
-agent = Agent('openai:gpt-4o', output_type=str)
-
-# Define evaluation cases
-cases = [
-    EvalCase(
-        input="What is 2+2?",
-        expected_output="4",
-    ),
-]
-
-# Run evaluation
-report: EvaluationReport = await agent.evaluate(cases)
-print(f"Pass rate: {report.pass_rate:.1%}")
-print(f"Mean score: {report.mean_score:.3f}")
-```
-
-### Deferred Model Loading
-
-```python
-from pydantic_ai import Agent
-
-# Defer model init until first run (useful for testing and lazy startup)
-agent = Agent('openai:gpt-4o', defer_loading=True)
-
-# Model is loaded only when run() is first called
-result = await agent.run("Hello")
-```
-
-### ThreadExecutor for Sync Tools
-
-When you need to call synchronous (blocking) functions inside an async agent:
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.tools import ThreadExecutor
-
-agent = Agent('openai:gpt-4o')
-
-@agent.tool
-def blocking_db_query(ctx, query: str) -> str:
-    # This sync function is automatically wrapped with ThreadExecutor
-    import time
-    time.sleep(0.1)  # Simulate blocking I/O
-    return f"Result for: {query}"
-
-# Sync tools are executed in a thread pool automatically
-result = await agent.run("Query the database for recent orders")
-```
-
-### CaseLifecycle Hooks (State Machine Patterns)
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.lifecycle import CaseLifecycle
-from dataclasses import dataclass
-
-@dataclass
-class WorkflowState:
-    step: str = "start"
-    retries: int = 0
-
-class WorkflowLifecycle(CaseLifecycle[WorkflowState]):
-    async def on_start(self, ctx) -> None:
-        ctx.deps.step = "processing"
-
-    async def on_tool_call(self, ctx, tool_name: str) -> None:
-        print(f"Tool called: {tool_name}, state: {ctx.deps.step}")
-
-    async def on_complete(self, ctx) -> None:
-        ctx.deps.step = "done"
-
-    async def on_error(self, ctx, error: Exception) -> None:
-        ctx.deps.retries += 1
-        ctx.deps.step = "error"
-
-agent = Agent('openai:gpt-4o', deps_type=WorkflowState)
-
-state = WorkflowState()
-result = await agent.run("Process this task", deps=state, lifecycle=WorkflowLifecycle())
-print(f"Final state: {state.step}")
-```
-
----
-
-## What's New in v1.84.0 (April 17, 2026)
-
-### OllamaModel — Dedicated Local LLM Class
-
-A new first-class `OllamaModel` replaces the generic `OpenAIModel` workaround and correctly sets Ollama capability flags (fixes structured output on Ollama Cloud):
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.models.ollama import OllamaModel
-
-# Dedicated OllamaModel — correct capability flags, no OpenAI workaround needed
-agent = Agent(OllamaModel('llama3.2'))
-result = await agent.run('Summarise this document in three bullet points')
-print(result.output)
-
-# With Ollama Cloud (hosted)
-cloud_agent = Agent(OllamaModel('llama3.2', base_url='https://api.ollama.ai/v1'))
-```
-
-### XSearchTool and FileSearch for xAI (Grok)
-
-Built-in search and file retrieval tools for the xAI provider:
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.tools.xai import XSearchTool, FileSearchTool
-
-agent = Agent(
-    'xai:grok-4-latest',
-    tools=[XSearchTool(), FileSearchTool()]
-)
-
-# Agent can now search the web and retrieve files via Grok's xAI APIs
-result = await agent.run('What are the latest AI developments this week?')
-print(result.output)
-```
-
-### FastMCPToolset Per-Call Metadata Injection
-
-Inject per-tool-call metadata when using `FastMCPToolset` for richer tracing and auditing:
-
-```python
-from pydantic_ai.mcp import FastMCPToolset
-
-toolset = FastMCPToolset(
-    server_url='http://localhost:8080',
-    inject_metadata=True   # Attaches call_id, timestamp, and agent_id to every invocation
-)
-
-agent = Agent('openai:gpt-4o', toolsets=[toolset])
-result = await agent.run('Search the company database for Q1 reports')
-# Each tool call now includes metadata visible in Logfire traces
-```
-
-### Bedrock Prompt Cache TTL
-
-Configure cache time-to-live for AWS Bedrock provider responses:
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.models.bedrock import BedrockModel
-
-agent = Agent(
-    BedrockModel('anthropic.claude-3-5-sonnet-20241022-v2:0', cache_ttl=300),
-    instructions='You are a helpful assistant'
-)
-# Responses are cached for 300 seconds — reduces Bedrock API costs on repeated queries
-```
-
-### Stateful OpenAICompaction
-
-Reduce token usage in long conversations while preserving state:
-
-```python
-from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.compaction import OpenAICompaction
-
-agent = Agent(
-    OpenAIModel('gpt-4o', compaction=OpenAICompaction(mode='stateful')),
-    instructions='You are a long-running research assistant'
-)
-# Stateful mode compacts history while retaining internal state references
-```
-
-### Claude Opus 4.7 Support
-
-`anthropic:claude-opus-4-7` is now a recognised model string:
-
-```python
-from pydantic_ai import Agent
-
-# Claude Opus 4.7 — highest capability Anthropic model
-agent = Agent('anthropic:claude-opus-4-7')
-result = await agent.run('Reason through this complex multi-step problem...')
-```
-
----
-
-## Embeddings (v1.85.x)
-
-`pydantic_ai.embeddings` introduces a first-class embeddings API with the same provider-agnostic
-interface as the agent model layer.
-
-```python
-# Installed: pydantic-ai==1.101.0
-import asyncio
-
-from pydantic_ai import Embedder
-
-async def main() -> None:
-    # Uses the same provider/model-string convention as Agent
-    embedder = Embedder('openai:text-embedding-3-small')
-    result = await embedder.embed(['Hello world', 'How are you?'])
-    print(result.embeddings)  # list[list[float]]
-    print(result.usage)       # EmbeddingResult with token counts
-
-asyncio.run(main())
-```
-
-Provider-specific models follow the `<provider>:<model>` format (e.g.
-`'openai:text-embedding-3-large'`, `'google:gemini-embedding-001'`). A `TestEmbeddingModel`
-is available for unit tests (no API key required).
-
----
-
-## Human-in-the-Loop: ApprovalRequiredToolset (v1.85.x)
-
-`ApprovalRequiredToolset` wraps an existing toolset and intercepts tool calls that need
-human approval before execution. The agent raises `ApprovalRequired` if a tool is invoked
-and the `approval_required_func` returns `True`.
-
-```python
-# Installed: pydantic-ai==1.101.0
-# Verified against installed package.
-import asyncio
-
-from pydantic_ai import Agent, ApprovalRequired, ApprovalRequiredToolset, FunctionToolset
-
-def send_email(to: str, body: str) -> str:
-    """Send an email."""
-    return f'Email sent to {to}'
-
-# Wrap the function in a FunctionToolset
-base_toolset = FunctionToolset(tools=[send_email])
-
-# approval_required_func signature: (RunContext, ToolDefinition, dict[str, Any]) -> bool
-approval_toolset = ApprovalRequiredToolset(
-    wrapped=base_toolset,
-    approval_required_func=lambda ctx, tool_def, args: tool_def.name == 'send_email',
-)
-
-agent = Agent('openai:gpt-4o', toolsets=[approval_toolset])
-
-async def main() -> None:
-    try:
-        result = await agent.run('Send a summary to alice@example.com')
-        print(result.output)
-    except ApprovalRequired as exc:
-        # exc.metadata is None unless ApprovalRequired was raised with metadata=
-        # Approval flow: obtain human consent, then re-run with ctx.tool_call_approved = True
-        print(f'Approval required — tool call intercepted (metadata: {exc.metadata})')
-
-asyncio.run(main())
-```
-
----
-
-## AG UI Integration (v1.85.x)
-
-`pydantic_ai.ag_ui` provides an [AG UI Protocol](https://docs.ag-ui.com) adapter so any
-PydanticAI agent can be served as a standards-compliant AG UI endpoint.
-
-> **Deprecation (v1.98.x):** The `pydantic_ai.ag_ui` module is deprecated and will be removed in
-> pydantic-ai 2.0. Importing from it emits `PydanticAIDeprecationWarning`. For new code, use:
-> ```python
-> from pydantic_ai.ui.ag_ui import AGUIAdapter
-> from pydantic_ai.ui import SSE_CONTENT_TYPE, StateDeps
-> ```
-> `AGUIApp` (the higher-level mount helper) is still available from `pydantic_ai.ag_ui` for backward
-> compatibility; call `AGUIAdapter.dispatch_request()` directly in new code.
-> See [the migration docs](https://ai.pydantic.dev/ui/ag-ui/#migrating-from-deprecated-apis).
-
-```python
-# Installed: pydantic-ai==1.86.1 — still works; emits PydanticAIDeprecationWarning in 1.98.x
-from pydantic_ai import Agent
-from pydantic_ai.ag_ui import AGUIApp
-
-agent = Agent('openai:gpt-4o', instructions='You are a helpful assistant.')
-
-# Mount as a FastAPI sub-application
-app = AGUIApp(agent=agent)
-
-# In FastAPI:
-# from fastapi import FastAPI
-# api = FastAPI()
-# api.mount('/agent', app)
-```
-
-`AGUIApp` handles SSE event streaming, tool-call events, and the AG UI state protocol automatically.
-
----
-
-## Capabilities API (v1.86.x)
-
-PydanticAI 1.86.0 introduces a composable **Capabilities** system. Capabilities are reusable
-objects that wrap or augment agent behaviour — hooks, history processors, toolsets, and more —
-and are passed to `Agent` via the `capabilities` parameter.
-
-### Hooks: decorator-based middleware
-
-`pydantic_ai.capabilities.Hooks` provides an ergonomic alternative to subclassing
-`AbstractCapability` for cross-cutting concerns such as logging, latency tracking, and request
-transformation.
-
-```python
-# Installed: pydantic-ai==1.86.1
-import asyncio
-from typing import Any
-from pydantic_ai import Agent, RunContext
-from pydantic_ai.capabilities import Hooks
-
-hooks = Hooks()
-
-@hooks.on.before_model_request
-async def log_request(ctx: RunContext, request_context: Any) -> Any:
-    print(f"[hook] model request: {request_context}")
-    return request_context  # must return the (optionally modified) context
-
-@hooks.on.after_model_request
-async def log_response(ctx: RunContext, response: Any) -> Any:
-    print(f"[hook] response parts: {len(response.parts)}")
-    return response
-
-agent = Agent('openai:gpt-4o', capabilities=[hooks], defer_model_check=True)
-```
-
-The `hooks.on` namespace exposes the following hooks (all optional, all async):
-
-| Hook | Signature | Purpose |
-|------|-----------|----------|
-| `before_model_request` | `(ctx, request_context) → request_context` | Inspect or mutate the model request before sending |
-| `after_model_request` | `(ctx, response) → response` | Inspect or mutate the model response after receiving |
-| `before_tool_execute` | `(ctx, tool_name, raw_args) → raw_args` | Inspect raw tool arguments before validation |
-| `after_tool_execute` | `(ctx, tool_name, result) → result` | Inspect or mutate the tool result after execution |
-| `before_tool_validate` | `(ctx, tool_name, validated_args) → validated_args` | Inspect validated arguments before execution |
-| `before_run` | `(ctx) → None` | Called at the start of the agent run |
-| `after_run` | `(ctx, result) → result` | Called at the end of the agent run |
-
-Hooks can carry an optional `timeout` (seconds) per registered function:
-
-```python
-# Installed: pydantic-ai==1.86.1
-from pydantic_ai.capabilities import Hooks
-
-hooks = Hooks()
-
-@hooks.on.before_model_request(timeout=5.0)
-async def slow_hook(ctx, request_context):
-    # raises HookTimeoutError if this exceeds 5 s
-    return request_context
-```
-
-Source: `pydantic_ai/capabilities/hooks.py` (installed pydantic-ai 1.86.1).
-
-### ModelProfile: describing model behaviour
-
-`pydantic_ai.profiles.ModelProfile` describes what a specific model or model family supports,
-independent of the provider class. The framework ships `DEFAULT_PROFILE`; providers override
-it per model.
-
-```python
-# Installed: pydantic-ai==1.86.1
-from pydantic_ai.profiles import ModelProfile, DEFAULT_PROFILE
-
-# Inspect the default profile
-print(DEFAULT_PROFILE.supports_tools)          # True
-print(DEFAULT_PROFILE.supports_thinking)       # False
-print(DEFAULT_PROFILE.supported_builtin_tools) # frozenset of 8 tool classes
-
-# Define a custom profile for a hypothetical restricted model
-restricted = ModelProfile(
-    supports_tools=False,
-    supports_json_schema_output=False,
-    default_structured_output_mode='prompted',
-)
-```
-
-`ModelProfile` fields (source: `pydantic_ai/profiles/__init__.py`, installed 1.86.1):
-
-| Field | Type | Default | Purpose |
-|-------|------|---------|----------|
-| `supports_tools` | `bool` | `True` | Tool/function calling supported |
-| `supports_tool_return_schema` | `bool` | `False` | Native return schema in tool definitions |
-| `supports_json_schema_output` | `bool` | `False` | Native structured output with JSON schema |
-| `supports_json_object_output` | `bool` | `False` | JSON-mode output (no schema) |
-| `supports_image_output` | `bool` | `False` | Image generation responses |
-| `default_structured_output_mode` | `str` | `'tool'` | `'tool'`, `'json_schema'`, `'json_object'`, or `'prompted'` |
-| `supports_thinking` | `bool` | `False` | Extended thinking / chain-of-thought tokens |
-| `supported_builtin_tools` | `frozenset` | Full toolset | Built-in tools the model can use |
-
----
-
-## Capabilities API (v1.87.x): expanded toolkit
-
-PydanticAI 1.87.0 significantly expands the Capabilities system introduced in 1.86.0, adding nine
-new capability classes that cover the most common cross-cutting concerns without requiring a custom
-`AbstractCapability` subclass.
-
-### New capability classes
-
-All classes are importable from `pydantic_ai.capabilities` (confirmed against installed 1.87.0; API confirmed unchanged in 1.88.0).
-
-| Class | Constructor | Purpose |
-|-------|-------------|----------|
-| `WrapperCapability` | `WrapperCapability(wrapped)` | Delegates all methods to another capability; use as a base for decorating existing capabilities |
-| `ReinjectSystemPrompt` | `ReinjectSystemPrompt(replace_existing=False)` | Reinjects the agent's configured `system_prompt` when it is absent from history (e.g. after conversation truncation) |
-| `ProcessHistory` | `ProcessHistory(processor)` | Runs a `HistoryProcessorFunc` before every model request to summarise, filter, or transform the message list |
-| `ProcessEventStream` | `ProcessEventStream(handler)` | Forwards the agent's event stream to an async handler function for custom logging or UI wiring |
-| `HandleDeferredToolCalls` | `HandleDeferredToolCalls(handler)` | Resolves `ExternalToolset` deferred tool calls inline during the run using a supplied handler |
-| `IncludeToolReturnSchemas` | `IncludeToolReturnSchemas(tools='all')` | Instructs selected tools to include their return schema in the tool definition (useful for models that infer output structure from schemas) |
-| `PrefixTools` | `PrefixTools(wrapped, prefix)` | Prepends a string to every tool name exposed by the wrapped capability — capability-level equivalent of `PrefixedToolset` |
-| `PrepareTools` | `PrepareTools(prepare_func)` | Runs a prepare function per step to filter or mutate tool definitions — capability-level equivalent of `PreparedToolset` |
-| `SetToolMetadata` | `SetToolMetadata(tools, metadata)` | Merges metadata key-value pairs onto selected tools — capability-level equivalent of `SetMetadataToolset` |
-
-### `ReinjectSystemPrompt` — guard against context truncation
-
-When using `HistoryProcessor` or external truncation, the system prompt can fall off the front
-of the message list. `ReinjectSystemPrompt` detects this and prepends it automatically.
-
-```python
-# Installed: pydantic-ai==1.87.0
-from pydantic_ai import Agent
-from pydantic_ai.capabilities import ReinjectSystemPrompt
-
-agent = Agent(
-    'openai:gpt-4o',
-    system_prompt='You are a concise assistant.',
-    capabilities=[ReinjectSystemPrompt(replace_existing=False)],
-    defer_model_check=True,
-)
-# replace_existing=True: overwrite any existing system prompt message with the
-# agent's configured one. replace_existing=False (default): only inject when absent.
-```
-
-Source: `pydantic_ai/capabilities/reinject_system_prompt.py` (installed 1.87.0; confirmed unchanged in 1.88.0).
-
-### `ProcessHistory` — composable history management
-
-`ProcessHistory` replaces the older pattern of subclassing `HistoryProcessor` directly.
-
-```python
-# Installed: pydantic-ai==1.87.0
-from pydantic_ai import Agent
-from pydantic_ai.capabilities import ProcessHistory
-
-async def keep_last_10(messages):
-    """Retain only the 10 most recent messages to cap token usage."""
-    return messages[-10:]
-
-agent = Agent(
-    'openai:gpt-4o',
-    capabilities=[ProcessHistory(keep_last_10)],
-    defer_model_check=True,
-)
-```
-
-Source: `pydantic_ai/capabilities/process_history.py` (installed 1.87.0; confirmed unchanged in 1.88.0).
-
-### `WrapperCapability` — composing custom capabilities
-
-`WrapperCapability` provides a base class for decorating or extending existing capabilities
-without re-implementing the full `AbstractCapability` interface.
-
-```python
-# Installed: pydantic-ai==1.87.0
-from pydantic_ai.capabilities import WrapperCapability, Hooks
-
-class LoggingWrapper(WrapperCapability):
-    """Adds before/after logging around any existing capability."""
-    def __init__(self, wrapped, label: str):
-        super().__init__(wrapped)
-        self.label = label
-
-hooks = Hooks()
-
-@hooks.on.before_model_request
-async def log_req(ctx, request_context):
-    return request_context
-
-logged_hooks = LoggingWrapper(hooks, label='my-agent')
-```
-
-Source: `pydantic_ai/capabilities/wrapper.py` (installed 1.87.0; confirmed unchanged in 1.88.0).
-
----
-
-## Pydantic AI 1.107.0 — What's New
-
-### `RunContext` Additions
-
-`RunContext` now exposes several new fields for advanced capability and tool-search workflows:
-
-- **`capabilities`** — `dict[str, AbstractCapability]`: all registered capabilities for the current run (including deferred ones).
-- **`loaded_capability_ids`** — `set[str]`: IDs of deferred capabilities the model has explicitly loaded via the `load_capability` tool.
-- **`discovered_tool_names`** — `set[str]`: tool names revealed via tool-search return parts; controls which deferred tools are visible this step.
-- **`model_settings`** — resolved merged model settings (populated before each model request, `None` in tool hooks).
-- **`metadata`** — arbitrary metadata passed via `Agent.run(..., metadata=...)`.
-- **`tool_call_metadata`** — populated from `DeferredToolResults.metadata` for the current tool call.
-
-```python
-from pydantic_ai import Agent, RunContext
-
-agent = Agent('openai:gpt-4o')
-
-@agent.tool
-async def introspect(ctx: RunContext[object]) -> str:
-    return (
-        f'run_id={ctx.run_id}, '
-        f'conversation_id={ctx.conversation_id}, '
-        f'step={ctx.run_step}, '
-        f'retry={ctx.retry}/{ctx.max_retries}, '
-        f'last_attempt={ctx.last_attempt}'
-    )
-```
-
-### `AgentSpec` YAML/JSON Agent Configuration
-
-`AgentSpec` enables loading agent configuration from YAML or JSON files, enabling configuration-driven deployments:
-
-```python
-from pydantic_ai import Agent, AgentSpec
-
-# Load from file — Agent.from_file is the one-step shortcut
-agent = Agent.from_file('agents/support.yaml')
-
-# Or load via the data model first, then construct
-spec = AgentSpec.from_file('agents/support.yaml')
-agent = Agent.from_spec(spec)
-
-# Or parse inline YAML into a spec and construct
-spec = AgentSpec.from_text("""
-model: openai:gpt-4o
-name: support-agent
-instructions: You are a helpful support agent. Respond in {{language}}.
-model_settings:
-  temperature: 0.3
-retries: 3
-""")
-agent = Agent.from_spec(spec)
-```
-
-### `TemplateStr` — Handlebars System Prompts
-
-`TemplateStr` renders Handlebars templates against `RunContext.deps` at runtime:
-
-```python
-from dataclasses import dataclass
-from pydantic_ai import Agent, TemplateStr
-
-@dataclass
-class Deps:
-    username: str
-    language: str
-
-agent = Agent(
-    'openai:gpt-4o',
-    deps_type=Deps,
-    instructions=TemplateStr('Assist {{username}} in {{language}}.', deps_type=Deps),
-)
-```
-
-### `DeferredToolRequests` / `CallDeferred` — Async Human-in-the-Loop
-
-Tools can now raise `CallDeferred` to pause execution and yield pending calls to the caller for external processing:
-
-```python
-from pydantic_ai import Agent, DeferredToolRequests, CallDeferred
-
-agent: Agent[object, DeferredToolRequests | str] = Agent(
-    'openai:gpt-4o',
-    output_type=[DeferredToolRequests, str],  # type: ignore[arg-type]
-)
-
-@agent.tool_plain
-def approve_payment(amount: float, recipient: str) -> str:
-    raise CallDeferred(metadata={'amount': amount, 'recipient': recipient})
-```
-
-### Hook Short-Circuit Exceptions
-
-Three new exceptions enable short-circuiting the normal execution pipeline from within hooks:
-
-- **`SkipModelRequest(response)`** — skip the model call and use a synthetic `ModelResponse`.
-- **`SkipToolExecution(result)`** — skip tool function execution and return `result` directly.
-- **`SkipToolValidation(validated_args)`** — skip Pydantic arg validation and use `validated_args` directly.
-
-### `ConcurrencyLimiter` Enhancements
-
-`ConcurrencyLimiter` now tracks `waiting_count`, `running_count`, and `available_count` as live properties, and the `acquire()` method creates OTel spans while waiting for a slot.
+## Upgrading from V1
+
+Pydantic AI 2.0.0 (June 2026) collected the breaking changes V1's stability promise held back; most were announced by deprecation warnings on 1.100.0+, so the smooth path is: upgrade to the last 1.x, clear every `PydanticAIDeprecationWarning`, then move to 2.x. The changes most likely to affect code written from older guides:
+
+| V1 | V2 |
+|---|---|
+| `openai:` prefix = Chat Completions | `openai:` = Responses API; use `openai-chat:` for Chat Completions |
+| `google-gla:`, `google-vertex:`, `grok:` prefixes; `GeminiModel`, `OpenAIModel` | `google:`, `google-cloud:`, `xai:`; `GoogleModel`, `OpenAIChatModel` |
+| `Agent('gpt-5')` without a prefix | raises `UserError` |
+| `Agent(builtin_tools=[...])`, `pydantic_ai.builtin_tools`, `UrlContextTool` | `capabilities=[NativeTool(...)]`, `pydantic_ai.native_tools`, `WebFetchTool` |
+| `Agent(instrument=..., event_stream_handler=..., history_processors=..., prepare_tools=...)` | `capabilities=[Instrumentation(...)]`, `ProcessEventStream(...)`, `ProcessHistory(...)`, `PrepareTools(...)` |
+| `Agent(mcp_servers=[...])`, `MCPServerStdio` / `MCPServerSSE` / `MCPServerStreamableHTTP` | `toolsets=[MCPToolset(...)]` |
+| `result.usage()`, `result.timestamp()`, `stream.get()` | `result.usage`, `result.timestamp`, `stream.response` (properties) |
+| `async for e in agent.run_stream_events(...)` | `async with agent.run_stream_events(...) as events:` |
+| `stream_responses()`, `FunctionToolResultEvent.result` | `stream_response()`, `FunctionToolResultEvent.part` |
+| `DeferredToolCalls`, `DeferredToolset` | `DeferredToolRequests`, `ExternalToolset` |
+| `usage.request_tokens` / `response_tokens` | `usage.input_tokens` / `output_tokens` |
+| `Agent.to_a2a()`, `Agent.to_ag_ui()` | `fasta2a.pydantic_ai.agent_to_a2a`, `pydantic_ai.ui.ag_ui.AGUIAdapter` |
+| `pydantic_graph.beta`, `pydantic_graph.persistence` | top-level `pydantic_graph`; persistence removed |
+| `Dataset(...)` without a name | `Dataset(name=...)` required |
+| Default `end_strategy='early'` | Default `'graceful'`: tools requested alongside a successful output tool still run |
+| `ModelProfile` dataclasses | `TypedDict`s; use `merge_profile()` |
+| Bare `pip install pydantic-ai` included Bedrock, Groq, Mistral, … | Only OpenAI, Anthropic and Google providers by default; add extras |
+
+The full list, with the PR for each change, is in the [official upgrade guide](https://pydantic.dev/docs/ai/changelog/). Message history serialised with V1 still loads in V2.
 
 ---
 
 ## Class & API Reference
 
-Verified against **pydantic-ai 2.33.0** (installed and cross-checked via `inspect.signature`, `dataclasses.fields`, and direct source reads). This is a consolidated, source-verified reference to the classes, functions, and wire types across `pydantic_ai`, `pydantic_graph`, and `pydantic_evals` — folded together from 44 previously-separate "class deep dive" volumes into 16 topic sections. Optional-dependency modules (Temporal/DBOS/Prefect/AG-UI/duckduckgo/tavily/exa/web-fetch/markdownify) were verified for import path and top-level structure only, since their third-party packages are not installed in the verification environment.
-
-> **2.43.0 addendum:** Ten additional classes verified against pydantic-ai 2.43.0 are documented in the companion deep-dive page — [10 Source-Verified Class Deep Dives (v2.43.0)](/pydanticai-guide/pydantic_ai_class_deep_dives_v2_43/) — covering `ToolFailed`, `RunCancelled`, `ToolSelector`, `ToolOrOutput`, `ServiceTier`/`ThinkingLevel`, `AgentStream`/`StreamedRunResult`, `SkipModelRequest`/`SkipToolValidation`/`SkipToolExecution`, `ToolDefinition.sequential`, `OutputContext`, and `ApprovalRequired`.
+Checked against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%): imports and signatures re-verified with `inspect.signature` / `dataclasses.fields` on the installed package, with the optional extras (Temporal, DBOS, Prefect, AG-UI, UI, DuckDuckGo, web-fetch) installed. A reference to the classes, functions and wire types across `pydantic_ai`, `pydantic_graph` and `pydantic_evals`, grouped by topic. Topic pages carry the longer explanations and worked examples; entries here are kept short.
 
 ### Agents & Execution Core
 
@@ -5168,21 +4593,7 @@ agent = Agent('openai:gpt-5.2', instructions=[policy])
 
 #### `AgentInstructions` pipeline
 
-Four-stage pipeline in `pydantic_ai._instructions`: `normalize_instructions()` (`None → []`, `str`/callable → `[it]`, sequence → `list(it)`) → `prepare_instructions()` (wraps each callable, including `TemplateStr`, in a `SystemPromptRunner`) → `resolve_instructions(instructions, run_context)` (awaits runners, returns `list[str]`). Separately, `normalize_toolset_instructions()` turns a toolset's `get_instructions()` return value into `list[InstructionPart]`, dropping whitespace-only content.
-
-```python
-def normalize_instructions(instructions) -> list[str | SystemPromptFunc]: ...
-def prepare_instructions(instructions) -> list[str | SystemPromptRunner]: ...
-async def resolve_instructions(instructions, run_context) -> list[str]: ...
-```
-
-```python
-from pydantic_ai._instructions import normalize_toolset_instructions
-from pydantic_ai.messages import InstructionPart
-
-parts = normalize_toolset_instructions("Use the search tool for factual questions.")
-print(parts[0].dynamic)   # True
-```
+`instructions=` accepts a string, a `TemplateStr`, an `InstructionPart`, a (sync or async) function of `RunContext`, or a list of any of these. The private `pydantic_ai._instructions` module normalises them into `SourcedInstruction`s, resolves the functions for each run, and turns toolset `get_instructions()` results into `InstructionPart`s (dropping whitespace-only content). Its helpers are internal and their names have changed between releases, so don't import them.
 
 #### Anthropic mid-conversation `SystemPromptPart` via `ctx.enqueue`
 
@@ -6333,54 +5744,17 @@ class ParentForkFinder(Generic[T]):
     def find_parent_fork(self, join_id, *, parent_fork_id=None, prefer_closest=False) -> ParentFork | None: ...
 ```
 
-#### `FileStatePersistence` + `SimpleStatePersistence` + `FullStatePersistence`
+#### Graph persistence — removed in 2.0
 
-Three built-in `BaseStatePersistence` implementations. `FileStatePersistence(json_file)` persists
-snapshots to JSON with an advisory `.pydantic-graph-persistence-lock` file, surviving process
-restarts (`graph.iter_from_persistence(persistence)` resumes an interrupted run).
-`SimpleStatePersistence` (the run-time default when no `persistence=` is passed) keeps only the
-latest snapshot — `load_all()` raises `NotImplementedError`. `FullStatePersistence` keeps the whole
-history and supports `dump_json()`/`load_json()` round-trips; `deep_copy=False` skips the
-defensive per-snapshot copy for a performance win when you don't need historical state values.
+`pydantic_graph.persistence` (`SimpleStatePersistence`, `FullStatePersistence`, `FileStatePersistence`, `BaseStatePersistence`, `NodeSnapshot` / `EndSnapshot`, `graph.iter_from_persistence()`) was removed in 2.0 with no replacement in `pydantic_graph`: the builder API does not snapshot state. To survive restarts run the graph inside a durable workflow (see [Durable execution](/pydanticai-guide/pydantic_ai_durable_execution/)); to save, resume and fork *agent run* state, the separate Pydantic AI Harness package provides a `StepPersistence` capability.
+
+#### Graph exceptions
 
 ```python
-FileStatePersistence(json_file: Path)
-FullStatePersistence(deep_copy: bool = True)
-```
-
-```python
-from pydantic_graph.persistence.file import FileStatePersistence
-
-persistence = FileStatePersistence(Path('runs/demo.json'))
-result = await graph.run(StartNode(), state=state, persistence=persistence)
-```
-
-#### `NodeSnapshot` + `EndSnapshot` + `BaseStatePersistence` + exception hierarchy
-
-`NodeSnapshot`/`EndSnapshot` make up the `Snapshot` discriminated union every persistence backend
-stores. `SnapshotStatus` lifecycle: `'created' → 'pending' (load_next) → 'running' (record_run) →
-'success'/'error'`. `BaseStatePersistence` is the ABC custom backends (Redis, DynamoDB) implement —
-requiring all six abstract methods: `should_set_types`, `set_types`, `snapshot_node`,
-`snapshot_node_if_new`, `snapshot_end` (receives the `End` value), `record_run` (async context
-manager), plus `load_next`/`load_all`. `build_snapshot_list_type_adapter(state_type, run_end_type)`
-builds the typed serialiser.
-
-```python
-GraphSetupError(TypeError)          # misconfigured graph
+GraphSetupError(TypeError)          # misconfigured graph (e.g. missing type hints on a BaseNode)
 GraphBuildingError(ValueError)      # error during GraphBuilder.build()
 GraphValidationError(ValueError)    # graph structure validation failure
 GraphRuntimeError(RuntimeError)     # execution error
-GraphNodeStatusError(GraphRuntimeError)   # .check(status) raises unless status in {'created','pending'}
-```
-
-```python
-@dataclass
-class RedisStatePersistence(BaseStatePersistence[Any, Any]):
-    redis_client: Any
-    run_id: str
-    async def snapshot_end(self, state, end) -> None:
-        data = self._adapter.dump_json([EndSnapshot(state=state, result=end)])
-        await self.redis_client.set(f'run:{self.run_id}:final', data)
 ```
 
 #### `GraphTaskRequest` + `JoinItem` + `EndMarker`
@@ -7075,10 +6449,10 @@ class ChatRequestExtra(BaseModel, extra='ignore', alias_generator=to_camel):
 ```python
 import os
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
-from pydantic_ai.ui._web.api import create_api_app
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.ui._web.api import create_api_app   # private; prefer agent.to_web(models=...)
 
-agent = Agent(OpenAIModel('gpt-4o'), system_prompt='You are a helpful assistant.')
+agent = Agent(OpenAIChatModel('gpt-4o'), system_prompt='You are a helpful assistant.')
 app = create_api_app(agent, models={'GPT-4o (fast)': 'openai:gpt-4o', 'GPT-4o-mini (cheap)': 'openai:gpt-4o-mini'})
 ```
 
@@ -7093,31 +6467,10 @@ Integrations section, to avoid duplication.
 
 ## Revision History
 
-| Version | Date | Changes | Reviewer |
-|---------|------|----------|----------|
-| 2.33.0 | August 21, 2026 | Version bumped 2.31.0 → 2.33.0; `Latest:` header and `**Version:**` prose updated throughout, including inline `2.31.0` references. Added a new **Class & API Reference** section (16 subsections: Agents & Execution Core, Models & Providers, Tools & Toolsets, Native/Built-in Tools, Streaming & Events, Structured Output, Messages & Multimodal Content, Concurrency/Usage & Limits, Hooks/Middleware & Lifecycle, Capabilities & Extensibility, Durable Execution & Integrations, Persistence & Graph Support, Testing & Evaluation, Error Handling & Retries, Security, UI/A2A/Adapters) consolidating the 44 separate `pydantic_ai_class_deep_dives*.md` / `pydantic_ai_advanced_classes_part2.md` / `pydantic_ai_source_code_deep_dive.md` volumes, verified against installed pydantic-ai 2.33.0; those 44 files were deleted and `index.mdx` updated to match. | Claude routine |
-| 1.107.0 | June 21, 2026 | Version bumped 1.104.0 → 1.107.0 (three minor releases: 1.105.0, 1.106.0, 1.107.0). New features documented: `RunContext` additions (capabilities, loaded_capability_ids, discovered_tool_names, model_settings, metadata, tool_call_metadata); `AgentSpec` YAML/JSON agent configuration; `TemplateStr` Handlebars system prompts; `DeferredToolRequests`/`CallDeferred` async human-in-the-loop; `SkipModelRequest`/`SkipToolExecution`/`SkipToolValidation` hook short-circuits; `ConcurrencyLimiter` observability enhancements. New Vol. 22 class deep dives added covering 10 class groups verified against installed pydantic-ai 1.107.0. All top-level exports confirmed; no DeprecationWarnings. | Claude routine |
-| 1.104.0 | May 29, 2026 | Version bumped 1.102.0 → 1.104.0 (two minor releases: 1.103.0, 1.104.0); `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.104.0` (`.routine-envs/check-0529-pydantic`); all PASS. 178 top-level exports confirmed. | Claude routine |
-| 1.102.0 | May 23, 2026 | Version bumped 1.101.0 → 1.102.0; `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.102.0` (`.routine-envs/check-0523-pydantic`); all PASS. 179 top-level exports confirmed; API surface unchanged from 1.101.0. | Claude routine |
-| 1.101.0 | May 22, 2026 | Version bumped 1.99.0 → 1.101.0 (two minor releases: 1.100.0, 1.101.0); `Latest:` header and `**Version:**` prose updated; `Installed` comments in snippets updated; revision history entry added. All core guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `limit_model_concurrency`, `ConcurrencyLimiter`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.101.0` (`.routine-envs/check-0522-pydantic`); all PASS. | Claude routine |
-| 1.99.0 | May 20, 2026 | Version bumped 1.98.0 → 1.99.0; `Latest:` header and `**Version:**` prose updated; revision history entry added. All core guide symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`, `limit_model_concurrency`, `ConcurrencyLimiter`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai==1.99.0` (`.routine-envs/check-0520-pydantic`); all PASS. | Claude routine |
-| 1.98.0 | May 19, 2026 | Two minor releases (1.97.0, 1.98.0). `pydantic_ai.ag_ui` module deprecated in 1.98.x — emits `PydanticAIDeprecationWarning`; new canonical path is `pydantic_ai.ui.ag_ui.AGUIAdapter`. AG UI section in this guide updated with deprecation note and migration path. New `pydantic_ai.common_tools` module (DuckDuckGo, Exa, Tavily, WebFetch, ImageGeneration providers); requires optional extras. All core guide symbols verified against installed `pydantic-ai 1.98.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions on standard imports. | Claude routine |
-| 1.96.0 | May 14, 2026 | Minor release; new concurrency management API: `ConcurrencyLimiter(max_running, max_queued=None)` and `limit_model_concurrency(model, limiter)`. All guide-referenced symbols verified against installed `pydantic-ai 1.96.0` (`.routine-envs/check-0514-py`); no `DeprecationWarning` emissions. |
-| 1.95.0 | May 13, 2026 | Minor release; all guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai 1.95.0` (`.routine-envs/check-0513-py`); no warnings. Additional exports `AgentRunResultEvent`, `AgentEventStream` confirmed in installed source. |
-| 1.94.0 | May 12, 2026 | Minor release; new top-level exports: `AgentRun`, `AgentRunResult`, `StreamedRunResultSync`. All guide-referenced symbols (`Agent`, `RunContext`, `ModelRetry`, `AgentRunResult`, `StreamedRunResult`, `UsageLimits`, `RunUsage`, `capture_run_messages`) verified with `-W error::DeprecationWarning` against installed `pydantic-ai 1.94.0` (`.routine-envs/check-0512-py`); no warnings. |
-| 1.93.0 | May 9, 2026 | Three minor releases (1.91.0, 1.92.0, 1.93.0). Breaking change: `TestModel` removed from `pydantic_ai` top-level — correct path is `from pydantic_ai.models.test import TestModel` (all guide pages already use this path). New top-level exports confirmed: `AgentSpec`, `UploadedFile`, `WebSearchUserLocation`, `DeferredLoadingToolset`. All existing symbols confirmed present in installed 1.93.0 (`.routine-envs/check-0509-py`) with no DeprecationWarnings. |
-| 1.90.0 | May 5, 2026 | Patch release; `DeferredToolCalls` in `pydantic_ai.output` marked `@deprecated` — use `DeferredToolRequests` (guides already use the correct API). Version confirmed against installed `pydantic-ai 1.90.0` (`.routine-envs/check-0505`); `Agent` (TestModel), `FunctionToolset`, `DeferredToolRequests`, `HandleDeferredToolCalls`, `ImageGenerationTool`, `MemoryTool`, `XSearchTool`, `RenamedToolset`, `WrapperToolset` all import successfully with no DeprecationWarnings. |
-| 1.89.1 | May 2, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.89.1` (`.routine-envs/check-pydantic-0502`); `Agent`, `OpenAIModel` imports verified with `-W error::DeprecationWarning`. |
-| 1.89.0 | May 1, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.89.0` (`.routine-envs/check-pydantic-0501`); `Agent`, `OpenAIModel` imports verified with `-W error::DeprecationWarning`. |
-| 1.88.0 | April 29, 2026 | Patch release; maintenance and dependency updates. Version confirmed against installed `pydantic-ai 1.88.0` (`.routine-envs/main-py-0429`); `Agent`, `OpenAIModel` imports verified. |
-| 1.87.0 | April 25, 2026 | Expanded Capabilities API: 9 new capability classes (`WrapperCapability`, `ReinjectSystemPrompt`, `ProcessHistory`, `ProcessEventStream`, `HandleDeferredToolCalls`, `IncludeToolReturnSchemas`, `PrefixTools`, `PrepareTools`, `SetToolMetadata`); new type aliases (`RawToolArgs`, `ValidatedToolArgs`, `CapabilityRef`, `CapabilityPosition`, `CapabilityOrdering`); `CAPABILITY_TYPES` registry. New capabilities section added. All symbols confirmed against installed 1.87.0 (`pydantic_ai/capabilities/__init__.py`). |
-| 1.86.1 | April 24, 2026 | Patch fix for Capabilities API. Snippets executed against installed 1.86.1; `Hooks`, `ModelProfile`, `DEFAULT_PROFILE` all import successfully. New Capabilities API section added to this guide. |
-| 1.86.0 | April 23, 2026 | Introduces `capabilities` parameter on `Agent.__init__`; new `pydantic_ai.capabilities` module (`Hooks`, `AbstractCapability`, `CombinedCapability`, `HistoryProcessor`, `Thinking`, `ThreadExecutor`, `WebFetch`, `WebSearch`, `ImageGeneration`, `MCP`, `Toolset`); new `pydantic_ai.profiles` module (`ModelProfile`, `ModelProfileSpec`, `DEFAULT_PROFILE`); new `pydantic_ai.ui` module (`UIAdapter`, `UIEventStream`, `MessagesBuilder`). |
-| 1.85.1 | April 22, 2026 | Patch fix; `UrlContextTool` marked deprecated (use `WebFetchTool`). Built-in tools, embeddings, AG UI, and `ApprovalRequiredToolset` verified against installed package. `pydantic_ai.common_tools` stub corrected to `pydantic_ai.builtin_tools` with correct class names. Snippets executed against 1.85.1. |
-| 1.85.0 | April 21, 2026 | New embeddings API (`Embedder`, `EmbeddingModel`, `EmbeddingSettings`); AG UI adapter (`AGUIApp`, `AGUIAdapter`, `run_ag_ui`); `ApprovalRequired`/`ApprovalRequiredToolset` for HITL; `DeferredLoadingToolset`; `UrlContextTool` deprecated in favour of `WebFetchTool` |
-| 1.84.1 | April 18, 2026 | Skip tool hooks for internal output tools; always pass dict-shaped validated args to hooks for single-`BaseModel` tools |
-| 1.84.0 | April 17, 2026 | `OllamaModel` subclass (fixes structured output on Ollama Cloud); `XSearchTool`/`FileSearchTool` for xAI (Grok); `FastMCPToolset` per-call metadata injection; Bedrock prompt cache TTL; Claude Opus 4.7 support (`anthropic:claude-opus-4-7`); stateful `OpenAICompaction`; fix exponential-time regex in Google `FileSearchTool` |
-| 1.83.0 | April 16, 2026 | Hard removal of all `result_*` → `output_*` renames (breaking); `EvaluationReport` API; pydantic-graph expansion with branching/looping; `defer_loading` for lazy model init; `ThreadExecutor` for sync-in-async tools; smart instruction caching; `CaseLifecycle` hooks; local `WebFetch` tool |
-| 1.20.0 | November 2025 | Previous documented version |
+Per-release bump notes have been removed; the framework's own history is in the [upstream changelog](https://pydantic.dev/docs/ai/changelog/) and this guide's history is in git.
 
-
+| Date | Change |
+|---|---|
+| 2026-10-21 | Re-verified against %%version=pydantic-ai%%. V1-era sections ("What's new in 1.84", "Capabilities API 1.86/1.87", "1.107.0 — what's new") replaced by an [Upgrading from V1](#upgrading-from-v1) table; removed APIs (graph persistence, `pydantic_ai.eval`, `FastMCPToolset`, `OpenAICompaction`, `AGUIApp`, `ThreadExecutor`) dropped; standalone class pages folded into this reference and the topic pages. |
+| 2026-08-21 | Class & API Reference section added, consolidating the earlier per-class pages. |
+| 2025-11 | First edition (1.x). |

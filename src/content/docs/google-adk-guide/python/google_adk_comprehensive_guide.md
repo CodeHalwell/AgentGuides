@@ -3920,7 +3920,7 @@ print(variant.name, base.name)  # strict_analyst analyst (original untouched)
 ```
 
 #### LlmAgent
-Why it matters: the workhorse agent class. In 2.7.1 `LlmAgent` (aliased `Agent`) sits on a unified class hierarchy with the workflow graph system — `LlmAgent -> BaseAgent -> google.adk.workflow._base_node.BaseNode -> pydantic.BaseModel`. This is a real architectural change versus every one of the 25 source docs (all written against 2.1.0–2.3.0), which describe `LlmAgent`/`BaseAgent` as graph-agnostic. Because of this MRO, every `LlmAgent` instance now directly carries workflow-node fields (`rerun_on_resume`, `retry_config`, `timeout`, `wait_for_output`, `parallel_worker`, `state_schema`) even when the agent is never used inside a `Workflow`.
+Why it matters: the workhorse agent class. In 2.7.1 `LlmAgent` (aliased `Agent`) sits on a unified class hierarchy with the workflow graph system — `LlmAgent -> BaseAgent -> google.adk.workflow._base_node.BaseNode -> pydantic.BaseModel`. This is a real architectural change from the early 2.x releases, where `LlmAgent`/`BaseAgent` were graph-agnostic. Because of this MRO, every `LlmAgent` instance now directly carries workflow-node fields (`rerun_on_resume`, `retry_config`, `timeout`, `wait_for_output`, `parallel_worker`, `state_schema`) even when the agent is never used inside a `Workflow`.
 
 ```python
 from google.adk.agents import LlmAgent  # also exported as Agent
@@ -4118,7 +4118,7 @@ class RoleBasedToolset(BaseToolset):
 ```
 
 #### InvocationContext
-Why it matters: the per-`run_async` call context threading session, run config, and branch info through the whole agent/tool/callback call graph. Unchanged from the docs.
+Why it matters: the per-`run_async` call context threading session, run config, and branch info through the whole agent/tool/callback call graph. Unchanged since 2.7.1.
 
 ```python
 from google.adk.agents.invocation_context import InvocationContext
@@ -4302,7 +4302,7 @@ toolset = McpToolset(
 ```
 
 #### GCSToolset / GCSAdminToolset
-Why it matters: **Correction** — every source doc that mentions these places them under `google.adk.tools`; in 2.7.1 they have moved to `google.adk.integrations.gcs.storage_toolset.GCSToolset` and `google.adk.integrations.gcs.admin_toolset.GCSAdminToolset` respectively, part of a broader trend of cloud-specific toolsets relocating into an `integrations` subpackage.
+Why it matters: **Correction** — older examples place them under `google.adk.tools`; in 2.7.1 they have moved to `google.adk.integrations.gcs.storage_toolset.GCSToolset` and `google.adk.integrations.gcs.admin_toolset.GCSAdminToolset` respectively, part of a broader trend of cloud-specific toolsets relocating into an `integrations` subpackage.
 
 ```python
 from google.adk.integrations.gcs.storage_toolset import GCSToolset
@@ -5459,7 +5459,7 @@ from google.adk.sessions.sqlite_session_service import SqliteSessionService
 ```
 
 #### FirestoreSessionService / FirestoreMemoryService
-Why it matters: **Correction** — these have moved out of `google.adk.sessions`/`google.adk.memory` entirely into a new `google.adk.integrations.firestore` subpackage, alongside the GCS toolset relocation noted above. This is a real, repeat-across-docs import-path break: every source volume mentioning them shows the old `google.adk.sessions`/`google.adk.memory` path.
+Why it matters: **Correction** — these have moved out of `google.adk.sessions`/`google.adk.memory` entirely into a new `google.adk.integrations.firestore` subpackage, alongside the GCS toolset relocation noted above. This is a real import-path break: older examples show the old `google.adk.sessions`/`google.adk.memory` path.
 
 ```python
 from google.adk.integrations.firestore.firestore_session_service import FirestoreSessionService
@@ -5706,18 +5706,18 @@ async def personalised_instruction(ctx: ReadonlyContext) -> str:
 ### Callbacks, Plugins & Middleware
 
 #### BasePlugin
-Why it matters: the plugin lifecycle hook interface. **Correction**: 2.7.1 exposes **14** hook methods, more than any individual source doc describes (most cover 12–13): `before_run_callback`, `after_run_callback`, `before_agent_callback`, `after_agent_callback`, `before_model_callback`, `after_model_callback`, `before_tool_callback`, `after_tool_callback`, `on_event_callback`, `on_user_message_callback`, `on_tool_error_callback`, `on_model_error_callback`, and two undocumented-in-every-volume additions: `on_agent_error_callback` and `on_run_error_callback` — dedicated error hooks at the agent and top-level run scope, filling a gap the docs' `on_tool_error_callback`/`on_model_error_callback` pair didn't cover.
+Why it matters: the plugin lifecycle hook interface. **Correction**: 2.7.1 exposes **14** hook methods, more than older write-ups describe (most cover 12–13): `before_run_callback`, `after_run_callback`, `before_agent_callback`, `after_agent_callback`, `before_model_callback`, `after_model_callback`, `before_tool_callback`, `after_tool_callback`, `on_event_callback`, `on_user_message_callback`, `on_tool_error_callback`, `on_model_error_callback`, and two undocumented-in-every-volume additions: `on_agent_error_callback` and `on_run_error_callback` — dedicated error hooks at the agent and top-level run scope, filling a gap the `on_tool_error_callback`/`on_model_error_callback` pair didn't cover.
 
 ```python
 from google.adk.plugins import BasePlugin
 
 class MyPlugin(BasePlugin):
     async def on_agent_error_callback(self, *, agent, callback_context, error):
-        ...  # new in 2.7.1 relative to the source docs
+        ...  # added in 2.7.1
 ```
 
 #### PluginManager
-Why it matters: registers plugins and drives early-exit hook chaining (first plugin to return non-`None` from a hook short-circuits the rest). Unchanged from the docs.
+Why it matters: registers plugins and drives early-exit hook chaining (first plugin to return non-`None` from a hook short-circuits the rest). Unchanged since 2.7.1.
 
 ```python
 from google.adk.plugins import PluginManager
@@ -5730,7 +5730,7 @@ manager.get_plugin("audit")        # look up by BasePlugin.name
 The `Runner` builds one from `App.plugins`. `on_agent_error_callback`, `on_run_error_callback` and `after_run_callback` are notification-only; every other hook can short-circuit. When `AgentTool` runs a sub-agent with `include_plugins=True`, the child manager is put in `set_skip_closing_plugins(True)` mode so finishing the sub-run doesn't close the parent's shared plugins.
 
 #### ReflectAndRetryToolPlugin / ReflectAndRetryModelPlugin
-Why it matters: built-in plugins that catch a tool/model error, feed it back to the LLM as a reflection prompt, and retry. **Note**: `google.adk.plugins.__all__` in 2.7.1 lists `ReflectAndRetryModelPlugin` alongside `ReflectAndRetryToolPlugin` — most source docs only describe the tool-retry variant; the model-retry sibling applies the same reflect-and-retry pattern to raw model-call failures.
+Why it matters: built-in plugins that catch a tool/model error, feed it back to the LLM as a reflection prompt, and retry. **Note**: `google.adk.plugins.__all__` in 2.7.1 lists `ReflectAndRetryModelPlugin` alongside `ReflectAndRetryToolPlugin` — older write-ups only describe the tool-retry variant; the model-retry sibling applies the same reflect-and-retry pattern to raw model-call failures.
 
 ```python
 from google.adk.plugins import ReflectAndRetryToolPlugin, ReflectAndRetryModelPlugin
@@ -5890,7 +5890,7 @@ from google.adk.evaluation.trajectory_evaluator import TrajectoryEvaluator
 ```
 
 #### EvalConfig / CustomMetricConfig
-Why it matters: declares which metrics run against an eval set and lets you register `CustomMetricConfig` instances alongside built-ins. Field set confirmed: `criteria`, `custom_metrics`, `user_simulator_config`, `live_model_config` — matches the source docs.
+Why it matters: declares which metrics run against an eval set and lets you register `CustomMetricConfig` instances alongside built-ins. Field set confirmed: `criteria`, `custom_metrics`, `user_simulator_config`, `live_model_config`.
 
 ```python
 from google.adk.evaluation.eval_config import EvalConfig
@@ -6065,7 +6065,7 @@ class AppDetails(BaseModel):
 ```
 
 #### GcsEvalSetsManager / LocalEvalSetsManager
-Why it matters: persistence backends for eval sets (and their `*Results` counterparts) — local filesystem vs. GCS-backed storage for CI pipelines. Import paths unchanged from the docs.
+Why it matters: persistence backends for eval sets (and their `*Results` counterparts) — local filesystem vs. GCS-backed storage for CI pipelines.
 
 ```python
 from google.adk.evaluation.local_eval_sets_manager import LocalEvalSetsManager
@@ -6302,7 +6302,7 @@ best = max(result.optimized_agents, key=lambda a: a.overall_score or 0.0)   # Pa
 ### A2A Protocol
 
 #### RemoteA2aAgent
-Why it matters: the client-side agent that proxies to a remote A2A-protocol server as if it were a local sub-agent. **Correction (significant)**: `RemoteA2aAgent` is **not** re-exported from `google.adk.agents` in 2.7.1 (`from google.adk.agents import RemoteA2aAgent` raises `ImportError`, contradicting every source doc that shows this exact import). It must be imported from its private submodule, and doing so additionally requires the optional `a2a` SDK package (`pip install google-adk[a2a]`) which is not installed by default.
+Why it matters: the client-side agent that proxies to a remote A2A-protocol server as if it were a local sub-agent. **Correction (significant)**: `RemoteA2aAgent` is **not** re-exported from `google.adk.agents` in 2.7.1 (`from google.adk.agents import RemoteA2aAgent` raises `ImportError`, contradicting older examples that show this exact import). It must be imported from its private submodule, and doing so additionally requires the optional `a2a` SDK package (`pip install google-adk[a2a]`) which is not installed by default.
 
 ```python
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
@@ -6894,7 +6894,7 @@ All three extend `BaseGoogleCredentialsConfig` (which enforces mutual exclusivit
 ### Caching & Performance
 
 #### ContextCacheConfig / GeminiContextCacheManager
-Why it matters: configures Gemini's implicit/explicit context caching (system instruction + tool schema reuse across turns) to cut token cost on long-running agents. Field set confirmed unchanged from the docs.
+Why it matters: configures Gemini's implicit/explicit context caching (system instruction + tool schema reuse across turns) to cut token cost on long-running agents.
 
 ```python
 from google.adk.agents.context_cache_config import ContextCacheConfig
@@ -6932,7 +6932,7 @@ app = App(name="finance_app", root_agent=agent, context_cache_config=ContextCach
 ```
 
 #### CacheMetadata
-Why it matters: a frozen model recording whether a given LLM call actually hit the cache (`active` state) versus merely computed a cache-eligible fingerprint (`fingerprint-only` state), exposing an `expire_soon` property for proactive cache refresh. Field set confirmed identical to the source docs via live `model_fields` introspection.
+Why it matters: a frozen model recording whether a given LLM call actually hit the cache (`active` state) versus merely computed a cache-eligible fingerprint (`fingerprint-only` state), exposing an `expire_soon` property for proactive cache refresh. Field set confirmed via live `model_fields` introspection.
 
 ```python
 from google.adk.models.llm_response import CacheMetadata
@@ -6963,7 +6963,7 @@ if stats["status"] == "active":
 ```
 
 #### EventsCompactionConfig
-Why it matters: configures sliding-window + token-threshold compaction of old events to keep long conversations within context limits, with HITL-safety guards so a compaction pass never discards an un-acknowledged human-in-the-loop request. **Correction (repeats across nearly every source volume)**: the standard `from google.adk.apps import App, EventsCompactionConfig, ResumabilityConfig` import now fails — `google.adk.apps.__all__` only exports `App` and `ResumabilityConfig` (true since 2.7.1 and still the case in the current release). `EventsCompactionConfig` is defined in the private `google.adk.apps._configs` module; the supported public import is `google.adk.apps.app`, whose `__all__` lists it.
+Why it matters: configures sliding-window + token-threshold compaction of old events to keep long conversations within context limits, with HITL-safety guards so a compaction pass never discards an un-acknowledged human-in-the-loop request. **Correction**: the standard `from google.adk.apps import App, EventsCompactionConfig, ResumabilityConfig` import now fails — `google.adk.apps.__all__` only exports `App` and `ResumabilityConfig` (true since 2.7.1 and still the case in the current release). `EventsCompactionConfig` is defined in the private `google.adk.apps._configs` module; the supported public import is `google.adk.apps.app`, whose `__all__` lists it.
 
 ```python
 from google.adk.apps import App, ResumabilityConfig
@@ -7214,15 +7214,15 @@ agent = LlmAgent(name="greeter", model=model, instruction="Greet the user by nam
 ```
 
 #### Event / EventActions
-Why it matters: `Event` is the atomic unit of everything that happens during a run (model output, tool call/result, state delta); `EventActions` carries the side-effect payload (state changes, artifact deltas, transfer/escalate flags) attached to an event. **Correction**: `Event` (which extends `LlmResponse`) carries two fields absent from every source doc — `environment_id` and `voice_activity` — reflecting newer live-session/environment-simulation support added after the docs were written. `EventActions`' 14-field shape matches the docs exactly (no drift there).
+Why it matters: `Event` is the atomic unit of everything that happens during a run (model output, tool call/result, state delta); `EventActions` carries the side-effect payload (state changes, artifact deltas, transfer/escalate flags) attached to an event. **Correction**: `Event` (which extends `LlmResponse`) carries two fields older write-ups omit — `environment_id` and `voice_activity` — reflecting newer live-session/environment-simulation support added in later releases. `EventActions` is unchanged.
 
 ```python
 from google.adk.events import Event, EventActions
-# Event.model_fields now includes: environment_id, voice_activity (undocumented in sources)
+# Event.model_fields now includes: environment_id, voice_activity
 ```
 
 #### LlmRequest / LlmResponse
-Why it matters: the normalized request/response envelope every `BaseLlm` implementation consumes/produces, decoupling agent logic from any specific model API shape. `LlmResponse.model_fields` shows the same two new fields as `Event` (`environment_id`, `voice_activity`), which is expected since `Event` subclasses `LlmResponse`; every other field matches the docs.
+Why it matters: the normalized request/response envelope every `BaseLlm` implementation consumes/produces, decoupling agent logic from any specific model API shape. `LlmResponse.model_fields` shows the same two new fields as `Event` (`environment_id`, `voice_activity`), which is expected since `Event` subclasses `LlmResponse`; every other field is unchanged.
 
 ```python
 from google.adk.models import LlmRequest, LlmResponse
@@ -7317,7 +7317,7 @@ model = LiteLlm(model="claude-opus-4-5-20250514")
 ```
 
 #### AnthropicLlm / Claude
-Why it matters: **Correction** — `AnthropicLlm` itself is not in `google.adk.models.__all__` (only its subclass `Claude` is publicly re-exported); import the base class from its submodule if you need it directly. Both classes exist and are unchanged in shape from the docs.
+Why it matters: **Correction** — `AnthropicLlm` itself is not in `google.adk.models.__all__` (only its subclass `Claude` is publicly re-exported); import the base class from its submodule if you need it directly. Both classes exist.
 
 ```python
 from google.adk.models import Claude               # public

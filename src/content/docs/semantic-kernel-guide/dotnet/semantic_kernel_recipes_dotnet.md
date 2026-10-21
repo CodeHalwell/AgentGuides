@@ -28,7 +28,7 @@ builder.Services.AddAzureOpenAIChatCompletion(
     endpoint: builder.Configuration["AzureOpenAI:Endpoint"]!,
     credentials: new DefaultAzureCredential());
 
-builder.Services.AddSingleton<WeatherPlugin>();
+builder.Services.AddSingleton<WeatherPlugin>();   // WeatherPlugin: see the comprehensive guide, section 4.1
 
 // ...but the Kernel is transient, so plugins and filters added per request do not leak
 builder.Services.AddTransient(sp =>
