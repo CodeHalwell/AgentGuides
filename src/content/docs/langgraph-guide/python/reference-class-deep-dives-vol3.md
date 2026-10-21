@@ -1302,7 +1302,7 @@ for chunk in graph.stream({}, context=Ctx(), stream_mode="custom"):
 **Status:** Stable.
 
 > **Note on related deprecated types** — `HumanInterruptConfig`, `ActionRequest`, and
-> `HumanInterrupt` have been deprecated since `langgraph==1.0.0`. Their deprecation
+> `HumanInterrupt` have been deprecated since `langgraph 1.0.0`. Their deprecation
 > message points to `langchain.agents.interrupt`, but that module does not exist in
 > `langchain` 1.4.x; agents built with `create_agent` use `HumanInTheLoopMiddleware`
 > and the `HITLRequest` / `HITLResponse` types from

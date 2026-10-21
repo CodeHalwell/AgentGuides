@@ -336,7 +336,7 @@ graph = builder.compile(store=memory_store)
 
 `ToolRuntime` is a dataclass that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
 
-Verified against the installed source (`langgraph-prebuilt==1.1.1`):
+Verified against the installed source (`langgraph-prebuilt==%%version=langgraph-prebuilt%%`):
 
 ```python
 @dataclass

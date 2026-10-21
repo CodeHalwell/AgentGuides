@@ -10,7 +10,7 @@ sidebar:
 
 # Checkpointers — API reference
 
-Verified against **`langgraph==%%version=langgraph%%`**, **`langgraph-checkpoint==4.3.0`**, **`langgraph-checkpoint-sqlite==3.1.2`**, **`langgraph-checkpoint-postgres==3.2.0`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
+Verified against **`langgraph==%%version=langgraph%%`**, **`langgraph-checkpoint==%%version=langgraph-checkpoint%%`**, **`langgraph-checkpoint-sqlite==%%version=langgraph-checkpoint-sqlite%%`**, **`langgraph-checkpoint-postgres==%%version=langgraph-checkpoint-postgres%%`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
 
 A checkpointer is a `BaseCheckpointSaver` subclass. It persists the per-thread history of `Checkpoint`/`CheckpointTuple` objects so the graph can pause (`interrupt`), resume (`Command(resume=...)`), replay (`get_state_history`), time-travel, and keep short-term memory across invocations.
 

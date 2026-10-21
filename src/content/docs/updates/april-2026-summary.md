@@ -152,7 +152,7 @@ Complete rewrite updating all framework version records:
 ## 8. LangGraph (TypeScript) — `LangGraph_Guide/typescript/README.md`
 
 **Breaking changes**:
-- `createReactAgent` moved to `@langgraphjs/toolkit` (deprecated in `@langchain/langgraph/prebuilt`)
+- `createReactAgent` moved to `@langgraphjs/toolkit` (deprecated in `@langchain/langgraph/prebuilt`) *(Correction, October 2026: this was wrong. `@langgraphjs/toolkit` is not a LangChain package and the npm name is now a security placeholder; do not install it. Use `createAgent` from `langchain` instead.)*
 
 **New features**:
 - Standard JSON Schema support (Zod 4, Valibot, ArkType compatible)

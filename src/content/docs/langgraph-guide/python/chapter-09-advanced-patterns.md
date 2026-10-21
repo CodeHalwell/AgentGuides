@@ -889,7 +889,7 @@ print(result["results"])
 
 ### Pattern 11: `add_sequence()` — concise linear pipelines
 
-`StateGraph.add_sequence()` is a convenience method introduced in LangGraph 1.2.1. It registers a list of nodes and automatically wires them with edges — no separate `add_node` + `add_edge` calls needed. Each element is either a callable (name is derived from `__name__`) or a `("name", callable)` tuple.
+`StateGraph.add_sequence()` is a convenience method. It registers a list of nodes and automatically wires them with edges — no separate `add_node` + `add_edge` calls needed. Each element is either a callable (name is derived from `__name__`) or a `("name", callable)` tuple.
 
 ```python
 from typing_extensions import TypedDict

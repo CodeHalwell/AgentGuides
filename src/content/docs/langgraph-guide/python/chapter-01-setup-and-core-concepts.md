@@ -270,15 +270,15 @@ async for event in graph.astream(...):
 
 ---
 
-## What's New in LangGraph 1.2.x
+## Key Features in Current LangGraph
 
-The sections below document additions and changes introduced across LangGraph 1.2.x. All of them are available in the current release, %%version=langgraph%%.
+The sections below document features you will use from the start, several of them recent additions. All of them are available in the current release, %%version=langgraph%%.
 
 ---
 
 ### `MessagesState` — Built-in Messages Shorthand
 
-Defining a TypedDict with an `add_messages`-annotated `messages` field is the single most common pattern in LangGraph. Version 1.2.1 ships `MessagesState` as a ready-made shorthand so you don't have to repeat that boilerplate.
+Defining a TypedDict with an `add_messages`-annotated `messages` field is the single most common pattern in LangGraph. LangGraph ships `MessagesState` as a ready-made shorthand so you don't have to repeat that boilerplate.
 
 **What it expands to under the hood:**
 
@@ -340,7 +340,7 @@ class AppState(TypedDict):
 
 ### `REMOVE_ALL_MESSAGES` — Clear the Entire Message List
 
-Previously, clearing all messages required iterating over every message and issuing individual `RemoveMessage` operations. LangGraph 1.2.1 adds the `REMOVE_ALL_MESSAGES` constant so you can wipe the list in a single operation.
+Previously, clearing all messages required iterating over every message and issuing individual `RemoveMessage` operations. LangGraph provides the `REMOVE_ALL_MESSAGES` constant so you can wipe the list in a single operation.
 
 **Import:**
 
@@ -405,7 +405,7 @@ result = graph.invoke(
 
 ### `context_schema` on `StateGraph` — Read-Only Runtime Context
 
-LangGraph 1.2.1 introduces the `context_schema` constructor parameter to replace the older `config_schema`. It is designed for **read-only, immutable context** that nodes should be able to read but never write back to state: things like a `user_id`, an API key, a database connection, or a model provider choice.
+The `context_schema` constructor parameter (introduced in 0.6) replaces the older `config_schema`. It is designed for **read-only, immutable context** that nodes should be able to read but never write back to state: things like a `user_id`, an API key, a database connection, or a model provider choice.
 
 Unlike regular state, context is never persisted to a checkpoint and cannot be updated by a node return value. It is injected at invocation time and stays constant for the lifetime of that run.
 

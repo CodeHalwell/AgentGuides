@@ -11,6 +11,9 @@
 // or a placeholder naming a package that isn't in versions.json.
 // Warnings: a literal copy of a current version, or a "targets vX" banner with a literal
 // number. These can be legitimate history ("added in 1.17.0"), so they don't fail.
+//
+// History is exempt: dated release notes under updates/, and revision-history table
+// rows (a row whose first cell is a version or a date).
 
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -56,6 +59,8 @@ const BANNER = new RegExp(
 );
 const HISTORY = /added|since|introduced|new in|changelog|before|prior|from v?\d|first (?:written|documented)|deprecated|removed|until|up to/i;
 const PLACEHOLDER = /%%(?:version=([^%\s]+)|versions-checked)%%/g;
+const HISTORY_ROW = /^\|\s*(?:v?\d+\.\d+(?:\.\d+)?|\d{4}-\d{2}(?:-\d{2})?|[A-Z][a-z]+ \d{1,2},? \d{4}|[A-Z][a-z]+ \d{4})\b/;
+const ARCHIVE = new Set(['updates']);
 
 function* walk(dir) {
   for (const entry of readdirSync(dir)) {
@@ -75,6 +80,7 @@ function scanDocs() {
   for (const file of walk(docsDir)) {
     const rel = relative(root, file);
     const guide = relative(docsDir, file).split('/')[0];
+    if (ARCHIVE.has(guide)) continue;
     const lines = readFileSync(file, 'utf8').split('\n');
     let frontmatter = lines[0] === '---';
     lines.forEach((line, i) => {
@@ -84,8 +90,9 @@ function scanDocs() {
         if (m[1] && !data.packages[m[1]]) errors.push(`${at}  unknown package in ${m[0]}`);
         if (frontmatter) errors.push(`${at}  ${m[0]} in frontmatter is not substituted`);
       }
+      if (HISTORY_ROW.test(line)) return;
       for (const [name, pkg] of Object.entries(data.packages)) {
-        for (const re of pinPatterns(name, pkg.registry)) {
+        for (const re of pinPatterns(pkg.name ?? name, pkg.registry)) {
           for (const m of line.matchAll(re)) {
             errors.push(`${at}  ${name} pinned to literal ${m[1]}; use %%version=${name}%%`);
           }
@@ -97,6 +104,8 @@ function scanDocs() {
         warnings.push(`${at}  "${m[0].trim()}" written literally`);
       }
       for (const [version, name] of here) {
+        const pkgName = data.packages[name].name ?? name;
+        if (!line.includes(pkgName.split('/').at(-1))) continue;
         if (new RegExp(String.raw`(?<![\d.])v?${esc(version)}(?![\d.])`).test(line) && !BANNER.test(line)) {
           warnings.push(`${at}  literal ${version} (current ${name}); use %%version=${name}%%`);
         }
@@ -140,7 +149,7 @@ async function checkLatest() {
   let behind = 0;
   for (const [name, pkg] of Object.entries(data.packages)) {
     try {
-      const now = await latest(name, pkg.registry);
+      const now = await latest(pkg.name ?? name, pkg.registry);
       if (now !== pkg.version) {
         behind++;
         console.log(`${name.padEnd(32)} ${pkg.version.padEnd(10)} -> ${now}   (${pkg.guide})`);

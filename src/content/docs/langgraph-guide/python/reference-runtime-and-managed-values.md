@@ -216,7 +216,7 @@ def my_node(state: State) -> dict:
 
 ### Class definition
 
-Verified against the installed `langgraph-prebuilt==1.1.1` source (`langgraph.prebuilt.tool_node`):
+Verified against the installed `langgraph-prebuilt==%%version=langgraph-prebuilt%%` source (`langgraph.prebuilt.tool_node`):
 
 ```python
 @dataclass

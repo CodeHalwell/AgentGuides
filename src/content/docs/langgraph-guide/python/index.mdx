@@ -91,8 +91,8 @@ Need one specific concept? Land directly on the chapter that owns it.
 ## Reference
 
 The API reference pages below are checked against the installed `langgraph==%%version=langgraph%%` /
-`langgraph-checkpoint==4.3.0` / `langgraph-checkpoint-sqlite==3.1.2` /
-`langgraph-checkpoint-postgres==3.2.0` source. If a signature disagrees with an
+`langgraph-checkpoint==%%version=langgraph-checkpoint%%` / `langgraph-checkpoint-sqlite==%%version=langgraph-checkpoint-sqlite%%` /
+`langgraph-checkpoint-postgres==%%version=langgraph-checkpoint-postgres%%` source. If a signature disagrees with an
 older blog post or docs page, the source wins.
 
 <CardGrid>
@@ -127,9 +127,9 @@ older blog post or docs page, the source wins.
 </CardGrid>
 
 <Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==%%version=langgraph%%`, `langgraph-checkpoint==4.3.0`,
-  `langgraph-prebuilt==1.1.1`, `langgraph-checkpoint-sqlite==3.1.2`,
-  `langgraph-checkpoint-postgres==3.2.0` and `langchain==1.4.6` (checked %%versions-checked%%). The full class/API
+  Introspected against `langgraph==%%version=langgraph%%`, `langgraph-checkpoint==%%version=langgraph-checkpoint%%`,
+  `langgraph-prebuilt==%%version=langgraph-prebuilt%%`, `langgraph-checkpoint-sqlite==%%version=langgraph-checkpoint-sqlite%%`,
+  `langgraph-checkpoint-postgres==%%version=langgraph-checkpoint-postgres%%` and `langchain==%%version=langchain%%` (checked %%versions-checked%%). The full class/API
   surface — every symbol below and many more — is consolidated in the
   [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference)
   section of the single-page guide.
@@ -216,9 +216,9 @@ distinct versions only, oldest to newest.
 | 2026-07-09 | 1.2.8 | Encrypted checkpoint serde (`EncryptedSerializer`), serde audit hooks documented. |
 | 2026-07-20 | 1.2.9 | `RunControl`/cooperative draining, `RemainingSteps`, `ToolRuntime` execution metadata, `TimeoutPolicy` refinements. |
 | 2026-08-01 | 1.2.10 | Patch release; all core symbols re-verified against the installed source. |
-| 2026-08-17 | 1.2.11 | **Consolidated the 46 "class deep dive" volumes into one source-verified [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph==1.2.11`. |
+| 2026-08-17 | 1.2.11 | **Consolidated the 46 "class deep dive" volumes into one source-verified [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph 1.2.11`. |
 | 2026-09-28 | 1.2.12 | Version bump to 1.2.12; added `set_node_defaults()` section to ch1 and Pattern 15 to ch9; Functional API section expanded with async tasks, `context_schema`/`Runtime` injection, `entrypoint.final` accumulator, named `@task` with `CachePolicy`; fixed `ToolRuntime` canonical import; Recipes 22–23 added (`set_node_defaults` + `ToolRuntime` all-in-one injection). |
 | 2026-10-05 | 1.2.12 | Added **Class Deep Dives Vol. 1** reference page — 10 source-verified class deep dives (`Send`, `Command`, `StateSnapshot`, `Interrupt`, `TracePolicy`, `InMemoryStore`, `InjectedState`, `InjectedStore`, `RetryPolicy`, `CachePolicy`) with 25+ runnable code examples covering the full range of each API. |
 | 2026-10-12 | 1.2.14 | Version bump to 1.2.14; all reference pages updated. Added **Class Deep Dives Vol. 2** — 10 source-verified deep dives (`DeltaChannel`, `EncryptedSerializer`, `TimeoutPolicy`, `NamedBarrierValueAfterFinish`, `GraphOutput`, `Durability`, `TaskPayload`/`TaskResultPayload`, `CheckpointPayload`, `ToolCallTransformer`/`ToolCallStream`, `StateUpdate`) with 30+ runnable code examples. `DeltaChannel` cross-reference added to channels reference. `langgraph-checkpoint` bumped to 4.2.0. |
 | 2026-10-19 | 1.2.16 | Version bump to 1.2.16. Added **Class Deep Dives Vol. 3** — 10 source-verified deep dives (`BinaryOperatorAggregate`, `Topic`, `EphemeralValue`, `LastValue`/`LastValueAfterFinish`, `GraphCallbackHandler`/`GraphInterruptEvent`/`GraphResumeEvent`, `ToolNode`, `MessagesState`/`add_messages`, `UIMessage`/`RemoveUIMessage`/`push_ui_message`, `Runtime`/`ExecutionInfo`/`RunControl`, `HumanResponse`) with 25+ runnable code examples. |
-| 2026-10-21 | 1.2.16 | Consistency pass: current version now comes from the site's version data; companion package versions updated (`langgraph-checkpoint` 4.3.0, `-sqlite` 3.1.2, `-postgres` 3.2.0, `langgraph-prebuilt` 1.1.1). Replaced the invented "v1.0.3 Production Patterns" section in the production guide with verified caching, fan-in, middleware and Postgres-store examples; replaced `AgentExecutor`-based examples with `create_agent`; fixed three wrong import paths (`StateSnapshot`, `RemoteGraph`, `SerializerProtocol`) and the non-existent `langgraph.types.call` / `langchain.agents.interrupt`; corrected the `langgraph[postgres]` install advice; renumbered duplicated recipe numbers; retired model IDs replaced. |
+| 2026-10-21 | 1.2.16 | Consistency pass: current version now comes from the site's version data; companion package versions updated (`langgraph-checkpoint` 4.3.0, `-sqlite` 3.1.2, `-postgres` 3.2.0, `langgraph-prebuilt` 1.1.1). Removed the invented "v1.0.3 Production Patterns" section from the production guide, replacing it with verified caching, fan-in, middleware and Postgres-store examples; replaced `AgentExecutor`-based examples with `create_agent`; fixed three wrong import paths (`StateSnapshot`, `RemoteGraph`, `SerializerProtocol`) and the non-existent `langgraph.types.call` / `langchain.agents.interrupt`; corrected the `langgraph[postgres]` install advice; renumbered duplicated recipe numbers; retired model IDs replaced. |

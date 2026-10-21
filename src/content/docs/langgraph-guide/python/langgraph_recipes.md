@@ -1298,7 +1298,7 @@ print(result2["final_report"])  # same content, returned from cache
 **Uses:** `create_react_agent` with `pre_model_hook` / `post_model_hook`, `Command`-returning tools, custom state schema
 
 ```python
-# Imports verified against langgraph==%%version=langgraph%% / langgraph-prebuilt==1.1.1
+# Imports verified against langgraph==%%version=langgraph%% / langgraph-prebuilt==%%version=langgraph-prebuilt%%
 import operator
 from typing import Annotated, Any
 from typing_extensions import TypedDict
@@ -3818,7 +3818,7 @@ for kind, data in graph.stream(
 print(last_state["messages"][-1].content)
 ```
 
-**`ToolRuntime` field summary (from `langgraph-prebuilt==1.1.0`):**
+**`ToolRuntime` field summary (from `langgraph-prebuilt==%%version=langgraph-prebuilt%%`):**
 
 | Field | Type | Source |
 |---|---|---|

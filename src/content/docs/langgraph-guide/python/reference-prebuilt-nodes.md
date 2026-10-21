@@ -10,7 +10,7 @@ sidebar:
 
 # ToolNode, InjectedState, InjectedStore, ToolRuntime, ToolCallTransformer — API reference
 
-Verified against **`langgraph==%%version=langgraph%%`** / **`langgraph-prebuilt==1.1.1`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
+Verified against **`langgraph==%%version=langgraph%%`** / **`langgraph-prebuilt==%%version=langgraph-prebuilt%%`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.prebuilt.tool_validator`, `langgraph.prebuilt._tool_call_transformer`, `langgraph.prebuilt._tool_call_stream`).
 
 `ToolNode` is LangGraph's prebuilt executor that takes a list of tools, reads the last AI message in state, runs every pending tool call in parallel, and writes back `ToolMessage` results. The surrounding helpers — `InjectedState`, `InjectedStore`, `ToolRuntime`, `tools_condition`, `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` — let tools read graph state, access the long-term store, stream partial output, intercept calls before execution, and consume per-tool-call streaming results in a structured way.
 

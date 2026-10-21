@@ -2221,7 +2221,7 @@ print("Cache hit:", result["cache_hit"])  # True
 
 ## Errata: removed fabricated sections
 
-The following subsections appeared in earlier drafts of this guide under a "v1.0.3 Features" heading but do not match any real API in the installed `langgraph==1.2.0` package. They have been removed:
+The following subsections appeared in earlier drafts of this guide under a "v1.0.3 Features" heading but do not match any real API in the installed `langgraph 1.2.0` package. They have been removed:
 
 - **Node Caching** — `from langgraph.cache import cache_node, SemanticCache, CachePolicy` does not exist. For caching, use LangGraph's long-term `Store` (see [Memory & Persistence](#memory--persistence)) or plain `functools.lru_cache`.
 - **Deferred Nodes** — `from langgraph.graph import deferred` and `@deferred(wait_for=[...])` are not real. Fan-in is native: edges from multiple sources into the same target wait for all upstream completions.
@@ -2730,9 +2730,9 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.2.7 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph==1.2.7`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
-| 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph==1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `StreamPart`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
-| 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph==1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
+| 1.2.7 | June 29, 2026 | Patch release. Version confirmed against installed `langgraph 1.2.7`, `langgraph-checkpoint==4.1.1`, `langgraph-prebuilt==1.1.0`. New deep-dive Vol. 29 covers 10 previously undocumented APIs: `Edge`/`TriggerEdge`/`draw_graph()` visualization internals, `get_graph(xray=)` subgraph expansion, `as_tool()` (beta) graph-to-tool conversion, `get_subgraphs(recurse=True)` namespace traversal, `get_input_jsonschema()`/`get_output_jsonschema()`/`get_context_jsonschema()` schema introspection, `clear_cache()`/`aclear_cache()` per-namespace cache invalidation, `_messages_delta_reducer` batch-invariant DeltaChannel reducer, `_add_messages_wrapper` partial-application decorator, `add_node(defer=True)` deferred end-of-run execution (quiescence), and `REMOVE_ALL_MESSAGES` bulk history reset. |
+| 1.2.0 | May 12, 2026 | Minor release. Version confirmed against installed `langgraph 1.2.0` (`.routine-envs/check-0512-py`); `langgraph-checkpoint==4.1.0`, `langgraph-prebuilt==1.1.0`. New exports: `ToolRuntime`, `ToolCallTransformer` (both in `langgraph.prebuilt`). All core symbols (`StateGraph`, `END`, `START`, `CompiledStateGraph`, `MemorySaver`, `create_react_agent`, `ToolNode`, `StreamPart`, `Command`, `Send`, `Interrupt`, `interrupt`, `entrypoint`, `task`, `InMemoryStore`) verified with `-W error::DeprecationWarning`. |
+| 1.1.10 | April 28, 2026 | Patch release. Version confirmed against installed `langgraph 1.1.10` (`.routine-envs/main-py-0428`); `langgraph-checkpoint==4.0.3`. All core symbols verified. |
 | 1.1.9 | April 22, 2026 | Patch release; six source-verified reference pages added to the guide. |
 | 1.1.8 | April 17, 2026 | Fixed strict `add_handler` type check that broke OpenTelemetry instrumentation; follows patch 1.1.7 (same day) |
 | 1.1.7 | April 17, 2026 | Intermediate patch preceding 1.1.8; stability fixes |
@@ -2745,8 +2745,8 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 Source-verified reference for the classes, functions, and types developers actually
 touch — consolidated from LangGraph's full class-by-class audit and re-verified
-against the installed `langgraph==%%version=langgraph%%` (`langgraph-checkpoint==4.3.0`,
-`langgraph-prebuilt==1.1.0`, `langchain-core==1.6.0`). Each entry gives the module
+against the installed `langgraph==%%version=langgraph%%` (`langgraph-checkpoint==%%version=langgraph-checkpoint%%`,
+`langgraph-prebuilt==%%version=langgraph-prebuilt%%`, `langchain-core==%%version=langchain-core%%`). Each entry gives the module
 path, the verified signature, why it matters, and a runnable example. Deeply
 private, underscore-prefixed implementation details (`langgraph.pregel._algo`,
 `langgraph._internal.*`, and similar) are intentionally **not** given individual
@@ -5389,7 +5389,7 @@ resuming node also needs to patch state or route explicitly.
 **Module:** `langgraph.prebuilt.interrupt`. The classes still work but each emits
 `LangGraphDeprecatedSinceV10`. The deprecation message says they moved to
 `langchain.agents.interrupt`, but no such module exists in `langchain` 1.4.x
-(checked with `langchain` 1.4.6 installed); for agents use `HumanInTheLoopMiddleware`
+(checked with `langchain` %%version=langchain%% installed); for agents use `HumanInTheLoopMiddleware`
 and the `HITLRequest` / `HITLResponse` types in
 `langchain.agents.middleware.human_in_the_loop`. `HumanResponse` is the conventional shape a human-review resume
 value takes; it remains a stable, non-deprecated `TypedDict`.
