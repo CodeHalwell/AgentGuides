@@ -160,7 +160,7 @@ for path in Path("handbook").glob("*.pdf"):
 
 # Processing is asynchronous; check before relying on a document
 status = client.beta.libraries.documents.status(library_id=library.id, document_id=doc.id)
-print(status.processing_status)
+print(status.process_status)          # "todo", "in_progress", "done" or "error"
 
 support = client.beta.agents.create(
     model="mistral-medium-latest",

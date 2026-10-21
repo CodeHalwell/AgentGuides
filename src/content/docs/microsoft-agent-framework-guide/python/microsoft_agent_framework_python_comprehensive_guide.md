@@ -1258,7 +1258,7 @@ intermediates = result.get_intermediate_outputs()  # worker_a/b/c outputs
 
 Outputs from unfiltered executors still flow through the graph (consumed by the next handler) — they simply aren't surfaced via the run result. This keeps `result.get_outputs()` deterministic when many nodes can yield.
 
-> **Deprecated:** The old `output_executors=[...]` parameter still works in 1.5.0 but is superseded by `output_from=`. Prefer `output_from=` in new code.
+> **Deprecated (since 1.5.0):** The old `output_executors=[...]` parameter still works but is superseded by `output_from=`. Prefer `output_from=` in new code.
 
 ### Conditional edges — gate a single connection
 
@@ -3572,10 +3572,10 @@ client.delete_agent(agent.id)
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.22.0 | October 21, 2026 | Version sweep: header now tracks the current release via the site's version data instead of a hard-coded number. Every code example re-checked (imports, constructor keywords, method names) against an installed `agent-framework` 1.22.0. Fixed: `AzureOpenAIChatClient` (removed — use `OpenAIChatClient(azure_endpoint=..., credential=...)`), `TruncationStrategy(keep_last_groups=)` → `max_n` / `compact_to`, `mode_descriptions=` → `mode_instructions=`, harness tool names (`todos_add`, `mode_set`, ... since 1.7.0), functional workflows now need `.build()` (since 1.14.0), `MagenticBuilder.with_human_input_on_stall()` (never existed), non-existent `[security]` / `[evals]` extras, `SkillFrontmatter` signature. Stability notes updated: skills stable since 1.11.0, `TodoProvider` / `AgentModeProvider` since 1.12.0. |
-| 1.6.0 | May 22, 2026 | Core bumped 1.5.0 → 1.6.0; `Latest verified release`, `**Framework Version:**`, API reference header, and description frontmatter updated. All 23 core symbols verified against installed `agent-framework-core==1.6.0` (`.routine-envs/check-0522-ms-agent`); 242 public symbols confirmed; no deprecations detected. Note: opentelemetry `importlib.metadata` DeprecationWarning at import (Python 3.11 compat issue) is an upstream opentelemetry bug — suppressed with `warnings.filterwarnings('ignore')` for verification purposes. | Claude routine |
+| 1.6.0 | May 22, 2026 | Core bumped 1.5.0 → 1.6.0; `Latest verified release`, `**Framework Version:**`, API reference header, and description frontmatter updated. All 23 core symbols verified against installed `agent-framework-core` 1.6.0 (`.routine-envs/check-0522-ms-agent`); 242 public symbols confirmed; no deprecations detected. Note: opentelemetry `importlib.metadata` DeprecationWarning at import (Python 3.11 compat issue) is an upstream opentelemetry bug — suppressed with `warnings.filterwarnings('ignore')` for verification purposes. | Claude routine |
 | 1.4.0 | May 15, 2026 | Core bumped 1.3.0 → 1.4.0. Added `SecureAgentConfig` (`ExperimentalFeature.FIDES`) section covering information-flow control, label tracking, policy enforcement, and audit logging. Added `InMemorySkillsSource`, `DelegatingSkillsSource`, `FunctionExecutor`/`@executor`, and `WorkflowViz` to the relevant reference pages. Version strings updated throughout; verified against installed `agent-framework` 1.4.0. |
 | 1.3.0 | May 9, 2026 | Core bumped 1.2.2 → 1.3.0. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. `MemoryStore` and `SkillResource` now emit `ExperimentalWarning` on import. Version strings updated throughout; `Agent` and `FoundryChatClient` verified against installed `agent-framework` 1.3.0 (`.routine-envs/check-0509-py`). |
-| 1.2.2 | May 2026 | Guide verified against `agent-framework-core==1.2.2`; skills, functional workflows, and `Agent.as_tool()` added. |
+| 1.2.2 | May 2026 | Guide verified against `agent-framework-core` 1.2.2; skills, functional workflows, and `Agent.as_tool()` added. |
 
 ## Where to go next
 

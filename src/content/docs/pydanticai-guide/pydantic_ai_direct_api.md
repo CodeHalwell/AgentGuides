@@ -7,7 +7,7 @@ language: python
 
 # Direct API — Raw Model Calls
 
-Verified against **pydantic-ai==2.8.0** — source module: `pydantic_ai.direct`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.direct`.
 
 `pydantic_ai.direct` exposes four functions that talk to a language model with **no Agent overhead**: no tool execution, no output validation, no message-history management, no retry loop. The only abstraction is translating your `ModelMessage` list into the provider's wire format and back. This is the right layer when you're building custom pipelines, comparing model outputs, writing SDK-level unit tests, or calling a model as part of a custom capability.
 
@@ -238,11 +238,11 @@ Chain turns by passing the prior history as additional messages:
 ```python
 import asyncio
 from pydantic_ai import ModelRequest
-from pydantic_ai.messages import ModelMessages, ModelMessagesTypeAdapter
+from pydantic_ai.messages import ModelMessage
 from pydantic_ai.direct import model_request
 
 async def chat():
-    history: list = [ModelRequest.user_text_prompt('My favourite colour is green.')]
+    history: list[ModelMessage] = [ModelRequest.user_text_prompt('My favourite colour is green.')]
 
     resp1 = await model_request('openai:gpt-4o-mini', history)
     history.append(resp1)  # ModelResponse also is a ModelMessage
@@ -306,7 +306,7 @@ from pydantic_ai import ModelRequest
 from pydantic_ai.direct import model_request
 from pydantic_ai.models.instrumented import InstrumentationSettings
 
-settings = InstrumentationSettings(include_content=True, version=4)
+settings = InstrumentationSettings(include_content=True)  # version 5 is the default
 
 async def main():
     response = await model_request(

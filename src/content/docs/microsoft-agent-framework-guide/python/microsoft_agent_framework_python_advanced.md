@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Advanced Patterns"
-description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.6.0."
+description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system."
 framework: microsoft-agent-framework
 language: python
 ---

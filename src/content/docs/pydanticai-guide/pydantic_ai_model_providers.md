@@ -7,7 +7,7 @@ language: python
 
 # Model Providers, FallbackModel & InstrumentationSettings
 
-Verified against **pydantic-ai==1.103.0** — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.
 
 A PydanticAI `Agent` talks to an `LLM` through a `Model` backed by a `Provider`. The quickest way to wire one up is the `'provider:model-name'` string; the full way is constructing `SpecificModel(..., provider=SpecificProvider(...))` yourself. This page lists every prefix the installed source recognises and how to compose, gateway, or fall back between them.
 
@@ -26,44 +26,45 @@ from pydantic_ai.providers.openai import OpenAIProvider
 agent = Agent(OpenAIChatModel('gpt-5.2', provider=OpenAIProvider(api_key='sk-...')))
 ```
 
-The string `'openai:gpt-5.2'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py:100`, `:234`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
+The string `'openai:gpt-5.2'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
 
 ## Provider prefixes
 
-Verified from `providers/__init__.py:100`:
+Verified from `infer_provider_class` in `providers/__init__.py`:
 
 | Prefix                  | Model class                         | Notes                                                                   |
 | ----------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
-| `openai`                | `OpenAIChatModel`                   | Default. `OPENAI_API_KEY` env var.                                      |
-| `openai-chat`           | `OpenAIChatModel`                   | Forces the Chat Completions API.                                        |
-| `openai-responses`      | `OpenAIResponsesModel`              | Forces the Responses API (reasoning, built-in tools).                   |
+| `openai`                | `OpenAIResponsesModel`              | `OPENAI_API_KEY`. **Since 2.0 the bare prefix means the Responses API** (it meant Chat Completions in V1). |
+| `openai-chat`           | `OpenAIChatModel`                   | Chat Completions API — use this to keep the V1 behaviour.               |
+| `openai-responses`      | `OpenAIResponsesModel`              | Explicit form of the default.                                           |
+| `azure` / `azure-responses` | Azure OpenAI                    | `AzureProvider(endpoint=..., api_key=...)`.                             |
 | `anthropic`             | `AnthropicModel`                    | `ANTHROPIC_API_KEY`.                                                    |
-| `google-gla`            | `GoogleModel` (Gemini API)          | `GEMINI_API_KEY`. Formerly `google`.                                    |
-| `google-vertex` / `vertexai` | `GoogleModel` (Vertex AI)      | Uses ADC / service-account credentials.                                 |
-| `bedrock`               | `BedrockConverseModel`              | AWS credentials resolution.                                             |
-| `groq`                  | `GroqModel`                         | `GROQ_API_KEY`.                                                         |
-| `mistral`               | `MistralModel`                      | `MISTRAL_API_KEY`.                                                      |
-| `cohere`                | `CohereModel`                       | `COHERE_API_KEY`.                                                       |
-| `xai`                   | `OpenAI*`-compatible xAI model      | `XAI_API_KEY`. Supports `XSearchTool`.                                  |
-| `grok`                  | deprecated alias of `xai`           | Prefer `xai:`.                                                          |
+| `google`                | `GoogleModel` (Gemini API)          | `GOOGLE_API_KEY` / `GEMINI_API_KEY`. Replaces V1's `google-gla:`.       |
+| `google-cloud`          | `GoogleModel` (Vertex AI)           | ADC / service-account credentials. Replaces V1's `google-vertex:` / `vertexai:`. |
+| `bedrock`               | `BedrockConverseModel`              | AWS credentials resolution. Needs the `bedrock` extra.                  |
+| `bedrock-mantle`        | Bedrock Mantle                      | Needs the `bedrock-mantle` extra.                                       |
+| `groq`                  | `GroqModel`                         | `GROQ_API_KEY`. Needs the `groq` extra.                                 |
+| `mistral`               | `MistralModel`                      | `MISTRAL_API_KEY`. Needs the `mistral` extra.                           |
+| `cohere`                | `CohereModel`                       | `COHERE_API_KEY`. Needs the `cohere` extra.                             |
+| `xai`                   | `XaiModel`                          | `XAI_API_KEY`. Supports `XSearchTool`. Replaces V1's `grok:`. Needs the `xai` extra. |
 | `deepseek`              | OpenAI-compatible DeepSeek          |                                                                         |
-| `openrouter`            | OpenAI-compatible OpenRouter        | Route to any OR model.                                                  |
+| `openrouter`            | `OpenRouterModel`                   | Route to any OpenRouter model.                                          |
 | `vercel`                | Vercel AI Gateway                   |                                                                         |
-| `azure`                 | Azure OpenAI                        | `AzureProvider(endpoint=..., api_key=...)`.                             |
 | `cerebras`              | Cerebras                            |                                                                         |
 | `moonshotai`            | Moonshot / Kimi                     |                                                                         |
-| `fireworks`             | Fireworks AI                        |                                                                         |
-| `together`              | Together AI                         |                                                                         |
-| `heroku`                | Heroku Inference                    |                                                                         |
-| `huggingface`           | HF Inference API                    |                                                                         |
-| `ollama`                | `OllamaModel` (local)               | OpenAI-chat-compatible, no API key.                                     |
-| `github`                | GitHub Models                       |                                                                         |
-| `litellm`               | LiteLLM gateway                     |                                                                         |
-| `nebius`, `ovhcloud`, `alibaba`, `sambanova` | OpenAI-compatible  | regional/cloud providers                                                |
-| `outlines`              | Outlines (Transformers, vLLM, ...)  | Local constrained decoding.                                             |
-| `sentence-transformers` | Embeddings only                     | `pydantic_ai.embeddings`.                                               |
-| `voyageai`              | Embeddings only                     | `pydantic_ai.embeddings`.                                               |
+| `zai`                   | Z.AI                                |                                                                         |
+| `fireworks`, `together`, `heroku`, `crusoe`, `nebius`, `ovhcloud`, `alibaba`, `sambanova`, `meta`, `snowflake` | OpenAI-compatible | hosted / regional providers |
+| `huggingface`           | HF Inference Providers              | Needs the `huggingface` extra.                                          |
+| `ollama`                | `OllamaModel` (local)               | Set `OLLAMA_BASE_URL`; no API key.                                      |
+| `vllm`, `litellm`       | OpenAI-compatible                   | Self-hosted server / LiteLLM proxy.                                     |
+| `github`, `github-copilot` | GitHub Models / Copilot          |                                                                         |
+| `sentence-transformers`, `voyageai` | Embeddings only         | `pydantic_ai.embeddings`.                                               |
 | `gateway/<upstream>`    | Any upstream via Pydantic AI Gateway| e.g. `'gateway/openai:gpt-5.2'`.                                        |
+| `test`                  | `TestModel`                         | No network; `Agent('test')`.                                            |
+
+Removed in 2.0: the `grok:`, `google-gla:`, `google-vertex:` / `vertexai:` prefixes and the Outlines integration. A bare model name with no prefix (`Agent('gpt-5')`) now raises `UserError`.
+
+Since 2.0 a bare `pip install pydantic-ai` installs only the OpenAI, Anthropic and Google providers (plus CLI, MCP, evals, web, retries and Logfire). Add the extras you use, e.g. `pip install "pydantic-ai[bedrock,groq]"`.
 
 The full list of `KnownModelName` literals (200+ entries) is in `models/__init__.py`. An unknown string with a known prefix still works — it's passed through to the provider.
 
@@ -104,7 +105,7 @@ agent = Agent(
 )
 ```
 
-Provider-specific extensions (`OpenAIChatModelSettings`, `AnthropicModelSettings`, `GoogleModelSettings`) subclass it and add provider keys (e.g. `openai_reasoning_effort`, `anthropic_thinking`).
+Provider-specific extensions (`OpenAIChatModelSettings`, `OpenAIResponsesModelSettings`, `AnthropicModelSettings`, `GoogleModelSettings`) subclass it and add provider keys (e.g. `openai_reasoning_effort`, `anthropic_thinking`). V1's `OpenAIModelSettings` is now `OpenAIChatModelSettings`.
 
 ## `FallbackModel` — wrap primaries with backups
 
@@ -247,16 +248,15 @@ agent = Agent(model)
 async def main():
     try:
         await agent.run('Hello')
-    except* ModelAPIError as eg:
-        for exc in eg.exceptions:
-            print(f'Provider failed: {exc}')
     except FallbackExceptionGroup as eg:
-        print(f'All {len(eg.exceptions)} models failed.')
+        print(f'All {len(eg.exceptions)} models failed:')
+        for exc in eg.exceptions:
+            print(f'  {type(exc).__name__}: {exc}')
 
 asyncio.run(main())
 ```
 
-`except*` is Python 3.11+ ExceptionGroup syntax. For 3.10, use `except FallbackExceptionGroup` and inspect `.exceptions` manually.
+`FallbackExceptionGroup` is an `ExceptionGroup`, so `except* ModelAPIError` also works (Python 3.11+, which Pydantic AI requires) — but a single `try` cannot mix `except` and `except*` clauses; pick one style.
 
 ### `FallbackModel.models` — inspecting the chain
 
@@ -293,12 +293,12 @@ from pydantic_ai.models.instrumented import InstrumentedModel, InstrumentationSe
 agent = Agent(
     InstrumentedModel(
         'openai:gpt-4o',
-        options=InstrumentationSettings(version=4, include_content=True),
+        options=InstrumentationSettings(include_content=True),
     )
 )
 
 # Or apply globally to every agent in the process
-Agent.instrument_all(InstrumentationSettings(version=4))
+Agent.instrument_all(InstrumentationSettings())
 ```
 
 ### `InstrumentationSettings` constructor (source-verified)
@@ -308,12 +308,11 @@ InstrumentationSettings(
     *,
     tracer_provider: TracerProvider | None = None,        # default: global provider
     meter_provider: MeterProvider | None = None,          # default: global provider
-    logger_provider: LoggerProvider | None = None,        # default: global provider
     include_binary_content: bool = True,
     include_content: bool = True,
-    version: Literal[1, 2, 3, 4, 5] = 5,   # default changed in 1.103.0
-    event_mode: Literal['attributes', 'logs'] = 'attributes',   # only for version=1
-    use_aggregated_usage_attribute_names: bool = False,
+    include_model_request_parameters: bool = True,
+    version: Literal[2, 3, 4, 5, 6] = 5,
+    use_aggregated_usage_attribute_names: bool = True,
 )
 ```
 
@@ -321,22 +320,24 @@ InstrumentationSettings(
 |-----------|---------|-------|
 | `tracer_provider` | global | Pass to scope spans to a custom provider |
 | `meter_provider` | global | Token + cost histograms |
-| `logger_provider` | global | OTel log events (version 1 only) |
 | `include_binary_content` | `True` | Whether to encode base64 images/files in spans |
 | `include_content` | `True` | Set `False` to strip prompts & completions from spans (PII) |
+| `include_model_request_parameters` | `True` | Record the full request parameters (tool definitions etc.) on spans; set `False` if large tool schemas bloat spans |
 | `version` | `5` | Wire format version (see table below) |
-| `event_mode` | `'attributes'` | `'logs'` emits OTel log-based events (version 1 only) |
-| `use_aggregated_usage_attribute_names` | `False` | Use `gen_ai.aggregated_usage.*` to avoid double-counting in backends that aggregate child+parent spans |
+| `use_aggregated_usage_attribute_names` | `True` | Agent-run spans report `gen_ai.aggregated_usage.*` to avoid double-counting in backends that aggregate child+parent spans. Default flipped to `True` in 2.0 |
+
+Version 1 and its `event_mode=` / `logger_provider=` arguments were removed in 2.0.
 
 ### Data format versions
 
 | Version | Notes |
 |---------|-------|
-| `1` | Legacy event-based GenAI spec — **deprecated**, will be removed. Use `event_mode` / `logger_provider` with this version. |
-| `2` | Newer OTel GenAI spec. Messages in `gen_ai.input.messages` / `gen_ai.output.messages` span attributes; system instructions in `gen_ai.system_instructions`. |
+| `1` | Legacy event-based spec — **removed in 2.0**. |
+| `2` | Newer OTel GenAI spec (deprecated since 2.0 — emits `PydanticAIDeprecationWarning`, as do 3 and 4). Messages in `gen_ai.input.messages` / `gen_ai.output.messages` span attributes; system instructions in `gen_ai.system_instructions`. |
 | `3` | Same as v2 + thinking tokens (e.g. Claude extended thinking, o-series reasoning tokens). |
 | `4` | Same as v3 + GenAI semantic conventions for multimodal content. URL media uses `type='uri'`; inline binaries use `type='blob'` with `modality`. |
-| `5` | Same as v4 + `CallDeferred` and `ApprovalRequired` control-flow exceptions no longer set the span to `ERROR` — spans are left `UNSET` since deferrals are not failures. **Default from 1.103.0.** |
+| `5` | Same as v4 + `CallDeferred` and `ApprovalRequired` control-flow exceptions no longer set the span to `ERROR` — spans are left `UNSET` since deferrals are not failures. **Default** (since 1.103.0). |
+| `6` | Same as v5, but tool results are emitted in a message with `role='tool'` instead of `role='user'`. Opt-in. |
 
 ```python
 from pydantic_ai.models.instrumented import InstrumentationSettings
@@ -354,11 +355,6 @@ dev_settings = InstrumentationSettings(
     version=5,
 )
 
-# Legacy Logfire setup still on version 1
-legacy = InstrumentationSettings(
-    version=1,
-    event_mode='logs',
-)
 ```
 
 ### OTel metrics emitted
@@ -378,11 +374,10 @@ legacy = InstrumentationSettings(
 To avoid double-counting on observability backends that sum child+parent spans:
 
 ```python
-settings = InstrumentationSettings(
-    use_aggregated_usage_attribute_names=True,
-    # => uses gen_ai.aggregated_usage.input_tokens / gen_ai.aggregated_usage.output_tokens
-    # on agent-run spans instead of gen_ai.usage.*
-)
+# Already the default since 2.0: agent-run spans use
+# gen_ai.aggregated_usage.input_tokens / output_tokens, model-request spans keep gen_ai.usage.*.
+# To keep the V1 attribute names on run spans (e.g. for existing dashboards):
+settings = InstrumentationSettings(use_aggregated_usage_attribute_names=False)
 ```
 
 ### `include_content=False` — PII scrubbing
@@ -400,7 +395,9 @@ agent = Agent(InstrumentedModel('openai:gpt-4o', options=pii_safe))
 # Spans will contain timing, token counts, and model name — but NO text content.
 ```
 
-### `messages_to_otel_events` — inspect span events manually
+### `messages_to_otel_messages` — see what lands on the span
+
+The V1 `messages_to_otel_events()` helper went with version 1. To see the GenAI-convention message list that version 2+ writes to `gen_ai.input.messages`, call `messages_to_otel_messages()`:
 
 ```python
 from pydantic_ai.models.instrumented import InstrumentationSettings
@@ -408,9 +405,7 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 settings = InstrumentationSettings()
 messages = [ModelRequest(parts=[UserPromptPart(content='Hello')])]
-events = settings.messages_to_otel_events(messages)
-for event in events:
-    print(event.attributes.get('event.name'), event.body)
+print(settings.messages_to_otel_messages(messages))
 ```
 
 ### `instrument_model` helper function
@@ -500,7 +495,7 @@ model = OpenAIChatModel(
 ```python
 from pydantic_ai import limit_model_concurrency
 
-model = limit_model_concurrency(OpenAIChatModel('gpt-5.2'), limit=8)
+model = limit_model_concurrency(OpenAIChatModel('gpt-5.2'), 8)   # or ConcurrencyLimit(max_running=8, max_queued=100)
 ```
 
 Enforces a max of 8 concurrent in-flight requests at the model layer.
@@ -583,12 +578,12 @@ agent = Agent(model)
 
 ## Reference
 
-- `infer_provider`, `infer_provider_class` — `providers/__init__.py:100`, `:234`
+- `infer_provider`, `infer_provider_class` — `providers/__init__.py`
 - `KnownModelName` — `models/__init__.py` (near the top)
 - `FallbackModel` — `models/fallback.py`
 - `FallbackExceptionGroup` — `models/fallback.py`
 - `InstrumentedModel` — `models/instrumented.py`
 - `InstrumentationSettings` — `models/instrumented.py`
 - `instrument_model` — `models/instrumented.py`
-- `ModelSettings` base — `settings.py:24`
+- `ModelSettings` base — `settings.py`
 - `limit_model_concurrency` — `models/concurrency.py`
