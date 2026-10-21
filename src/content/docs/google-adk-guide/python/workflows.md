@@ -246,6 +246,16 @@ Signatures recognised by `FunctionNode`:
 - `ctx` — the `Context` (state, `run_node`, `route`, `interrupt`, artifact helpers).
 - Any other parameter must be declared in the enclosing `Workflow.state_schema` — the framework injects its current value.
 
+That is the default `parameter_binding="state"`. With `@node(parameter_binding="node_input")` the parameters are filled from the fields of a `dict`/Pydantic `node_input` instead, and `input_schema`/`output_schema` are inferred from the signature (this is the mode used when a node acts as an agent's tool):
+
+```python
+@node(parameter_binding="node_input")
+def greet(name: str, greeting: str = "Hello") -> str:
+    return f"{greeting}, {name}!"      # called with node_input={"name": "Alice"}
+```
+
+Values are coerced to the annotations with a Pydantic `TypeAdapter`: a `dict` becomes the annotated `BaseModel`, a `list[dict]` becomes `list[Model]`, and a `types.Content` (such as the user's message reaching a START successor) becomes `str` when the parameter expects one.
+
 Return types are honoured: returning a value sets `ctx.output`; yielding values from an async generator lets you stream partials.
 
 ## `Node` subclass
@@ -357,6 +367,15 @@ workflow = Workflow(
     ],
 )
 ```
+
+How the next nodes are chosen after a node finishes (`Graph.get_next_pending_nodes`):
+
+1. Edges with no route are always followed (an unconditional fan-out).
+2. Edges whose route matches the emitted `ctx.route` are followed; a list route matches if any value overlaps.
+3. `DEFAULT_ROUTE` edges are followed only when no specific route matched.
+4. If a node has routing edges and none matched, the branch ends with a logged warning, not an error.
+
+Route values can be `bool`, `int` or `str`.
 
 ## Loops
 

@@ -21,6 +21,7 @@ This follows the [Agent Skills specification](https://agentskills.io). Verified 
 | `SkillScript` | Executable code (in-process callable or file on disk) the model can invoke via `run_skill_script` |
 | `SkillsProvider` | A `ContextProvider` that advertises skills in the prompt and exposes the three tools |
 | `FileSkillsSource` | Discovers skills from filesystem directories (SKILL.md files) |
+| `MCPSkillsSource` | Discovers skills an MCP server publishes at `skill://index.json` (experimental) |
 | `AggregatingSkillsSource` | Combines multiple `SkillsSource` instances into one |
 | `FilteringSkillsSource` | Filters skills from a source by a predicate |
 | `DeduplicatingSkillsSource` | Removes duplicate skills (by name) from a source |
@@ -351,6 +352,34 @@ agent = Agent(
 ```
 
 `InMemorySkillsSource` is equivalent to passing a list directly to `SkillsProvider(source)` — the provider auto-wraps any `Sequence[Skill]` — but the explicit constructor is useful when you need to inspect or mutate the source before passing it downstream (e.g. wrap it in a `DeduplicatingSkillsSource` or `FilteringSkillsSource`).
+
+## Skills served over MCP (`MCPSkillsSource`)
+
+`MCPSkillsSource` (experimental, `ExperimentalFeature.MCP_SKILLS`) reads skills from an MCP server that follows the SEP-2640 convention: the server publishes a `skill://index.json` resource, and each entry is either a `skill-md` (a `SKILL.md` resource, fetched lazily with `resources/read` only when the skill is loaded) or an `archive` (a ZIP unpacked **in memory** into the skill's body plus resources). Scripts inside archives are exposed as read-only resources and never as runnable scripts. If the index is missing or malformed the source just returns no skills.
+
+```python
+import asyncio
+from agent_framework import Agent, MCPSkillsSource, MCPStdioTool, SkillsProvider
+from agent_framework.openai import OpenAIChatClient
+
+
+async def main() -> None:
+    async with MCPStdioTool(name="skills-server", command="python", args=["skills_server.py"]) as mcp:
+        # session_provider (not client=) survives the tool reconnecting and swapping its session.
+        source = MCPSkillsSource(session_provider=lambda: mcp.session)
+        agent = Agent(
+            client=OpenAIChatClient(),
+            instructions="Use your skills to help the user.",
+            tools=[mcp],
+            context_providers=[SkillsProvider(source)],
+        )
+        print((await agent.run("Which skills can you use?")).text)
+
+
+asyncio.run(main())
+```
+
+Pass exactly one of `client=` (a live `mcp.ClientSession`) or `session_provider=`. The `archive_max_file_count` (default 20), `archive_max_size_bytes` and `archive_max_uncompressed_size_bytes` (1 MB each), `archive_resource_extensions` and `archive_resource_search_depth` (default 2) limits protect against oversized or zip-bomb archives. A non-null `sha256:` digest on an archive entry is verified before extraction, and a mismatched archive is skipped with a warning. The source doesn't cache, so wrap it in `CachingSkillsSource` to avoid re-reading the index every run. Skills from a remote server are untrusted input, so keep the default approval flags on `SkillsProvider` unless you control the server.
 
 ## `DelegatingSkillsSource` — composable decorators
 

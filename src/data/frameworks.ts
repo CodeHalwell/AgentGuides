@@ -207,7 +207,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],
-    version: v('mistralai'),
+    version: `Python ${v('mistralai')} / TS ${v('@mistralai/mistralai')}`,
   },
   {
     id: 'semantic-kernel',

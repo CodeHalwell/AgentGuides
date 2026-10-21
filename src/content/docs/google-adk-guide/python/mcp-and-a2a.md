@@ -164,7 +164,42 @@ Agent card sources:
 - `str` starting with `http://` / `https://` — fetched via `A2ACardResolver`.
 - Any other `str` — treated as a local file path.
 
-Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_request_meta_provider`, `full_history_when_stateless`, `config: A2aRemoteAgentConfig`, and `use_legacy: bool = True`. `use_legacy=False` emits the new-integration extension header (`remote_a2a_agent.py`).
+Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_request_meta_provider`, `full_history_when_stateless`, `config: A2aRemoteAgentConfig`, and `use_legacy: bool = True`. `use_legacy=False` emits the new-integration extension header (`remote_a2a_agent.py`). `timeout` defaults to 600 s. `description` is filled from the card when left empty, and `context_builder` lets you control how the outgoing message is assembled.
+
+**Auth.** `auth_scheme`, `auth_credential` and `credential_key` apply to every request, including the card fetch:
+
+```python
+from fastapi.openapi.models import HTTPBearer
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+
+secure_peer = RemoteA2aAgent(
+    name="secure_peer",
+    agent_card="https://secure-agent.example.com/.well-known/agent.json",
+    auth_scheme=HTTPBearer(scheme="bearer"),
+    auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.HTTP,
+        http=HttpAuth(scheme="bearer", credentials=HttpCredentials(token="MY_API_KEY")),
+    ),
+    credential_key="secure_peer_key",
+)
+```
+
+**Task-mode delegation.** `mode="task"` makes the peer a task sub-agent that must finish with `finish_task`; set `output_schema` on the `RemoteA2aAgent` so ADK can turn the `finish_task` arguments into your typed result:
+
+```python
+from pydantic import BaseModel
+
+class ResearchOutput(BaseModel):
+    summary: str
+    sources: list[str]
+
+researcher = RemoteA2aAgent(
+    name="researcher",
+    agent_card="https://research.example.com/.well-known/agent.json",
+    mode="task",
+    output_schema=ResearchOutput,
+)
+```
 
 ## `A2aRemoteAgentConfig`
 

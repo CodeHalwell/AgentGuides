@@ -199,7 +199,9 @@ jobs:
 -   **Memory Caching:** Cache frequently accessed user profiles or memory objects to reduce database load.
 
 ```csharp
-// Program.cs - Adding Redis for distributed caching
+// Program.cs - Adding Redis for distributed caching (Microsoft.Extensions.Caching.StackExchangeRedis)
+var builder = WebApplication.CreateBuilder(args);
+
 builder.Services.AddStackExchangeRedisCache(options =>
 {
     options.Configuration = builder.Configuration.GetConnectionString("Redis");
@@ -216,7 +218,9 @@ builder.Services.AddStackExchangeRedisCache(options =>
 Configure your application to use structured logging. This allows for powerful querying and alerting in Application Insights.
 
 ```csharp
-// Program.cs
+// Program.cs (Microsoft.Extensions.Logging.ApplicationInsights)
+var builder = WebApplication.CreateBuilder(args);
+
 builder.Logging.AddApplicationInsights(
     configureTelemetryConfiguration: (config) => 
         config.ConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"],
@@ -258,12 +262,17 @@ public class MyTool(ILogger<MyTool> logger)
 Never store secrets (API keys, connection strings) in code or configuration files.
 
 ```csharp
-// Program.cs - Integrating Azure Key Vault
-var keyVaultEndpoint = new Uri(Environment.GetEnvironmentVariable("KEY_VAULT_ENDPOINT"));
+// Program.cs - Integrating Azure Key Vault (Azure.Extensions.AspNetCore.Configuration.Secrets)
+using Azure.Identity;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var keyVaultEndpoint = new Uri(Environment.GetEnvironmentVariable("KEY_VAULT_ENDPOINT")!);
 builder.Configuration.AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential());
 
-// Now you can access secrets via IConfiguration
-var apiKey = builder.Configuration["AzureOpenAIApiKey"];
+// Secrets are now ordinary configuration values (e.g. a third-party API key used by a tool).
+// Prefer managed identity over keys for Azure OpenAI itself.
+var weatherApiKey = builder.Configuration["WeatherApiKey"];
 ```
 
 ### Network Security
@@ -291,32 +300,34 @@ For critical applications, deploy your agent services to multiple Azure regions.
 
 ### Resiliency with Polly
 
-Use the Polly library to implement resiliency patterns like retries, circuit breakers, and fallbacks for external dependencies (LLM calls, tool APIs).
+`Microsoft.Extensions.Http.Resilience` (built on Polly v8) adds retries, a circuit breaker and timeouts to an `HttpClient` in one call. To apply it to model calls, give the Azure OpenAI client that `HttpClient` as its transport and turn off the SDK's own retries so the two don't compound.
 
 ```csharp
-// Add Polly to DI container
-builder.Services.AddHttpClient("OpenAI")
-    .AddPolicyHandler(
-        HttpPolicyExtensions
-            .HandleTransientHttpError()
-            .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)))
-    )
-    .AddPolicyHandler(
-        HttpPolicyExtensions
-            .HandleTransientHttpError()
-            .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30))
-    );
+// Resilience for the model client (Microsoft.Extensions.Http.Resilience)
+using System.ClientModel.Primitives;
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using OpenAI.Chat;
 
-// Use the named HttpClient in your services
-public class MyLLMService
+var builder = WebApplication.CreateBuilder(args);
+
+// Retries with back-off (including 429s), a circuit breaker and timeouts, on a named HttpClient.
+builder.Services.AddHttpClient("openai").AddStandardResilienceHandler();
+
+builder.Services.AddSingleton<AIAgent>(sp =>
 {
-    private readonly HttpClient _httpClient;
-    public MyLLMService(IHttpClientFactory httpClientFactory)
+    HttpClient http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("openai");
+    var options = new AzureOpenAIClientOptions
     {
-        _httpClient = httpClientFactory.CreateClient("OpenAI");
-    }
-}
+        Transport = new HttpClientPipelineTransport(http),
+        RetryPolicy = new ClientRetryPolicy(maxRetries: 0),   // let the resilience handler own retries
+    };
+
+    return new AzureOpenAIClient(new Uri(builder.Configuration["AzureOpenAI:Endpoint"]!), new DefaultAzureCredential(), options)
+        .GetChatClient("gpt-4o-mini")
+        .AsAIAgent(instructions: "You are a helpful assistant.");
+});
 ```
 
 ---

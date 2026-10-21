@@ -50,7 +50,7 @@ asyncio.run(main())
 
 The deprecation notices are emitted via `typing_extensions.deprecated` at class level (see `sequential_agent.py`, `parallel_agent.py`, `loop_agent.py`).
 
-> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) and [— A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) sections.
+> **LangGraphAgent** and **RemoteA2aAgent** are documented in detail in the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) and [— A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) sections.
 
 ## LlmAgent
 
@@ -542,6 +542,37 @@ agent = LlmAgent(
 
 Note: when `RunConfig.support_cfc=True` and the agent's model is `gemini-2.*`, the runner swaps in `BuiltInCodeExecutor` automatically (`runners.py`).
 
+Every executor inherits these `BaseCodeExecutor` fields:
+
+| Field | Default | Purpose |
+|---|---|---|
+| `optimize_data_file` | `False` | Pull CSV files out of the request and hand them to the executor |
+| `stateful` | `False` | Keep interpreter state across code blocks |
+| `error_retry_attempts` | `2` | Consecutive code errors tolerated before giving up |
+| `code_block_delimiters` | `` ```tool_code `` and `` ```python `` fences | How code blocks are found in model output |
+| `execution_result_delimiters` | `` ```tool_output `` fence | How results are fed back to the model |
+| `timeout_seconds` | `None` | Wall-clock limit per execution |
+
+`UnsafeLocalCodeExecutor` runs each block in a fresh subprocess of the current interpreter (sending SIGTERM, then SIGKILL after 5 s on timeout), so `stateful=True` and `optimize_data_file=True` raise `ValueError`. It has full OS access; use it only in a trusted sandbox. To run code somewhere else, subclass `BaseCodeExecutor` and implement the synchronous `execute_code`:
+
+```python
+import subprocess
+from google.adk.code_executors import BaseCodeExecutor
+from google.adk.code_executors.code_execution_utils import CodeExecutionInput, CodeExecutionResult
+
+class DockerCodeExecutor(BaseCodeExecutor):
+    image: str = "python:3.13-slim"
+
+    def execute_code(self, invocation_context, code_execution_input: CodeExecutionInput) -> CodeExecutionResult:
+        proc = subprocess.run(
+            ["docker", "run", "--rm", "-i", "--network=none", self.image, "python", "-"],
+            input=code_execution_input.code.encode(),
+            capture_output=True,
+            timeout=self.timeout_seconds or 30,
+        )
+        return CodeExecutionResult(stdout=proc.stdout.decode(), stderr=proc.stderr.decode())
+```
+
 ### `BuiltInCodeExecutor` — the full signature
 
 Source-verified against `google.adk.code_executors.built_in_code_executor` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Every field is inherited from `BaseCodeExecutor`; `BuiltInCodeExecutor` overrides only `process_llm_request` (attaches `types.Tool(code_execution=types.ToolCodeExecution())` to the request) and stubs out `execute_code` because execution happens **inside the Gemini API call**, not client-side.
@@ -760,7 +791,7 @@ An `LlmAgent` with `output_schema=MyPydanticModel` emits a validated structured 
 
 ### 3 — ReAct via `BuiltInPlanner`
 
-`BuiltInPlanner` delegates planning entirely to Gemini's native thinking feature. It injects a `ThinkingConfig` into every `LlmRequest` — the model then produces `thought=True` parts internally which are stripped before the response reaches the user.
+`BuiltInPlanner` delegates planning entirely to Gemini's native thinking feature. It injects a `ThinkingConfig` into every `LlmRequest` and adds no system-prompt text (`build_planning_instruction` returns `None`). With `include_thoughts=True` the model's `thought=True` parts are **not** stripped (`process_planning_response` is a no-op): they appear in the yielded events, so filter on `part.thought` before showing text in a UI or logging it. Use it on thinking-capable Gemini models; `PlanReActPlanner` below is the alternative for others. In a multi-agent setup you can give only the orchestrator a planner.
 
 Source: `planners/built_in_planner.py`.
 

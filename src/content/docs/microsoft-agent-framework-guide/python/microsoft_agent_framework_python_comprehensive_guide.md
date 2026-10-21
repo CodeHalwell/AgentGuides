@@ -145,8 +145,9 @@ from agent_framework import load_settings, SecretString
 
 class AzureSettings(TypedDict, total=False):
     endpoint: str | None
-    api_key: str | None          # plain str in the TypedDict; wrap in SecretString after loading
+    api_key: SecretString | None   # SecretString-typed fields are wrapped automatically
     deployment_name: str | None
+    max_tokens: int | None         # int / float / bool fields are coerced from the env string
 
 settings = load_settings(
     AzureSettings,
@@ -156,10 +157,12 @@ settings = load_settings(
 )
 
 AZURE_OPENAI_ENDPOINT = settings["endpoint"]
-# Only wrap in SecretString when a value is actually present — avoids masking a missing key
-AZURE_OPENAI_KEY = SecretString(settings["api_key"]) if settings.get("api_key") else None
+AZURE_OPENAI_KEY = settings.get("api_key")        # SecretString or None; prints as **********
 AZURE_OPENAI_DEPLOYMENT = settings["deployment_name"]
+# Unwrap only at the SDK boundary: AZURE_OPENAI_KEY.get_secret_value()
 ```
+
+`required_fields` also takes tuples for "exactly one of these" groups, e.g. `required_fields=["endpoint", ("api_key", "ad_token")]`; failing either check raises `agent_framework.exceptions.SettingNotFoundError`. Keyword overrides beat the `.env` file, which beats process environment variables. Missing optional fields come back as `None`.
 
 Alternatively, use `python-dotenv` + `os.getenv` for simpler cases:
 

@@ -395,6 +395,18 @@ async def handle_error(ctx: RunContext, *, error: BaseException) -> AgentRunResu
 agent = Agent('openai:gpt-4o', capabilities=[hooks])
 ```
 
+## Bundling tools and instructions — `Capability`
+
+`Hooks` covers *behaviour*; `Capability` is the no-subclass way to package *content* — instructions, function tools and toolsets — into one reusable unit you can attach to many agents. With `defer_loading=True` (an `id` is then required) the model initially sees only the capability's `description` and a `load_capability` tool; the tools and instructions appear once the model loads it, which keeps large tool sets out of the context until needed.
+
+The example also shows `OutputContext`, which output hooks receive: it tells you *how* the output was produced (`mode` — `'tool'`, `'native'`, `'prompted'`, `'text'`, `'image'` — plus `output_type`, `tool_call`, `tool_def`, `allows_text`, `allows_image`, `allows_deferred_tools`). `@agent.output_validator` does not get it; use the `before_/after_output_validate` or `output_process` hooks.
+
+```python
+{code}
+```
+
+For anything more involved — state across hooks, configuration, serialisation into an `AgentSpec` — subclass `AbstractCapability` and override the `before_*` / `after_*` / `wrap_*` / `on_*_error` methods, `get_instructions`, `get_toolset` or `get_model_settings`.
+
 ## Complete hook lifecycle diagram
 
 ```

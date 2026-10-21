@@ -799,6 +799,47 @@ async def main():
 asyncio.run(main())
 ```
 
+### Configuring the simulated user
+
+A scenario-driven case is played out by a simulated user. Configure it with `EvalConfig(user_simulator_config=LlmBackedUserSimulatorConfig(...))` from `google.adk.evaluation.simulation.llm_backed_user_simulator`:
+
+| Field | Default | Purpose |
+|---|---|---|
+| `model` | `"gemini-2.5-flash"` | LLM that plays the user |
+| `model_configuration` | default `GenerateContentConfig` | Generation config for that LLM |
+| `max_allowed_invocations` | `20` | Turn cap before the simulation stops |
+| `include_function_calls` | `False` | Show the agent's tool calls to the simulated user |
+| `custom_instructions` | `None` | Jinja2 template replacing the default simulator prompt |
+
+`ConversationScenario.user_persona` takes a `UserPersona` (or a registered persona name) to give the simulated user a style, with rubrics the judge checks it against:
+
+```python
+from google.adk.evaluation.simulation.llm_backed_user_simulator import LlmBackedUserSimulatorConfig
+from google.adk.evaluation.simulation.user_simulator_personas import UserBehavior, UserPersona
+
+impatient = UserPersona(
+    id="impatient_traveller",
+    description="A frequent flyer who is time-pressed and expects quick answers.",
+    behaviors=[UserBehavior(
+        name="brief_responses",
+        description="Gives very short answers.",
+        behavior_instructions=["Keep your messages under 15 words."],
+        violation_rubrics=["Response is longer than 15 words."],
+    )],
+)
+scenario = ConversationScenario(
+    starting_prompt="Book me a flight to Paris.",
+    conversation_plan="Book a one-way flight LHR→CDG on 2025-05-01. Say yes to all prompts.",
+    user_persona=impatient,
+)
+eval_config = EvalConfig(
+    criteria={PrebuiltMetrics.MULTI_TURN_TASK_SUCCESS_V1.value: 0.7},
+    user_simulator_config=LlmBackedUserSimulatorConfig(max_allowed_invocations=15),
+)
+```
+
+`AgentEvaluator` imports `agent_module` and reads its module-level `root_agent`, so keep the driver (with `asyncio.run`) in a separate script from the agent module.
+
 ### Choosing between multi-turn and per-turn metrics
 
 | Situation | Recommended approach |

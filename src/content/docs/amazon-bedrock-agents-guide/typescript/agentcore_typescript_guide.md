@@ -122,12 +122,14 @@ curl -s http://localhost:8080/ping
 
 curl -N -X POST http://localhost:8080/invocations \
   -H 'Content-Type: application/json' \
+  -H 'Accept: text/event-stream' \
   -H 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: local-session-0000000000000000000001' \
   -d '{"prompt": "Where is order ORD-7?"}'
 # data: {"text":"Order ORD-7 has "}
-# ...
-# event: done
+# data: {"text":"shipped."}
 ```
+
+A streaming handler only streams to callers that send `Accept: text/event-stream`; anyone else gets HTTP 406. When invoking a deployed runtime, set `accept: 'text/event-stream'` on `InvokeAgentRuntimeCommand` (see the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/#invoking-a-deployed-runtime)). If the generator throws, the server sends an `event: error` message and closes the stream.
 
 A non-streaming handler is simpler, and is what you want when the caller expects one JSON document:
 

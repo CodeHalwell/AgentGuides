@@ -503,6 +503,41 @@ storage = FileCheckpointStorage(
 )
 ```
 
+### What `AgentExecutor` saves — `AgentExecutorCheckpointState`
+
+Agent nodes use the same hooks. `AgentExecutor.on_checkpoint_save()` returns a dict shaped like the `AgentExecutorCheckpointState` TypedDict, stored at `checkpoint.state["_executor_state"][executor_id]`:
+
+| Key | Type | Holds |
+|---|---|---|
+| `cache` | `list[Message]` | Messages received since the agent last ran |
+| `full_conversation` | `list[Message]` | Every input plus the agent's outputs so far |
+| `agent_session` | `AgentSessionDict` | `AgentSession.to_dict()` (local history only when the session isn't service-backed) |
+| `pending_agent_requests` | `dict[str, Content]` | Open user-input/approval requests, by request id |
+| `pending_responses_to_agent` | `list[Content]` | Responses received but not yet delivered to the agent |
+| `pending_request_order` | `list[str]` | Original request order, so batched answers are replayed in sequence |
+
+Every key is optional (`total=False`); missing keys restore as empty, which keeps older checkpoints loadable. To checkpoint extra data on an agent node, subclass and extend the dict:
+
+```python
+from typing import Any
+from agent_framework import AgentExecutor
+
+
+class TaggedAgentExecutor(AgentExecutor):
+    def __init__(self, agent, *, tag: str, **kwargs: Any) -> None:
+        super().__init__(agent, **kwargs)
+        self._tag = tag
+
+    async def on_checkpoint_save(self) -> dict[str, Any]:
+        state = await super().on_checkpoint_save()
+        state["tag"] = self._tag
+        return state
+
+    async def on_checkpoint_restore(self, state: dict[str, Any]) -> None:
+        await super().on_checkpoint_restore(state)
+        self._tag = state.get("tag", self._tag)
+```
+
 ## Inspecting the checkpoint chain
 
 `list_checkpoints` returns the full `WorkflowCheckpoint` objects — use it to walk `previous_checkpoint_id` and show progress or build an audit trail:

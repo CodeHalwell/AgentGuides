@@ -203,6 +203,23 @@ client = MyModelClient(otel_provider_name="my_model_prod")
 
 `EmbeddingTelemetryLayer` follows the same pattern for embedding clients — wrap `RawMyEmbeddingClient` to get `embeddings` spans with token-usage histograms.
 
+## Token usage in code — `UsageDetails`
+
+The token metrics above are also on every response object. `AgentResponse.usage_details` and `ChatResponse.usage_details` are a `UsageDetails` TypedDict with the keys `input_token_count`, `output_token_count`, `total_token_count`, `cache_creation_input_token_count`, `cache_read_input_token_count` and `reasoning_output_token_count`. All are optional, and providers may add their own `int` keys. Sum them with `add_usage_details`, which accepts `None` and skips non-int values:
+
+```python
+from agent_framework import UsageDetails, add_usage_details
+
+total: UsageDetails = {}
+for prompt in ["What is the speed of light?", "Explain entanglement briefly."]:
+    response = await agent.run(prompt)
+    total = add_usage_details(total, response.usage_details)
+
+print(total.get("input_token_count"), total.get("output_token_count"), total.get("cache_read_input_token_count"))
+```
+
+For a per-tenant budget, do the same in an `AgentMiddleware` after `await call_next()` (read `context.result.usage_details`) and raise `MiddlewareTermination` once the budget is spent.
+
 ## Custom spans around business logic
 
 You can still wrap your own code in spans; they slot neatly into the framework's tree.

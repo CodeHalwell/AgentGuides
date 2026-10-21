@@ -61,6 +61,26 @@ Embedder('bedrock:cohere.embed-english-v3')
 Embedder('sentence-transformers:all-MiniLM-L6-v2')
 ```
 
+### Explicit model construction
+
+The string form is shorthand for a model class plus a provider. Build it yourself to point at an OpenAI-compatible embeddings endpoint (Azure, vLLM, Ollama, a gateway) or to fix default settings:
+
+```python
+from pydantic_ai import Embedder
+from pydantic_ai.embeddings import EmbeddingSettings
+from pydantic_ai.embeddings.openai import OpenAIEmbeddingModel
+from pydantic_ai.providers.openai import OpenAIProvider
+
+model = OpenAIEmbeddingModel(
+    'text-embedding-3-small',
+    provider=OpenAIProvider(base_url='http://localhost:11434/v1', api_key='unused'),
+    settings=EmbeddingSettings(dimensions=512),   # also: truncate, extra_headers, extra_body
+)
+embedder = Embedder(model)
+```
+
+`OpenAIEmbeddingSettings` adds OpenAI-specific keys; other providers have their own model classes under `pydantic_ai.embeddings` (`cohere`, `google`, `bedrock`, `voyageai`, `sentence_transformers`).
+
 ## `embed_query` vs `embed_documents`
 
 The `input_type` distinction tells the model whether the text is a *search query* or a *document* to index. Providers that distinguish these (Cohere, Voyage) optimise differently:

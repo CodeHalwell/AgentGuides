@@ -374,6 +374,28 @@ When to share:
 - Multi-turn loops where one agent plans, another executes, and a third verifies — all against the same scratchpad.
 - A supervisor agent that needs to see what a worker remembered from an earlier turn.
 
+### Per-run tool kwargs and client kwargs — `WorkflowInvocationKwargs`
+
+`workflow.run()` takes the same `function_invocation_kwargs=` (forwarded to tool calls) and `client_kwargs=` (forwarded to chat-client calls) as `agent.run()`, plus a runtime `tools=` list made available to every agent executor. Each kwargs argument accepts three shapes:
+
+- a **flat mapping**, applied to every agent executor: `{"tenant_id": "acme"}`;
+- a **per-executor mapping**, keyed by agent name or executor id: `{"invoice_parser": {...}, "summariser": {...}}`;
+- a **`WorkflowInvocationKwargs`** when you need both shared defaults and per-executor overrides. The executor entry wins over the global one.
+
+```python
+from agent_framework import WorkflowInvocationKwargs
+
+result = await workflow.run(
+    "Process the attached invoice.",
+    function_invocation_kwargs=WorkflowInvocationKwargs(
+        global_kwargs={"tenant_id": "acme", "language_hint": "en"},
+        executor_kwargs={"french_summariser": {"language_hint": "fr"}},
+    ),
+)
+```
+
+Tools read these values through `FunctionInvocationContext.kwargs`, as they do for a plain agent (see [Tools → runtime context](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#runtime-context--hidden-parameters)).
+
 ### Cloning executors for graph reuse — `AgentExecutor.clone`
 
 When the same agent appears at multiple positions in a graph, wrap it in two separate `AgentExecutor`s with distinct ids — the constructor gives each one its own cache and session:

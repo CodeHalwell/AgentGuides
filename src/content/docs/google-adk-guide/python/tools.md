@@ -1282,7 +1282,7 @@ async def list_calendar_events(tool_context: ToolContext) -> dict:
 
 `request_credential` sets `actions.requested_auth_configs` on the current event. The framework pauses execution; when the user completes OAuth the runner resumes. On the next turn `get_auth_response` returns the exchanged token.
 
-Use `save_credential` / `load_credential` in **callback** contexts where `function_call_id` is not available.
+Use `save_credential` / `load_credential` in **callback** contexts where `function_call_id` is not available. `save_credential(auth_config)` persists `auth_config.exchanged_auth_credential`, and `get_auth_response()` doesn't fill that in on your config, so attach the token first: `await tool_context.save_credential(MY_AUTH.model_copy(update={"exchanged_auth_credential": cred}))`. On a later session, `await tool_context.load_credential(MY_AUTH)` restores it.
 
 ### Confirmation (HITL gate)
 
