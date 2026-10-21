@@ -47,7 +47,7 @@ This diagram illustrates the lifecycle of a stateful `ChatClientAgent` as it pro
 ```mermaid
 graph TD
     Start((Create Thread)) --> Idle
-    Idle -- InvokeAsync(userInput) --> Processing
+    Idle -- RunAsync(userInput) --> Processing
     
     subgraph Processing
         direction LR
@@ -59,7 +59,7 @@ graph TD
     end
 
     Processing -- Returns AgentResponse --> Idle
-    Idle -- "InvokeAsync(...)" --> Processing
+    Idle -- "RunAsync(...)" --> Processing
     Idle -- End of Session --> End((Thread Terminated))
 ```
 

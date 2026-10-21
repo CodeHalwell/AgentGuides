@@ -48,52 +48,52 @@ async def create_simple_agent():
     # Credentials
     async with AzureCliCredential() as credential:
         # Initialize Azure AI client
-        async with FoundryChatClient(credential=credential) as client:
-            
-            # Create agent with system instructions
-            agent = Agent(
-                client=client,
-                instructions="You are a helpful assistant. Provide accurate, concise answers."
-            )
-            
-            # Run agent
-            response = await agent.run("What is artificial intelligence?")
-            print(f"Assistant: {response.text}")
+        client = FoundryChatClient(credential=credential)
+
+        # Create agent with system instructions
+        agent = Agent(
+            client=client,
+            instructions="You are a helpful assistant. Provide accurate, concise answers."
+        )
+
+        # Run agent
+        response = await agent.run("What is artificial intelligence?")
+        print(f"Assistant: {response.text}")
 
 
 async def multi_turn_conversation():
     """Multi-turn conversation example"""
     
     async with AzureCliCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            agent = Agent(
-                client=client,
-                instructions="You are a Python programming tutor."
-            )
-            
-            # Create a thread for conversation context
-            thread = agent.get_new_thread()
-            
-            # First turn
-            response1 = await agent.run(
-                "What is a list in Python?",
-                thread=thread
-            )
-            print(f"Q1: {response1.text}\n")
-            
-            # Second turn - context maintained
-            response2 = await agent.run(
-                "How do I add items to it?",
-                thread=thread
-            )
-            print(f"Q2: {response2.text}\n")
-            
-            # Third turn - full conversation maintained
-            response3 = await agent.run(
-                "Can you provide a complete example?",
-                thread=thread
-            )
-            print(f"Q3: {response3.text}")
+        client = FoundryChatClient(credential=credential)
+        agent = Agent(
+            client=client,
+            instructions="You are a Python programming tutor."
+        )
+
+        # Create a session for conversation context
+        session = agent.create_session()
+
+        # First turn
+        response1 = await agent.run(
+            "What is a list in Python?",
+            session=session
+        )
+        print(f"Q1: {response1.text}\n")
+
+        # Second turn - context maintained
+        response2 = await agent.run(
+            "How do I add items to it?",
+            session=session
+        )
+        print(f"Q2: {response2.text}\n")
+
+        # Third turn - full conversation maintained
+        response3 = await agent.run(
+            "Can you provide a complete example?",
+            session=session
+        )
+        print(f"Q3: {response3.text}")
 
 
 # Run examples
@@ -157,7 +157,7 @@ public class WeatherAgentRecipe
 
         // Create agent with tool
         var chatClient = client.GetChatClient(deploymentName);
-        var agent = chatClient.CreateAIAgent(
+        var agent = chatClient.AsAIAgent(
             instructions: "You are a weather assistant. Help users check weather in different cities.",
             tools: [AIFunctionFactory.Create(GetWeather)]
         );
@@ -236,14 +236,14 @@ class AgentWithErrorHandling:
         
         try:
             async with AzureCliCredential() as credential:
-                async with FoundryChatClient(credential=credential) as client:
-                    agent = Agent(
-                        client=client,
-                        instructions="You are helpful"
-                    )
-                    
-                    response = await self.run_with_retry(agent, query)
-                    return response.text
+                client = FoundryChatClient(credential=credential)
+                agent = Agent(
+                    client=client,
+                    instructions="You are helpful"
+                )
+
+                response = await self.run_with_retry(agent, query)
+                return response.text
                     
         except AzureError as e:
             logger.error(f"Azure service error: {e}")
@@ -375,16 +375,16 @@ async def run_workflow():
     """
     
     async with AzureCliCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            workflow = DocumentAnalysisWorkflow(client)
-            
-            print("=== Document Analysis Workflow ===\n")
-            result = await workflow.process_document(sample_document)
-            
-            print("\n=== Results ===")
-            print(f"\nExtraction:\n{result.research}")
-            print(f"\nAnalysis:\n{result.analysis}")
-            print(f"\nRecommendations:\n{result.recommendations}")
+        client = FoundryChatClient(credential=credential)
+        workflow = DocumentAnalysisWorkflow(client)
+
+        print("=== Document Analysis Workflow ===\n")
+        result = await workflow.process_document(sample_document)
+
+        print("\n=== Results ===")
+        print(f"\nExtraction:\n{result.research}")
+        print(f"\nAnalysis:\n{result.analysis}")
+        print(f"\nRecommendations:\n{result.recommendations}")
 
 
 if __name__ == "__main__":
@@ -451,33 +451,33 @@ async def run_travel_agent():
     """Create agent with multiple tools for travel planning"""
     
     async with AzureCliCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            
-            # Create agent with multiple tools
-            agent = Agent(
-                client=client,
-                tools=[get_weather, calculate_travel_time, check_hotels],
-                instructions="""You are a travel planning assistant. Help users plan trips by:
-                1. Checking weather at destinations
-                2. Calculating travel times between cities
-                3. Finding hotel availability
-                
-                Provide comprehensive travel recommendations."""
-            )
-            
-            # Test queries
-            queries = [
-                "What's the weather like in Paris and Amsterdam?",
-                "How long does it take to get from London to Paris?",
-                "I want to visit Paris and Amsterdam in July. What are the options?"
-            ]
-            
-            print("=== Travel Planning Agent ===\n")
-            
-            for query in queries:
-                print(f"User: {query}")
-                response = await agent.run(query)
-                print(f"Agent: {response.text}\n")
+        client = FoundryChatClient(credential=credential)
+
+        # Create agent with multiple tools
+        agent = Agent(
+            client=client,
+            tools=[get_weather, calculate_travel_time, check_hotels],
+            instructions="""You are a travel planning assistant. Help users plan trips by:
+            1. Checking weather at destinations
+            2. Calculating travel times between cities
+            3. Finding hotel availability
+
+            Provide comprehensive travel recommendations."""
+        )
+
+        # Test queries
+        queries = [
+            "What's the weather like in Paris and Amsterdam?",
+            "How long does it take to get from London to Paris?",
+            "I want to visit Paris and Amsterdam in July. What are the options?"
+        ]
+
+        print("=== Travel Planning Agent ===\n")
+
+        for query in queries:
+            print(f"User: {query}")
+            response = await agent.run(query)
+            print(f"Agent: {response.text}\n")
 
 
 if __name__ == "__main__":
@@ -589,34 +589,34 @@ async def run_persistent_agent():
     
     try:
         async with AzureCliCredential() as credential:
-            async with FoundryChatClient(credential=credential) as client:
-                agent = Agent(
-                    client=client,
-                    instructions="You are a helpful personal assistant who remembers previous conversations."
-                )
-                
-                # Simulate multi-session conversation
-                user_id = "user-123"
-                
-                print("=== Persistent Memory Agent ===\n")
-                
-                # Session 1
-                print("Session 1:")
-                response1 = await agent_store.execute_with_context(
-                    user_id, 
-                    "My name is Alice and I like Python programming",
-                    agent
-                )
-                print(f"Alice: {response1}\n")
-                
-                # Later session - agent remembers
-                print("Session 2 (later):")
-                response2 = await agent_store.execute_with_context(
-                    user_id,
-                    "What did I tell you about my interests?",
-                    agent
-                )
-                print(f"Alice: {response2}")
+            client = FoundryChatClient(credential=credential)
+            agent = Agent(
+                client=client,
+                instructions="You are a helpful personal assistant who remembers previous conversations."
+            )
+
+            # Simulate multi-session conversation
+            user_id = "user-123"
+
+            print("=== Persistent Memory Agent ===\n")
+
+            # Session 1
+            print("Session 1:")
+            response1 = await agent_store.execute_with_context(
+                user_id, 
+                "My name is Alice and I like Python programming",
+                agent
+            )
+            print(f"Alice: {response1}\n")
+
+            # Later session - agent remembers
+            print("Session 2 (later):")
+            response2 = await agent_store.execute_with_context(
+                user_id,
+                "What did I tell you about my interests?",
+                agent
+            )
+            print(f"Alice: {response2}")
                 
     finally:
         await agent_store.close()
@@ -719,24 +719,24 @@ async def run_rag_agent():
     search_index = "documents"
     
     async with DefaultAzureCredential() as credential:
-        async with FoundryChatClient(credential=credential) as ai_client:
-            
-            rag_agent = RAGAgent(search_endpoint, search_index)
-            await rag_agent.initialize(ai_client)
-            
-            print("=== RAG Agent ===\n")
-            
-            # Query with retrieved context
-            queries = [
-                "What are the benefits of electric vehicles?",
-                "How does solar energy work?",
-                "What are the latest AI developments?"
-            ]
-            
-            for query in queries:
-                print(f"User: {query}")
-                response = await rag_agent.query_with_context(query)
-                print(f"Agent: {response}\n")
+        ai_client = FoundryChatClient(credential=credential)
+
+        rag_agent = RAGAgent(search_endpoint, search_index)
+        await rag_agent.initialize(ai_client)
+
+        print("=== RAG Agent ===\n")
+
+        # Query with retrieved context
+        queries = [
+            "What are the benefits of electric vehicles?",
+            "How does solar energy work?",
+            "What are the latest AI developments?"
+        ]
+
+        for query in queries:
+            print(f"User: {query}")
+            response = await rag_agent.query_with_context(query)
+            print(f"Agent: {response}\n")
 
 
 if __name__ == "__main__":
@@ -841,7 +841,7 @@ public class AgentFunction
 
         var chatClient = client.GetChatClient(deploymentName);
         
-        return chatClient.CreateAIAgent(
+        return chatClient.AsAIAgent(
             instructions: "You are a helpful assistant",
             tools: [AIFunctionFactory.Create(GetWeather)]
         );

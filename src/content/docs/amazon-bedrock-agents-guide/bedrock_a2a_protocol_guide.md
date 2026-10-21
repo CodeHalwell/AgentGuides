@@ -1,18 +1,19 @@
 ---
 title: "Agent-to-Agent (A2A) Protocol: Comprehensive Technical Guide"
-description: "Protocol Name: agent-to-agent-protocol (A2A)"
+description: "The open Agent2Agent (A2A) protocol on AWS: agent cards, JSON-RPC methods, tasks and messages, Strands A2A servers and clients, and hosting A2A agents on Amazon Bedrock AgentCore Runtime."
 framework: amazon-bedrock-agents
 ---
 
 # Agent-to-Agent (A2A) Protocol: Comprehensive Technical Guide
 
-**Protocol Name:** agent-to-agent-protocol (A2A)
+A2A (Agent2Agent) is an open protocol that lets agents built with different frameworks, by different teams, discover one another and collaborate over HTTP. Google introduced it in April 2025; it is now developed as a Linux Foundation project. On AWS, A2A is supported by **Amazon Bedrock AgentCore Runtime** and by the **Strands Agents** SDK.
 
-A complete technical reference for the Agent-to-Agent (A2A) protocol, enabling cross-framework interoperability for AI agents. A2A provides a standardized, verifiable format for agent communication across Amazon Bedrock, OpenAI SDK, LangGraph, Google ADK, Claude SDK, and other frameworks.
+> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore%% and `strands-agents` %%version=strands-agents%% (checked %%versions-checked%%), with the `a2a` extras installed. The wire examples follow A2A protocol version 0.3, which those SDKs use by default.
 
-**Status:** Generally Available (March 10, 2025)
-**Version:** 1.0
-**Specification:** https://github.com/a2a-protocol/specification (hypothetical)
+**Specification:** https://a2a-protocol.org/
+**Python SDK:** `a2a-sdk` (installed by the `a2a` extras of Strands and AgentCore)
+
+> **Bedrock Agents (Classic) does not implement A2A.** Its multi-agent collaboration uses a built-in supervisor/collaborator mechanism, and `invoke_agent` has no A2A parameters. Earlier versions of this page described an invented "A2A message envelope" for Bedrock Agents; that has been removed.
 
 ---
 
@@ -21,49 +22,38 @@ A complete technical reference for the Agent-to-Agent (A2A) protocol, enabling c
 1. [Introduction to A2A Protocol](#introduction-to-a2a-protocol)
 2. [Core Concepts](#core-concepts)
 3. [Protocol Specification](#protocol-specification)
-4. [Amazon Bedrock Integration](#amazon-bedrock-integration)
-5. [OpenAI SDK Integration](#openai-sdk-integration)
-6. [LangGraph Integration](#langgraph-integration)
-7. [Google ADK Integration](#google-adk-integration)
-8. [Claude SDK Integration](#claude-sdk-integration)
-9. [Cross-Framework Communication Examples](#cross-framework-communication-examples)
-10. [Security and Authentication](#security-and-authentication)
-11. [Message Verification](#message-verification)
-12. [Best Practices](#best-practices)
+4. [Building an A2A Server with Strands](#building-an-a2a-server-with-strands)
+5. [Hosting A2A Agents on AgentCore Runtime](#hosting-a2a-agents-on-agentcore-runtime)
+6. [Calling A2A Agents](#calling-a2a-agents)
+7. [Other Frameworks](#other-frameworks)
+8. [Security](#security)
+9. [Best Practices](#best-practices)
 
 ---
 
 ## Introduction to A2A Protocol
 
-The **Agent-to-Agent (A2A) protocol** is an open standard for enabling AI agents built with different frameworks to communicate and collaborate seamlessly. It provides a **common, verifiable message format** that ensures interoperability across the agent ecosystem.
+A2A complements MCP. MCP connects an agent to *tools and data*; A2A connects an agent to *other agents* that have their own reasoning, state and long-running work.
 
 ### Key Benefits
 
-| Benefit | Description | Value |
-|---------|-------------|-------|
-| **Framework Agnostic** | Works with any agent framework | Freedom of choice |
-| **Interoperability** | Agents from different frameworks can collaborate | Build best-of-breed systems |
-| **Verifiable** | Cryptographic message verification | Trust and security |
-| **Standardized** | Common message format | Reduced integration complexity |
-| **Open Source** | Community-driven specification | Transparent, extensible |
+| Benefit | Description |
+|---------|-------------|
+| **Framework interoperability** | A Strands agent can delegate to a LangGraph or Google ADK agent without knowing how it is built |
+| **Discovery** | Each agent publishes an *agent card* describing its skills, endpoint and auth requirements |
+| **Long-running work** | Work is modelled as *tasks* with states, streaming updates and optional push notifications |
+| **Opaque agents** | Agents share messages and artefacts, not internal memory, prompts or tools |
+| **Standard web stack** | JSON-RPC 2.0 over HTTPS, Server-Sent Events for streaming, standard auth schemes |
 
 ### Supported Frameworks
 
-- **Amazon Bedrock Agents** (AWS)
-- **Strands Agents SDK** (AWS)
-- **OpenAI Agents SDK** (OpenAI)
-- **LangGraph** (LangChain)
-- **Google Agent Development Kit (ADK)** (Google)
-- **Claude SDK** (Anthropic)
-- **Any framework implementing A2A specification**
+Any framework with an `a2a-sdk` `AgentExecutor` can be served over A2A. Strands ships `StrandsA2AExecutor`; Google ADK and LangGraph have their own A2A integrations; AgentCore's `serve_a2a` hosts any of them.
 
 ### Use Cases
 
-- **Multi-vendor agent systems**: Combine agents from different cloud providers
-- **Specialized agent collaboration**: Use best-in-class agents for specific tasks
-- **Enterprise integration**: Connect internal and external agent systems
-- **Research and development**: Test agent interoperability
-- **Hybrid architectures**: Mix proprietary and open-source agents
+- A central assistant delegating to department-owned agents
+- Cross-organisation workflows where each party runs its own agent
+- Gradual migration: wrap an existing agent in A2A and call it from new code
 
 ---
 
@@ -71,60 +61,58 @@ The **Agent-to-Agent (A2A) protocol** is an open standard for enabling AI agents
 
 ### Agent Identity
 
-Every A2A-compatible agent has a **unique identity**:
-
-```python
-{
-    "agent_id": "bedrock:us-east-1:123456789012:agent/ABCDEFGH",
-    "framework": "amazon-bedrock",
-    "version": "1.0",
-    "capabilities": ["reasoning", "tool_use", "knowledge_retrieval"],
-    "public_key": "-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
-}
-```
-
-### Message Format
-
-A2A messages follow a standardized JSON structure:
+An **agent card** is a JSON document served at `/.well-known/agent-card.json` (A2A 0.3; earlier drafts used `/.well-known/agent.json`). An example as served from AgentCore Runtime:
 
 ```json
 {
-    "protocol_version": "1.0",
-    "message_id": "msg-uuid-12345",
-    "timestamp": "2025-03-10T10:30:00Z",
-    "sender": {
-        "agent_id": "bedrock:agent/ABC123",
-        "framework": "amazon-bedrock"
-    },
-    "recipient": {
-        "agent_id": "openai:agent/XYZ789",
-        "framework": "openai-sdk"
-    },
-    "message_type": "request",
-    "payload": {
-        "action": "analyze_data",
-        "parameters": {
-            "data_source": "s3://bucket/data.csv",
-            "analysis_type": "trend_analysis"
-        }
-    },
-    "signature": "base64-encoded-signature",
-    "metadata": {
-        "priority": "high",
-        "timeout_seconds": 300
+  "name": "Research Agent",
+  "description": "Researches a topic and returns sourced bullet points.",
+  "version": "1.0.0",
+  "url": "https://bedrock-agentcore.us-west-2.amazonaws.com/runtimes/<url-encoded-runtime-arn>/invocations/",
+  "protocolVersion": "0.3.0",
+  "preferredTransport": "JSONRPC",
+  "capabilities": { "streaming": true },
+  "defaultInputModes": ["text"],
+  "defaultOutputModes": ["text"],
+  "skills": [
+    {
+      "id": "research",
+      "name": "Topic research",
+      "description": "Finds and summarises sources on a topic",
+      "tags": ["research"]
     }
+  ]
+}
+```
+
+Cards can also declare `securitySchemes` / `security` (for example OAuth 2.0 bearer tokens) so that clients know how to authenticate.
+
+### Message Format
+
+A **message** is a turn from a `user` (the calling agent or app) or an `agent`, made of **parts**:
+
+```json
+{
+  "role": "user",
+  "messageId": "6f1b2c1e-1d1a-4d3e-9c1e-4c8a4b2b9e10",
+  "parts": [
+    { "kind": "text", "text": "Summarise the attached report" },
+    { "kind": "file", "file": { "uri": "https://example.com/report.pdf", "mimeType": "application/pdf" } },
+    { "kind": "data", "data": { "audience": "board", "maxWords": 200 } }
+  ]
 }
 ```
 
 ### Message Types
 
-| Type | Purpose | Direction |
-|------|---------|-----------|
-| `request` | Request an action from another agent | Sender → Recipient |
-| `response` | Respond to a request | Recipient → Sender |
-| `notification` | Send information without expecting response | Sender → Recipient(s) |
-| `error` | Report an error condition | Any → Any |
-| `heartbeat` | Agent availability check | Any → Any |
+| Object | Purpose |
+|--------|---------|
+| **Message** | A single turn (`role`, `parts`, `messageId`, optional `contextId` / `taskId`) |
+| **Task** | A unit of work with an `id`, `contextId`, `status` (state + optional message), `history` and `artifacts` |
+| **Artifact** | An output produced by the task (`artifactId`, `name`, `parts`) |
+| **Status / artifact update events** | Streamed progress (`status-update`, `artifact-update`) during `message/stream` |
+
+Task states: `submitted`, `working`, `input-required`, `auth-required`, `completed`, `canceled`, `failed`, `rejected`, `unknown`.
 
 ---
 
@@ -132,44 +120,37 @@ A2A messages follow a standardized JSON structure:
 
 ### Message Structure
 
+Requests are JSON-RPC 2.0 over HTTP POST to the agent's URL.
+
 #### Required Fields
 
-```json
-{
-    "protocol_version": "1.0",          // A2A protocol version
-    "message_id": "unique-uuid",         // Unique message identifier
-    "timestamp": "ISO-8601-timestamp",   // Message creation time
-    "sender": {                          // Sender identification
-        "agent_id": "framework-specific-id",
-        "framework": "framework-name"
-    },
-    "recipient": {                       // Recipient identification
-        "agent_id": "framework-specific-id",
-        "framework": "framework-name"
-    },
-    "message_type": "request|response|notification|error|heartbeat",
-    "payload": {}                        // Message-specific data
-}
-```
+| Field | Meaning |
+|-------|---------|
+| `jsonrpc` | Always `"2.0"` |
+| `id` | Request ID, echoed in the response |
+| `method` | One of the methods below |
+| `params` | Method parameters; for `message/send` a `message` object with `role`, `parts` and `messageId` |
 
 #### Optional Fields
 
-```json
-{
-    "correlation_id": "original-message-id",  // For responses
-    "signature": "cryptographic-signature",    // Message authentication
-    "encryption": {                            // Encryption details
-        "algorithm": "AES-256-GCM",
-        "key_id": "kms-key-id"
-    },
-    "metadata": {                              // Additional context
-        "priority": "low|normal|high|urgent",
-        "timeout_seconds": 300,
-        "retry_policy": {},
-        "custom_fields": {}
-    }
-}
-```
+| Field | Meaning |
+|-------|---------|
+| `params.message.contextId` | Groups related tasks into one conversation |
+| `params.message.taskId` | Continue an existing task (for example after `input-required`) |
+| `params.configuration` | e.g. `acceptedOutputModes`, `blocking`, `historyLength`, `pushNotificationConfig` |
+| `params.metadata` | Free-form metadata |
+
+**Methods (A2A 0.3):**
+
+| Method | Purpose |
+|--------|---------|
+| `message/send` | Send a message; returns a `Task` or a `Message` |
+| `message/stream` | Same, but streams task status and artefact updates over SSE |
+| `tasks/get` | Fetch a task's current state, history and artefacts |
+| `tasks/cancel` | Cancel a running task |
+| `tasks/resubscribe` | Re-attach to a task's event stream |
+| `tasks/pushNotificationConfig/set` · `get` · `list` · `delete` | Manage webhook push notifications for long tasks |
+| `agent/getAuthenticatedExtendedCard` | Fetch a richer card after authenticating |
 
 ### Payload Schemas
 
@@ -177,16 +158,16 @@ A2A messages follow a standardized JSON structure:
 
 ```json
 {
-    "action": "action_name",
-    "parameters": {
-        "param1": "value1",
-        "param2": "value2"
-    },
-    "context": {
-        "session_id": "session-123",
-        "user_id": "user-456",
-        "conversation_history": []
+  "jsonrpc": "2.0",
+  "id": "req-001",
+  "method": "message/send",
+  "params": {
+    "message": {
+      "role": "user",
+      "parts": [{ "kind": "text", "text": "What is 101 * 11?" }],
+      "messageId": "12345678-1234-1234-1234-123456789012"
     }
+  }
 }
 ```
 
@@ -194,1012 +175,230 @@ A2A messages follow a standardized JSON structure:
 
 ```json
 {
-    "status": "success|failure|partial",
-    "result": {
-        "output": "response data",
-        "confidence": 0.95,
-        "metadata": {}
-    },
-    "error": {                           // If status = failure
-        "code": "error_code",
-        "message": "error description",
-        "details": {}
-    }
+  "jsonrpc": "2.0",
+  "id": "req-001",
+  "result": {
+    "kind": "task",
+    "id": "task-7c1",
+    "contextId": "ctx-42",
+    "status": { "state": "completed" },
+    "artifacts": [
+      {
+        "artifactId": "a-1",
+        "name": "agent_response",
+        "parts": [{ "kind": "text", "text": "101 × 11 = 1111" }]
+      }
+    ]
+  }
 }
 ```
 
 #### Notification Payload
 
-```json
-{
-    "event_type": "event_name",
-    "event_data": {
-        "key": "value"
-    },
-    "severity": "info|warning|critical"
-}
-```
+For long-running tasks, a client can register a webhook with `tasks/pushNotificationConfig/set`; the server then POSTs task updates to it. Errors use standard JSON-RPC error objects (`code`, `message`, optional `data`); A2A reserves codes such as `-32001` (task not found) and `-32002` (task not cancelable).
 
 ---
 
-## Amazon Bedrock Integration
+## Building an A2A Server with Strands
 
-### Enabling A2A in Bedrock Agents
+```bash
+pip install "strands-agents[a2a]==%%version=strands-agents%%"
+```
+
+```python
+from strands import Agent, tool
+from strands.multiagent.a2a import A2AServer
+
+
+@tool
+def add_numbers(a: int, b: int) -> int:
+    """Return the sum of two numbers.
+
+    Args:
+        a: First number.
+        b: Second number.
+    """
+    return a + b
+
+
+agent = Agent(
+    model="us.anthropic.claude-sonnet-5-5",
+    name="Calculator Agent",
+    description="Performs arithmetic.",
+    tools=[add_numbers],
+)
+
+# Serves JSON-RPC at / and the agent card at /.well-known/agent-card.json
+A2AServer(agent=agent, host="0.0.0.0", port=9000).serve()
+```
+
+Test it:
+
+```bash
+curl -s http://localhost:9000/.well-known/agent-card.json | jq .
+
+curl -s -X POST http://localhost:9000/ -H "Content-Type: application/json" -d '{
+  "jsonrpc": "2.0", "id": "1", "method": "message/send",
+  "params": {"message": {"role": "user", "messageId": "m-1",
+                         "parts": [{"kind": "text", "text": "what is 101 * 11?"}]}}
+}' | jq .
+```
+
+`A2AServer` builds the agent card from the agent's `name`, `description` and tools; pass `skills=[...]` (a list of `a2a.types.AgentSkill`) to describe skills explicitly, and `http_url=` when the server sits behind a proxy so the card advertises the public URL.
+
+---
+
+## Hosting A2A Agents on AgentCore Runtime
+
+AgentCore Runtime acts as a transparent proxy for A2A: JSON-RPC payloads sent with `InvokeAgentRuntime` are passed to your container unchanged, while AgentCore adds session isolation and SigV4 or OAuth authentication.
+
+**Container contract for A2A:** listen on `0.0.0.0:9000`, serve JSON-RPC at `/` (POST), the agent card at `/.well-known/agent-card.json` (GET) and health at `/ping`; build for ARM64. `serve_a2a` from the AgentCore SDK does all of this:
+
+```python
+# pip install "bedrock-agentcore[a2a]" "strands-agents[a2a]"
+from bedrock_agentcore.runtime import serve_a2a
+from strands import Agent
+from strands.multiagent.a2a import StrandsA2AExecutor
+
+agent = Agent(
+    model="us.anthropic.claude-sonnet-5-5",
+    name="Research Agent",
+    description="Researches a topic and returns sourced bullet points.",
+)
+
+if __name__ == "__main__":
+    serve_a2a(StrandsA2AExecutor(agent))
+```
+
+Deploy with the AgentCore CLI:
+
+```bash
+agentcore create --project-name A2AProject --name ResearchAgent \
+  --language Python --framework Strands --model-provider Bedrock --protocol A2A
+cd A2AProject
+agentcore dev      # local test with the agent inspector
+agentcore deploy
+```
+
+Or, with boto3, set the protocol on the runtime:
 
 ```python
 import boto3
-import json
 
-bedrock = boto3.client('bedrock')
-
-# Create agent with A2A support
-agent = bedrock.create_agent(
-    agentName='BedrockA2AAgent',
-    foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    instruction='You are an agent capable of collaborating with other agents.',
-    agentA2AConfig={
-        'enabled': True,
-        'allowedFrameworks': ['openai-sdk', 'langgraph', 'google-adk', 'claude-sdk'],
-        'requireSignature': True,
-        'publicKeyId': 'bedrock-agent-key-123'
-    }
+control = boto3.client("bedrock-agentcore-control", region_name="us-west-2")
+control.create_agent_runtime(
+    agentRuntimeName="research_agent",
+    agentRuntimeArtifact={"containerConfiguration": {"containerUri": "111122223333.dkr.ecr.us-west-2.amazonaws.com/research-agent:latest"}},
+    roleArn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
+    networkConfiguration={"networkMode": "PUBLIC"},
+    protocolConfiguration={"serverProtocol": "A2A"},
 )
-
-print(f"Agent created with A2A support: {agent['agentId']}")
 ```
 
-### Sending A2A Messages from Bedrock
+The data plane also exposes the card through the API (`bedrock-agentcore` `get_agent_card`), so callers with IAM access can discover an agent without hand-building URLs.
+
+`bedrock-agentcore` also offers an `a2a-v1` extra for the newer A2A v1 protocol; it is mutually exclusive with the `a2a` extra, and Strands currently targets the 0.3 SDK.
+
+---
+
+## Calling A2A Agents
+
+### From a Strands agent
+
+`A2AAgent` wraps a remote A2A agent so it can be called directly, used as a tool, or placed in a Strands graph:
 
 ```python
+from strands import Agent
+from strands.agent.a2a_agent import A2AAgent
+
+researcher = A2AAgent(
+    endpoint="http://localhost:9000/",
+    name="researcher",
+    description="Researches a topic and returns sourced bullet points.",
+)
+
+writer = Agent(
+    model="us.anthropic.claude-sonnet-5-5",
+    system_prompt="Write clear briefings. Ask the researcher for facts first.",
+    tools=[researcher],
+)
+
+writer("Write a one-paragraph briefing on grid-scale battery storage.")
+```
+
+For agents that should *discover* peers at run time, `strands-agents-tools` provides `A2AClientToolProvider(known_agent_urls=[...])`, which gives the model tools to list agent cards and send messages.
+
+### With boto3 (AgentCore-hosted agent, SigV4)
+
+```python
+import json
+import uuid
+
 import boto3
-import json
-from datetime import datetime
-import uuid
 
-bedrock_runtime = boto3.client('bedrock-runtime')
-
-# Prepare A2A message
-a2a_message = {
-    'protocol_version': '1.0',
-    'message_id': str(uuid.uuid4()),
-    'timestamp': datetime.utcnow().isoformat() + 'Z',
-    'sender': {
-        'agent_id': 'bedrock:us-east-1:123456789012:agent/ABC123',
-        'framework': 'amazon-bedrock'
-    },
-    'recipient': {
-        'agent_id': 'openai:agent/XYZ789',
-        'framework': 'openai-sdk'
-    },
-    'message_type': 'request',
-    'payload': {
-        'action': 'analyze_sentiment',
-        'parameters': {
-            'text': 'The product quality is excellent, but shipping was delayed.',
-            'language': 'en'
-        }
-    }
-}
-
-# Send via Bedrock
-response = bedrock_runtime.invoke_agent(
-    agentId='ABC123',
-    agentAliasId='PROD',
-    sessionId='session-123',
-    inputText='Send A2A message',
-    a2aMessage=json.dumps(a2a_message)
-)
-
-print(f"A2A message sent: {response}")
-```
-
-### Receiving A2A Messages in Bedrock
-
-```python
-import json
-
-def lambda_handler(event, context):
-    """
-    Lambda function to handle incoming A2A messages for Bedrock agent
-    """
-
-    # Parse A2A message
-    a2a_message = json.loads(event['body'])
-
-    # Validate protocol version
-    if a2a_message['protocol_version'] != '1.0':
-        return {
-            'statusCode': 400,
-            'body': json.dumps({'error': 'Unsupported protocol version'})
-        }
-
-    # Verify sender (implement signature verification)
-    if not verify_signature(a2a_message):
-        return {
-            'statusCode': 403,
-            'body': json.dumps({'error': 'Invalid signature'})
-        }
-
-    # Process based on message type
-    message_type = a2a_message['message_type']
-
-    if message_type == 'request':
-        # Process request
-        result = process_request(a2a_message['payload'])
-
-        # Send response
-        response_message = {
-            'protocol_version': '1.0',
-            'message_id': str(uuid.uuid4()),
-            'timestamp': datetime.utcnow().isoformat() + 'Z',
-            'sender': a2a_message['recipient'],
-            'recipient': a2a_message['sender'],
-            'message_type': 'response',
-            'correlation_id': a2a_message['message_id'],
-            'payload': {
-                'status': 'success',
-                'result': result
-            }
-        }
-
-        return {
-            'statusCode': 200,
-            'body': json.dumps(response_message)
-        }
-
-    elif message_type == 'notification':
-        # Handle notification
-        handle_notification(a2a_message['payload'])
-        return {'statusCode': 202}
-
-    else:
-        return {
-            'statusCode': 400,
-            'body': json.dumps({'error': f'Unsupported message type: {message_type}'})
-        }
-```
-
----
-
-## OpenAI SDK Integration
-
-### Setting Up OpenAI Agent for A2A
-
-```python
-from openai import OpenAI
-from typing import Dict
-import json
-
-client = OpenAI()
-
-# Define A2A tool
-a2a_tool = {
-    "type": "function",
-    "function": {
-        "name": "send_a2a_message",
-        "description": "Send a message to another agent using the A2A protocol",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "recipient_agent_id": {
-                    "type": "string",
-                    "description": "Target agent identifier"
-                },
-                "recipient_framework": {
-                    "type": "string",
-                    "description": "Target agent framework"
-                },
-                "action": {
-                    "type": "string",
-                    "description": "Action to request"
-                },
-                "parameters": {
-                    "type": "object",
-                    "description": "Action parameters"
-                }
-            },
-            "required": ["recipient_agent_id", "recipient_framework", "action"]
-        }
-    }
-}
-
-# Create OpenAI agent with A2A tool
-response = client.chat.completions.create(
-    model="gpt-4-turbo-preview",
-    messages=[
-        {"role": "system", "content": "You can collaborate with other agents using the A2A protocol."},
-        {"role": "user", "content": "Ask the Bedrock data analysis agent to analyze Q4 sales"}
-    ],
-    tools=[a2a_tool]
-)
-
-# Handle tool call
-if response.choices[0].message.tool_calls:
-    tool_call = response.choices[0].message.tool_calls[0]
-    if tool_call.function.name == "send_a2a_message":
-        args = json.loads(tool_call.function.arguments)
-        a2a_response = send_a2a_message(
-            recipient_id=args['recipient_agent_id'],
-            recipient_framework=args['recipient_framework'],
-            action=args['action'],
-            parameters=args.get('parameters', {})
-        )
-        print(f"A2A Response: {a2a_response}")
-```
-
-### Implementing A2A Message Handler
-
-```python
-import uuid
-from datetime import datetime
-import requests
-
-def send_a2a_message(
-    recipient_id: str,
-    recipient_framework: str,
-    action: str,
-    parameters: Dict
-) -> Dict:
-    """
-    Send A2A message from OpenAI agent to another framework
-    """
-
-    # Construct A2A message
-    message = {
-        'protocol_version': '1.0',
-        'message_id': str(uuid.uuid4()),
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'sender': {
-            'agent_id': 'openai:agent/my-openai-agent',
-            'framework': 'openai-sdk'
-        },
-        'recipient': {
-            'agent_id': recipient_id,
-            'framework': recipient_framework
-        },
-        'message_type': 'request',
-        'payload': {
-            'action': action,
-            'parameters': parameters
-        }
-    }
-
-    # Get recipient endpoint from registry
-    endpoint = get_agent_endpoint(recipient_id, recipient_framework)
-
-    # Send message
-    response = requests.post(
-        endpoint,
-        json=message,
-        headers={'Content-Type': 'application/json'}
-    )
-
-    return response.json()
-
-def receive_a2a_message(message: Dict) -> Dict:
-    """
-    Receive and process A2A message in OpenAI agent
-    """
-
-    # Validate message
-    if message['protocol_version'] != '1.0':
-        return {'error': 'Unsupported protocol version'}
-
-    # Process based on action
-    action = message['payload']['action']
-    parameters = message['payload'].get('parameters', {})
-
-    # Use OpenAI agent to process the request
-    response = client.chat.completions.create(
-        model="gpt-4-turbo-preview",
-        messages=[
-            {"role": "system", "content": "Process incoming A2A requests."},
-            {"role": "user", "content": f"Process action: {action} with parameters: {parameters}"}
-        ]
-    )
-
-    # Return A2A response
-    return {
-        'protocol_version': '1.0',
-        'message_id': str(uuid.uuid4()),
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'sender': message['recipient'],
-        'recipient': message['sender'],
-        'message_type': 'response',
-        'correlation_id': message['message_id'],
-        'payload': {
-            'status': 'success',
-            'result': {
-                'output': response.choices[0].message.content
-            }
-        }
-    }
-```
-
----
-
-## LangGraph Integration
-
-### Creating A2A-Compatible LangGraph Agent
-
-```python
-from langgraph.graph import StateGraph, END
-from typing import TypedDict, Annotated
-import operator
-import uuid
-from datetime import datetime
-
-# Define state
-class A2AState(TypedDict):
-    messages: Annotated[list, operator.add]
-    a2a_messages: Annotated[list, operator.add]
-    current_task: str
-
-def send_a2a_node(state: A2AState):
-    """Node for sending A2A messages"""
-
-    # Extract task details
-    task = state['current_task']
-
-    # Determine which external agent to call
-    if 'data analysis' in task.lower():
-        recipient_framework = 'amazon-bedrock'
-        recipient_id = 'bedrock:agent/data-analyzer'
-        action = 'analyze_data'
-    elif 'image generation' in task.lower():
-        recipient_framework = 'openai-sdk'
-        recipient_id = 'openai:agent/dalle'
-        action = 'generate_image'
-    else:
-        return state
-
-    # Create A2A message
-    a2a_msg = {
-        'protocol_version': '1.0',
-        'message_id': str(uuid.uuid4()),
-        'timestamp': datetime.utcnow().isoformat() + 'Z',
-        'sender': {
-            'agent_id': 'langgraph:agent/my-graph',
-            'framework': 'langgraph'
-        },
-        'recipient': {
-            'agent_id': recipient_id,
-            'framework': recipient_framework
-        },
-        'message_type': 'request',
-        'payload': {
-            'action': action,
-            'parameters': extract_parameters(task)
-        }
-    }
-
-    # Send message and get response
-    response = send_a2a_message_http(a2a_msg)
-
-    # Update state
-    state['a2a_messages'].append({
-        'sent': a2a_msg,
-        'received': response
-    })
-
-    return state
-
-def process_a2a_response_node(state: A2AState):
-    """Node for processing A2A responses"""
-
-    if not state['a2a_messages']:
-        return state
-
-    last_exchange = state['a2a_messages'][-1]
-    response = last_exchange['received']
-
-    # Extract result
-    if response['payload']['status'] == 'success':
-        result = response['payload']['result']['output']
-        state['messages'].append({
-            'role': 'assistant',
-            'content': f"Received from external agent: {result}"
-        })
-
-    return state
-
-# Build graph
-workflow = StateGraph(A2AState)
-
-# Add nodes
-workflow.add_node("analyze_request", analyze_request_node)
-workflow.add_node("send_a2a", send_a2a_node)
-workflow.add_node("process_response", process_a2a_response_node)
-workflow.add_node("generate_final_response", final_response_node)
-
-# Add edges
-workflow.add_edge("analyze_request", "send_a2a")
-workflow.add_edge("send_a2a", "process_response")
-workflow.add_edge("process_response", "generate_final_response")
-workflow.add_edge("generate_final_response", END)
-
-# Set entry point
-workflow.set_entry_point("analyze_request")
-
-# Compile
-app = workflow.compile()
-
-# Use the graph
-result = app.invoke({
-    'messages': [],
-    'a2a_messages': [],
-    'current_task': 'Analyze Q4 sales data and create a trend report'
-})
-```
-
----
-
-## Google ADK Integration
-
-### Google ADK Agent with A2A Support
-
-```python
-from google import genai
-from google.genai.types import Tool, FunctionDeclaration
-import json
-
-# Define A2A tool for Google ADK
-a2a_send_tool = Tool(
-    function_declarations=[
-        FunctionDeclaration(
-            name="send_a2a_message",
-            description="Send message to another agent via A2A protocol",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "recipient_id": {"type": "string"},
-                    "recipient_framework": {"type": "string"},
-                    "action": {"type": "string"},
-                    "parameters": {"type": "object"}
-                },
-                "required": ["recipient_id", "recipient_framework", "action"]
-            }
-        )
-    ]
-)
-
-# Create Google ADK client
-client = genai.Client(api_key='YOUR_API_KEY')
-
-# Use agent with A2A capability
-response = client.models.generate_content(
-    model='gemini-1.5-pro',
-    contents='Ask the Amazon Bedrock agent to summarize our Q4 financial reports',
-    tools=[a2a_send_tool]
-)
-
-# Process tool calls
-if response.candidates[0].content.parts:
-    for part in response.candidates[0].content.parts:
-        if hasattr(part, 'function_call'):
-            func_call = part.function_call
-            if func_call.name == 'send_a2a_message':
-                # Send A2A message
-                result = send_a2a_from_google_adk(func_call.args)
-                print(f"A2A Result: {result}")
-```
-
----
-
-## Claude SDK Integration
-
-### Claude SDK with A2A Protocol
-
-```python
-import anthropic
-import json
-import uuid
-from datetime import datetime
-
-client = anthropic.Anthropic(api_key="YOUR_API_KEY")
-
-# Define A2A tool
-a2a_tool = {
-    "name": "send_a2a_message",
-    "description": "Send a message to another AI agent using the A2A protocol",
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "recipient_agent_id": {
-                "type": "string",
-                "description": "Full agent ID including framework prefix"
-            },
-            "recipient_framework": {
-                "type": "string",
-                "enum": ["amazon-bedrock", "openai-sdk", "langgraph", "google-adk"]
-            },
-            "action": {
-                "type": "string",
-                "description": "Action to request from the agent"
-            },
-            "parameters": {
-                "type": "object",
-                "description": "Parameters for the action"
-            }
-        },
-        "required": ["recipient_agent_id", "recipient_framework", "action"]
-    }
-}
-
-# Create message with A2A tool
-message = client.messages.create(
-    model="claude-3-5-sonnet-20241022",
-    max_tokens=1024,
-    tools=[a2a_tool],
-    messages=[
-        {
+agentcore = boto3.client("bedrock-agentcore", region_name="us-west-2")
+
+request = {
+    "jsonrpc": "2.0",
+    "id": "req-001",
+    "method": "message/send",
+    "params": {
+        "message": {
             "role": "user",
-            "content": "Ask the Bedrock knowledge base agent to find information about our return policy"
+            "parts": [{"kind": "text", "text": "Research heat-pump adoption in the UK"}],
+            "messageId": str(uuid.uuid4()),
         }
-    ]
-)
-
-# Process tool use
-if message.stop_reason == "tool_use":
-    tool_use = message.content[-1]
-    if tool_use.name == "send_a2a_message":
-        # Send A2A message
-        a2a_message = create_a2a_message(
-            sender_id="claude:agent/my-claude-agent",
-            sender_framework="claude-sdk",
-            recipient_id=tool_use.input["recipient_agent_id"],
-            recipient_framework=tool_use.input["recipient_framework"],
-            action=tool_use.input["action"],
-            parameters=tool_use.input.get("parameters", {})
-        )
-
-        # Send and get response
-        a2a_response = send_a2a_message_http(a2a_message)
-
-        # Continue conversation with tool result
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=1024,
-            messages=[
-                {"role": "user", "content": "Ask the Bedrock agent..."},
-                {"role": "assistant", "content": message.content},
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_use.id,
-                            "content": json.dumps(a2a_response)
-                        }
-                    ]
-                }
-            ]
-        )
-
-        print(response.content[0].text)
-```
-
----
-
-## Cross-Framework Communication Examples
-
-### Example 1: Bedrock ↔ OpenAI
-
-```python
-# Bedrock agent asks OpenAI agent for image generation
-
-# Bedrock side
-import boto3
-
-bedrock = boto3.client('bedrock-runtime')
-
-a2a_message = {
-    'protocol_version': '1.0',
-    'message_id': str(uuid.uuid4()),
-    'timestamp': datetime.utcnow().isoformat() + 'Z',
-    'sender': {
-        'agent_id': 'bedrock:agent/content-creator',
-        'framework': 'amazon-bedrock'
     },
-    'recipient': {
-        'agent_id': 'openai:agent/dalle',
-        'framework': 'openai-sdk'
-    },
-    'message_type': 'request',
-    'payload': {
-        'action': 'generate_image',
-        'parameters': {
-            'prompt': 'A modern office with AI assistants helping employees',
-            'size': '1024x1024',
-            'style': 'vivid'
-        }
-    }
 }
 
-# Send via A2A gateway
-response = send_to_a2a_gateway(a2a_message)
-
-# OpenAI side receives and processes
-def handle_image_generation(message):
-    client = OpenAI()
-
-    image_response = client.images.generate(
-        model="dall-e-3",
-        prompt=message['payload']['parameters']['prompt'],
-        size=message['payload']['parameters']['size'],
-        style=message['payload']['parameters']['style']
-    )
-
-    # Return A2A response
-    return {
-        'protocol_version': '1.0',
-        'message_id': str(uuid.uuid4()),
-        'correlation_id': message['message_id'],
-        'sender': message['recipient'],
-        'recipient': message['sender'],
-        'message_type': 'response',
-        'payload': {
-            'status': 'success',
-            'result': {
-                'image_url': image_response.data[0].url
-            }
-        }
-    }
-```
-
-### Example 2: LangGraph ↔ Google ADK
-
-```python
-# LangGraph agent coordinates with Google ADK for multimodal analysis
-
-# LangGraph sends request
-a2a_msg = {
-    'protocol_version': '1.0',
-    'message_id': str(uuid.uuid4()),
-    'timestamp': datetime.utcnow().isoformat() + 'Z',
-    'sender': {
-        'agent_id': 'langgraph:agent/document-processor',
-        'framework': 'langgraph'
-    },
-    'recipient': {
-        'agent_id': 'google:agent/gemini-vision',
-        'framework': 'google-adk'
-    },
-    'message_type': 'request',
-    'payload': {
-        'action': 'analyze_document_images',
-        'parameters': {
-            'image_urls': [
-                'https://storage.googleapis.com/doc1.pdf',
-                'https://storage.googleapis.com/doc2.pdf'
-            ],
-            'analysis_type': 'extract_tables_and_charts'
-        }
-    }
-}
-
-# Google ADK processes
-def process_document_analysis(message):
-    client = genai.Client()
-
-    results = []
-    for url in message['payload']['parameters']['image_urls']:
-        response = client.models.generate_content(
-            model='gemini-1.5-pro-vision',
-            contents=[
-                {'mime_type': 'application/pdf', 'data': fetch_pdf(url)},
-                'Extract all tables and charts from this document'
-            ]
-        )
-        results.append(response.text)
-
-    return create_a2a_response(message, results)
-```
-
-### Example 3: Multi-Framework Collaboration
-
-```python
-# Complex workflow involving multiple frameworks
-
-def complex_analysis_workflow():
-    """
-    1. Bedrock agent coordinates the workflow
-    2. OpenAI agent generates synthetic test data
-    3. Google ADK agent analyzes the data
-    4. LangGraph agent creates a comprehensive report
-    5. Claude agent reviews and provides recommendations
-    """
-
-    # Step 1: Bedrock coordinates
-    coordinator = BedrockA2AAgent('workflow-coordinator')
-
-    # Step 2: Request test data from OpenAI
-    test_data_request = coordinator.send_a2a(
-        recipient='openai:agent/data-generator',
-        action='generate_test_data',
-        parameters={'rows': 10000, 'schema': 'sales_data'}
-    )
-
-    # Step 3: Send data to Google ADK for analysis
-    analysis_request = coordinator.send_a2a(
-        recipient='google:agent/data-analyst',
-        action='analyze_dataset',
-        parameters={'data': test_data_request['result']}
-    )
-
-    # Step 4: Request report from LangGraph
-    report_request = coordinator.send_a2a(
-        recipient='langgraph:agent/report-generator',
-        action='create_report',
-        parameters={'analysis': analysis_request['result']}
-    )
-
-    # Step 5: Get review from Claude
-    review_request = coordinator.send_a2a(
-        recipient='claude:agent/reviewer',
-        action='review_report',
-        parameters={'report': report_request['result']}
-    )
-
-    return review_request['result']
-```
-
----
-
-## Security and Authentication
-
-### Message Signing
-
-```python
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, padding
-import base64
-import json
-
-# Generate keypair
-private_key = rsa.generate_private_key(
-    public_exponent=65537,
-    key_size=2048
+response = agentcore.invoke_agent_runtime(
+    agentRuntimeArn="arn:aws:bedrock-agentcore:us-west-2:111122223333:runtime/research_agent-abc123",
+    runtimeSessionId=str(uuid.uuid4()),
+    payload=json.dumps(request),
 )
-public_key = private_key.public_key()
-
-def sign_a2a_message(message: dict, private_key) -> str:
-    """
-    Sign A2A message with private key
-
-    Returns:
-        Base64-encoded signature
-    """
-    # Create canonical representation
-    canonical = json.dumps(message, sort_keys=True, separators=(',', ':'))
-
-    # Sign
-    signature = private_key.sign(
-        canonical.encode('utf-8'),
-        padding.PSS(
-            mgf=padding.MGF1(hashes.SHA256()),
-            salt_length=padding.PSS.MAX_LENGTH
-        ),
-        hashes.SHA256()
-    )
-
-    return base64.b64encode(signature).decode('utf-8')
-
-def verify_a2a_signature(message: dict, signature: str, public_key) -> bool:
-    """
-    Verify A2A message signature
-
-    Returns:
-        True if signature is valid
-    """
-    # Remove signature from message
-    msg_copy = message.copy()
-    msg_copy.pop('signature', None)
-
-    # Create canonical representation
-    canonical = json.dumps(msg_copy, sort_keys=True, separators=(',', ':'))
-
-    # Verify
-    try:
-        public_key.verify(
-            base64.b64decode(signature),
-            canonical.encode('utf-8'),
-            padding.PSS(
-                mgf=padding.MGF1(hashes.SHA256()),
-                salt_length=padding.PSS.MAX_LENGTH
-            ),
-            hashes.SHA256()
-        )
-        return True
-    except Exception:
-        return False
+result = json.loads(response["response"].read())
+for artifact in result["result"].get("artifacts", []):
+    for part in artifact["parts"]:
+        if part["kind"] == "text":
+            print(part["text"])
 ```
 
-### Authentication with AWS IAM
+### With OAuth (any A2A client)
 
-```python
-import boto3
-from botocore.auth import SigV4Auth
-from botocore.awsrequest import AWSRequest
-
-def sign_a2a_with_sigv4(message: dict, region: str = 'us-east-1') -> dict:
-    """
-    Sign A2A message using AWS Signature Version 4
-    """
-
-    session = boto3.Session()
-    credentials = session.get_credentials()
-
-    # Create request
-    request = AWSRequest(
-        method='POST',
-        url='https://a2a-gateway.amazonaws.com/messages',
-        data=json.dumps(message),
-        headers={'Content-Type': 'application/json'}
-    )
-
-    # Sign request
-    SigV4Auth(credentials, 'a2a', region).add_auth(request)
-
-    # Add signature to message
-    message['aws_signature'] = {
-        'authorization': request.headers['Authorization'],
-        'x-amz-date': request.headers['X-Amz-Date'],
-        'x-amz-security-token': request.headers.get('X-Amz-Security-Token')
-    }
-
-    return message
-```
+When the runtime has a JWT authorizer, generic A2A clients call the runtime's HTTPS URL directly with `Authorization: Bearer <token>` and an `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` header; this is how agents in other clouds or frameworks reach an AgentCore-hosted agent.
 
 ---
 
-## Message Verification
+## Other Frameworks
 
-### Verifying Message Integrity
+| Framework | Serving over A2A | Calling A2A agents |
+|-----------|------------------|--------------------|
+| **Strands** | `A2AServer`, or `StrandsA2AExecutor` + `serve_a2a` on AgentCore | `A2AAgent`, `A2AClientToolProvider` |
+| **Google ADK** | ADK's A2A integration (exposes an ADK agent as an A2A server) | ADK remote A2A agents |
+| **LangGraph / LangChain** | Wrap the graph in an `a2a-sdk` `AgentExecutor`; AgentCore CLI scaffolds this | `a2a-sdk` client |
+| **Anything else** | Implement `a2a.server.agent_execution.AgentExecutor` and serve with `a2a-sdk` (or `serve_a2a`) | `a2a-sdk` `ClientFactory` |
 
-```python
-import hashlib
-import hmac
+Check each framework's own documentation for current class names; A2A integrations outside Strands and AgentCore are not covered by this guide's verification.
 
-def verify_message_integrity(message: dict) -> bool:
-    """
-    Verify that message has not been tampered with
-    """
+---
 
-    # Extract checksum
-    received_checksum = message.get('checksum')
-    if not received_checksum:
-        return False
+## Security
 
-    # Remove checksum from message
-    msg_copy = message.copy()
-    msg_copy.pop('checksum', None)
-
-    # Calculate checksum
-    canonical = json.dumps(msg_copy, sort_keys=True, separators=(',', ':'))
-    calculated_checksum = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
-
-    # Compare
-    return hmac.compare_digest(received_checksum, calculated_checksum)
-
-def add_message_checksum(message: dict) -> dict:
-    """
-    Add integrity checksum to message
-    """
-
-    canonical = json.dumps(message, sort_keys=True, separators=(',', ':'))
-    message['checksum'] = hashlib.sha256(canonical.encode('utf-8')).hexdigest()
-
-    return message
-```
+- **Authenticate every call.** On AgentCore, A2A runtimes accept SigV4 (IAM) or OAuth 2.0 bearer tokens via a custom JWT authorizer. Advertise the scheme in the agent card's `securitySchemes`.
+- **Treat remote agents as untrusted input.** Messages and artefacts from another agent can carry prompt injection; don't let them trigger privileged tools without checks, and keep remote agents out of your agent's system prompt.
+- **Least privilege per agent.** Each AgentCore runtime has its own execution role; don't share one broad role across agents.
+- **Pass identity explicitly.** Propagate end-user identity through AgentCore Identity (OAuth on-behalf-of / token exchange) rather than embedding user IDs in message text.
+- **TLS only.** AgentCore endpoints are HTTPS; self-hosted A2A servers should be too.
 
 ---
 
 ## Best Practices
 
-### 1. Error Handling
+1. **Write good agent cards.** Clear `description` and `skills` are what a calling model uses to decide whether to delegate.
+2. **Use tasks for long work.** Return a task quickly and stream updates (`message/stream`) or use push notifications instead of holding a request open.
+3. **Keep `contextId` stable** for a conversation so the remote agent can keep context; AgentCore's session header gives each conversation its own microVM.
+4. **Bound delegation.** Set timeouts on clients (`A2AAgent(timeout=...)`) and limits on graphs or swarms that include remote agents.
+5. **Observe across agents.** Propagate W3C trace context (`traceparent`) so AgentCore Observability can stitch spans from both sides.
+6. **Pin protocol versions.** A2A is still evolving (0.3 and v1 coexist); pin `a2a-sdk` with your framework and test before upgrading.
 
-```python
-def send_a2a_with_retry(message: dict, max_retries: int = 3) -> dict:
-    """Send A2A message with automatic retry"""
-
-    for attempt in range(max_retries):
-        try:
-            response = send_a2a_message_http(message)
-
-            # Check for error in response
-            if response.get('payload', {}).get('status') == 'failure':
-                error = response['payload']['error']
-                raise A2AError(error['code'], error['message'])
-
-            return response
-
-        except (ConnectionError, TimeoutError) as e:
-            if attempt == max_retries - 1:
-                raise
-            time.sleep(2 ** attempt)  # Exponential backoff
-```
-
-### 2. Message Validation
-
-```python
-from jsonschema import validate, ValidationError
-
-A2A_MESSAGE_SCHEMA = {
-    "type": "object",
-    "required": ["protocol_version", "message_id", "timestamp", "sender", "recipient", "message_type"],
-    "properties": {
-        "protocol_version": {"type": "string", "pattern": "^1\\.0$"},
-        "message_id": {"type": "string", "format": "uuid"},
-        "timestamp": {"type": "string", "format": "date-time"},
-        "sender": {
-            "type": "object",
-            "required": ["agent_id", "framework"],
-            "properties": {
-                "agent_id": {"type": "string"},
-                "framework": {"type": "string"}
-            }
-        }
-        # ... additional schema ...
-    }
-}
-
-def validate_a2a_message(message: dict) -> bool:
-    """Validate A2A message against schema"""
-    try:
-        validate(instance=message, schema=A2A_MESSAGE_SCHEMA)
-        return True
-    except ValidationError as e:
-        print(f"Validation error: {e}")
-        return False
-```
-
-### 3. Timeout Management
-
-```python
-import asyncio
-
-async def send_a2a_with_timeout(message: dict, timeout_seconds: int = 30) -> dict:
-    """Send A2A message with timeout"""
-
-    try:
-        response = await asyncio.wait_for(
-            send_a2a_async(message),
-            timeout=timeout_seconds
-        )
-        return response
-
-    except asyncio.TimeoutError:
-        # Send timeout notification
-        timeout_notification = {
-            'protocol_version': '1.0',
-            'message_id': str(uuid.uuid4()),
-            'sender': message['sender'],
-            'recipient': message['recipient'],
-            'message_type': 'error',
-            'correlation_id': message['message_id'],
-            'payload': {
-                'error': {
-                    'code': 'TIMEOUT',
-                    'message': f'Request timed out after {timeout_seconds} seconds'
-                }
-            }
-        }
-        return timeout_notification
-```
-
----
-
-## Conclusion
-
-The Agent-to-Agent (A2A) protocol enables seamless interoperability across the AI agent ecosystem. With standardized message formats, cryptographic verification, and support for major frameworks, A2A empowers developers to build sophisticated multi-agent systems that leverage the best capabilities from each platform.
-
-**Specification:** https://github.com/a2a-protocol/specification (hypothetical)
-**Community:** https://a2a-protocol.org (hypothetical)
-**Support:** Contact your framework provider for A2A implementation details
-
----
-
-**Last Updated:** March 2025
-**Status:** Generally Available (v1.0)
-
+**Related guides:** [AgentCore](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/) · [Strands SDK](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) · [Advanced multi-agent patterns](/amazon-bedrock-agents-guide/bedrock_agents_advanced_multi_agent_python/)

@@ -1,17 +1,14 @@
 ---
 title: "Google Agent Development Kit (ADK) - Comprehensive Technical Guide"
-description: "Version: 1.1 Last Updated: August 21, 2026 Framework: Google Agent Development Kit (ADK) Target Audience: Beginner to Advanced Developers"
+description: "Single-page technical guide to Google ADK for Python: agents, tools, MCP, memory, context engineering, Google Cloud integration, and a consolidated class and API reference."
 framework: google-adk
 language: python
 ---
 
-Latest as of 2026-09-28: google-adk 2.10.0 | Version headers updated to 2.10.0 | New sections verified against 2.10.0 source | Existing body sections verified against 2.7.1 | Updated: September 28, 2026
 # Google Agent Development Kit (ADK) - Comprehensive Technical Guide
 
-**Version:** 1.1  
-**Last Updated:** August 21, 2026  
-**Framework:** Google Agent Development Kit (ADK)  
-**Target Audience:** Beginner to Advanced Developers
+**Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%). The Class & API Reference was first built against 2.7.1; its imports and signatures have been re-checked against the current release, and entries note where behaviour changed.
+**Target audience:** Beginner to advanced developers
 
 ---
 
@@ -72,50 +69,46 @@ python3 -m venv adk_env
 source adk_env/bin/activate  # On Windows: adk_env\Scripts\activate
 
 # Install the ADK package
-pip install google-adk>=2.9.2
+pip install google-adk
 
 # Verify installation
 python -c "import google.adk; print('ADK installed successfully')"
 ```
 
-#### Installing Additional Dependencies
+ADK needs Python 3.11 or later (support for 3.10 was removed in 2.12.0).
 
-Depending on your use case, you may need additional packages:
+#### Optional extras
+
+Several integrations are optional extras rather than core dependencies. Install the ones you use:
 
 ```bash
-# For structured outputs with Pydantic
-pip install pydantic
-
-# For Google Cloud services
-pip install google-cloud-firestore
-pip install google-cloud-bigquery
-pip install google-cloud-storage
-
-# For development and testing
-pip install pytest
-pip install pytest-asyncio
-
-# For async support
-pip install aiohttp
+pip install "google-adk[mcp]"         # McpToolset, to_mcp_server
+pip install "google-adk[a2a]"         # to_a2a, RemoteA2aAgent
+pip install "google-adk[eval]"        # AgentEvaluator and metrics
+pip install "google-adk[db]"          # DatabaseSessionService (SQLAlchemy drivers)
+pip install "google-adk[extensions]"  # LiteLlm, AnthropicLlm, container code executors, LangGraph bridge
+pip install "google-adk[bigquery-analytics]"  # BigQueryAgentAnalyticsPlugin
 ```
+
+Extras can be combined: `pip install "google-adk[mcp,a2a,eval]"`. Install `pytest` and `pytest-asyncio` for the testing examples.
 
 #### Creating a requirements.txt
 
-For production deployments, create a `requirements.txt` file:
+For production deployments, pin ADK in a `requirements.txt` file:
 
 ```
-google-adk>=2.9.2
-google-genai>=0.3.0
-pydantic>=2.0
+google-adk[mcp,a2a]==%%version=google-adk%%
 google-cloud-firestore>=2.14.0
 google-cloud-bigquery>=3.13.0
 google-cloud-storage>=2.10.0
 python-dotenv>=1.0.0
 ```
 
+`google-genai` and `pydantic` come in as ADK dependencies, so you do not need to list them yourself.
+
 **Cost Considerations:**
 - The `google-adk` package itself is free
-- Using Gemini models incurs costs based on input/output tokens (typically $0.075 per 1M input tokens, $0.30 per 1M output tokens for Gemini 2.5 Flash)
+- Using Gemini models incurs per-token costs; see the [Gemini API pricing page](https://ai.google.dev/gemini-api/docs/pricing) for current rates
 - Google Cloud services (Firestore, BigQuery, etc.) have their own pricing models
 
 ### Google Cloud Project Setup
@@ -2760,7 +2753,44 @@ bank_memory = VertexAiMemoryBankService(
 
 ### Custom Memory Implementations
 
-#### Abstract Memory Service
+#### Plugging a store into ADK (`BaseMemoryService`)
+
+The `Runner` and the `load_memory` / `preload_memory` tools only talk to a `BaseMemoryService`. A custom backend implements two coroutines:
+
+```python
+from google.adk.memory import BaseMemoryService
+from google.adk.memory.base_memory_service import SearchMemoryResponse
+from google.adk.memory.memory_entry import MemoryEntry
+from google.adk.sessions import Session
+
+
+class KeywordMemoryService(BaseMemoryService):
+    """Toy in-process memory keyed by (app, user)."""
+
+    def __init__(self):
+        self._store: dict[tuple[str, str], list[MemoryEntry]] = {}
+
+    async def add_session_to_memory(self, session: Session) -> None:
+        entries = self._store.setdefault((session.app_name, session.user_id), [])
+        for event in session.events:
+            if event.content and event.content.parts:
+                entries.append(MemoryEntry(content=event.content, author=event.author))
+
+    async def search_memory(
+        self, *, app_name: str, user_id: str, query: str
+    ) -> SearchMemoryResponse:
+        words = set(query.lower().split())
+        hits = [
+            m for m in self._store.get((app_name, user_id), [])
+            if words & set(" ".join(p.text or "" for p in m.content.parts).lower().split())
+        ]
+        return SearchMemoryResponse(memories=hits)
+```
+
+#### Application-level key-value memory
+
+The helpers below are plain application code (not seen by the `Runner`), useful for caches and per-user settings alongside ADK's session state.
+
 
 ```python
 from abc import ABC, abstractmethod
@@ -3854,7 +3884,7 @@ Rewinding to an unknown invocation raises `InvocationNotFoundError`.
 
 ## Class & API Reference
 
-**Verified against `google-adk==2.7.1`** (live introspection — `model_fields`, `inspect.signature`, `__mro__`, package `__all__` lists — cross-checked against the installed package source, consolidating 48 sequential "class deep dive" volumes down to one deduplicated, source-verified reference covering 12 subject areas).
+**First built against google-adk 2.7.1 and re-checked against %%version=google-adk%%** (live introspection — `model_fields`, `inspect.signature`, `__mro__`, package `__all__` lists — cross-checked against the installed package source, consolidating 48 sequential "class deep dive" volumes down to one deduplicated, source-verified reference covering 12 subject areas).
 
 If you're coming from an older volume of this guide, the callouts below marked **Correction** or **Import path note** flag real breaking changes versus earlier `google-adk` releases — most notably:
 
@@ -3997,7 +4027,7 @@ agent = LangGraphAgent(
 #### `AntigravityAgent` + `convert_step_to_events`
 **Source:** `google.adk.labs.antigravity._antigravity_agent`, `._event_converter` — `@experimental`
 
-Wraps a pre-configured `google.antigravity.Agent` as an ADK `BaseAgent`, delegating each turn to the Antigravity SDK runner and converting its trajectory steps into ADK events. Because the Antigravity harness owns session lifecycle, the agent must be a **standalone root** — both `model_post_init` (rejects a non-empty `sub_agents`) and `__setattr__` (rejects being assigned a `parent_agent`) enforce this.
+Wraps a pre-configured `google.antigravity.Agent` as an ADK `BaseAgent`, delegating each turn to the Antigravity SDK runner and converting its trajectory steps into ADK events. Needs `pip install "google-adk[antigravity]"`. Because the harness owns its conversation, the agent must run as an ADK **root** unless it is built with `mode="single_turn"`, in which case a parent `LlmAgent` can call it as an inline tool (each call an independent conversation). Since 2.12.0 it may also have ADK `sub_agents`: each child is bridged onto the Antigravity config as a client-side tool, and a child whose name collides with an existing tool is rejected.
 
 ```python
 def convert_step_to_events(
@@ -4008,14 +4038,17 @@ def convert_step_to_events(
 
 Mapping rules: SSE partial deltas → `thinking_delta` becomes a `Part(thought=True)`, `content_delta` becomes text; final model text is emitted only when `step.is_complete_response`; tool calls are deduplicated on `call.id or f'{step_index}-{call.name}'`; tool-response events are authored as the **tool name**, not the agent name.
 
-Trajectories persist across turns via `config.save_dir` — the harness writes a random-ID trajectory on turn 1, which the agent renames to `{session_id}_{agent_name}` and replays via `config.conversation_id` on later turns. `_trajectory_files.save_resume_step_index` prevents re-emitting already-yielded steps.
+Conversation memory across turns relies on `config.save_dir`: a local config without one gets a fresh temporary directory per connection, so the agent logs a warning that it will not remember earlier turns. Set a stable `save_dir`, or use `mode="single_turn"` when independent turns are what you want.
 
 ```python
 from google.adk.labs.antigravity import AntigravityAgent
 from google.antigravity import LocalAgentConfig
 
 config = LocalAgentConfig(model="gemini-2.5-flash", save_dir="~/.adk_antigravity_trajs")
-agent = AntigravityAgent(name="my_ag_agent", config=config)   # root-only; no sub_agents
+agent = AntigravityAgent(name="my_ag_agent", config=config)   # root agent
+
+# or as a tool of a parent LlmAgent
+helper = AntigravityAgent(name="ag_helper", config=config, mode="single_turn")
 ```
 
 #### `Context` — the unified write API (`ToolContext` = `CallbackContext`)
@@ -4257,9 +4290,12 @@ Why it matters: exposes tools from any MCP server (stdio, SSE, or streamable-HTT
 ```python
 from google.adk.tools import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
+from mcp import StdioServerParameters
 
 toolset = McpToolset(
-    connection_params=StdioConnectionParams(command="npx", args=["-y", "some-mcp-server"]),
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(command="npx", args=["-y", "some-mcp-server"]),
+    ),
 )
 ```
 
@@ -4564,6 +4600,7 @@ Three Vertex AI-backed discovery/proxy clients:
 - **`AgentRegistry(project_id, location, header_provider=None)`** — both args are required (no env fallback; raises `ValueError` if either is falsy). `get_mcp_toolset(mcp_server_name, auth_scheme=None, ...)` auto-resolves a `GcpAuthProviderScheme` from IAM bindings when no scheme is given (requires `GcpAuthProvider` registered via `CredentialManager.register_auth_provider` and the `agent-identity` extra). Also exposes `list_endpoints`, `get_endpoint`, `get_model_name`.
 
 ```python
+# Needs the agent-identity extra: pip install "google-adk[agent-identity]"
 from google.adk.integrations.agent_registry.agent_registry import AgentRegistry
 from google.adk.auth.credential_manager import CredentialManager
 from google.adk.integrations.agent_identity.gcp_auth_provider import GcpAuthProvider
@@ -4757,16 +4794,17 @@ class Trigger(BaseModel):
     input: Any = None                    # payload forwarded to the downstream node
     use_sub_branch: bool = False         # isolate the downstream node's event history
     branch: str | None = None            # inherited from the predecessor node
-    isolation_scope: str | None = None   # explicit scope tag for state partitioning
 ```
+
+The `isolation_scope` field present in 2.7.1 was removed from `Trigger` in 2.10.0; isolation is expressed through `use_sub_branch` / `branch`.
 
 ```python
 from google.adk.workflow._trigger import Trigger
-def make_tenant_trigger(tenant_id, payload):
-    return Trigger(input=payload, use_sub_branch=True, isolation_scope=f"tenant:{tenant_id}")
+def make_isolated_trigger(payload):
+    return Trigger(input=payload, use_sub_branch=True)
 ```
 
-**Import path note:** `Trigger` is not re-exported at the `google.adk.workflow` package level in 2.7.1 (only from the private `google.adk.workflow._trigger` submodule) despite several older docs showing a bare `from google.adk.workflow import Trigger`.
+**Import path note:** `Trigger` is not re-exported at the `google.adk.workflow` package level (true in 2.7.1 and still in the current release) (only from the private `google.adk.workflow._trigger` submodule) despite several older docs showing a bare `from google.adk.workflow import Trigger`.
 
 #### `Graph` + `Edge` + chain syntax (`parse_edge_items`)
 **Source:** `google.adk.workflow._graph`, `.utils._graph_parser`
@@ -4870,18 +4908,21 @@ flaky = FunctionNode(name="api_caller", func=call_external_api, retry_config=Ret
 Because `LlmAgent`/`BaseAgent` share the same `BaseNode` MRO as workflow nodes, `RetryConfig` is directly usable on agents too (`LlmAgent(..., retry_config=RetryConfig(...))`), not just on `FunctionNode`/custom nodes.
 
 #### `DynamicNodeScheduler` — `ctx.run_node()` internals
-**Source:** `google.adk.workflow._dynamic_node_scheduler`, `._schedule_dynamic_node` (Protocol)
+**Source:** `google.adk.workflow._dynamic_node_scheduler`
 
-Implements `ctx.run_node()`: scheduling a child node at runtime rather than through static edges.
+Implements `ctx.run_node()`: scheduling a child node at runtime rather than through static edges. Up to 2.9 the entry point was described by a `ScheduleDynamicNode` protocol; in the current release it is a plain coroutine, `run_node_internal`, and the protocol is gone:
 
 ```python
-class ScheduleDynamicNode(Protocol):
-    def __call__(self, ctx: Context, node: Any, node_input: Any, *,
-                 node_name: str | None = None, use_as_output: bool = False,
-                 run_id: str, use_sub_branch: bool = False,
-                 override_branch: str | None = None,
-                 override_isolation_scope: str | None = None) -> Awaitable[Context]: ...
-    # ctx.run_node() unwraps the returned Context and hands back only child_ctx.output (Any)
+async def run_node_internal(
+    ctx: Context, node: NodeLike, node_input: Any = None, *,
+    use_as_output: bool = False, run_id: str | None = None,
+    use_sub_branch: bool = False, override_branch: str | None = None,
+    override_isolation_scope: str | None = None,
+    raise_on_wait: bool = False, return_ctx: bool = False,
+    resume_inputs: dict[str, Any] | None = None,
+    skip_run_id_validation: bool = False,
+) -> Any: ...
+    # raises ValueError unless the calling node has rerun_on_resume=True
 
 @dataclass(kw_only=True)
 class DynamicNodeRun:
@@ -5768,7 +5809,8 @@ Priority for `is_feature_enabled(name)`: **(1)** programmatic `override_feature_
 The `@experimental`/`@stable`/`@working_in_progress` decorators register a `FeatureConfig` on first use and wrap `__init__`/the function to call `check_feature_enabled()` at invocation time, raising `RuntimeError` if disabled. `@experimental` sets `default_on=False`; `@stable` sets `default_on=True`; `@working_in_progress` always starts disabled.
 
 ```python
-from google.adk.features import FeatureName, override_feature_enabled, temporary_feature_override
+from google.adk.features import FeatureName, override_feature_enabled
+from google.adk.features._feature_registry import temporary_feature_override  # private; not in __all__
 
 override_feature_enabled(FeatureName.PROGRESSIVE_SSE_STREAMING, True)   # permanent
 
@@ -6056,11 +6098,11 @@ class LlmBackedUserSimulatorConfig(BaseUserSimulatorConfig):
 ```
 
 #### LlmBackedUserSimulator / StaticUserSimulator / UserPersona
-Why it matters: drives multi-turn conversation simulation for evals — either an LLM improvising as a persona-constrained user, or a fixed scripted transcript. Field sets and import paths unchanged.
+Why it matters: drives multi-turn conversation simulation for evals — either an LLM improvising as a persona-constrained user, or a fixed scripted transcript. Both live in the `simulation` subpackage.
 
 ```python
-from google.adk.evaluation.llm_backed_user_simulator import LlmBackedUserSimulator
-from google.adk.evaluation.static_user_simulator import StaticUserSimulator
+from google.adk.evaluation.simulation.llm_backed_user_simulator import LlmBackedUserSimulator
+from google.adk.evaluation.simulation.static_user_simulator import StaticUserSimulator
 ```
 
 #### `AgentOptimizer[T, U]` + `Sampler[T]` + `OptimizerResult`
@@ -6232,7 +6274,7 @@ from google.adk.a2a.utils.agent_card_builder import AgentCardBuilder
 Why it matters: reduces a stream of ADK events into the 5-state A2A task lifecycle (submitted/working/input-required/completed/failed), the piece that actually maps ADK's event model onto A2A's task state machine.
 
 ```python
-from google.adk.a2a.converters.event_converter import TaskResultAggregator
+from google.adk.a2a.executor.task_result_aggregator import TaskResultAggregator
 ```
 
 #### `ExecutorContext`
@@ -6467,7 +6509,7 @@ agent = LlmAgent(name="dynamic_agent", model="gemini-2.5-pro", instruction=provi
 Why it matters: a tool that fetches a named resource from a connected MCP server on demand, for cases where an agent needs to pull a resource mid-conversation rather than at startup.
 
 ```python
-from google.adk.tools.mcp_tool.load_mcp_resource_tool import LoadMcpResourceTool
+from google.adk.tools.load_mcp_resource_tool import LoadMcpResourceTool
 ```
 
 #### MCP transport parameters — `SseConnectionParams` / `StreamableHTTPConnectionParams` / `StdioConnectionParams`
@@ -6706,10 +6748,10 @@ param, headers = credential_to_param(scheme, credential)   # {"Authorization": "
 ```
 
 #### AuthenticatedFunctionTool / BaseAuthenticatedTool
-Why it matters: the tool-level integration point — wraps a function tool so ADK automatically injects a resolved credential before invocation, pausing the run for user auth if none is cached yet. Constructor signature confirmed unchanged via live introspection.
+Why it matters: the tool-level integration point — wraps a function tool so ADK automatically injects a resolved credential before invocation, pausing the run for user auth if none is cached yet. Experimental (`@experimental(FeatureName.AUTHENTICATED_FUNCTION_TOOL)`) and not re-exported from `google.adk.tools`.
 
 ```python
-from google.adk.tools import AuthenticatedFunctionTool
+from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
 ```
 
 #### `_AuthLlmRequestProcessor` + `_store_auth_and_collect_resume_targets`
@@ -6738,7 +6780,8 @@ def effective_googleapis_endpoint(url: str) -> str: ...      # rewrites to the .
 Why it matters: resolves ambient GCP credentials (ADC, workload identity, etc.) for tools that need to call Google Cloud APIs without an explicit per-user OAuth flow.
 
 ```python
-from google.adk.auth.providers.gcp_auth_provider import GcpAuthProvider
+# Needs the agent-identity extra: pip install "google-adk[agent-identity]"
+from google.adk.integrations.agent_identity.gcp_auth_provider import GcpAuthProvider
 ```
 
 #### `PubSubCredentialsConfig` + `SpannerCredentialsConfig` + `DataAgentCredentialsConfig`
@@ -7290,11 +7333,10 @@ Module-level singletons inserted into the pipeline whenever an `LlmAgent` has a 
 The simplest processor: injects `'You are an agent. Your internal name is "{agent.name}".'` (plus `' The description about you is "{agent.description}".'` when non-empty) into the system prompt on every call, **except** when `agent.mode == 'single_turn'` — task-delegation sub-agents in that mode get no identity injection at all. Module-level singleton `request_processor`.
 
 #### TelemetryContext
-Why it matters: **Note** — two distinct classes share this name in 2.7.1: `google.adk.telemetry.node_tracing.TelemetryContext` (workflow-node span context) and `google.adk.telemetry._instrumentation.TelemetryContext` (general OpenTelemetry instrumentation context). Neither is re-exported from `google.adk.telemetry` package root; pick the submodule matching your use case rather than assuming a single shared class.
+Why it matters: the span context for workflow-node tracing. In 2.7.1 and 2.8 a second, unrelated `TelemetryContext` also lived in `google.adk.telemetry._instrumentation`; that one was removed in 2.9, leaving only the `node_tracing` class. It is not re-exported from the `google.adk.telemetry` package root.
 
 ```python
-from google.adk.telemetry.node_tracing import TelemetryContext as NodeTelemetryContext
-from google.adk.telemetry._instrumentation import TelemetryContext as InstrumentationContext
+from google.adk.telemetry.node_tracing import TelemetryContext
 ```
 
 #### `TelemetryContext` + `start_as_current_node_span`
@@ -7510,7 +7552,7 @@ class AgentBuilderAssistant:
     def create_agent(model: str = "gemini-2.5-pro") -> LlmAgent: ...
 ```
 
-Ships 9 `FunctionTool`s (`read_config_files`, `write_config_files`, `explore_project`, `read_files`, `write_files`, `delete_files`, `cleanup_unused_files`, `search_adk_source`, `search_adk_knowledge`) plus 2 `AgentTool`-wrapped sub-agents (`google_search_agent`, `url_context_agent`, since ADK's built-in search/URL-context tools are themselves sub-agents). `instruction` is a callable that resolves the working directory from `session.state` at runtime and injects a compact schema reference (9 core config definitions, pruned generation-config fields) into the system prompt. The module exposes `root_agent = AgentBuilderAssistant.create_agent()` so `AgentLoader` can discover it without explicit registration.
+Ships 8 `FunctionTool`s (`read_config_files`, `write_config_files`, `explore_project`, `read_files`, `write_files`, `delete_files`, `cleanup_unused_files`, `search_adk_source`). Up to 2.10 it also had a `search_adk_knowledge` tool and two `AgentTool`-wrapped sub-agents (`google_search_agent`, `url_context_agent`); 2.12.0 dropped those and sources the assistant's ADK knowledge from the installed package instead. `instruction` is a callable that resolves the working directory from `session.state` at runtime and injects a compact schema reference (9 core config definitions, pruned generation-config fields) into the system prompt. The module exposes `root_agent = AgentBuilderAssistant.create_agent()` so `AgentLoader` can discover it without explicit registration.
 
 #### `yaml_utils` — `load_yaml_file` + `dump_pydantic_to_yaml` + `_MultilineDumper`
 **Source:** `google.adk.utils.yaml_utils`
@@ -7549,11 +7591,11 @@ def is_enterprise_mode_enabled() -> bool: ...
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 2.7.1 | August 24, 2026 | **New source-verified examples for 10 sampled classes.** Added dedicated example sections (each cross-checked via live introspection against `google-adk==2.7.1`) covering: `BuiltInCodeExecutor` (full signature + `is_gemini_model` model check + `ADK_DISABLE_GEMINI_MODEL_ID_CHECK`), `VertexAiCodeExecutor` (`resource_name` reuse + output file `mime_type` handling), `TransferToAgentTool` (manual enum-constrained construction), `LoadMemoryTool` (JSON schema branch + implicit instruction injection), `RunConfig` (every field in one example + `custom_metadata` tracing + `get_session_config` window), `ContextCacheConfig` (`create_http_options` timeout + model-minimum floor rules), `LoggingPlugin` (subclass-for-JSON-logs + callback prefix table), `SaveFilesAsArtifactsPlugin` (`attach_file_reference=False` + `user:` prefix + 20 MB ceiling + pending-delta lifecycle), `AgentEvaluator.evaluate_eval_set` (`output_file` CSV + `artifact_service` preload + `eval_set_results_manager`), `Workflow` (`max_concurrency` semantics + `state_schema` compile-time validation). |
-| 2.7.1 | August 21, 2026 | **Documentation consolidation.** Added a new [Class & API Reference](#class--api-reference) section (12 subject areas), merging and deduplicating the 48 sequential "class deep dives" volumes into this single page; those volume pages have been removed. Version banner and frontmatter bumped to `google-adk==2.7.1`; content cross-checked via live introspection against the installed package, confirming (among other things) that `LoopAgent`/`ParallelAgent`/`SequentialAgent` now carry a verified `@deprecated` notice, `EventsCompactionConfig` lives at the private `google.adk.apps._configs`, and GCS/Firestore integrations moved under `google.adk.integrations.*`. |
-| 2.3.0 | June 22 – 29, 2026 | Version bump to 2.3.0. Class deep dives vol. 24 added (`LlmAgent` mode system, `ContextCacheConfig`, `State` + `StateSchemaError`, `DatabaseSessionService`, `VertexAiSessionService`, `VertexAiMemoryBankService`, `Event` + `NodeInfo`, `EventActions` + `EventCompaction`, `ReadonlyContext`, `InvocationContext`; all source-verified against `google-adk==2.3.0`). Class deep dives vol. 30 and vol. 31 added (21 additional classes across pipeline processors, registry, environment simulation, and integration layers). Memory & Artifacts and MCP & A2A guides enhanced with 4 and 5 complete runnable examples respectively. |
-| 2.1.0 | May 23, 2026 | Minor feature release. `RunConfig` gains `tool_thread_pool_config` (`ToolThreadPoolConfig`), `context_window_compression`, `get_session_config`, `enable_affective_dialog`, `proactivity`, `session_resumption`. `BaseNode.state_schema`, `input_schema`, `output_schema` documented as first-class fields. `Context.add_memory()` for explicit memory entries. `BasePlugin.on_model_error_callback` formally documented. Class deep dives page added. Core symbols verified against installed `google-adk==2.1.0` (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed. |
-| 2.0.0 (GA) | May 20, 2026 | GA stable release confirmed. `pip install google-adk` (no `--pre` required). Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk==2.0.0` (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS. |
+| 2.7.1 | August 24, 2026 | **New source-verified examples for 10 sampled classes.** Added dedicated example sections (each cross-checked via live introspection against `google-adk` 2.7.1) covering: `BuiltInCodeExecutor` (full signature + `is_gemini_model` model check + `ADK_DISABLE_GEMINI_MODEL_ID_CHECK`), `VertexAiCodeExecutor` (`resource_name` reuse + output file `mime_type` handling), `TransferToAgentTool` (manual enum-constrained construction), `LoadMemoryTool` (JSON schema branch + implicit instruction injection), `RunConfig` (every field in one example + `custom_metadata` tracing + `get_session_config` window), `ContextCacheConfig` (`create_http_options` timeout + model-minimum floor rules), `LoggingPlugin` (subclass-for-JSON-logs + callback prefix table), `SaveFilesAsArtifactsPlugin` (`attach_file_reference=False` + `user:` prefix + 20 MB ceiling + pending-delta lifecycle), `AgentEvaluator.evaluate_eval_set` (`output_file` CSV + `artifact_service` preload + `eval_set_results_manager`), `Workflow` (`max_concurrency` semantics + `state_schema` compile-time validation). |
+| 2.7.1 | August 21, 2026 | **Documentation consolidation.** Added a new [Class & API Reference](#class--api-reference) section (12 subject areas), merging and deduplicating the 48 sequential "class deep dives" volumes into this single page; those volume pages have been removed. Version banner and frontmatter bumped to `google-adk` 2.7.1; content cross-checked via live introspection against the installed package, confirming (among other things) that `LoopAgent`/`ParallelAgent`/`SequentialAgent` now carry a verified `@deprecated` notice, `EventsCompactionConfig` lives at the private `google.adk.apps._configs`, and GCS/Firestore integrations moved under `google.adk.integrations.*`. |
+| 2.3.0 | June 22 – 29, 2026 | Version bump to 2.3.0. Class deep dives vol. 24 added (`LlmAgent` mode system, `ContextCacheConfig`, `State` + `StateSchemaError`, `DatabaseSessionService`, `VertexAiSessionService`, `VertexAiMemoryBankService`, `Event` + `NodeInfo`, `EventActions` + `EventCompaction`, `ReadonlyContext`, `InvocationContext`; all source-verified against `google-adk` 2.3.0). Class deep dives vol. 30 and vol. 31 added (21 additional classes across pipeline processors, registry, environment simulation, and integration layers). Memory & Artifacts and MCP & A2A guides enhanced with 4 and 5 complete runnable examples respectively. |
+| 2.1.0 | May 23, 2026 | Minor feature release. `RunConfig` gains `tool_thread_pool_config` (`ToolThreadPoolConfig`), `context_window_compression`, `get_session_config`, `enable_affective_dialog`, `proactivity`, `session_resumption`. `BaseNode.state_schema`, `input_schema`, `output_schema` documented as first-class fields. `Context.add_memory()` for explicit memory entries. `BasePlugin.on_model_error_callback` formally documented. Class deep dives page added. Core symbols verified against installed `google-adk` 2.1.0 (`.routine-envs/check-0523-google-adk`) with `-W error::DeprecationWarning`; all PASS. 27 top-level exports confirmed. |
+| 2.0.0 (GA) | May 20, 2026 | GA stable release confirmed. `pip install google-adk` (no `--pre` required). Core symbols (`google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.runners.Runner`, `google.adk.sessions.InMemorySessionService`, `google.adk.tools.FunctionTool`, `google.adk.tools.ToolContext`, `google.adk.memory.InMemoryMemoryService`, `google.adk.artifacts.InMemoryArtifactService`) verified against installed `google-adk` 2.0.0 (`.routine-envs/check-0520-adk`) with `-W error::DeprecationWarning`; all PASS. |
 | 2.0.0 | May 19, 2026 | **Stable major release.** `SequentialAgent`, `ParallelAgent`, `LoopAgent` are officially deprecated in favour of `Workflow`. `ToolContext` is now an alias for `Context` (`agents/context.py`). `LongRunningFunctionTool` moved to `tools/long_running_tool.py`. `McpToolset` gained `credential_key` parameter for shared credential service namespacing. `RunConfig` adds `ToolThreadPoolConfig` for live-mode tool concurrency, `custom_metadata` merged into every event, and `get_session_config` for selective session event loading. Plugins gained `before_run_callback`, `on_event_callback`, `after_run_callback`, and `close` lifecycle hooks. `GlobalInstructionPlugin` replaces the deprecated `LlmAgent.global_instruction` field. `SaveFilesAsArtifactsPlugin` replaces the deprecated `RunConfig.save_input_blobs_as_artifacts`. `Workflow.max_concurrency` limits graph-scheduled parallel nodes. |
 | 1.33.0 | May 9, 2026 | Minor stable release. Version confirmed against installed `google-adk 1.33.0`; `google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.tools.FunctionTool` verified with `-W error::DeprecationWarning` — all PASS. |
 | 1.32.0 | May 1, 2026 | Stable patch release. Version confirmed against installed `google-adk 1.32.0` (`.routine-envs/check-googadk-0501`); `google.adk.agents.Agent` import verified with `-W error::DeprecationWarning`. |

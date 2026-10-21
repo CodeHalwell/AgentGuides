@@ -7,7 +7,7 @@ sidebar:
   order: 80
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
 
 ## Planners
 

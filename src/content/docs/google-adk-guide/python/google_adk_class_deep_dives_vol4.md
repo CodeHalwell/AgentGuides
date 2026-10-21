@@ -1,13 +1,13 @@
 ---
-title: "Class Deep Dives Vol. 4 — v2.9.2"
-description: "Source-verified deep dives for 10 classes new or deepened in google-adk 2.9.2: SimplePromptOptimizer, GEPARootAgentOptimizer, Sampler, LocalEvalSampler, TelemetryConfig, UrlContextTool, Skill, SkillRegistry, SkillToolset, and VertexAiRagMemoryService."
+title: "Class Deep Dives Vol. 4"
+description: "Source-verified deep dives for 10 classes new or deepened first written for google-adk 2.9.2: SimplePromptOptimizer, GEPARootAgentOptimizer, Sampler, LocalEvalSampler, TelemetryConfig, UrlContextTool, Skill, SkillRegistry, SkillToolset, and VertexAiRagMemoryService."
 framework: google-adk
 language: python
 sidebar:
   order: 130
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.9.2** (installed in a venv, introspected with `inspect.getsource`). The ten classes cover the **optimization module** (prompt engineering automation, deepened here beyond the overview in the Class & API reference), per-request telemetry control, the Gemini URL-context tool, the skills subsystem, and RAG-backed memory — areas either absent from earlier guides or covered only superficially.
+First written for google-adk 2.9.2 (installed and introspected with `inspect.getsource`); imports, constructor signatures and fields re-checked against `google-adk` %%version=google-adk%% on %%versions-checked%%. Changes since then: `SkillToolset` has since gained `discovery_mode`, `lifecycle_config` (experimental, `ADK_ENABLE_SKILL_LIFECYCLE=1`) and `save_output_artifacts`, plus `load_skill` / `unload_skill` / `list_active_skills` methods; `TelemetryConfig` gained `experimental_features_opt_in`. The ten classes cover the **optimization module** (prompt engineering automation, deepened here beyond the overview in the Class & API reference), per-request telemetry control, the Gemini URL-context tool, the skills subsystem, and RAG-backed memory — areas either absent from earlier guides or covered only superficially.
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|

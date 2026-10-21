@@ -7,7 +7,7 @@ sidebar:
   order: 50
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 
@@ -40,7 +40,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`InMemoryRunner` subclasses `Runner` and wires in `InMemorySessionService` + `InMemoryMemoryService` + `InMemoryArtifactService` (`runners.py:1970`).
+`InMemoryRunner` subclasses `Runner` and wires in `InMemorySessionService` + `InMemoryMemoryService` + `InMemoryArtifactService` (`runners.py`).
 
 ## The App container
 
@@ -91,7 +91,7 @@ runner = Runner(
 )
 ```
 
-Exactly one of `app=`, `agent=`, or `node=` is required (`runners.py:196-274`). `plugins=` on the runner is **deprecated** — pass them through `App(plugins=[...])` instead. `auto_create_session=True` is a convenience flag — when the session service returns `None`, the runner creates one on the fly; otherwise it raises `SessionNotFoundError` with an app-name alignment hint.
+Exactly one of `app=`, `agent=`, or `node=` is required (`runners.py`). `plugins=` on the runner is **deprecated** — pass them through `App(plugins=[...])` instead. `auto_create_session=True` is a convenience flag — when the session service returns `None`, the runner creates one on the fly; otherwise it raises `SessionNotFoundError` with an app-name alignment hint.
 
 ### Key methods
 
@@ -277,7 +277,7 @@ cfg = RunConfig(
 
 ### The full `RunConfig` — every field in one runnable example
 
-Source-verified against `google.adk.agents.run_config` (google-adk==2.7.1). Every field is optional; the example below sets each one at least once so you can see the exact call site and type. Copy-paste-delete to build your own.
+Source-verified against `google.adk.agents.run_config` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Every field is optional; the example below sets each one at least once so you can see the exact call site and type. Copy-paste-delete to build your own.
 
 ```python
 from google.genai import types
@@ -381,7 +381,7 @@ svc = VertexAiSessionService(
 )
 ```
 
-`DatabaseSessionService.create_session`/`get_session` run the underlying SQL inside an async session factory; Postgres and MySQL use row-level locking for concurrent `append_event` (`database_session_service.py:282-320`).
+`DatabaseSessionService.create_session`/`get_session` run the underlying SQL inside an async session factory; Postgres and MySQL use row-level locking for concurrent `append_event` (`database_session_service.py`).
 
 ---
 
@@ -744,7 +744,7 @@ Migrate by re-creating the DB file (for dev) or using `DatabaseSessionService` w
 
 ## Session state
 
-Access via `ctx.state` in callbacks and tools. State is a `dict`-like object with three reserved prefixes (`sessions/state.py:64-66`):
+Access via `ctx.state` in callbacks and tools. State is a `dict`-like object with three reserved prefixes (`sessions/state.py`):
 
 | Prefix | Lifetime | Example |
 |---|---|---|
@@ -798,7 +798,7 @@ runner = Runner(
 
 ### `ContextCacheConfig` — the `create_http_options` timeout knob
 
-Source-verified against `google.adk.agents.context_cache_config` (google-adk==2.7.1). `create_http_options` is often overlooked but essential in production: **when Gemini's `CachedContent.create()` call is slow** (network hiccup, quota spike), your first request of a new session would otherwise stall waiting for the cache to be created. Setting a timeout tells ADK to give up on cache creation and just serve the request uncached rather than pinning the request.
+Source-verified against `google.adk.agents.context_cache_config` (first verified in 2.7.1; re-checked against %%version=google-adk%%). `create_http_options` is often overlooked but essential in production: **when Gemini's `CachedContent.create()` call is slow** (network hiccup, quota spike), your first request of a new session would otherwise stall waiting for the cache to be created. Setting a timeout tells ADK to give up on cache creation and just serve the request uncached rather than pinning the request.
 
 ```python
 from google.genai import types

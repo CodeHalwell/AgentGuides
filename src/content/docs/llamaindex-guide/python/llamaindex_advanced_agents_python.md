@@ -171,52 +171,64 @@ Tell the model what a rejection means ("Do not retry") in the tool's return valu
 
 ### 4.2 Approval that outlives the process
 
-When approval comes from a ticket or a chat message hours later, stop the run once it asks, store the context, and resume when the answer arrives:
+When approval comes from a ticket or a chat message hours later, the run has to be stored and resumed in another process. A prebuilt agent paused *inside a tool* cannot currently be resumed that way — its chat memory is skipped when the context is serialised — so model the approval as a small custom workflow whose state is plain data, and call the agent (or the risky action) from its steps:
 
 ```python
-async def start(prompt: str) -> tuple[dict, str]:
-    handler = dba.run(user_msg=prompt)
+from llama_index.core.workflow import Workflow, step, StartEvent, StopEvent
+
+class ApprovalFlow(Workflow):
+    @step
+    async def request(self, ctx: Context, ev: StartEvent) -> InputRequiredEvent:
+        await ctx.store.set("action", ev.action)
+        return InputRequiredEvent(prefix=f"Approve: {ev.action}? ")
+
+    @step
+    async def execute(self, ctx: Context, ev: HumanResponseEvent) -> StopEvent:
+        action = await ctx.store.get("action")
+        if ev.response.strip().lower() != "yes":
+            return StopEvent(result=f"Rejected: {action}")
+        # ... perform the action, or run an agent to do it ...
+        return StopEvent(result=f"Done: {action}")
+
+async def start(action: str) -> dict:
+    handler = ApprovalFlow(timeout=None).run(action=action)
     async for ev in handler.stream_events():
         if isinstance(ev, InputRequiredEvent):
             saved = handler.ctx.to_dict(serializer=JsonSerializer())
             await handler.cancel_run()
-            return saved, ev.prefix         # persist `saved`, show `prefix` to a human
-    raise RuntimeError("finished without needing approval")
+            return saved                      # persist; show ev.prefix to a human
 
-async def resume(saved: dict, answer: str):
-    ctx = Context.from_dict(dba, saved, serializer=JsonSerializer())
-    handler = dba.run(ctx=ctx)
+async def resume(saved: dict, answer: str) -> str:
+    flow = ApprovalFlow(timeout=None)
+    ctx = Context.from_dict(flow, saved, serializer=JsonSerializer())
+    handler = flow.run(ctx=ctx)
     handler.ctx.send_event(HumanResponseEvent(response=answer))
     return await handler
 ```
 
-The waiting tool is re-entered on resume and receives the `HumanResponseEvent`. Keep tool code before `wait_for_event` side-effect-free, because it runs again.
+`timeout=None` matters: the default workflow timeout would otherwise expire while a human thinks.
 
 ---
 
 ## 5. Durable conversations
 
-Serialise `Context` per conversation and keep it in any key-value store:
+Keep one `Context` per conversation while the process is alive. Across processes, persist the chat history with a database-backed `Memory`, keyed by a stable session ID:
 
 ```python
-import json
-import redis.asyncio as redis
+from llama_index.core.memory import Memory
 
-r = redis.from_url("redis://localhost:6379")
 assistant = FunctionAgent(tools=[search_docs], llm=llm)
 
 async def chat(session_id: str, message: str) -> str:
-    raw = await r.get(f"ctx:{session_id}")
-    ctx = (
-        Context.from_dict(assistant, json.loads(raw), serializer=JsonSerializer())
-        if raw else Context(assistant)
+    memory = Memory.from_defaults(
+        session_id=session_id,
+        async_database_uri="postgresql+asyncpg://app:secret@db/agents",  # or sqlite+aiosqlite:///chat.db
+        token_limit=40_000,
     )
-    result = await assistant.run(user_msg=message, ctx=ctx)
-    await r.set(f"ctx:{session_id}", json.dumps(ctx.to_dict(serializer=JsonSerializer())), ex=86_400)
-    return str(result)
+    return str(await assistant.run(user_msg=message, memory=memory))
 ```
 
-Alternatively pass `memory=Memory.from_defaults(session_id=..., async_database_uri="postgresql+asyncpg://...")` and let `Memory` persist the chat history in SQL; `Context` persistence also covers custom state.
+Serialising the agent's `Context` (`ctx.to_dict(serializer=JsonSerializer())`) preserves your own state keys but not the chat history, so use it for state and `Memory` for history.
 
 ---
 

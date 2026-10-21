@@ -1,6 +1,6 @@
 ---
 title: "Chapter 2 — Your First Agent"
-description: "Build linear pipelines, conditional routers, looping agents, ReAct tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads. Verified against langgraph==1.2.12."
+description: "Build linear pipelines, conditional routers, looping agents, ReAct tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads."
 framework: langgraph
 language: python
 sidebar:
@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** six concrete agent patterns you can copy-paste and adapt — a linear chat pipeline, conditional routing, looping with a safeguard counter, a ReAct tool-calling agent with `create_react_agent`, `tools_condition` for routing, and streaming execution.
 
-Verified against **`langgraph==1.2.12`**.
+Verified against **`langgraph==%%version=langgraph%%`**.
 
 **Time:** ~25 minutes.
 
@@ -32,7 +32,7 @@ from langchain_core.messages import SystemMessage
 
 # Construct the model ONCE at module scope — reusing across node calls avoids
 # unnecessary client-creation overhead in production.
-model = ChatAnthropic(model="claude-sonnet-5")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 def call_model(state: MessagesState) -> dict:
     """Call the LLM with the full message history."""
@@ -94,7 +94,7 @@ class State(TypedDict):
     query_type: str
     result: str
 
-model = ChatAnthropic(model="claude-sonnet-5")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 
 def classify_query(state: State) -> dict:
@@ -220,7 +220,7 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[get_weather, convert_currency],
     checkpointer=InMemorySaver(),
     prompt="You are a helpful travel assistant. Answer concisely.",
@@ -295,7 +295,7 @@ def calculator(expression: str) -> str:
         return f"Error: {e}"
 
 
-model = ChatAnthropic(model="claude-sonnet-5").bind_tools([search, calculator])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([search, calculator])
 
 
 def agent_node(state: MessagesState) -> dict:
@@ -355,7 +355,7 @@ def multiply(a: float, b: float) -> float:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[multiply],
 )
 

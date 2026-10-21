@@ -7,7 +7,7 @@ sidebar:
   order: 75
 ---
 
-Verified against google-adk==2.4.0 (`google/adk/evaluation/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.4.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/evaluation/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted.
 
 ADK ships a first-class evaluation framework built around three concepts: **`EvalCase`** (a single conversation to run), **`EvalSet`** (a collection of cases), and **`AgentEvaluator`** (the engine that runs cases against a live agent and scores the results). The framework integrates with `pytest` and supports custom metrics.
 
@@ -245,7 +245,7 @@ ToolTrajectoryCriterion(threshold=1.0, match_type=ToolTrajectoryCriterion.MatchT
 
 ## `AgentEvaluator`
 
-The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (source-verified for google-adk==2.3.0).
+The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (first source-verified for 2.3.0; re-checked against %%version=google-adk%%).
 
 ### `evaluate_eval_set` — programmatic, in-memory
 
@@ -446,7 +446,7 @@ asyncio.run(main())
 
 ### `evaluate_eval_set` — CSV output, preloaded artifacts, results manager
 
-Source-verified against `google.adk.evaluation.agent_evaluator.evaluate_eval_set` (google-adk==2.7.1). Three params are worth calling out because they're often ignored and each solves a real reporting problem.
+Source-verified against `google.adk.evaluation.agent_evaluator.evaluate_eval_set` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Three params are worth calling out because they're often ignored and each solves a real reporting problem.
 
 ```python
 import asyncio

@@ -399,7 +399,7 @@ agent = Agent(
 
 **Module:** `agent_framework._sessions` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.SESSION_STORE` opt-in.
+> **Experimental** (`ExperimentalFeature.SESSION_STORE`): there is no opt-in call; first use emits an `ExperimentalWarning`.
 
 `FileSessionStore` persists `AgentSession` snapshots to the local filesystem — one file per session. JSON is the default format; pass `serialization_format="msgpack"` for a more compact binary representation. Writes are atomic (temp-file + `os.replace`) so readers never see a partial write. The store is process-local; concurrent writers across processes use last-writer-wins semantics.
 
@@ -434,9 +434,8 @@ import asyncio
 from pathlib import Path
 from agent_framework import Agent, AgentSession
 from agent_framework._sessions import FileSessionStore
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.SESSION_STORE)
+# SESSION_STORE is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 STORE = FileSessionStore(Path("/var/myapp/sessions"))
 
@@ -455,9 +454,8 @@ asyncio.run(chat("user-42", "What were we talking about last time?"))
 ```python
 from pathlib import Path
 from agent_framework._sessions import FileSessionStore
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.SESSION_STORE)
+# SESSION_STORE is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 # Binary format is faster to read/write and about 30% smaller than JSON
 store = FileSessionStore(
@@ -487,7 +485,7 @@ def safe_session_id(raw_id: str) -> str:
 
 **Module:** `agent_framework._harness._loop` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.HARNESS` opt-in.
+> **Experimental** (`ExperimentalFeature.HARNESS`): there is no opt-in call; first use emits an `ExperimentalWarning`.
 
 `AgentLoopMiddleware` is an `AgentMiddleware` that re-runs an agent in a loop until a `should_continue` predicate returns `False` or `max_iterations` is reached. Use `AgentLoopMiddleware.with_judge(judge_client)` to drive the loop with a second LLM that judges whether the original request was satisfactorily answered.
 
@@ -558,9 +556,8 @@ Creates a loop whose stop condition is determined by a second LLM (`judge_client
 import asyncio
 from agent_framework import Agent, AgentResponse
 from agent_framework._harness._loop import AgentLoopMiddleware
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.HARNESS)
+# HARNESS is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 async def should_continue(*, iteration: int, last_result: AgentResponse, **kwargs) -> bool:
     return iteration < 5 and "DONE" not in last_result.text
@@ -583,9 +580,8 @@ print(response.text)
 import asyncio
 from agent_framework import Agent
 from agent_framework._harness._loop import AgentLoopMiddleware
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.HARNESS)
+# HARNESS is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 agent = Agent(
     client=my_client,
@@ -610,9 +606,8 @@ print(response.text)
 ```python
 from agent_framework import Agent, AgentResponse, Message
 from agent_framework._harness._loop import AgentLoopMiddleware
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.HARNESS)
+# HARNESS is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 async def should_continue(
     *, iteration: int, last_result: AgentResponse, **kwargs
@@ -777,7 +772,7 @@ result = await workflow.run(input_text, function_invocation_kwargs=multi_lingual
 
 **Module:** `agent_framework._workflows._functional` (re-exported via `agent_framework`)
 
-> **Experimental:** requires `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` opt-in.
+> **Experimental** (`ExperimentalFeature.FUNCTIONAL_WORKFLOWS`): there is no opt-in call; first use emits an `ExperimentalWarning`.
 
 `StepWrapper` is the object returned by the `@step` decorator in functional workflows. You never construct it directly — you obtain it by decorating an `async` function with `@step`. Inside a `@workflow` function, calls to a `StepWrapper` are intercepted to provide result caching, event emission, `RunContext` injection, and per-step checkpointing. Outside a workflow (e.g., in unit tests), the wrapper is transparent and calls the original function directly.
 
@@ -831,9 +826,8 @@ StepWrapper(
 ```python
 import asyncio
 from agent_framework._workflows._functional import step, workflow, RunContext
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
+# FUNCTIONAL_WORKFLOWS is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 @step
 async def fetch_data(url: str) -> str:
@@ -868,9 +862,8 @@ asyncio.run(main())
 import asyncio
 import hashlib
 from agent_framework._workflows._functional import step, workflow
-from agent_framework.experimental import enable_experimental, ExperimentalFeature
-
-enable_experimental(ExperimentalFeature.FUNCTIONAL_WORKFLOWS)
+# FUNCTIONAL_WORKFLOWS is experimental: no opt-in call is needed, the first use emits an
+# ExperimentalWarning (agent_framework._feature_stage) that you can filter if you wish.
 
 @step(replay_key=lambda url, **_: hashlib.sha256(url.encode()).hexdigest())
 async def fetch_page(url: str) -> str:

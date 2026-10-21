@@ -1,13 +1,13 @@
 ---
-title: "Class Deep Dives Vol. 6 — v2.11.0"
-description: "Source-verified deep dives for 10 entries in google-adk 2.11.0: Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App, LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, and ToolboxToolset."
+title: "Class Deep Dives Vol. 6"
+description: "Source-verified deep dives of 10 entries, first written for google-adk 2.11.0: Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App, LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, and ToolboxToolset."
 framework: google-adk
 language: python
 sidebar:
   order: 136
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.11.0**. The ten entries span the **workflow engine** (the DAG orchestrator that replaces LoopAgent and ParallelAgent), the **application container** (`App` with compaction and resumability), **advanced LlmAgent fields**, and toolsets/services covering REST APIs (`OpenAPIToolset`), A2A peers (`RemoteA2aAgent`), GCS artifacts (`GcsArtifactService`), Pub/Sub (`PubSubToolset`), and the MCP Toolbox (`ToolboxToolset`).
+First written for google-adk 2.11.0 (installed and introspected with `inspect.getsource`); imports, constructor signatures and fields re-checked against `google-adk` %%version=google-adk%% on %%versions-checked%%. Changes since then: `FunctionNode` has since gained `require_confirmation` (2.12.0), which pauses for human approval before the node runs. The ten entries span the **workflow engine** (the DAG orchestrator that replaces LoopAgent and ParallelAgent), the **application container** (`App` with compaction and resumability), **advanced LlmAgent fields**, and toolsets/services covering REST APIs (`OpenAPIToolset`), A2A peers (`RemoteA2aAgent`), GCS artifacts (`GcsArtifactService`), Pub/Sub (`PubSubToolset`), and the MCP Toolbox (`ToolboxToolset`).
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|
@@ -1361,4 +1361,4 @@ async def main():
 
 ## Version note
 
-All field names, defaults, and call signatures are verified against **google-adk==2.11.0** installed from PyPI.  Check `pip show google-adk` to confirm your installed version.
+First written for google-adk 2.11.0; field names, defaults and call signatures re-checked against %%version=google-adk%%. Check `pip show google-adk` to confirm your installed version.

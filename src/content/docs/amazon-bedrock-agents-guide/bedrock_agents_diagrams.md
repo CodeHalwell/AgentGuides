@@ -8,6 +8,8 @@ framework: amazon-bedrock-agents
 
 Comprehensive visual representations of Bedrock Agents architecture, data flows, and deployment patterns.
 
+These diagrams describe **Bedrock Agents (Agents Classic)**, which has been in maintenance mode — closed to new customers — since 30 July 2026. For the AgentCore architecture that AWS recommends for new agents, see the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#agentcore-architecture).
+
 ---
 
 ## 1. Core Agent Architecture
@@ -26,7 +28,7 @@ User Input
              ↓
 ┌─────────────────────────────┐
 │  Foundation Model           │
-│  - Claude 3.5 Sonnet       │
+│  - Claude Sonnet 5.5       │
 │  - Reasoning Phase          │
 │  - Action Selection         │
 │  - Code Interpretation      │
@@ -61,11 +63,11 @@ User Input
 └──────────────────────┬───────────────────────────────────────┘
                        │
 ┌──────────────────────▼───────────────────────────────────────┐
-│            Agent Orchestration & Routing Layer (AgentCore)   │
+│            Agent Orchestration & Routing Layer (Bedrock)     │
 │  - Request Reception        - Session Management             │
 │  - Agent Selection          - State Tracking                 │
 │  - Multi-Agent Coordination - Error Handling                 │
-│  - Code Interpretation      - A2A Protocol                   │
+│  - Code Interpretation      - Agent Memory                   │
 └──────────────────────┬───────────────────────────────────────┘
                        │
         ┌──────────────┼──────────────┐
@@ -86,9 +88,9 @@ User Input
 │  Foundation  │ │  Action      │ │  Knowledge   │
 │  Models      │ │  Groups      │ │  Bases       │
 │              │ │              │ │              │
-│ Claude 3     │ │ Lambda Funcs │ │ OpenSearch   │
-│ Llama 2      │ │ APIs         │ │ Pinecone     │
-│ Titan        │ │ Step Funcs   │ │ Kendra       │
+│ Claude 5.5   │ │ Lambda Funcs │ │ OpenSearch   │
+│ Llama        │ │ APIs         │ │ Pinecone     │
+│ Nova         │ │ Step Funcs   │ │ Kendra       │
 └──────┬───────┘ └──────┬───────┘ └──────┬───────┘
        │                │                │
        └────────────────┼────────────────┘
@@ -120,7 +122,7 @@ User Input
                     │  - Intent Analysis │
                     │  - Task Planning   │
                     │  - Routing Logic   │
-                    │  (A2A Protocol)    │
+                    │  (SUPERVISOR)      │
                     └─────────┬──────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
@@ -237,6 +239,8 @@ User Task: "I want to know my account balance and update my contact information"
 ```
 
 ### API Action Group Flow
+
+Bedrock Agents has no built-in HTTP executor: the HTTP call below runs inside the action group's Lambda function or, with return of control (`RETURN_CONTROL`), in your application, which sends the result back on the next `invoke_agent` call.
 
 ```
 Agent Decision: "I need to check external system status"
@@ -458,8 +462,8 @@ Bedrock Guardrails Coverage Matrix
 │  ┌──────────────────────────────────────┐             │
 │  │  Amazon Bedrock Agent                │             │
 │  │  - Agent ID: ag-12345                │             │
-│  │  - Foundation Model: Claude 3        │             │
-│  │  - Status: ACTIVE                    │             │
+│  │  - Foundation Model: Claude 5.5      │             │
+│  │  - Status: PREPARED                  │             │
 │  └──────────────────────────────────────┘             │
 │                                                        │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐            │

@@ -1,16 +1,16 @@
 ---
 title: "Microsoft Agent Framework Comprehensive Guide"
-description: "Document Version: 1.0 Last Updated: April 2026 Target Audience: Developers from beginner to expert level Coverage: Unified SDK and Azure Ecosystem Integration"
+description: "Language-neutral overview of the Microsoft Agent Framework — architecture, agent lifecycle, simple agents and multi-agent systems — with pointers to the verified Python and .NET guides."
 framework: microsoft-agent-framework
 ---
 
 # Microsoft Agent Framework Comprehensive Guide
-## **GA 1.0** (April 2026) - Beginner to Expert
 
-**Document Version:** 1.0  
-**Last Updated:** April 2026  
-**Target Audience:** Developers from beginner to expert level  
+**Current releases:** `agent-framework` %%version=agent-framework%% (Python) · `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET) — the two version independently. Reviewed %%versions-checked%%.
+**Target Audience:** Developers from beginner to expert level
 **Coverage:** Unified SDK and Azure Ecosystem Integration
+
+> The code on this page dates from the April 2026 GA and is illustrative. For examples checked against the current packages, use the [Python guide](/microsoft-agent-framework-guide/python/) and the [.NET guide](/microsoft-agent-framework-guide/dotnet/).
 
 ---
 
@@ -27,9 +27,9 @@ This page is the language-neutral overview. Tools, structured output, MCP, memor
 
 ## Introduction
 
-The Microsoft Agent Framework (GA 1.0, April 2026) represents a unified, open-source development kit designed to facilitate the creation, orchestration, and deployment of AI agents and multi-agent workflows across .NET and Python platforms. This framework directly unifies **Semantic Kernel** and **AutoGen** into a single production-ready SDK, providing a comprehensive foundation for building sophisticated AI agents.
+The Microsoft Agent Framework (generally available since April 2026) represents a unified, open-source development kit designed to facilitate the creation, orchestration, and deployment of AI agents and multi-agent workflows across .NET and Python platforms. This framework directly unifies **Semantic Kernel** and **AutoGen** into a single production-ready SDK, providing a comprehensive foundation for building sophisticated AI agents.
 
-> **Note (GA 1.0):** `ChatClientAgentOptions.Instructions` has been removed in GA 1.0. Use the `SystemPrompt` property on the agent configuration instead.
+> **Note (GA 1.0):** `ChatClientAgentOptions.Instructions` was removed in GA 1.0. On .NET, pass `instructions:` to the `ChatClientAgent` constructor (or to `AsAIAgent(...)`); on Python, pass `instructions=` to `Agent`.
 
 ### Key Objectives
 
@@ -366,17 +366,17 @@ async def main():
     # Create credentials (uses Azure CLI or environment variables)
     async with AzureCliCredential() as credential:
         # Initialize Azure AI agent client
-        async with FoundryChatClient(credential=credential) as client:
-            # Create a chat agent with system instructions
-            agent = Agent(
-                client=client,
-                instructions="You are a helpful assistant specialising in Python programming. "
-                            "Provide clear, concise explanations with code examples when appropriate."
-            )
-            
-            # Run agent with a user query
-            response = await agent.run("How do I implement async/await in Python?")
-            print(f"Assistant: {response.text}")
+        client = FoundryChatClient(credential=credential)
+        # Create a chat agent with system instructions
+        agent = Agent(
+            client=client,
+            instructions="You are a helpful assistant specialising in Python programming. "
+                        "Provide clear, concise explanations with code examples when appropriate."
+        )
+
+        # Run agent with a user query
+        response = await agent.run("How do I implement async/await in Python?")
+        print(f"Assistant: {response.text}")
 
 # Execute
 asyncio.run(main())
@@ -405,7 +405,7 @@ var client = new AzureOpenAIClient(
 
 // Create an AI agent from the chat client
 var chatClient = client.GetChatClient("gpt-4o-mini");
-var agent = chatClient.CreateAIAgent(
+var agent = chatClient.AsAIAgent(
     instructions: "You are a helpful assistant that explains concepts clearly."
 );
 
@@ -439,17 +439,17 @@ async def get_weather(location: Annotated[str, "City name, e.g., 'London'"],
 
 async def main():
     async with AzureCliCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            # Create agent with integrated tool
-            agent = Agent(
-                client=client,
-                tools=[get_weather],
-                instructions="You are a weather assistant. Help users check weather in different cities."
-            )
-            
-            # Agent will automatically use the tool when appropriate
-            response = await agent.run("What's the weather in London and Paris?")
-            print(response.text)
+        client = FoundryChatClient(credential=credential)
+        # Create agent with integrated tool
+        agent = Agent(
+            client=client,
+            tools=[get_weather],
+            instructions="You are a weather assistant. Help users check weather in different cities."
+        )
+
+        # Agent will automatically use the tool when appropriate
+        response = await agent.run("What's the weather in London and Paris?")
+        print(response.text)
 
 asyncio.run(main())
 ```
@@ -487,7 +487,7 @@ async Task Main()
     var chatClient = client.GetChatClient("gpt-4o-mini");
     
     // Create agent with function tool
-    var agent = chatClient.CreateAIAgent(
+    var agent = chatClient.AsAIAgent(
         instructions: "You are a weather assistant.",
         tools: [AIFunctionFactory.Create(GetWeather)]
     );
@@ -539,9 +539,8 @@ class ManagedChatAgent:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Termination phase - cleanup resources"""
         if self.agent:
-            await self.agent.close()
-        if self.client:
-            await self.client.close()
+            await self.agent.close()   # releases MCP tools / context providers the agent owns
+        # FoundryChatClient has no close(); its project client is released with the credential.
         if self.credential:
             await self.credential.close()
     
@@ -774,13 +773,13 @@ class CodeReviewAgent(SpecialisedAgent):
 # Usage
 async def main():
     async with AzureCliCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            # Use specialised agents
-            analysis_agent = DataAnalysisAgent(client)
-            result = await analysis_agent.execute("sales_data.csv")
-            
-            review_agent = CodeReviewAgent(client)
-            result = await review_agent.execute("def hello(): print('hi')")
+        client = FoundryChatClient(credential=credential)
+        # Use specialised agents
+        analysis_agent = DataAnalysisAgent(client)
+        result = await analysis_agent.execute("sales_data.csv")
+
+        review_agent = CodeReviewAgent(client)
+        result = await review_agent.execute("def hello(): print('hi')")
 ```
 
 ### Testing Individual Agents
@@ -842,12 +841,12 @@ import os
 async def real_agent():
     """Fixture providing a real agent for integration tests"""
     async with DefaultAzureCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            agent = Agent(
-                client=client,
-                instructions="You are a helpful assistant."
-            )
-            yield agent
+        client = FoundryChatClient(credential=credential)
+        agent = Agent(
+            client=client,
+            instructions="You are a helpful assistant."
+        )
+        yield agent
 
 @pytest.mark.asyncio
 @pytest.mark.integration
@@ -862,13 +861,13 @@ async def test_agent_responds_to_query(real_agent):
 @pytest.mark.integration
 async def test_agent_conversation_context(real_agent):
     """Integration test: agent maintains conversation context"""
-    thread = real_agent.get_new_thread()
+    session = real_agent.create_session()
     
     # First message
-    response1 = await real_agent.run("My name is Alice", thread=thread)
+    response1 = await real_agent.run("My name is Alice", session=session)
     
     # Second message - agent should remember the context
-    response2 = await real_agent.run("What's my name?", thread=thread)
+    response2 = await real_agent.run("What's my name?", session=session)
     
     assert response1.text is not None
     assert "Alice" in response2.text
@@ -956,12 +955,12 @@ class MultiAgentSystem:
 # Usage
 async def main():
     async with AzureCliCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            multi_agent = MultiAgentSystem(client)
-            result = await multi_agent.orchestrate("Market trends in AI")
-            print("Research:", result["research"])
-            print("Analysis:", result["analysis"])
-            print("Recommendations:", result["recommendations"])
+        client = FoundryChatClient(credential=credential)
+        multi_agent = MultiAgentSystem(client)
+        result = await multi_agent.orchestrate("Market trends in AI")
+        print("Research:", result["research"])
+        print("Analysis:", result["analysis"])
+        print("Recommendations:", result["recommendations"])
 
 asyncio.run(main())
 ```

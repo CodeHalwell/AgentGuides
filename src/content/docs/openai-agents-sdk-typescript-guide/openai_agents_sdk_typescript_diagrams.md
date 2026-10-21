@@ -1,12 +1,13 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Architecture Diagrams & Visual Guides"
-description: "Version: 1.0 Focus: Architecture patterns, component relationships, flow diagrams"
+description: "Architecture patterns, component relationships and flow diagrams for the OpenAI Agents SDK in TypeScript."
 framework: openai-agents-sdk-typescript
 ---
 
 # OpenAI Agents SDK TypeScript: Architecture Diagrams & Visual Guides
 
-**Version:** 1.0  
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
+
 **Focus:** Architecture patterns, component relationships, flow diagrams
 
 ---

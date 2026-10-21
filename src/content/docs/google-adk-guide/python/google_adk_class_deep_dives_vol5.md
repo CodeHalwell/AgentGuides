@@ -1,13 +1,13 @@
 ---
-title: "Class Deep Dives Vol. 5 — v2.11.0"
-description: "Source-verified deep dives for 10 classes in google-adk 2.11.0: Event, EventActions, Context (unified CallbackContext/ToolContext), FunctionTool, LongRunningFunctionTool, AuthConfig, DatabaseSessionService, SqliteSessionService, VertexAiSessionService, and VertexAiSearchTool."
+title: "Class Deep Dives Vol. 5"
+description: "Source-verified deep dives of 10 classes, first written for google-adk 2.11.0: Event, EventActions, Context (unified CallbackContext/ToolContext), FunctionTool, LongRunningFunctionTool, AuthConfig, DatabaseSessionService, SqliteSessionService, VertexAiSessionService, and VertexAiSearchTool."
 framework: google-adk
 language: python
 sidebar:
   order: 135
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.11.0**. The ten classes span the **event model** (the data flowing through every agent run), the **unified context** object that callbacks and tools share, **tool mechanics** (bare Python functions, long-running async tools, and argument validation), the **auth flow**, all three **session storage backends** available out of the box, and **Vertex AI Search** grounding.
+First written for google-adk 2.11.0 (installed and introspected with `inspect.getsource`); imports, constructor signatures and fields re-checked against `google-adk` %%version=google-adk%% on %%versions-checked%%. Changes since then: `SqliteSessionService` has since gained an async `close()`. The ten classes span the **event model** (the data flowing through every agent run), the **unified context** object that callbacks and tools share, **tool mechanics** (bare Python functions, long-running async tools, and argument validation), the **auth flow**, all three **session storage backends** available out of the box, and **Vertex AI Search** grounding.
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|
@@ -255,7 +255,7 @@ def route_to_billing(tool_context: ToolContext) -> str:
 
 **Module:** `google.adk.agents.context`
 
-As of ADK 2.10.0, `CallbackContext` and `ToolContext` are both type aliases for `Context`. All three names are interchangeable at runtime. The unification means callbacks and tools share the same surface without wrapper boilerplate.
+Throughout 2.x (checked in 2.7.1 and the current release), `CallbackContext` and `ToolContext` are both type aliases for `Context`. All three names are interchangeable at runtime. The unification means callbacks and tools share the same surface without wrapper boilerplate.
 
 ```python
 # These three imports all give you the same class:
@@ -1469,4 +1469,4 @@ agent = LlmAgent(
 
 ## Version note
 
-Verified against **google-adk==2.11.0**. `Context`, `CallbackContext`, and `ToolContext` are all aliases for the same class in 2.11.0 — use whichever name is most readable in context. `DatabaseSessionService`, `SqliteSessionService`, `VertexAiSessionService`, `LongRunningFunctionTool`, and `AuthConfig` are all available in 2.11.0.
+First written for google-adk 2.11.0; re-checked against %%version=google-adk%%. `Context`, `CallbackContext`, and `ToolContext` are all aliases for the same class — use whichever name is most readable in context. `DatabaseSessionService`, `SqliteSessionService`, `VertexAiSessionService`, `LongRunningFunctionTool`, and `AuthConfig` are all available from 2.11.0 onwards.

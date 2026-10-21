@@ -1,6 +1,6 @@
 ---
-title: "Class Deep Dives Vol. 3 — 10 API Classes (v1.2.16)"
-description: "Source-verified deep dives for BinaryOperatorAggregate, Topic, EphemeralValue, LastValue/LastValueAfterFinish, GraphCallbackHandler/events, ToolNode, MessagesState/add_messages, UIMessage/RemoveUIMessage, Runtime/ExecutionInfo/RunControl, and HumanResponse — each with multiple runnable code examples. Verified against langgraph==1.2.16."
+title: "Class Deep Dives Vol. 3 — 10 API Classes"
+description: "Source-verified deep dives for BinaryOperatorAggregate, Topic, EphemeralValue, LastValue/LastValueAfterFinish, GraphCallbackHandler/events, ToolNode, MessagesState/add_messages, UIMessage/RemoveUIMessage, Runtime/ExecutionInfo/RunControl, and HumanResponse — each with multiple runnable code examples."
 framework: langgraph
 language: python
 sidebar:
@@ -8,9 +8,9 @@ sidebar:
   order: 45
 ---
 
-# Class Deep Dives Vol. 3 — 10 API Classes (v1.2.16)
+# Class Deep Dives Vol. 3 — 10 API Classes
 
-> **Source-verified against `langgraph==1.2.16`** — October 2026.
+> **Source-verified against `langgraph==%%version=langgraph%%`** (checked %%versions-checked%%).
 
 This third volume dives into ten classes spanning channels, observability, the prebuilt
 tool layer, message state, UI streaming, and the unified run-context API. Each section
@@ -1302,8 +1302,11 @@ for chunk in graph.stream({}, context=Ctx(), stream_mode="custom"):
 **Status:** Stable.
 
 > **Note on related deprecated types** — `HumanInterruptConfig`, `ActionRequest`, and
-> `HumanInterrupt` have all been **moved to `langchain.agents.interrupt`** as of
-> `langgraph==1.0.0`. Import them from there. `HumanResponse` remains in
+> `HumanInterrupt` have been deprecated since `langgraph==1.0.0`. Their deprecation
+> message points to `langchain.agents.interrupt`, but that module does not exist in
+> `langchain` 1.4.x; agents built with `create_agent` use `HumanInTheLoopMiddleware`
+> and the `HITLRequest` / `HITLResponse` types from
+> `langchain.agents.middleware.human_in_the_loop`. `HumanResponse` remains in
 > `langgraph.prebuilt.interrupt` and is not deprecated.
 
 ### What it is
@@ -1437,4 +1440,4 @@ def batch_review_node(state: dict) -> dict:
 | `UIMessage` / `RemoveUIMessage` | `langgraph.graph.ui` | 1.1.x |
 | `Runtime` / `ExecutionInfo` / `RunControl` | `langgraph.runtime` | 0.6.0 |
 | `HumanResponse` | `langgraph.prebuilt.interrupt` | 0.2 |
-| `HumanInterruptConfig` / `ActionRequest` / `HumanInterrupt` | `langchain.agents.interrupt` *(moved)* | deprecated in 1.0 |
+| `HumanInterruptConfig` / `ActionRequest` / `HumanInterrupt` | `langgraph.prebuilt.interrupt` *(deprecated)* | deprecated in 1.0 |

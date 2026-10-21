@@ -612,7 +612,7 @@ WorkflowAgent(
 ```python
 import asyncio
 from agent_framework import Agent, WorkflowAgent, tool, executor
-from agent_framework._workflows import WorkflowBuilder
+from agent_framework import WorkflowBuilder
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
 from agent_framework.openai import OpenAIChatClient
@@ -679,7 +679,7 @@ asyncio.run(main())
 ```python
 import asyncio
 from agent_framework import Agent, WorkflowAgent, tool, executor
-from agent_framework._workflows import WorkflowBuilder
+from agent_framework import WorkflowBuilder
 from agent_framework._workflows._workflow_context import WorkflowContext
 from agent_framework._types import Message
 from agent_framework.orchestrations import GroupChatBuilder
@@ -793,7 +793,7 @@ ctx.request_id -> str | None   # non-None only inside a @response_handler
 ```python
 import asyncio
 from agent_framework import executor
-from agent_framework._workflows import WorkflowBuilder
+from agent_framework import WorkflowBuilder
 from agent_framework._workflows._workflow_context import WorkflowContext
 
 @executor

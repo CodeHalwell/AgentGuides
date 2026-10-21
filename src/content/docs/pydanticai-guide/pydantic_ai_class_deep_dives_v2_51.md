@@ -1227,13 +1227,16 @@ except UserError as e:
 
 ### Supported hook names (from source)
 
-All hooks are registered via `@hooks.on.<name>`. The wrap form of each lifecycle phase
-is named after the phase itself (e.g. `node_run`, `tool_validate`), except for
-`wrap_model_request` which keeps the `wrap_` prefix.
+All hooks are registered via `@hooks.on.<name>` (or the same name as a `Hooks(...)`
+constructor keyword). The wrap form of each lifecycle phase is named after the phase
+itself (`run`, `node_run`, `model_request`, `tool_validate`, …). Internally these map to
+the `wrap_*` / `on_*_error` methods of `AbstractCapability` (e.g. `@hooks.on.model_request`
+registers `wrap_model_request`), but `hooks.on` has no `wrap_` or `on_` prefixed names.
 
 ```
 # Run lifecycle
-run_error
+before_run               after_run
+run                      run_error
 
 # Node lifecycle
 before_node_run          after_node_run
@@ -1241,7 +1244,7 @@ node_run                 node_run_error
 
 # Model request lifecycle
 before_model_request     after_model_request
-wrap_model_request       model_request_error
+model_request            model_request_error
 
 # Tool validate lifecycle
 before_tool_validate     after_tool_validate
@@ -1258,6 +1261,12 @@ output_validate          output_validate_error
 # Output process lifecycle
 before_output_process    after_output_process
 output_process           output_process_error
+
+# Tool preparation
+prepare_tools            prepare_output_tools
+
+# Event stream
+run_event_stream         event
 
 # Deferred tools
 deferred_tool_calls
@@ -1370,7 +1379,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Example 4 — `wrap_model_request` for request logging
+### Example 4 — wrap-style `model_request` for request logging
 
 ```python
 import asyncio
@@ -1380,7 +1389,7 @@ from pydantic_ai.capabilities.hooks import Hooks
 hooks = Hooks()
 attempt_count: dict[int, int] = {}
 
-@hooks.on.wrap_model_request
+@hooks.on.model_request
 async def log_request(ctx, *, request_context, handler):
     run_id = id(ctx)
     attempt_count[run_id] = attempt_count.get(run_id, 0) + 1

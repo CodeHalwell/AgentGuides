@@ -1,10 +1,12 @@
 ---
 title: "Claude Agent SDK (TypeScript) - Architecture Diagrams and Flows"
-description: "These diagrams illustrate the complex interactions and architectural patterns within the Claude Agent SDK. Each represents a different aspect of the system's operation, from basic"
+description: "Architecture, query flow, permissions, sessions and compaction diagrams for the TypeScript Claude Agent SDK."
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
 # Claude Agent SDK (TypeScript) - Architecture Diagrams and Flows
+
+> Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%). `query()` runs Claude Code as a child process; the boxes below marked "harness" live in that process, not in your Node.js process.
 
 ## System Architecture Overview
 
@@ -28,7 +30,7 @@ framework: anthropic-claude-agent-sdk-typescript
     └────────────────────┬─────────────────────────────────────────────┘
                          │
     ┌────────────────────▼─────────────────────────────────────────────┐
-    │             Core Agent Harness (Built on Claude Code)           │
+    │      Core Agent Harness (Claude Code child process)             │
     │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
     │  │ Agent Loop   │  │ Context Mgmt │  │ Permission System  │    │
     │  │ Executor     │  │ Compaction   │  │ Access Control     │    │
@@ -38,9 +40,9 @@ framework: anthropic-claude-agent-sdk-typescript
     ┌────────────────────▼─────────────────────────────────────────────┐
     │                  Tool Execution Framework                        │
     │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
-    │  │ Built-In     │  │ Custom MCP   │  │ Computer Use API   │    │
-    │  │ Tools        │  │ Tools        │  │ (Mouse, Keyboard)  │    │
-    │  │ (File, Bash) │  │              │  │                    │    │
+    │  │ Built-In     │  │ Custom MCP   │  │ Subagents          │    │
+    │  │ Tools        │  │ Tools        │  │ (Agent tool,       │    │
+    │  │ (File, Bash) │  │              │  │  own context)      │    │
     │  └──────────────┘  └──────────────┘  └────────────────────┘    │
     └────────────────────┬─────────────────────────────────────────────┘
                          │
@@ -67,7 +69,7 @@ framework: anthropic-claude-agent-sdk-typescript
         │
         ▼
    ┌─────────────────────────────────┐
-   │ Create Agent Instance            │
+   │ Spawn Claude Code process        │
    │ - Session ID                      │
    │ - Model Selection                 │
    │ - Permission Mode                 │
@@ -142,11 +144,11 @@ framework: anthropic-claude-agent-sdk-typescript
         ┌───────┼───────┬─────────┬──────┐
         │       │       │         │      │
         ▼       ▼       ▼         ▼      ▼
-    assistant tool_call tool_result error system
-        │       │       │         │      │
-        ▼       ▼       ▼         ▼      ▼
-    Process  Execute Collect Handle Update
-    Text    Tool     Result  Error  State
+    system   assistant  user     stream_event result
+    (init)   text +     tool     (partial    success or
+             tool_use   results  deltas)     error_* subtype
+             blocks in
+             message.message.content
 ```
 
 ## Multi-Agent Orchestration Pattern
@@ -220,7 +222,7 @@ Agent0 ├─► Agent2 ├─► Aggregator ──► Final Result
     └────────┘  └────────┘  └────────┘
 
 State Compaction:
-    Long Conversation → Automatic Compression → 200K Token Context
+    Long Conversation → Automatic Compaction → stays within the 1M window
     ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
     │Recent history│     │Summarise    │     │Maintained   │
     │Old messages  │────▶│Keep summary │────▶│within limit  │
@@ -240,12 +242,12 @@ Built-in Tools:
 │ • Read (file)                           │
 │ • Write (file)                          │
 │ • Edit (file section)                   │
-│ • Delete (file/directory)               │
 │ • Bash (shell commands)                 │
 │ • Grep (text search)                    │
 │ • Glob (file patterns)                  │
-│ • WebSearch (internet search)           │
-│ • Computer Use (mouse, keyboard, vision)│
+│ • WebSearch / WebFetch (the web)        │
+│ • Agent (delegate to a subagent)        │
+│ • TaskCreate / TaskUpdate (task lists)  │
 └─────────────────────────────────────────┘
 
 MCP Servers (Custom Tools):
@@ -295,25 +297,18 @@ Tool Call Flow:
 Permission Modes:
 
 ┌─────────────────────────────────────────┐
-│ bypassPermissions                       │
-│ ✓ No checks, maximum autonomy          │
-│ ⚠ Use only for trusted environments    │
+│ default (recommended for production)    │
+│ ✓ Unapproved tools go to canUseTool     │
+├─────────────────────────────────────────┤
+│ acceptEdits   file edits auto-approved  │
+│ plan          nothing executes          │
+│ dontAsk       not pre-approved → denied │
+│ auto          classifier decides        │
+│ bypassPermissions  no checks; needs     │
+│   allowDangerouslySkipPermissions: true │
 └─────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────┐
-│ acceptEdits                             │
-│ ✓ Auto-approve file modifications      │
-│ ⚠ Suitable for development with backup │
-└─────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────┐
-│ default (Recommended for production)    │
-│ ✓ Ask for confirmation on write ops    │
-│ ✓ Allow read ops                        │
-│ ✓ Customizable via canUseTool callback  │
-└─────────────────────────────────────────┘
+
+Evaluation order: hooks → deny rules → mode → allow rules → canUseTool
 
 Permission Decision Flow:
     Tool Requested
@@ -344,7 +339,7 @@ Permission Decision Flow:
 │    Context Management and Compaction         │
 └──────────────────────────────────────────────┘
 
-Token Budget: 200,000 tokens
+Context window: 1,000,000 tokens (Claude 5 family); see getContextUsage()
 
 As conversation grows:
 ┌─────────────────────────────────────┐
@@ -354,13 +349,13 @@ As conversation grows:
 ├─────────────────────────────────────┤
 │ Message 3: Tool result              │  ~300 tokens
 ├─────────────────────────────────────┤
-│ ...many messages...                 │  ~150,000 tokens
+│ ...many messages...                 │  ~800,000 tokens
 ├─────────────────────────────────────┤
-│ Token Usage: ~165,000               │
+│ Token Usage: ~830,000               │
 └─────────────────────────────────────┘
 
 Automatic Compaction Triggered:
-    When tokens reach threshold (~80% of limit)
+    When tokens reach autoCompactThreshold (PreCompact hook fires first)
             │
             ▼
     ┌─────────────────────────────┐
@@ -373,9 +368,9 @@ Automatic Compaction Triggered:
                  │
                  ▼
     ┌─────────────────────────────┐
-    │ Original: 165,000 tokens    │
-    │ Compacted: 85,000 tokens    │
-    │ Freed: 80,000 tokens        │
+    │ Earlier turns summarised    │
+    │ compact_boundary message    │
+    │ emitted to the SDK stream   │
     │ New buffer for continuation │
     └─────────────────────────────┘
 ```
@@ -469,11 +464,11 @@ User Input
 │                                  │
 │ ┌─────────────────────────────┐  │
 │ │ if (message.type ==)        │  │
-│ │   'assistant': Stream text  │  │
-│ │   'tool_call': Execute tool │  │
-│ │   'tool_result': To context │  │
-│ │   'error': Handle error     │  │
-│ │   'system': Update state    │  │
+│ │   'system': init, session   │  │
+│ │   'assistant': text, tools  │  │
+│ │   'user': tool results      │  │
+│ │   'stream_event': deltas    │  │
+│ │   'result': success|error_* │  │
 │ └──────────────┬──────────────┘  │
 │                │                  │
 │                ▼                  │

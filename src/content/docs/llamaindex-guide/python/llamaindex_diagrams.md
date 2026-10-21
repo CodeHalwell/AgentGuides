@@ -7,7 +7,7 @@ language: python
 
 # LlamaIndex Architecture and System Diagrams
 
-Comprehensive visual documentation of LlamaIndex components, workflows, and patterns.
+Visual reference for LlamaIndex components, workflows and patterns. Class names match `llama-index-core` %%version=llama-index%%; see the [comprehensive guide](../llamaindex_comprehensive_guide/) for code.
 
 ---
 
@@ -39,8 +39,8 @@ Comprehensive visual documentation of LlamaIndex components, workflows, and patt
          │               │               │
     ┌────▼────┐   ┌─────▼─────┐   ┌────▼────┐
     │  Agents │   │   Query   │   │  Chat   │
-    │ (ReAct, │   │  Engines  │   │Interface│
-    │Function)│   │(Router,   │   │         │
+    │(Function│   │  Engines  │   │ Engines │
+    │ ReAct)  │   │(Router,   │   │         │
     └────┬────┘   │Sub-Qs)    │   └────┬────┘
          │        └─────┬─────┘        │
          └────────────┬─┴──────────────┘
@@ -54,7 +54,7 @@ Comprehensive visual documentation of LlamaIndex components, workflows, and patt
          ┌────────────▼──────────────┐
          │  Indexing & Storage       │
          │  (VectorStoreIndex,       │
-         │   TreeIndex, ListIndex)   │
+         │ SummaryIndex, PropGraph)  │
          └────────────┬──────────────┘
                       │
          ┌────────────▼──────────────┐
@@ -260,7 +260,7 @@ Unified Ranked Results
 
 ## Agent Workflows
 
-### ReAct Loop
+### ReAct Loop (`ReActAgent`)
 
 ```
 ┌─────────────────────┐
@@ -320,7 +320,7 @@ Unified Ranked Results
        └─────────────┘
 ```
 
-### Function Calling Agent
+### Function Calling Agent (`FunctionAgent`)
 
 ```
 Query
@@ -380,52 +380,48 @@ Final Synthesis
 
 ## Multi-Agent Systems
 
-### Multi-Agent Architecture
+### Multi-Agent Architecture (`AgentWorkflow`)
 
 ```
-┌───────────────────────────────────────┐
-│      Control Plane / Orchestrator      │
-│  (Task Distribution, Coordination)     │
-└────────────┬────────────────────────┬──┘
-             │                        │
-    ┌────────▼────────┐      ┌────────▼────────┐
-    │ Message Queue   │◀────▶│ State Manager   │
-    │ (Redis/RabbitMQ)│      │ (Consensus)     │
-    └────────┬────────┘      └────────┬────────┘
-             │                        │
-    ┌────────┼─────────────────────────┼────────┐
-    │        │                         │        │
-┌───▼──┐ ┌──▼────┐                ┌──▼───┐ ┌──▼──┐
-│Agent1│ │Agent 2│ ... Agent N    │Monit.│ │Cache│
-│      │ │       │                │      │ │     │
-│Spec  │ │Special│                │     │ │    │
-│Task1 │ │Task2  │                │     │ │    │
-└──────┘ └───────┘                └──────┘ └─────┘
+                    user_msg
+                       │
+                       ▼
+┌──────────────────────────────────────────────────┐
+│ AgentWorkflow (one Context per run)              │
+│                                                  │
+│   shared memory  ◀──────────────▶  shared state  │
+│        ▲                              ▲          │
+│        │                              │          │
+│  ┌─────┴──────┐  handoff()  ┌─────────┴──┐       │
+│  │ root agent │ ──────────▶ │ specialist │       │
+│  │ (triage)   │ ◀────────── │ agent      │       │
+│  └─────┬──────┘  handoff()  └─────┬──────┘       │
+│        │ tools                    │ tools        │
+│        ▼                          ▼              │
+│   FunctionTool,              QueryEngineTool,    │
+│   MCP tools ...              FunctionTool ...    │
+└──────────────────────────────────────────────────┘
+                       │
+                       ▼
+              AgentOutput + event stream
 ```
 
-### Agent Communication Flow
+Each agent may only hand off to the names in its `can_handoff_to`. The 2024 `llama-agents` design (control plane, message queue, agent services) is retired; separate-process deployment is now done with LlamaAgents / `llamactl`.
+
+### Orchestrator Pattern (agents as tools)
 
 ```
-Agent A                             Agent B
-  │                                   │
-  ├─▶ "I need data on topic X"       │
-  │                                   │
-  │  ◀─ "Requesting from service" ───┤
-  │                                   │
-  │  ┌─ Message Queue (RabbitMQ)     │
-  │  │ ├─ Topic: retrieve_data       │
-  │  │ ├─ Priority: high             │
-  │  │ └─ Callback_queue: agent_a    │
-  │  │                                │
-  │  └──────────────────────────────▶│
-  │                                   │
-  │                          Process  │
-  │                           Data    │
-  │                                   │
-  │  ◀────────────────────────────────┤
-  │     "Data ready at /storage/x"    │
-  │                                   │
-  Continue Processing                 Done
+Orchestrator FunctionAgent
+  │
+  ├─▶ tool: research(topic) ──▶ researcher.run(...) ──▶ notes
+  │                                                       │
+  │  ◀────────────────────────────────────────────────────┘
+  │
+  ├─▶ tool: write(notes) ─────▶ writer.run(...) ──────▶ draft
+  │                                                       │
+  │  ◀────────────────────────────────────────────────────┘
+  ▼
+Final answer (orchestrator keeps control throughout)
 ```
 
 ---
@@ -516,12 +512,6 @@ LLM Decomposition
 │ ├─ Memory: Moderate                                  │
 │ └─ Use: General RAG, semantic queries                │
 │                                                       │
-│ ListIndex                                            │
-│ ├─ Simple sequential retrieval                       │
-│ ├─ No embeddings needed                              │
-│ ├─ Memory: Low                                       │
-│ └─ Use: Small datasets, similarity scoring           │
-│                                                       │
 │ TreeIndex                                            │
 │ ├─ Hierarchical decomposition                        │
 │ ├─ Creates tree structure                            │
@@ -534,11 +524,16 @@ LLM Decomposition
 │ ├─ Memory: Low-Moderate                              │
 │ └─ Use: Keyword-heavy queries, exact matches         │
 │                                                       │
-│ SummaryIndex                                         │
-│ ├─ Summary-based retrieval                           │
-│ ├─ LLM-generated summaries                           │
-│ ├─ Memory: High                                      │
-│ └─ Use: Collection-level queries                     │
+│ SummaryIndex (formerly ListIndex)                    │
+│ ├─ Stores nodes as a list; returns all of them       │
+│ ├─ No embeddings needed                              │
+│ ├─ Cost: every node goes to the LLM per query        │
+│ └─ Use: "summarise everything", small collections    │
+│                                                       │
+│ PropertyGraphIndex                                   │
+│ ├─ Entities and relations extracted at ingestion     │
+│ ├─ Graph + vector retrieval                          │
+│ └─ Use: relationship-heavy questions                 │
 │                                                       │
 └──────────────────────────────────────────────────────┘
 ```
@@ -575,32 +570,30 @@ Index Ready for Queries
 
 ## Memory and Context
 
-### Chat Memory Buffer
+### Agent Memory (`Memory`)
 
 ```
-┌──────────────────────────────────┐
-│  ChatMemoryBuffer                │
-├──────────────────────────────────┤
-│                                  │
-│  Max Tokens: 2000                │
-│                                  │
-│  Turn 1:                         │
-│  ├─ User: "Hello"                │
-│  └─ Assistant: "Hi there!"       │
-│                                  │
-│  Turn 2:                         │
-│  ├─ User: "What did I ask?"      │
-│  └─ Assistant: "You said hello"  │
-│                                  │
-│  ... (recent context maintained)
-│                                  │
-│  Token Count:                    │
-│  ├─ Current: 1850 / 2000         │
-│  ├─ When full: Prune oldest      │
-│  └─ Keep recent turns            │
-│                                  │
-└──────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Memory(session_id="user-123")                │
+├──────────────────────────────────────────────┤
+│ Short-term: chat history (SQL-backed)        │
+│   token_limit × chat_history_token_ratio     │
+│   ├─ User: "Hello"                           │
+│   ├─ Assistant: "Hi there!"                  │
+│   └─ ...                                     │
+│          │ overflow (token_flush_size)       │
+│          ▼                                   │
+│ Long-term memory blocks                      │
+│   ├─ StaticMemoryBlock   (fixed facts)       │
+│   ├─ FactExtractionMemoryBlock (LLM facts)   │
+│   └─ VectorMemoryBlock   (retrieved turns)   │
+│          │                                   │
+│          ▼                                   │
+│ Rendered into the prompt on each turn        │
+└──────────────────────────────────────────────┘
 ```
+
+`ChatMemoryBuffer` (a plain token-bounded buffer) still exists; `Memory` is the current default for agents.
 
 ### Memory Types
 
@@ -753,6 +746,8 @@ Final Result
 
 ### Retrieval Optimization
 
+Timings are illustrative; LLM generation usually dominates and is measured in seconds, not milliseconds.
+
 ```
 Query
   │
@@ -780,10 +775,10 @@ Reranking (20ms)
   └─ Final ranking
   │
   ▼
-Generation (100ms)
+Generation (1–5 s)
   │
   ▼
-Total: ~185ms
+Total: dominated by generation
 ```
 
 ### Caching Strategy
@@ -818,5 +813,5 @@ Response        Response + Cache
 
 ---
 
-This diagrams document provides visual representations of all major LlamaIndex components and workflows. Each diagram illustrates the flow of data and control through different aspects of the framework.
+For runnable versions of these flows see the [comprehensive guide](../llamaindex_comprehensive_guide/) and [advanced agents](../llamaindex_advanced_agents_python/).
 

@@ -1,13 +1,13 @@
 ---
 title: "LangGraph Streaming Server (FastAPI)"
-description: "Server-Sent Events with all LangGraph stream modes, token-level streaming, async patterns, and production FastAPI setup — source-verified for LangGraph 1.2.2."
+description: "Server-Sent Events with all LangGraph stream modes, token-level streaming, async patterns, and production FastAPI setup — source-verified."
 framework: langgraph
 language: python
 ---
 
 # LangGraph Streaming Server (FastAPI)
 
-Verified against **`langgraph==1.2.2`**, **`fastapi>=0.111`**, **`uvicorn>=0.29`**.
+Verified against **`langgraph==%%version=langgraph%%`**, **`fastapi>=0.111`**, **`uvicorn>=0.29`**.
 
 This guide shows how to expose a LangGraph compiled graph over HTTP using FastAPI and Server-Sent Events (SSE). It covers all five `stream_mode` options, token-level LLM streaming, authentication, background task patterns, and production deployment.
 
@@ -54,7 +54,7 @@ class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 
 def call_model(state: State) -> dict:
@@ -181,7 +181,7 @@ class State(TypedDict):
     query: str
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 
 async def research_agent(state: State, runtime: Runtime) -> dict:
@@ -321,7 +321,7 @@ class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 
 def call_model(state: State) -> dict:
@@ -487,7 +487,7 @@ CMD ["uvicorn", "production_app:app", \
 **`requirements.txt`**:
 
 ```
-langgraph>=1.2.2
+langgraph==%%version=langgraph%%
 langchain-anthropic>=0.3
 fastapi>=0.111
 uvicorn[standard]>=0.29

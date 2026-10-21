@@ -301,7 +301,7 @@ Runtime does not need framework-specific adapters: any code that can be called f
 
 ### 1. Strands Agents SDK
 
-Covered in detail in the [Strands SDK guide](../bedrock_strands_sdk_guide/). Streaming is supported by making the entrypoint an async generator:
+Covered in detail in the [Strands SDK guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/). Streaming is supported by making the entrypoint an async generator:
 
 ```python
 from bedrock_agentcore import BedrockAgentCoreApp
@@ -454,7 +454,7 @@ ci.stop()
 
 ### Workflow Automation Examples
 
-AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](../bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
+AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
 
 **Remembering context across sessions with Memory:**
 
@@ -491,7 +491,7 @@ records = memory.retrieve_memories(
 )
 ```
 
-With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](../bedrock_strands_sdk_guide/#memory-and-state-management)).
+With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/#memory-and-state-management)).
 
 ---
 

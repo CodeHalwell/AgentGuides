@@ -48,11 +48,11 @@ Each node is a Python function. State flows through edges. Conditions route base
 
 ### Basic Installation
 
-LangGraph 1.2.12 is the current release. Install the core package alongside `langchain-core`:
+The current release is LangGraph %%version=langgraph%% (checked %%versions-checked%%). Install the core package alongside `langchain-core`:
 
 ```bash
-# Core LangGraph (1.2.12)
-pip install "langgraph>=1.2.12" langchain-core
+# Core LangGraph, pinned to the version this guide is verified against
+pip install "langgraph==%%version=langgraph%%" langchain-core
 
 # Async support
 pip install aiosqlite
@@ -60,9 +60,8 @@ pip install aiosqlite
 # For SQLite checkpointing (requires separate package)
 pip install langgraph-checkpoint-sqlite
 
-# For PostgreSQL checkpointing
-pip install langgraph[postgres]
-pip install psycopg2-binary
+# For PostgreSQL checkpointing (uses psycopg 3)
+pip install langgraph-checkpoint-postgres "psycopg[binary,pool]"
 
 # LLM providers (example with Anthropic)
 pip install langchain-anthropic
@@ -71,7 +70,7 @@ pip install langchain-anthropic
 pip install langgraph-cli        # CLI tools
 ```
 
-> **Note on checkpointers:** `InMemorySaver` is built into `langgraph` itself — no extra install needed. `SqliteSaver` requires the separate `langgraph-checkpoint-sqlite` package. PostgreSQL requires `langgraph[postgres]`.
+> **Note on checkpointers:** `InMemorySaver` is built into `langgraph` itself — no extra install needed. `SqliteSaver` requires the separate `langgraph-checkpoint-sqlite` package. PostgreSQL requires the separate `langgraph-checkpoint-postgres` package (`langgraph` has no `[postgres]` extra).
 
 ### Project Structure
 
@@ -222,9 +221,11 @@ from langgraph.checkpoint.memory import InMemorySaver
 graph = builder.compile(checkpointer=InMemorySaver())
 
 # SQLite persistence (requires: pip install langgraph-checkpoint-sqlite)
+import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
-checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
+checkpointer = SqliteSaver(sqlite3.connect("checkpoints.db", check_same_thread=False))
 graph = builder.compile(checkpointer=checkpointer)
+# (SqliteSaver.from_conn_string(...) is a context manager: `with ... as checkpointer:`)
 
 # Without persistence (stateless)
 graph = builder.compile()
@@ -271,7 +272,7 @@ async for event in graph.astream(...):
 
 ## What's New in LangGraph 1.2.x
 
-The sections below document additions and changes introduced across LangGraph 1.2.x. All features are available when you install `langgraph>=1.2.12`.
+The sections below document additions and changes introduced across LangGraph 1.2.x. All of them are available in the current release, %%version=langgraph%%.
 
 ---
 

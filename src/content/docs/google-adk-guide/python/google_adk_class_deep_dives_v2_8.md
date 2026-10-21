@@ -1,13 +1,13 @@
 ---
-title: "Class Deep Dives — v2.8.0"
-description: "Source-verified deep dives for 10 classes new or enhanced in google-adk 2.8.0: LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, and the exit_loop / get_user_choice_tool built-ins."
+title: "Class Deep Dives Vol. 2"
+description: "Source-verified deep dives for 10 classes new or enhanced first written for google-adk 2.8.0: LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, and the exit_loop / get_user_choice_tool built-ins."
 framework: google-adk
 language: python
 sidebar:
   order: 120
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.8.0** (installed, introspected with `inspect.getsource`). The ten classes were sampled to cover areas that either arrived new in 2.8.0 or remained thin in earlier documentation.
+First written for google-adk 2.8.0 (installed and introspected with `inspect.getsource`); imports, constructor signatures and fields re-checked against `google-adk` %%version=google-adk%% on %%versions-checked%%. Changes since then: Since 2.9 `LiveRequestQueue` is defined in `google.adk.live.live_request_queue`; the `google.adk.agents.live_request_queue` import used here still works as a re-export. `GcsArtifactService` has since gained `get_signed_url` / `get_authenticated_url`. The ten classes were sampled to cover areas that either arrived new in 2.8.0 or remained thin in earlier documentation.
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|
@@ -1219,8 +1219,9 @@ async for event in runner.run_async(
 
 ## Version note
 
-All content on this page is verified against **google-adk==2.8.0** (August 2026). Classes and modules may have changed in later releases. Check `inspect.getsource` against your installed version before using field names or constructor signatures in production.
+This page was first written for google-adk 2.8.0 (August 2026) and re-checked against %%version=google-adk%%; the changes since 2.8.0 are listed at the top of the page. Check `inspect.getsource` against your installed version before relying on private fields.
 
 | Area | Revision |
 |---|---|
-| 2026-08-31 | Initial page — 10 classes sourced from google-adk==2.8.0. |
+| 2026-08-31 | Initial page — 10 classes sourced from google-adk 2.8.0. |
+| 2026-10-21 | Re-checked against the current release; renamed Vol. 2; noted the `LiveRequestQueue` module move and new `GcsArtifactService` methods. |

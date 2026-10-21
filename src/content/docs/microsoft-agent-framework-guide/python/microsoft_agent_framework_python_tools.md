@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
-description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.6.0."
+description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers."
 framework: microsoft-agent-framework
 language: python
 ---
@@ -11,7 +11,7 @@ Tools are how agents call back into your code. Agent Framework offers two ways t
 
 This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
 
-Verified against `agent-framework-core==1.6.0` (`agent_framework._tools`).
+Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._tools`, re-checked %%versions-checked%%; first written for 1.6.0).
 
 ## Minimal `@tool`
 
@@ -335,7 +335,7 @@ agent = Agent(client=client, instructions="You are a research assistant.")
 await agent.run("Research the order pipeline")
 ```
 
-All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework-core==1.6.0`):
+All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework` %%version=agent-framework%%):
 
 | Key | Type | Default | Effect |
 |---|---|---|---|

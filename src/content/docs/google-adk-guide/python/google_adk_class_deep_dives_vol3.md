@@ -1,13 +1,13 @@
 ---
-title: "Class Deep Dives Vol. 3 — v2.8.0"
-description: "Source-verified deep dives for 10 classes in google-adk 2.8.0: RunConfig, BuiltInPlanner, PlanReActPlanner, BasePlugin, ReflectAndRetryToolPlugin, ContextFilterPlugin, VertexAiMemoryBankService, VertexAiCodeExecutor, ConversationScenarios / LlmBackedUserSimulatorConfig, and SaveFilesAsArtifactsPlugin."
+title: "Class Deep Dives Vol. 3"
+description: "Source-verified deep dives of 10 classes, first written for google-adk 2.8.0: RunConfig, BuiltInPlanner, PlanReActPlanner, BasePlugin, ReflectAndRetryToolPlugin, ContextFilterPlugin, VertexAiMemoryBankService, VertexAiCodeExecutor, ConversationScenarios / LlmBackedUserSimulatorConfig, and SaveFilesAsArtifactsPlugin."
 framework: google-adk
 language: python
 sidebar:
   order: 125
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.8.0** (installed, introspected with `inspect.getsource`). The ten classes cover runtime control, planning, the plugin system, memory, code execution, and simulation-based evaluation — areas underrepresented in earlier guides.
+First written for google-adk 2.8.0 (installed and introspected with `inspect.getsource`); imports, constructor signatures and fields re-checked against `google-adk` %%version=google-adk%% on %%versions-checked%%. Changes since then: `RunConfig` has since gained a `service_tier` field. The ten classes cover runtime control, planning, the plugin system, memory, code execution, and simulation-based evaluation — areas underrepresented in earlier guides.
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|

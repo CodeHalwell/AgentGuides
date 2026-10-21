@@ -1,14 +1,16 @@
 ---
 title: "Haystack Architecture and Pattern Diagrams"
-description: "Architecture diagrams for Haystack 2.x — components, pipeline execution, the agent loop, multi-agent coordination and memory/retrieval."
+description: "Architecture diagrams for Haystack 3 — components, pipeline execution, the agent loop, multi-agent coordination and memory/retrieval."
 framework: haystack
 ---
 
 # Haystack Architecture and Pattern Diagrams
 
+> Reflects `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Component names follow Haystack 3: ChatGenerators only, tools executed by `Agent`, a single `Pipeline` class with `run`, `run_async` and `stream`.
+
 ## Table of Contents
 
-1. [Haystack 2.x Core Architecture](#haystack-2x-core-architecture)
+1. [Haystack 3 Core Architecture](#haystack-3-core-architecture)
 2. [Component Types and Interactions](#component-types-and-interactions)
 3. [Pipeline Execution Flow](#pipeline-execution-flow)
 4. [Agent Loop Architecture](#agent-loop-architecture)
@@ -21,7 +23,7 @@ framework: haystack
 
 ---
 
-## Haystack 2.x Core Architecture
+## Haystack 3 Core Architecture
 
 ### System Layers
 
@@ -45,7 +47,7 @@ framework: haystack
 ┌──────────────────┴───────────────────────────────────────────┐
 │                  Component Layer                              │
 │  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐   │
-│  │  Retrievers    │ │  Generators    │ │     Tools      │   │
+│  │  Retrievers    │ │ ChatGenerators │ │     Tools      │   │
 │  └────────────────┘ └────────────────┘ └────────────────┘   │
 │  ┌────────────────┐ ┌────────────────┐ ┌────────────────┐   │
 │  │ PromptBuilders │ │    Routers     │ │  Validators    │   │
@@ -119,16 +121,20 @@ framework: haystack
     │             │              │               │
     ▼             ▼              ▼               ▼
 ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-│Retrievers│ │Generators│ │  Routers │ │TransFormers  │
+│Retrievers│ │  Chat    │ │  Routers │ │ Builders &   │
+│          │ │Generators│ │          │ │ Joiners      │
 └──────────┘ └──────────┘ └──────────┘ └──────────────┘
     │             │              │               │
     ├─────────────┼──────────────┼───────────────┤
     │             │              │               │
     ▼             ▼              ▼               ▼
-┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐
-│BM25      │ │OpenAI    │ │Conditional│ │PromptBuilder│
-│Dense     │ │Anthropic │ │Router    │ │OutputAdapter │
-│Hybrid    │ │HF        │ │Pipeline  │ │DocumentJoiner│
+┌──────────┐ ┌──────────┐ ┌───────────┐ ┌──────────────┐
+│BM25      │ │OpenAI    │ │Conditional│ │PromptBuilder │
+│Embedding │ │Anthropic*│ │LLMMessages│ │ChatPrompt-   │
+│MultiQuery│ │Fallback  │ │Metadata   │ │ Builder      │
+│          │ │Mock      │ │FileType   │ │DocumentJoiner│
+└──────────┘ └──────────┘ └───────────┘ └──────────────┘
+  * integration package (haystack_integrations.*)
 └──────────┘ └──────────┘ └──────────┘ └──────────────┘
 ```
 
@@ -271,73 +277,56 @@ Input Query
 ### Agent Execution Flow
 
 ```
-Start
+agent.run(messages=[...], **prompt_variables, **state_values)
   │
   ▼
-┌──────────────────────────────┐
-│ 1. Initialize Agent State    │
-│    - Load tools              │
-│    - Prepare system prompt   │
-│    - Load conversation hist  │
-└────────────┬─────────────────┘
-             │
-             ▼
-┌──────────────────────────────┐
-│ 2. Prepare Prompt            │
-│    - Add system message      │
-│    - Add conversation history│
-│    - Add tool descriptions   │
-│    - Add user query          │
-└────────────┬─────────────────┘
-             │
-             ▼
-┌──────────────────────────────┐
-│ 3. Call LLM                  │
-│    - Send prompt to model    │
-│    - Get response            │
-│    - Parse for tool calls    │
-└────────────┬─────────────────┘
-             │
-             ▼
-┌──────────────────────────────┐
-│ 4. Check Response Type       │
-│    - Final answer?           │
-│    - Tool call?              │
-│    - Error state?            │
-└──┬───────────┬──────────┬────┘
-   │           │          │
-   │ Final     │ Tool     │ Error
-   │ Answer    │ Call     │
-   │           │          │
-   ▼           ▼          ▼
-  Return   Execute     Handle
-  Result   Tool        Error
-   │           │          │
-   │      ┌────▼────┐    │
-   │      │Update   │    │
-   │      │State    │    │
-   │      └────┬────┘    │
-   │           │         │
-   └───────────┼─────────┘
-               │
-        ┌──────▼──────┐
-        │Check Exit   │
-        │Conditions   │
-        └──────┬──────┘
-               │
-        ┌──────▼───────┐
-        │Exit Met?     │
-        └──┬────────┬──┘
-        Yes │        │ No
-           │        │
-           ▼        ▼
-         Return  Continue
-         Result  (Loop)
-           │        │
-           └────┬───┘
-                │
-                ▼
-              End
+┌──────────────────────────────────────┐
+│ before_run hooks                     │
+│ Render system_prompt / user_prompt   │
+│ Initialise State (messages, step_count,
+│   token_usage, tool_call_counts, ...)│
+└──────────────────┬───────────────────┘
+                   │
+      ┌────────────▼─────────────┐
+      │ before_llm hooks         │◄─────────────────────────┐
+      │ (a hook may set stop_run)│                          │
+      └────────────┬─────────────┘                          │
+                   ▼                                        │
+      ┌──────────────────────────┐                          │
+      │ chat_generator.run(      │                          │
+      │   messages, tools)       │                          │
+      └────────────┬─────────────┘                          │
+                   │                                        │
+         tool calls in reply?                               │
+          │ no               │ yes                          │
+          ▼                  ▼                              │
+   exit_reason="text"  ┌──────────────────────────┐         │
+          │            │ before_tool hooks        │         │
+          │            │ (e.g. ConfirmationHook)  │         │
+          │            │ run tools concurrently   │         │
+          │            │ (tool_concurrency_limit) │         │
+          │            │ outputs_to_state → State │         │
+          │            │ after_tool hooks         │         │
+          │            └────────────┬─────────────┘         │
+          │                         │                       │
+          │         tool in exit_conditions?                │
+          │            │ yes                │ no            │
+          │            ▼                    └─ step_count < │
+          │     exit_reason=<tool>             max_agent_steps
+          │            │                                    │
+          ▼            ▼                                    │
+      ┌──────────────────────────┐   continue_run=True      │
+      │ on_exit hooks            │──────────────────────────┘
+      └────────────┬─────────────┘
+                   ▼
+      ┌──────────────────────────┐
+      │ after_run hooks          │
+      │ return {messages,        │
+      │  last_message, step_count│
+      │  token_usage,            │
+      │  tool_call_counts,       │
+      │  exit_reason, ...state}  │
+      └──────────────────────────┘
 ```
 
 ### Agent State Transitions
@@ -371,9 +360,9 @@ Start
                      ▼
     ┌─────────────────────────────────┐
     │ CHECK EXIT CONDITIONS           │
-    │ - Iteration limit reached?      │
-    │ - Timeout?                      │
-    │ - Final answer ready?           │
+    │ - max_agent_steps reached?      │
+    │ - exit-condition tool called?   │
+    │ - text reply (no tool calls)?   │
     └──┬────────────────────────┬─────┘
        │                        │
     No │                        │ Yes
@@ -654,8 +643,8 @@ Input Query
 │                │                                             │
 │                ▼                                             │
 │   ┌────────────────────────────────┐                       │
-│   │  LLM Generator                 │  OpenAI GPT-4o        │
-│   │  (Generate Response)           │  Temperature: 0.7     │
+│   │  ChatGenerator                 │  e.g. OpenAIChat-     │
+│   │  (Generate Response)           │  Generator            │
 │   └────────────┬────────────────────┘                       │
 │                │                                             │
 │                ▼                                             │
@@ -688,15 +677,15 @@ Input Query
 │          Haystack Application with Instrumentation       │
 ├──────────────────────────────────────────────────────────┤
 │                                                           │
-│  ┌──────────────┐      ┌──────────────┐                 │
-│  │  Component A │      │  Component B │                 │
-│  │ @instrument  │      │ @instrument  │                 │
-│  └──────┬───────┘      └──────┬───────┘                 │
-│         │                     │                          │
-│         └──────────┬──────────┘                          │
-│                    │                                     │
-│          Events: Start, End, Error                       │
-│          Metrics: Duration, Status                       │
+│  tracing.enable_tracing(OpenTelemetryTracer(...))         │
+│  or a connector: OpenTelemetryConnector / Langfuse...    │
+│                                                           │
+│  Spans: haystack.pipeline.run                             │
+│           └ haystack.component.run                        │
+│         haystack.agent.run                                │
+│           └ haystack.agent.step                           │
+│               ├ haystack.agent.step.llm                   │
+│               └ haystack.agent.step.tool (one per call)   │
 │                    │                                     │
 └────────────────────┼──────────────────────────────────┘
                      │

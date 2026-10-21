@@ -1,12 +1,13 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Production-Ready Patterns & Best Practices Guide"
-description: "Version: 1.0 Focus: Enterprise-grade patterns, scalability, reliability, and operational excellence"
+description: "Enterprise-grade patterns for scalability, reliability and operations with the OpenAI Agents SDK in TypeScript."
 framework: openai-agents-sdk-typescript
 ---
 
 # OpenAI Agents SDK TypeScript: Production-Ready Patterns & Best Practices Guide
 
-**Version:** 1.0  
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
+
 **Focus:** Enterprise-grade patterns, scalability, reliability, and operational excellence
 
 ---
@@ -32,7 +33,7 @@ Production-ready Dockerfile:
 
 ```dockerfile
 # Multi-stage build
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 COPY package*.json ./
@@ -44,7 +45,7 @@ COPY src ./src
 RUN npm run build
 
 # Production image
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -449,7 +450,8 @@ const errorHandler = new ErrorHandler();
 
 async function robustAgentExecution(agent: Agent, input: string): Promise<string> {
   try {
-    return await run(agent, input);
+    const result = await run(agent, input);
+    return result.finalOutput ?? '';
   } catch (error) {
     const productionError = errorHandler.createError(
       error.message,

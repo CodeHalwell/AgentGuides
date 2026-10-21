@@ -1,6 +1,6 @@
 ---
 title: "BaseCache & InMemoryCache — cache backend API reference"
-description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration for LangGraph 1.2.14."
+description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration."
 framework: langgraph
 language: python
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 # BaseCache & InMemoryCache — cache backends
 
-Verified against **`langgraph==1.2.14`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
 
 LangGraph node caching is a two-part system:
 
@@ -32,7 +32,7 @@ This page covers the backend side. See [chapter 9 — Advanced Patterns](/langgr
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Generic, TypeVar
-from langgraph.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol
 
 ValueT = TypeVar("ValueT")
 Namespace = tuple[str, ...]      # e.g. ("my_graph", "embed_node")
@@ -71,7 +71,7 @@ class BaseCache(ABC, Generic[ValueT]):
 # langgraph.cache.memory
 import threading
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
-from langgraph.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
 class InMemoryCache(BaseCache[ValueT]):

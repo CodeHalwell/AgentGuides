@@ -7,16 +7,16 @@ language: python
 
 # PydanticAI Streaming Server (FastAPI)
 
-Verified against **pydantic-ai==1.101.0** — source modules: `pydantic_ai.agent`, `pydantic_ai.result`, `pydantic_ai.messages`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.agent`, `pydantic_ai.result`, `pydantic_ai.messages`, `pydantic_ai.ui.ag_ui`.
 
-PydanticAI's `agent.run_stream()` and `agent.run_stream_events()` produce async iterators that map directly onto Server-Sent Events (SSE). This guide shows three production patterns: plain text streaming, structured output streaming, and raw event streaming.
+PydanticAI's `agent.run_stream()` and `agent.run_stream_events()` (both async context managers) produce async iterators that map directly onto Server-Sent Events (SSE). This guide shows three production patterns: plain text streaming, structured output streaming, and raw event streaming.
 
 ---
 
 ## Installation
 
 ```bash
-pip install "pydantic-ai[openai]" fastapi uvicorn
+pip install pydantic-ai fastapi uvicorn
 ```
 
 ---
@@ -105,11 +105,10 @@ Exposes every protocol event — tool calls, tool results, retries — giving th
 import json
 from fastapi import FastAPI, Query
 from fastapi.responses import StreamingResponse
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, AgentRunResultEvent, RunContext
 from pydantic_ai.messages import (
     PartStartEvent, PartDeltaEvent,
     FunctionToolCallEvent, FunctionToolResultEvent,
-    AgentRunResultEvent,
 )
 
 app = FastAPI()
@@ -120,44 +119,45 @@ agent = Agent(
 )
 
 @agent.tool
-async def lookup_price(ctx: RunContext[None], product: str) -> dict:
+async def lookup_price(ctx: RunContext, product: str) -> dict:
     # Replace with real DB / API call
     return {'product': product, 'price': 9.99, 'currency': 'USD'}
 
 @app.get('/stream/events')
 async def stream_events(q: str = Query(...)):
     async def event_generator():
-        async for event in agent.run_stream_events(q):
-            if isinstance(event, PartStartEvent):
-                data = {'type': 'part_start', 'kind': event.part.part_kind}
-                yield f'data: {json.dumps(data)}\n\n'
-
-            elif isinstance(event, PartDeltaEvent):
-                # Text deltas — send the incremental token
-                delta = getattr(event.delta, 'content_delta', None)
-                if delta:
-                    data = {'type': 'text_delta', 'delta': delta}
+        async with agent.run_stream_events(q) as events:
+            async for event in events:
+                if isinstance(event, PartStartEvent):
+                    data = {'type': 'part_start', 'kind': event.part.part_kind}
                     yield f'data: {json.dumps(data)}\n\n'
 
-            elif isinstance(event, FunctionToolCallEvent):
-                data = {
-                    'type': 'tool_call',
-                    'tool': event.part.tool_name,
-                    'args': event.part.args_as_dict(),
-                }
-                yield f'data: {json.dumps(data)}\n\n'
+                elif isinstance(event, PartDeltaEvent):
+                    # Text deltas — send the incremental token
+                    delta = getattr(event.delta, 'content_delta', None)
+                    if delta:
+                        data = {'type': 'text_delta', 'delta': delta}
+                        yield f'data: {json.dumps(data)}\n\n'
 
-            elif isinstance(event, FunctionToolResultEvent):
-                data = {
-                    'type': 'tool_result',
-                    'tool': event.result.tool_name,
-                    'content': str(event.result.content)[:500],
-                }
-                yield f'data: {json.dumps(data)}\n\n'
+                elif isinstance(event, FunctionToolCallEvent):
+                    data = {
+                        'type': 'tool_call',
+                        'tool': event.part.tool_name,
+                        'args': event.part.args_as_dict(),
+                    }
+                    yield f'data: {json.dumps(data)}\n\n'
 
-            elif isinstance(event, AgentRunResultEvent):
-                data = {'type': 'final', 'output': str(event.result.output)}
-                yield f'event: result\ndata: {json.dumps(data)}\n\n'
+                elif isinstance(event, FunctionToolResultEvent):
+                    data = {
+                        'type': 'tool_result',
+                        'tool': event.part.tool_name,
+                        'content': str(event.part.content)[:500],
+                    }
+                    yield f'data: {json.dumps(data)}\n\n'
+
+                elif isinstance(event, AgentRunResultEvent):
+                    data = {'type': 'final', 'output': str(event.result.output)}
+                    yield f'event: result\ndata: {json.dumps(data)}\n\n'
 
         yield 'event: done\ndata: {}\n\n'
 
@@ -240,7 +240,7 @@ async def stream_safe(q: str = Query(...)):
                     yield f'data: {json.dumps({"text": delta})}\n\n'
 
                 await stream.get_output()
-                usage = stream.usage()
+                usage = stream.usage
                 yield f'event: usage\ndata: {json.dumps({"tokens": usage.total_tokens})}\n\n'
 
         except UsageLimitExceeded as e:
@@ -257,20 +257,27 @@ async def stream_safe(q: str = Query(...)):
 
 ## Using the AG UI protocol adapter
 
-For [AG UI](https://github.com/ag-ui-protocol/ag-ui)-compatible frontends (Vercel AI SDK, CopilotKit), use PydanticAI's built-in adapter instead of rolling your own SSE:
+For [AG UI](https://github.com/ag-ui-protocol/ag-ui)-compatible frontends (CopilotKit and others), use PydanticAI's built-in adapter instead of rolling your own SSE. Install the `ag-ui` extra (it is not in the default bundle since 2.0):
+
+```bash
+pip install "pydantic-ai-slim[openai,ag-ui]" fastapi uvicorn
+```
 
 ```python
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from starlette.responses import Response
 from pydantic_ai import Agent
+from pydantic_ai.ui.ag_ui import AGUIAdapter
 
 app = FastAPI()
 agent = Agent('openai:gpt-4o')
 
-# to_ag_ui() returns an ASGI app you mount directly
-app.mount('/ai', agent.to_ag_ui())
+@app.post('/ai')
+async def run_agent(request: Request) -> Response:
+    return await AGUIAdapter.dispatch_request(request, agent=agent)
 ```
 
-The AG UI adapter handles the protocol framing, message de/serialisation, and error mapping automatically.
+The adapter handles the protocol framing, message de/serialisation, and error mapping. `Agent.to_ag_ui()` and `AGUIApp` were removed in 2.0; `AGUIAdapter.dispatch_request` replaces them. For the Vercel AI SDK use `pydantic_ai.ui.vercel_ai.VercelAIAdapter` the same way.
 
 ---
 
@@ -326,7 +333,7 @@ async def stream(
                 async for chunk in s.stream_text(delta=True):
                     yield f'data: {json.dumps({"text": chunk})}\n\n'
                 await s.get_output()
-                usage = s.usage()
+                usage = s.usage
                 yield f'event: usage\ndata: {json.dumps({"total_tokens": usage.total_tokens})}\n\n'
         except UsageLimitExceeded as e:
             yield f'event: error\ndata: {json.dumps({"error": "budget_exceeded", "detail": str(e)})}\n\n'
@@ -377,7 +384,7 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
 ### `requirements.txt`
 
 ```text
-pydantic-ai[openai]>=1.99.0
+pydantic-ai==%%version=pydantic-ai%%
 fastapi>=0.115
 uvicorn[standard]>=0.34
 ```
@@ -448,11 +455,11 @@ spec:
 ## Reference
 
 - `Agent.run_stream(...)` — `pydantic_ai/agent/abstract.py`
-- `Agent.run_stream_events(...)` — `pydantic_ai/agent/abstract.py`
+- `Agent.run_stream_events(...)` (async context manager) — `pydantic_ai/agent/abstract.py`
 - `StreamedRunResult.stream_text(delta=True)` — `pydantic_ai/result.py`
 - `StreamedRunResult.stream_output(debounce_by=...)` — `pydantic_ai/result.py`
 - `StreamedRunResult.get_output()` — `pydantic_ai/result.py`
-- `StreamedRunResult.usage()` — `pydantic_ai/result.py`
+- `StreamedRunResult.usage` (property) — `pydantic_ai/result.py`
 - `ModelMessagesTypeAdapter` — `pydantic_ai/messages.py`
-- `Agent.to_ag_ui()` — `pydantic_ai/agent` (mounts a `pydantic_ai.ui.ag_ui` ASGI app)
+- `AGUIAdapter.dispatch_request()` — `pydantic_ai/ui/ag_ui`
 - `UsageLimits`, `UsageLimitExceeded` — `pydantic_ai/usage.py`

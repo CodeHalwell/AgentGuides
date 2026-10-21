@@ -7,7 +7,7 @@ sidebar:
   order: 60
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/memory/`, `google/adk/artifacts/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 
@@ -39,7 +39,7 @@ runner = Runner(
 
 ## Memory service landscape
 
-`BaseMemoryService` (`memory/base_memory_service.py:44`) defines the following operations:
+`BaseMemoryService` (`memory/base_memory_service.py`) defines the following operations:
 
 | Method | Purpose |
 |---|---|
@@ -58,7 +58,7 @@ Not every service implements every method — `InMemoryMemoryService` supports s
 | `VertexAiMemoryBankService(project, location, agent_engine_id, *, express_mode_api_key=None)` | GCP Agent Engine Memory Bank | Semantic (Vertex-side) | Enable Agent Engine in your GCP project; pass the engine's numeric ID (not the full resource path) |
 | `VertexAiRagMemoryService(rag_corpus, similarity_top_k=None, vector_distance_threshold=10)` | Vertex AI RAG corpus | Vector similarity | Create a RAG corpus in advance; format `projects/.../ragCorpora/{id}` or just the id |
 
-`VertexAiRagMemoryService` is imported lazily — install `google-cloud-aiplatform` to enable it (`memory/__init__.py:30-37`).
+`VertexAiRagMemoryService` is imported lazily — install `google-cloud-aiplatform` to enable it (`memory/__init__.py`).
 
 ### Wiring memory into agent turns
 
@@ -109,7 +109,7 @@ await runner.memory_service.add_memory(
 )
 ```
 
-`VertexAiMemoryBankService.add_events_to_memory` uses `memories.ingest_events` by default; it switches to `memories.generate` if `custom_metadata` includes Vertex-specific keys (`ttl`, `revision_ttl`, `metadata`, `wait_for_completion`). See `vertex_ai_memory_bank_service.py:229-250`.
+`VertexAiMemoryBankService.add_events_to_memory` uses `memories.ingest_events` by default; it switches to `memories.generate` if `custom_metadata` includes Vertex-specific keys (`ttl`, `revision_ttl`, `metadata`, `wait_for_completion`). See `vertex_ai_memory_bank_service.py`.
 
 ## MemoryEntry
 
@@ -131,7 +131,7 @@ entry = MemoryEntry(
 
 ## Artifact service landscape
 
-`BaseArtifactService` (`artifacts/base_artifact_service.py:88`) abstracts versioned file storage. Key methods:
+`BaseArtifactService` (`artifacts/base_artifact_service.py`) abstracts versioned file storage. Key methods:
 
 | Method | Purpose |
 |---|---|
@@ -147,7 +147,7 @@ entry = MemoryEntry(
 
 - `session_id=<id>` — session-scoped artifact. Lost when the session is deleted.
 - `session_id=None` — user-scoped artifact. Lives across sessions.
-- `filename="user:foo.pdf"` — explicit user scope even inside a session (filename prefix convention; see `file_artifact_service.py:60-85`).
+- `filename="user:foo.pdf"` — explicit user scope even inside a session (filename prefix convention; see `file_artifact_service.py`).
 
 ### Implementations
 
@@ -529,7 +529,7 @@ asyncio.run(demo_gcs_artifacts())
 - **`preload_memory`** silently no-ops when no `memory_service` is configured (catches all exceptions). **`load_memory`** raises `ValueError('Memory service is not available.')` — the model receives a tool error. Always wire a `memory_service` on the `Runner` before exposing `load_memory` to the model.
 - `VertexAiMemoryBankService` requires the **numeric** `agent_engine_id` (`"456"`), not the full resource path. The constructor warns if it detects a `/`.
 - `SaveFilesAsArtifactsPlugin` replaced the deprecated `RunConfig.save_input_blobs_as_artifacts`. Install the plugin on the `App` instead of toggling the flag.
-- Artifact `save_artifact` accepts a `types.Part` OR a plain dict (camelCase or snake_case); `ensure_part` normalises via Pydantic validation (`base_artifact_service.py:68-85`).
+- Artifact `save_artifact` accepts a `types.Part` OR a plain dict (camelCase or snake_case); `ensure_part` normalises via Pydantic validation (`base_artifact_service.py`).
 - `FileArtifactService` creates the root directory lazily on first save; make sure the process has write permissions.
 - `GcsArtifactService` uses Application Default Credentials by default — on GKE/Cloud Run make sure the service account has `storage.objects.create` and `storage.objects.get`.
-- An artifact's `version` starts at **0**, not 1 (`base_artifact_service.py:122`).
+- An artifact's `version` starts at **0**, not 1 (`base_artifact_service.py`).

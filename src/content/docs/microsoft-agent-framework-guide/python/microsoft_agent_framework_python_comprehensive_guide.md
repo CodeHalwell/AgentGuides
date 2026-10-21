@@ -193,7 +193,7 @@ import asyncio
 from azure.identity.aio import DefaultAzureCredential
 
 from agent_framework import Agent
-from agent_framework.openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 from config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_DEPLOYMENT
 
 async def main():
@@ -201,11 +201,12 @@ async def main():
     credential = DefaultAzureCredential()
 
     # Construct the chat client — pick any first-party provider
-    # (OpenAIChatClient, AzureOpenAIChatClient, FoundryChatClient,
-    # AnthropicClient, OllamaChatClient, BedrockChatClient).
-    client = AzureOpenAIChatClient(
-        endpoint=AZURE_OPENAI_ENDPOINT,
-        deployment_name=AZURE_OPENAI_DEPLOYMENT,
+    # (OpenAIChatClient, FoundryChatClient, AnthropicClient,
+    # OllamaChatClient, BedrockChatClient). Azure OpenAI is served by
+    # OpenAIChatClient itself: pass azure_endpoint= and a credential.
+    client = OpenAIChatClient(
+        AZURE_OPENAI_DEPLOYMENT,               # model / deployment name
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
         credential=credential,
     )
 
@@ -1658,15 +1659,12 @@ workflow = GroupChatBuilder(
 ```python
 from agent_framework_orchestrations import MagenticBuilder
 
-workflow = (
-    MagenticBuilder(
-        participants=[researcher, analyst, writer],
-        manager_agent=manager_agent,
-        enable_plan_review=True,        # pause for HITL after the initial plan
-    )
-    .with_human_input_on_stall()        # ask a human when the manager loops
-    .build()
-)
+workflow = MagenticBuilder(
+    participants=[researcher, analyst, writer],
+    manager_agent=manager_agent,
+    enable_plan_review=True,        # pause for HITL after the initial plan and after stall replans
+    max_stall_count=3,              # replan after three rounds without progress
+).build()
 ```
 
 For the full set of optional knobs (intermediate outputs, request-info filters, autonomous mode for handoff, custom selection functions for group chat) see the [orchestration page](./microsoft_agent_framework_python_orchestration/).

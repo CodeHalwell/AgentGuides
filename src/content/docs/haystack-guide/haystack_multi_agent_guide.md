@@ -1,12 +1,12 @@
 ---
-title: "Haystack Multi-Agent Systems Guide (2025)"
-description: "Complete Guide to Building Collaborative Multi-Agent Applications"
+title: "Haystack Multi-Agent Systems Guide"
+description: "Building collaborative multi-agent applications with Haystack 3 — AgentTool coordinators, agents as pipeline stages, routing, parallel fan-out, refinement loops and shared state."
 framework: haystack
 ---
 
-# Haystack Multi-Agent Systems Guide (2025)
+# Haystack Multi-Agent Systems Guide
 
-**Complete Guide to Building Collaborative Multi-Agent Applications**
+> Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). First written in 2025 for Haystack 2.x; rewritten for the 3.x `Agent` API.
 
 ---
 
@@ -20,77 +20,53 @@ framework: haystack
 6. [Complete Production Multi-Agent Example](#complete-production-multi-agent-example)
 7. [Summary](#summary)
 
-For pipeline-level patterns see [Multi-Agent Pipeline Design Patterns](/haystack-guide/haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns); for deployment, scaling and caching see the [production guide](/haystack-guide/haystack_production_guide/).
+For the short version see [Multi-Agent Pipeline Design Patterns](/haystack-guide/haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns); for deployment, scaling and caching see the [production guide](/haystack-guide/haystack_production_guide/).
 
 ---
 
 ## Introduction to Multi-Agent Systems
 
-Multi-agent systems in Haystack (2025) enable **multiple specialized agents to collaborate** on complex tasks that would be difficult for a single agent to handle effectively.
+A single agent with twenty tools and a long system prompt tends to pick the wrong tool, forget instructions and burn tokens re-reading schemas. Splitting the work between specialised agents keeps each prompt short and each tool set small, at the cost of more LLM calls and more moving parts. Reach for multiple agents when the sub-tasks genuinely need different instructions or tools; otherwise one agent plus a deterministic pipeline is cheaper and easier to debug.
 
-### Why Multi-Agent Systems?
+### Building blocks
+
+Haystack has no separate "multi-agent" module. You compose agents with the same primitives used everywhere else:
+
+| Primitive | Role in a multi-agent system |
+|-----------|------------------------------|
+| `Agent` | A specialist: a chat generator, a system prompt and a few tools |
+| `AgentTool` | Exposes an agent as a tool, so a coordinator agent can delegate to it |
+| `Pipeline` | Fixed wiring between agents (and retrievers, validators, routers) |
+| `ConditionalRouter` / `LLMMessagesRouter` | Rule-based or model-based dispatch to the right specialist |
+| `State` + `state_schema` | Structured data shared between tools during one agent's run |
+| `run_async` / `Pipeline.run_async` | Concurrent execution of independent agents |
+| Hooks | Guard-rails and control flow around each agent's loop |
+
+All examples below assume these imports and a small helper:
 
 ```python
-# Single Agent Limitation:
-# One agent trying to do research, analysis, coding, and writing
-# → Jack of all trades, master of none
+from typing import Annotated
 
-# Multi-Agent Solution:
-# - Research Agent: Expert at finding information
-# - Analysis Agent: Expert at data processing
-# - Coding Agent: Expert at implementation
-# - Writing Agent: Expert at communication
-# → Each agent excels in its domain
-```
-
-### Core Concepts
-
-```python
 from haystack import Pipeline
 from haystack.components.agents import Agent
 from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack.tools import AgentTool, tool
 
-# Multi-agent system components:
-# 1. Specialized Agents - Each with domain expertise
-# 2. Orchestrator - Coordinates agent collaboration
-# 3. Communication Protocol - How agents share information
-# 4. Shared State - Common knowledge and context
-# 5. Workflow - How tasks flow between agents
 
-def create_simple_multi_agent_system():
-    """
-    Basic multi-agent system with two collaborating agents
-    """
-    pipeline = Pipeline()
-
-    # Agent 1: Research specialist
-    research_agent = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[WebSearchTool(), DatabaseTool()],
-        system_prompt="You are a research specialist. Find comprehensive information."
+def make_agent(system_prompt: str, tools=None, **kwargs) -> Agent:
+    return Agent(
+        chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+        system_prompt=system_prompt,
+        tools=tools,
+        **kwargs,
     )
 
-    # Agent 2: Writing specialist
-    writing_agent = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[],
-        system_prompt="You are a writing specialist. Create clear, engaging content."
-    )
 
-    # Connect agents in sequence
-    pipeline.add_component("researcher", research_agent)
-    pipeline.add_component("writer", writing_agent)
-    pipeline.connect("researcher.output", "writer.input")
-
-    return pipeline
-
-# Usage
-multi_agent = create_simple_multi_agent_system()
-result = multi_agent.run({
-    "researcher": {"query": "Latest developments in quantum computing"}
-})
-print(result["writer"]["output"])
-# Researcher finds information → Writer creates polished article
+@tool
+def web_search(query: Annotated[str, "Search query"]) -> str:
+    """Search the web for current information."""
+    return f"(stub) results for {query!r}"
 ```
 
 ---
@@ -99,332 +75,141 @@ print(result["writer"]["output"])
 
 ### Pattern 1: Sequential Collaboration
 
-Agents work in a chain, each building on the previous agent's output:
+Each agent's final message feeds the next agent's `user_prompt`. The order is fixed, so a pipeline is the natural fit.
 
 ```python
-from haystack import Pipeline
-from haystack.components.agents import Agent
+researcher = make_agent(
+    "Research the topic and list the key facts with sources.",
+    tools=[web_search],
+    user_prompt="Topic: {{ topic }}",
+)
+writer = make_agent(
+    "Write a clear 300-word article from the research notes.",
+    user_prompt="Research notes:\n{{ research.text }}",
+)
 
-def sequential_pattern():
-    """
-    Agent1 → Agent2 → Agent3 → Agent4
-    Each agent processes and passes to next
-    """
-    pipeline = Pipeline()
+sequential = Pipeline()
+sequential.add_component("researcher", researcher)
+sequential.add_component("writer", writer)
+sequential.connect("researcher.last_message", "writer.research")
 
-    # Define specialized agents
-    agents = [
-        ("data_collector", create_data_collector_agent()),
-        ("preprocessor", create_preprocessing_agent()),
-        ("analyzer", create_analysis_agent()),
-        ("reporter", create_reporting_agent())
-    ]
-
-    # Add to pipeline
-    for name, agent in agents:
-        pipeline.add_component(name, agent)
-
-    # Connect sequentially
-    pipeline.connect("data_collector.output", "preprocessor.input")
-    pipeline.connect("preprocessor.output", "analyzer.input")
-    pipeline.connect("analyzer.output", "reporter.input")
-
-    return pipeline
-
-def create_data_collector_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[WebSearchTool(), APITool()],
-        system_prompt="Collect comprehensive data from multiple sources"
-    )
-
-def create_preprocessing_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[DataCleaningTool(), ValidationTool()],
-        system_prompt="Clean, validate, and structure collected data"
-    )
-
-def create_analysis_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[StatisticsTool(), MLTool()],
-        system_prompt="Perform deep analysis and extract insights"
-    )
-
-def create_reporting_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[VisualizationTool(), FormattingTool()],
-        system_prompt="Create comprehensive, visually appealing reports"
-    )
-
-# Execute sequential workflow
-sequential = sequential_pattern()
 result = sequential.run({
-    "data_collector": {"query": "Q4 2024 sales performance"}
+    "researcher": {"topic": "grid-scale batteries", "messages": []},
+    "writer": {"messages": []},
 })
+print(result["writer"]["last_message"].text)
 ```
+
+`messages` is a mandatory input of every `Agent`; pass `[]` when the `user_prompt` supplies the turn.
 
 ### Pattern 2: Parallel Processing
 
-Multiple agents work simultaneously on different aspects:
+Independent analyses can run at the same time. Either gather `run_async` calls yourself, or put the agents on parallel branches of a pipeline and use `await pipeline.run_async(...)`.
 
 ```python
-from haystack import Pipeline
-from haystack.components.joiners import DocumentJoiner
+import asyncio
 
-def parallel_pattern():
-    """
-    Task splits into parallel streams:
-           → Agent1 →
-    Task → → Agent2 → Joiner → Result
-           → Agent3 →
-    """
-    pipeline = Pipeline()
+analysts = {
+    "market": make_agent("You analyse market size and growth."),
+    "competition": make_agent("You analyse competitors and their positioning."),
+    "customers": make_agent("You analyse customer needs and sentiment."),
+}
+synthesiser = make_agent("Combine the analyses into one balanced brief.")
 
-    # Parallel agents for different aspects
-    pipeline.add_component("market_analyst", create_market_agent())
-    pipeline.add_component("competitor_analyst", create_competitor_agent())
-    pipeline.add_component("customer_analyst", create_customer_agent())
 
-    # Joiner combines outputs
-    pipeline.add_component("synthesizer", DocumentJoiner())
-
-    # All agents receive same input
-    # Each produces specialized output
-    # Joiner synthesizes results
-
-    pipeline.connect("market_analyst.output", "synthesizer.documents")
-    pipeline.connect("competitor_analyst.output", "synthesizer.documents")
-    pipeline.connect("customer_analyst.output", "synthesizer.documents")
-
-    return pipeline
-
-def create_market_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[MarketDataTool(), TrendAnalysisTool()],
-        system_prompt="Analyze market trends and conditions"
+async def parallel_brief(question: str) -> str:
+    results = await asyncio.gather(*[
+        agent.run_async(messages=[ChatMessage.from_user(question)]) for agent in analysts.values()
+    ])
+    sections = "\n\n".join(
+        f"## {name}\n{r['last_message'].text}" for name, r in zip(analysts, results)
     )
+    final = await synthesiser.run_async(messages=[ChatMessage.from_user(sections)])
+    return final["last_message"].text
 
-def create_competitor_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[CompetitorTool(), BenchmarkingTool()],
-        system_prompt="Analyze competitor strategies and positioning"
-    )
 
-def create_customer_agent():
-    return Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[CustomerDataTool(), SentimentTool()],
-        system_prompt="Analyze customer behavior and sentiment"
-    )
-
-# Execute parallel analysis
-parallel = parallel_pattern()
-result = parallel.run({
-    "market_analyst": {"query": "Tech industry 2025"},
-    "competitor_analyst": {"query": "Tech industry 2025"},
-    "customer_analyst": {"query": "Tech industry 2025"}
-})
+print(asyncio.run(parallel_brief("Should we enter the UK e-bike market?")))
 ```
 
 ### Pattern 3: Hierarchical Delegation
 
-Manager agent delegates to specialist agents:
+A manager agent decides which specialists to call, in what order, and how often. Each specialist is wrapped in an `AgentTool`.
 
 ```python
-from haystack import Pipeline
-from haystack.components.agents import Agent
+research_agent = make_agent("You find information and cite sources.", tools=[web_search])
+data_agent = make_agent("You answer questions about sales data. Be precise with numbers.")
+coding_agent = make_agent("You write small, correct Python snippets.")
 
-def hierarchical_pattern():
-    """
-    Manager Agent
-         ├─→ Specialist Agent 1
-         ├─→ Specialist Agent 2
-         └─→ Specialist Agent 3
+manager = make_agent(
+    "You manage a team. Break the request into sub-tasks, delegate each to the right specialist, "
+    "and assemble the final answer. Do not do specialist work yourself.",
+    tools=[
+        AgentTool(agent=research_agent, name="research", description="Finds information and best practice."),
+        AgentTool(agent=data_agent, name="data", description="Answers questions about sales data."),
+        AgentTool(agent=coding_agent, name="code", description="Writes Python code."),
+    ],
+    max_agent_steps=12,
+)
 
-    Manager decides which specialists to use
-    """
-    pipeline = Pipeline()
-
-    # Specialist agents
-    research_agent = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[WebSearchTool()],
-        system_prompt="Expert researcher"
-    )
-
-    coding_agent = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[PythonTool(), GitTool()],
-        system_prompt="Expert programmer"
-    )
-
-    data_agent = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[SQLTool(), AnalyticsTool()],
-        system_prompt="Expert data analyst"
-    )
-
-    # Manager agent with access to specialists
-    manager = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        managed_agents=[research_agent, coding_agent, data_agent],
-        system_prompt="""You are a project manager.
-        Delegate tasks to appropriate specialists:
-        - researcher: for information gathering
-        - coder: for implementation tasks
-        - analyst: for data analysis"""
-    )
-
-    pipeline.add_component("manager", manager)
-
-    return pipeline
-
-# Manager intelligently delegates
-hierarchical = hierarchical_pattern()
-result = hierarchical.run({
-    "manager": {"query": "Build a sales dashboard with latest data"}
-})
-# Manager will:
-# 1. Ask data_agent to gather sales data
-# 2. Ask coding_agent to build dashboard
-# 3. Ask research_agent for best practices
-# 4. Synthesize final solution
+result = manager.run(messages=[ChatMessage.from_user("Build a dashboard plan for our Q4 sales.")])
+print(result["last_message"].text)
+print(result["tool_call_counts"])   # how often each specialist was used
 ```
+
+`AgentTool` sends the sub-agent a single user message and, by default, returns its final text to the manager. Use `outputs_to_string` to return something else, or `outputs_to_state` to capture the sub-agent's outputs in the manager's state. Set `tool_streaming_callback_passthrough=True` on the manager to stream sub-agent output too.
 
 ### Pattern 4: Iterative Refinement Loop
 
-Agents collaborate in cycles to refine outputs:
+A creator drafts; a critic reviews; the creator revises. The simplest robust version is an explicit loop in Python with a hard cap:
 
 ```python
-from haystack import Pipeline
-from haystack.components.routers import ConditionalRouter
+creator = make_agent("You write concise product descriptions.")
+critic = make_agent(
+    "You review product descriptions. Reply with APPROVED if it is clear, accurate and under 80 words; "
+    "otherwise list specific fixes."
+)
 
-def iterative_refinement_pattern():
-    """
-    Creator Agent → Critic Agent → Quality Check
-                 ↑___________________|
-                 (loop if not good enough)
-    """
-    pipeline = Pipeline()
 
-    # Creator agent
-    creator = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[WritingTool(), ResearchTool()],
-        system_prompt="Create high-quality content"
-    )
+def refine(brief: str, max_rounds: int = 3) -> str:
+    history = [ChatMessage.from_user(brief)]
+    draft = ""
+    for _ in range(max_rounds):
+        draft = creator.run(messages=history)["last_message"].text
+        review = critic.run(messages=[ChatMessage.from_user(draft)])["last_message"].text
+        if "APPROVED" in review:
+            break
+        history += [ChatMessage.from_assistant(draft), ChatMessage.from_user(f"Revise: {review}")]
+    return draft
 
-    # Critic agent
-    critic = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[AnalysisTool()],
-        system_prompt="Provide constructive criticism and improvement suggestions"
-    )
 
-    # Quality checker
-    quality_router = ConditionalRouter(
-        routes=[
-            {
-                "condition": "{quality_score} >= 0.9",
-                "output_name": "approved",
-                "output": "{content}"
-            },
-            {
-                "condition": "{quality_score} < 0.9",
-                "output_name": "revise",
-                "output": "{feedback}"
-            }
-        ]
-    )
-
-    pipeline.add_component("creator", creator)
-    pipeline.add_component("critic", critic)
-    pipeline.add_component("quality_check", quality_router)
-
-    # Connect with feedback loop
-    pipeline.connect("creator.output", "critic.input")
-    pipeline.connect("critic.feedback", "quality_check.feedback")
-    pipeline.connect("quality_check.revise", "creator.revision_feedback")
-
-    return pipeline
-
-# Iterative improvement
-iterative = iterative_refinement_pattern()
-result = iterative.run({
-    "creator": {"query": "Write executive summary of Q4 performance"}
-})
-# Creator writes → Critic reviews → If not good enough, loops back
+print(refine("Describe a stainless-steel water bottle."))
 ```
+
+The same loop can be expressed inside a pipeline with a `ConditionalRouter` and a `BranchJoiner` (see [Iterative refinement loop](/haystack-guide/haystack_comprehensive_guide/#iterative-refinement-loop)), or inside one agent with an `on_exit` hook that sets `continue_run`.
 
 ### Pattern 5: Consensus Building
 
-Multiple agents vote or reach agreement:
+Several agents with different stances answer independently; a judge reconciles them. Varying the system prompt usually matters more than varying temperature.
 
 ```python
-from haystack import Pipeline
-from haystack.components.joiners import AnswerJoiner
+panel = {
+    "optimist": make_agent("You argue the strongest case in favour."),
+    "sceptic": make_agent("You argue the strongest case against."),
+    "pragmatist": make_agent("You weigh costs and practicalities."),
+}
+judge = make_agent("You read several opinions and write a balanced recommendation with a confidence level.")
 
-def consensus_pattern():
-    """
-    Multiple agents analyze independently,
-    then consensus mechanism selects best answer
-    """
-    pipeline = Pipeline()
 
-    # Multiple independent agents with different approaches
-    agent_optimistic = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o", temperature=0.9),
-        tools=[AnalysisTool()],
-        system_prompt="Analyze with optimistic perspective"
-    )
+async def consensus(question: str) -> str:
+    opinions = await asyncio.gather(*[
+        a.run_async(messages=[ChatMessage.from_user(question)]) for a in panel.values()
+    ])
+    transcript = "\n\n".join(f"{n}: {o['last_message'].text}" for n, o in zip(panel, opinions))
+    verdict = await judge.run_async(messages=[ChatMessage.from_user(f"Question: {question}\n\n{transcript}")])
+    return verdict["last_message"].text
 
-    agent_pessimistic = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o", temperature=0.3),
-        tools=[AnalysisTool()],
-        system_prompt="Analyze with conservative perspective"
-    )
 
-    agent_neutral = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o", temperature=0.5),
-        tools=[AnalysisTool()],
-        system_prompt="Analyze with balanced perspective"
-    )
-
-    # Consensus builder
-    consensus = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[],
-        system_prompt="Synthesize multiple viewpoints into consensus"
-    )
-
-    pipeline.add_component("optimist", agent_optimistic)
-    pipeline.add_component("pessimist", agent_pessimistic)
-    pipeline.add_component("neutral", agent_neutral)
-    pipeline.add_component("consensus_builder", consensus)
-
-    # All feed into consensus
-    joiner = AnswerJoiner()
-    pipeline.add_component("joiner", joiner)
-
-    pipeline.connect("optimist.output", "joiner.answers")
-    pipeline.connect("pessimist.output", "joiner.answers")
-    pipeline.connect("neutral.output", "joiner.answers")
-    pipeline.connect("joiner.output", "consensus_builder.input")
-
-    return pipeline
-
-# Multiple perspectives → consensus
-consensus_system = consensus_pattern()
-result = consensus_system.run({
-    "optimist": {"query": "Forecast 2025 growth"},
-    "pessimist": {"query": "Forecast 2025 growth"},
-    "neutral": {"query": "Forecast 2025 growth"}
-})
+print(asyncio.run(consensus("Should a 20-person company adopt a four-day week?")))
 ```
 
 ---
@@ -433,125 +218,54 @@ result = consensus_system.run({
 
 ### Defining Agent Expertise
 
+Keep role definitions as data so they are easy to review and test:
+
 ```python
-from haystack.components.agents import Agent
-from haystack.components.generators.chat import OpenAIChatGenerator
+from dataclasses import dataclass, field
 
-class AgentRole:
-    """Define specialized agent roles"""
+from haystack.tools import Tool
 
-    @staticmethod
-    def create_research_agent():
-        return Agent(
-            llm=OpenAIChatGenerator(model="gpt-4o"),
-            tools=[
-                WebSearchTool(),
-                ScholarTool(),
-                DatabaseTool(),
-                NewsTool()
-            ],
-            system_prompt="""You are an expert research analyst.
-            Your role:
-            - Find comprehensive, accurate information
-            - Verify sources and fact-check
-            - Synthesize information from multiple sources
-            - Cite your sources clearly
-            - Identify knowledge gaps"""
+
+@dataclass
+class Role:
+    name: str
+    description: str          # what the coordinator sees
+    instructions: str         # the specialist's system prompt
+    tools: list[Tool] = field(default_factory=list)
+    max_steps: int = 6
+
+
+ROLES = [
+    Role("researcher", "Finds facts and sources.", "Research thoroughly; cite every claim.", [web_search]),
+    Role("analyst", "Interprets data and identifies trends.", "Analyse the material; state assumptions."),
+    Role("writer", "Produces polished prose.", "Write clearly for a non-specialist reader."),
+]
+
+
+def build_team(roles: list[Role]) -> list[AgentTool]:
+    return [
+        AgentTool(
+            agent=make_agent(r.instructions, tools=r.tools or None, max_agent_steps=r.max_steps),
+            name=r.name,
+            description=r.description,
         )
+        for r in roles
+    ]
 
-    @staticmethod
-    def create_data_scientist_agent():
-        return Agent(
-            llm=OpenAIChatGenerator(model="gpt-4o"),
-            tools=[
-                PythonTool(),
-                SQLTool(),
-                StatisticsTool(),
-                VisualizationTool(),
-                MLTool()
-            ],
-            system_prompt="""You are an expert data scientist.
-            Your role:
-            - Analyze data rigorously
-            - Apply appropriate statistical methods
-            - Build predictive models
-            - Create insightful visualizations
-            - Explain findings clearly"""
-        )
 
-    @staticmethod
-    def create_software_engineer_agent():
-        return Agent(
-            llm=OpenAIChatGenerator(model="gpt-4o"),
-            tools=[
-                PythonTool(),
-                GitTool(),
-                TestingTool(),
-                DocumentationTool()
-            ],
-            system_prompt="""You are an expert software engineer.
-            Your role:
-            - Write clean, efficient code
-            - Follow best practices and patterns
-            - Test thoroughly
-            - Document clearly
-            - Consider edge cases"""
-        )
-
-    @staticmethod
-    def create_business_analyst_agent():
-        return Agent(
-            llm=OpenAIChatGenerator(model="gpt-4o"),
-            tools=[
-                FinancialDataTool(),
-                MarketAnalysisTool(),
-                CompetitorTool()
-            ],
-            system_prompt="""You are an expert business analyst.
-            Your role:
-            - Understand business context
-            - Identify opportunities and risks
-            - Provide strategic recommendations
-            - Consider financial implications
-            - Think about stakeholders"""
-        )
-
-    @staticmethod
-    def create_technical_writer_agent():
-        return Agent(
-            llm=OpenAIChatGenerator(model="gpt-4o"),
-            tools=[
-                DocumentationTool(),
-                DiagramTool()
-            ],
-            system_prompt="""You are an expert technical writer.
-            Your role:
-            - Explain complex concepts clearly
-            - Structure information logically
-            - Write for target audience
-            - Create helpful examples
-            - Use appropriate formatting"""
-        )
-
-# Build multi-agent team with specialized roles
-def create_product_development_team():
-    pipeline = Pipeline()
-
-    pipeline.add_component("researcher", AgentRole.create_research_agent())
-    pipeline.add_component("data_scientist", AgentRole.create_data_scientist_agent())
-    pipeline.add_component("engineer", AgentRole.create_software_engineer_agent())
-    pipeline.add_component("business_analyst", AgentRole.create_business_analyst_agent())
-    pipeline.add_component("writer", AgentRole.create_technical_writer_agent())
-
-    # Connect workflow
-    # Research → Business Analysis → Data Science → Engineering → Documentation
-    pipeline.connect("researcher.output", "business_analyst.input")
-    pipeline.connect("business_analyst.output", "data_scientist.input")
-    pipeline.connect("data_scientist.output", "engineer.input")
-    pipeline.connect("engineer.output", "writer.input")
-
-    return pipeline
+lead = make_agent(
+    "Coordinate your team to answer the request. Delegate, then synthesise.",
+    tools=build_team(ROLES),
+    max_agent_steps=12,
+)
 ```
+
+Guidelines that hold up in practice:
+
+- Give each specialist two to five tools. If a role needs more, wrap them in a `SearchableToolset`.
+- Write the `AgentTool` description for the coordinator: say what the specialist is good at and what input it expects.
+- Cap `max_agent_steps` per specialist; a runaway sub-agent multiplies cost.
+- Use a cheaper model for narrow specialists and a stronger one for the coordinator.
 
 ---
 
@@ -559,130 +273,57 @@ def create_product_development_team():
 
 ### Message Passing Between Agents
 
+Agents communicate through `ChatMessage`s. In a pipeline you can connect an agent's `messages` output (the full transcript) or `last_message` (just the final reply) to the next agent:
+
 ```python
-from haystack import Pipeline
-from haystack.components.agents import Agent
-from haystack.dataclasses import ChatMessage
+reviewer = make_agent("Review the conversation so far and point out any factual errors.")
 
-class AgentMessage:
-    """Structured message format for agent communication"""
+chain = Pipeline()
+chain.add_component("drafter", make_agent("Answer the user's question."))
+chain.add_component("reviewer", reviewer)
+chain.connect("drafter.messages", "reviewer.messages")   # full transcript, including tool calls
 
-    def __init__(self, sender: str, recipient: str, content: str, metadata: dict = None):
-        self.sender = sender
-        self.recipient = recipient
-        self.content = content
-        self.metadata = metadata or {}
-        self.timestamp = datetime.now()
-
-    def to_chat_message(self) -> ChatMessage:
-        """Convert to Haystack ChatMessage format"""
-        return ChatMessage.from_assistant(
-            f"From {self.sender}: {self.content}"
-        )
-
-def create_communicating_agents():
-    """Agents that explicitly communicate with message passing"""
-
-    pipeline = Pipeline()
-
-    # Agent 1: Sends structured requests
-    agent1 = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[],
-        system_prompt="""You coordinate tasks.
-        Send clear requests to other agents in this format:
-        TO: [agent_name]
-        REQUEST: [what you need]
-        CONTEXT: [background information]"""
-    )
-
-    # Agent 2: Processes requests and responds
-    agent2 = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[DataTool()],
-        system_prompt="""You handle data requests.
-        Read incoming messages and respond with:
-        FROM: [your name]
-        RESPONSE: [your response]
-        STATUS: [success/failure]"""
-    )
-
-    pipeline.add_component("coordinator", agent1)
-    pipeline.add_component("data_handler", agent2)
-    pipeline.connect("coordinator.output", "data_handler.input")
-
-    return pipeline
+out = chain.run({"drafter": {"messages": [ChatMessage.from_user("When was the Eiffel Tower built?")]}})
+print(out["reviewer"]["last_message"].text)
 ```
+
+Passing the whole transcript gives the next agent full context but costs tokens. Passing `last_message` into a `user_prompt` variable is cheaper and keeps each agent's context focused.
 
 ### Shared Context & State
 
+Within one agent's run, tools share data through `State`. Declare keys in `state_schema`, write them with `outputs_to_state` and read them with `inputs_from_state`. Combined with `AgentTool`, this lets a coordinator collect structured results from its specialists:
+
 ```python
-from haystack.components.memory import ConversationMemory
+@tool(outputs_to_state={"facts": {"source": "facts"}})
+def record_fact(fact: Annotated[str, "A verified fact with its source"]) -> dict:
+    """Record a verified fact."""
+    return {"facts": [fact]}
 
-class SharedAgentState:
-    """Shared state accessible to all agents"""
 
-    def __init__(self):
-        self.shared_context = {}
-        self.agent_outputs = {}
-        self.conversation_history = ConversationMemory()
+fact_finder = make_agent(
+    "Find facts and record each with record_fact.",
+    tools=[web_search, record_fact],
+    state_schema={"facts": {"type": list[str]}},
+)
 
-    def update(self, agent_name: str, data: dict):
-        """Agent updates shared state"""
-        self.agent_outputs[agent_name] = data
-        self.shared_context.update(data)
+coordinator = make_agent(
+    "Use the fact finder, then write a summary.",
+    tools=[AgentTool(
+        agent=fact_finder,
+        name="fact_finder",
+        description="Finds and records facts on a topic.",
+        outputs_to_state={"facts": {"source": "facts"}},   # copy the sub-agent's facts into our state
+    )],
+    state_schema={"facts": {"type": list[str]}},
+)
 
-    def get_context_for_agent(self, agent_name: str) -> dict:
-        """Get relevant context for specific agent"""
-        return {
-            "shared_data": self.shared_context,
-            "previous_agents": self.agent_outputs,
-            "conversation": self.conversation_history.get_messages()
-        }
-
-def create_state_sharing_pipeline():
-    """Pipeline where agents share state"""
-
-    shared_state = SharedAgentState()
-
-    pipeline = Pipeline()
-
-    # Agents update and read from shared state
-    agent1 = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[],
-        system_prompt="You find data and update shared state"
-    )
-
-    agent2 = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        tools=[],
-        system_prompt="You analyze data from shared state"
-    )
-
-    # Custom component to inject shared state
-    @component
-    class StateInjector:
-        def __init__(self, shared_state: SharedAgentState, agent_name: str):
-            self.shared_state = shared_state
-            self.agent_name = agent_name
-
-        @component.output_types(enhanced_input=dict)
-        def run(self, input: dict) -> dict:
-            context = self.shared_state.get_context_for_agent(self.agent_name)
-            return {"enhanced_input": {**input, "context": context}}
-
-    pipeline.add_component("state_injector_1", StateInjector(shared_state, "agent1"))
-    pipeline.add_component("agent1", agent1)
-    pipeline.add_component("state_injector_2", StateInjector(shared_state, "agent2"))
-    pipeline.add_component("agent2", agent2)
-
-    pipeline.connect("state_injector_1.enhanced_input", "agent1.input")
-    pipeline.connect("agent1.output", "state_injector_2")
-    pipeline.connect("state_injector_2.enhanced_input", "agent2.input")
-
-    return pipeline
+result = coordinator.run(messages=[ChatMessage.from_user("Summarise what is known about perovskite solar cells.")])
+print(result.get("facts", []))
 ```
+
+List-typed state keys are merged (appended) by default; other types are replaced. Supply a `handler` in the schema entry to change that, e.g. `{"type": dict, "handler": my_merge}`.
+
+Across separate runs or processes, persist what you need explicitly: serialise messages with `ChatMessage.to_dict()` and store state values in your database.
 
 ---
 
@@ -690,146 +331,113 @@ def create_state_sharing_pipeline():
 
 ### Dynamic Agent Selection
 
+Route each request to one specialist instead of asking a coordinator to delegate. `LLMMessagesRouter` classifies messages with a model and sends them to the matching output; unmatched messages go to `unmatched`.
+
 ```python
-from haystack.components.routers import ConditionalRouter
+from haystack.components.joiners import BranchJoiner
+from haystack.components.routers import LLMMessagesRouter
 
-def create_dynamic_routing_system():
-    """System that routes to appropriate specialist based on query type"""
+router = LLMMessagesRouter(
+    chat_generator=OpenAIChatGenerator(model="gpt-5-mini"),
+    output_names=["billing", "technical"],
+    output_patterns=["billing", "technical"],
+    system_prompt="Classify the request as 'billing' or 'technical'. Reply with one word.",
+)
 
-    pipeline = Pipeline()
+dispatch = Pipeline()
+dispatch.add_component("router", router)
+dispatch.add_component("billing", make_agent("You handle billing questions."))
+dispatch.add_component("technical", make_agent("You handle technical support questions."))
+dispatch.add_component("general", make_agent("You handle general enquiries."))
+dispatch.add_component("joiner", BranchJoiner(ChatMessage))
 
-    # Classifier determines query type
-    @component
-    class QueryClassifier:
-        @component.output_types(query_type=str, original_query=str)
-        def run(self, query: str) -> dict:
-            # Simple keyword-based classification
-            # In production, use ML classifier
-            if any(word in query.lower() for word in ['code', 'implement', 'program']):
-                return {"query_type": "coding", "original_query": query}
-            elif any(word in query.lower() for word in ['analyze', 'data', 'statistics']):
-                return {"query_type": "analysis", "original_query": query}
-            elif any(word in query.lower() for word in ['research', 'find', 'search']):
-                return {"query_type": "research", "original_query": query}
-            else:
-                return {"query_type": "general", "original_query": query}
+dispatch.connect("router.billing", "billing.messages")
+dispatch.connect("router.technical", "technical.messages")
+dispatch.connect("router.unmatched", "general.messages")
+for name in ["billing", "technical", "general"]:
+    dispatch.connect(f"{name}.last_message", "joiner")
 
-    # Specialist agents
-    coding_agent = AgentRole.create_software_engineer_agent()
-    analysis_agent = AgentRole.create_data_scientist_agent()
-    research_agent = AgentRole.create_research_agent()
-    general_agent = Agent(llm=OpenAIChatGenerator(model="gpt-4o"), tools=[])
-
-    # Router sends to appropriate agent
-    router = ConditionalRouter(
-        routes=[
-            {"condition": "{query_type} == 'coding'", "output_name": "to_coder"},
-            {"condition": "{query_type} == 'analysis'", "output_name": "to_analyst"},
-            {"condition": "{query_type} == 'research'", "output_name": "to_researcher"},
-            {"condition": "{query_type} == 'general'", "output_name": "to_general"}
-        ]
-    )
-
-    pipeline.add_component("classifier", QueryClassifier())
-    pipeline.add_component("router", router)
-    pipeline.add_component("coder", coding_agent)
-    pipeline.add_component("analyst", analysis_agent)
-    pipeline.add_component("researcher", research_agent)
-    pipeline.add_component("generalist", general_agent)
-
-    # Connect routing
-    pipeline.connect("classifier.query_type", "router.query_type")
-    pipeline.connect("router.to_coder", "coder.query")
-    pipeline.connect("router.to_analyst", "analyst.query")
-    pipeline.connect("router.to_researcher", "researcher.query")
-    pipeline.connect("router.to_general", "generalist.query")
-
-    return pipeline
-
-# Usage
-router_system = create_dynamic_routing_system()
-result = router_system.run({"classifier": {"query": "Implement binary search in Python"}})
-# Automatically routes to coding agent
+out = dispatch.run({"router": {"messages": [ChatMessage.from_user("I was charged twice this month.")]}})
+print(out["joiner"]["value"].text)
 ```
+
+For deterministic rules (keywords, metadata, user tier), use `ConditionalRouter` instead; it costs nothing and is easy to test. To branch on how an agent finished, route on its `exit_reason` output.
 
 ---
 
 ## Complete Production Multi-Agent Example
 
+A support desk: a cheap triage step, specialists with real tools, a confirmation hook on the one tool with side effects, and tracing.
+
 ```python
-from haystack import Pipeline
-from haystack.components.agents import Agent
-from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.components.routers import ConditionalRouter
-from haystack.tools import Tool
+import os
 
-def create_enterprise_multi_agent_system():
-    """
-    Complete production multi-agent system (2025):
-    - Research team finds information
-    - Analysis team processes data
-    - Engineering team implements solutions
-    - QA team validates outputs
-    - Management coordinates everything
-    """
+from haystack.hooks.human_in_the_loop import (
+    AlwaysAskPolicy,
+    BlockingConfirmationStrategy,
+    ConfirmationHook,
+    SimpleConsoleUI,
+)
 
-    pipeline = Pipeline()
+ORDERS = {"ORD-1": {"status": "delivered", "amount": 49.0}}
 
-    # Create specialized agent teams
-    research_team = create_research_team()
-    analysis_team = create_analysis_team()
-    engineering_team = create_engineering_team()
-    qa_team = create_qa_team()
 
-    # Manager coordinates teams
-    manager = Agent(
-        llm=OpenAIChatGenerator(model="gpt-4o"),
-        managed_agents=[research_team, analysis_team, engineering_team],
-        system_prompt="""You are a project manager coordinating specialist teams.
-        Break down complex tasks and delegate to appropriate teams."""
+@tool
+def get_order(order_id: Annotated[str, "Order ID"]) -> dict:
+    """Look up an order."""
+    return ORDERS.get(order_id, {"error": "not found"})
+
+
+@tool
+def issue_refund(order_id: Annotated[str, "Order ID"], amount: Annotated[float, "Amount in GBP"]) -> str:
+    """Issue a refund. This moves money."""
+    return f"Refunded £{amount:.2f} for {order_id}"
+
+
+confirm_refunds = ConfirmationHook(confirmation_strategies={
+    "issue_refund": BlockingConfirmationStrategy(
+        confirmation_policy=AlwaysAskPolicy(), confirmation_ui=SimpleConsoleUI()
     )
-
-    # Quality gate before final output
-    quality_router = ConditionalRouter(
-        routes=[
-            {"condition": "{qa_score} >= 0.95", "output_name": "approved"},
-            {"condition": "{qa_score} < 0.95", "output_name": "rework"}
-        ]
-    )
-
-    pipeline.add_component("manager", manager)
-    pipeline.add_component("qa_team", qa_team)
-    pipeline.add_component("quality_gate", quality_router)
-
-    # Connect with feedback loop
-    pipeline.connect("manager.output", "qa_team.input")
-    pipeline.connect("qa_team.score", "quality_gate.qa_score")
-    pipeline.connect("quality_gate.rework", "manager.feedback")
-
-    # Serialize for deployment
-    pipeline.to_yaml("enterprise_multi_agent_system.yaml")
-
-    return pipeline
-
-# Deploy production system
-production_system = create_enterprise_multi_agent_system()
-result = production_system.run({
-    "manager": {"query": "Build customer churn prediction system"}
 })
+
+billing_agent = make_agent(
+    "You resolve billing issues. Check the order before refunding.",
+    tools=[get_order, issue_refund],
+    hooks={"before_tool": [confirm_refunds]},
+    max_agent_steps=6,
+)
+tech_agent = make_agent("You resolve technical issues step by step.", tools=[web_search], max_agent_steps=6)
+
+desk = make_agent(
+    "You are the front desk. Hand billing issues to `billing` and technical issues to `tech`. "
+    "Answer simple questions yourself.",
+    tools=[
+        AgentTool(agent=billing_agent, name="billing", description="Handles orders, charges and refunds."),
+        AgentTool(agent=tech_agent, name="tech", description="Handles technical problems."),
+    ],
+    max_agent_steps=8,
+)
+
+# Tracing (pip install langfuse-haystack); instantiating the connector enables it globally
+if os.getenv("LANGFUSE_SECRET_KEY"):
+    os.environ.setdefault("HAYSTACK_CONTENT_TRACING_ENABLED", "true")
+    from haystack_integrations.components.connectors.langfuse import LangfuseConnector
+    LangfuseConnector("support-desk")
+
+result = desk.run(messages=[ChatMessage.from_user("Order ORD-1 arrived broken, can I get my money back?")])
+print(result["last_message"].text)
 ```
+
+In a web service, replace `SimpleConsoleUI` with a custom `ConfirmationUI` that asks the user through your front end, and pass request-scoped objects with `desk.run(..., hook_context={...})`.
 
 ---
 
 ## Summary
 
-Haystack's 2025 multi-agent capabilities enable:
-
-1. **Specialized Agent Teams**: Each agent excels in specific domain
-2. **Flexible Coordination**: Sequential, parallel, hierarchical patterns
-3. **Shared Context**: Agents communicate through shared state
-4. **Dynamic Routing**: Intelligent task delegation
-5. **Quality Assurance**: Built-in validation and feedback loops
-6. **Production Ready**: Serializable, deployable, scalable
-
-Build sophisticated multi-agent applications that tackle complex real-world problems through intelligent collaboration.
-
+- Start with one agent; split only when roles need different prompts or tools.
+- **Coordinator + `AgentTool`** when the order of work is decided at run time.
+- **Pipeline stages** when the order is fixed; wire `last_message` into the next `user_prompt`.
+- **Routers** to send each request to exactly one specialist.
+- **`asyncio.gather` over `run_async`** for independent, parallel work.
+- **State** (`state_schema`, `outputs_to_state`, `inputs_from_state`) for structured data shared between tools and sub-agents.
+- **Hooks** for guard-rails and approvals; **tracing** to see what each agent did.

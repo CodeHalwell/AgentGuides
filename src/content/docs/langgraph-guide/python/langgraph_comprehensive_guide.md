@@ -1,22 +1,21 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.2.12 (September 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Single-page LangGraph reference for Python: fundamentals through advanced multi-agent architectures, with practical, production-ready patterns."
 framework: langgraph
 language: python
 ---
 
-Latest: langgraph 1.2.12 | Updated: September 28, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.2.12 (September 2026)
+**Verified against**: `langgraph` %%version=langgraph%% (checked %%versions-checked%%)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
 > **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.12 (verified September 2026):**
+**What's real in the current release (%%version=langgraph%%):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
-- `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
+- `ToolCallTransformer` (`langgraph.prebuilt`) — native stream transformer that projects `tools` events into per-call `ToolCallStream` handles (`run.tool_calls`)
 - `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
 - `Overwrite` (`langgraph.types`) — bypass a reducer and replace a channel value directly
 - `MessagesState` (`langgraph.graph`) — built-in TypedDict with `add_messages` reducer, ready to subclass
@@ -35,10 +34,8 @@ Latest: langgraph 1.2.12 | Updated: September 28, 2026
 - Cross-thread memory via `Store` + `InjectedStore`
 - Fixed time-travel replays with interrupts and subgraphs
 
-**Deprecated in v1.2.12:**
-- `langgraph.prebuilt.HumanInterrupt` → `langchain.agents.interrupt.HumanInterrupt`
-- `langgraph.prebuilt.HumanInterruptConfig` → `langchain.agents.interrupt.HumanInterruptConfig`
-- `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
+**Deprecated (still importable):**
+- `langgraph.prebuilt.interrupt.HumanInterrupt`, `HumanInterruptConfig`, `ActionRequest`, `HumanResponse` → for agents, `HumanInTheLoopMiddleware` and its `HITLRequest` / `HITLResponse` types in `langchain.agents.middleware.human_in_the_loop` (there is no `langchain.agents.interrupt` module)
 - `@entrypoint(config_schema=...)` → `@entrypoint(context_schema=...)`
 - `add_node(..., retry=...)` → `add_node(..., retry_policy=...)`; `add_node(..., cache=...)` → `add_node(..., cache_policy=...)`
 
@@ -107,8 +104,7 @@ pip install langgraph langchain-core
 pip install aiosqlite
 
 # For database checkpointing
-pip install langgraph[postgres]  # PostgreSQL support
-pip install psycopg2-binary      # PostgreSQL adapter
+pip install langgraph-checkpoint-postgres "psycopg[binary,pool]"  # PostgreSQL support (psycopg 3)
 
 # LLM providers (example with Anthropic)
 pip install langchain-anthropic
@@ -262,8 +258,10 @@ The `.compile()` method turns your graph into an executable Pregel engine:
 ```python
 from langgraph.checkpoint.sqlite import SqliteSaver
 
+import sqlite3
+
 # Compile with persistence
-checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
+checkpointer = SqliteSaver(sqlite3.connect("checkpoints.db", check_same_thread=False))
 graph = builder.compile(checkpointer=checkpointer)
 
 # Without persistence (in-memory only)
@@ -336,7 +334,7 @@ def fetch_user_context(state: State):
 
 def call_model(state: State):
     """Call LLM with messages."""
-    model = ChatAnthropic(model="claude-sonnet-5")
+    model = ChatAnthropic(model="claude-sonnet-5-5")
     
     system_prompt = f"You're helping {state['user_name']}. Be concise."
     
@@ -415,7 +413,7 @@ def solve_math(state: State) -> dict:
 
 def general_response(state: State) -> dict:
     """Handle general queries."""
-    model = ChatAnthropic(model="claude-sonnet-5")
+    model = ChatAnthropic(model="claude-sonnet-5-5")
     response = model.invoke(state["query"])
     return {"result": response.content}
 
@@ -561,62 +559,50 @@ One coordinator agent routing to specialists:
 
 
 ```python
-from langchain_core.messages import BaseMessage
-# Note: AgentExecutor and create_tool_calling_agent require `pip install langchain langchain-anthropic`
-# from langchain.agents import AgentExecutor, create_tool_calling_agent
-# from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
-from langgraph.types import Send
-from langchain_core.tools import tool
-from typing import List
+# Specialist agents use create_agent from the `langchain` package (pip install langchain langchain-anthropic).
+# AgentExecutor / create_tool_calling_agent are LangChain 0.x APIs; in LangChain 1.x they live
+# only in the langchain-classic compatibility package.
+from typing import Annotated, Literal
+from typing_extensions import TypedDict
 
-# Define specialized agents' tools
+from langchain.agents import create_agent
+from langchain.chat_models import init_chat_model
+from langchain_core.messages import AIMessage
+from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+
 @tool
 def research_tool(query: str) -> str:
     """Search the web for information."""
     return f"Research results for: {query}"
 
 @tool
-def calculator_tool(expression: str) -> str:
-    """Evaluate math expressions."""
-    # In a real scenario, use a safe evaluation library
-    return str(eval(expression))
+def calculator_tool(a: float, b: float, op: Literal["add", "sub", "mul", "div"]) -> float:
+    """Apply a basic arithmetic operation to two numbers."""
+    return {"add": a + b, "sub": a - b, "mul": a * b, "div": a / b}[op]
 
-# Helper function to create a specialist agent
-def create_agent(llm, tools: list, system_prompt: str):
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", system_prompt),
-        ("placeholder", "{chat_history}"),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ])
-    agent = create_tool_calling_agent(llm, tools, prompt)
-    executor = AgentExecutor(agent=agent, tools=tools)
-    return executor
+model = init_chat_model("anthropic:claude-sonnet-5-5")
 
-# Create agent runner function
+research_agent = create_agent(model, [research_tool],
+                              system_prompt="You are a research specialist. Find accurate information.")
+math_agent = create_agent(model, [calculator_tool],
+                          system_prompt="You are a maths specialist. Use the calculator tool.")
+
 def agent_node(state, agent, name):
-    result = agent.invoke(state)
-    return {"messages": [BaseMessage(type="human", content=result["output"], name=name)]}
+    result = agent.invoke({"messages": state["messages"]})
+    return {"messages": [AIMessage(content=result["messages"][-1].content, name=name)]}
 
-# Create specialized agents
-model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-research_agent = create_agent(model, [research_tool], "You are a research specialist. Find accurate information.")
-math_agent = create_agent(model, [calculator_tool], "You are a math specialist. Solve problems step-by-step.")
-
-# Supervisor state
 class SupervisorState(TypedDict):
     messages: Annotated[list, add_messages]
     next: str
 
-# Supervisor logic
 def supervisor_node(state: SupervisorState) -> dict:
-    """Analyze request and pick best agent."""
+    """Pick the next specialist, or finish once one has answered."""
     last_message = state["messages"][-1]
-    
-    # If the last message is from an agent, the supervisor can decide to end the process
-    if hasattr(last_message, 'name'):
-        return {"next": "END"}
+    if getattr(last_message, "name", None) in ("research_agent", "math_agent"):
+        return {"next": "FINISH"}
 
     prompt = f"""You manage two specialist agents:
 - research_agent: For web searches, fact-finding, current info
@@ -625,11 +611,9 @@ def supervisor_node(state: SupervisorState) -> dict:
 Request: {last_message.content}
 
 Which agent should handle this? Reply with ONLY the agent name or FINISH."""
-    
-    response = model.invoke(prompt)
-    next_agent = response.content.strip()
-    
-    return {"next": next_agent}
+
+    next_agent = model.invoke(prompt).content.strip()
+    return {"next": next_agent if next_agent in ("research_agent", "math_agent") else "FINISH"}
 
 # Build supervisor graph
 builder = StateGraph(SupervisorState)
@@ -852,7 +836,7 @@ def send_email(to: str, subject: str, body: str) -> str:
 tools = [get_weather, get_stock_price, send_email]
 
 # Create model with tools
-model = ChatAnthropic(model="claude-sonnet-5")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 model_with_tools = model.bind_tools(tools)
 
 class ToolState(TypedDict):
@@ -1048,35 +1032,39 @@ graph = builder.compile(checkpointer=checkpointer)
 #### SQLite (Local Persistence)
 
 ```python
+import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
 
-# File-based
-checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
-
-# Or in-memory SQLite
-checkpointer = SqliteSaver.from_conn_string(":memory:")
-
+# File-based: pass a connection directly ...
+checkpointer = SqliteSaver(sqlite3.connect("checkpoints.db", check_same_thread=False))
 graph = builder.compile(checkpointer=checkpointer)
+
+# ... or use from_conn_string, which is a context manager
+with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+    graph = builder.compile(checkpointer=checkpointer)
 ```
 
 #### PostgreSQL (Production)
 
 ```python
+# pip install langgraph-checkpoint-postgres "psycopg[binary,pool]"
 from langgraph.checkpoint.postgres import PostgresSaver
-import psycopg2
 
-checkpointer = PostgresSaver.from_conn_string(
-    "postgresql://user:password@localhost/langgraph_db"
-)
+DB_URI = "postgresql://user:password@localhost/langgraph_db"
+
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    checkpointer.setup()  # create tables on first run
+    graph = builder.compile(checkpointer=checkpointer)
+    graph.invoke(inputs, {"configurable": {"thread_id": "t1"}})
 
 # Async version
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-async_checkpointer = AsyncPostgresSaver.from_conn_string(
-    "postgresql://user:password@localhost/langgraph_db"
-)
-
-graph = builder.compile(checkpointer=checkpointer)
+async def run():
+    async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
+        await checkpointer.setup()
+        graph = builder.compile(checkpointer=checkpointer)
+        await graph.ainvoke(inputs, {"configurable": {"thread_id": "t1"}})
 ```
 
 ### Using Checkpoints
@@ -1139,10 +1127,10 @@ from langgraph.store.postgres import AsyncPostgresStore
 # In-memory for development
 store = InMemoryStore()
 
-# PostgreSQL for production (with vector search)
-store = AsyncPostgresStore.from_conn_string(
-    "postgresql://user:password@localhost/langgraph_db"
-)
+# PostgreSQL for production: from_conn_string is an async context manager,
+#   async with AsyncPostgresStore.from_conn_string(DB_URI) as store:
+#       await store.setup()
+# The operations below work the same on either store.
 
 # Store operations
 namespace = ("users", "user-123", "preferences")
@@ -1159,7 +1147,7 @@ item = await store.aget(namespace, "theme")
 print(item.value)  # {"dark_mode": True, ...}
 
 # List all in namespace
-items = await store.asearch(namespace_prefix=namespace)
+items = await store.asearch(namespace)  # namespace_prefix is positional-only
 for item in items:
     print(f"{item.key}: {item.value}")
 
@@ -1169,32 +1157,33 @@ await store.adelete(namespace, "theme")
 # Store with vector search for semantic retrieval
 from langchain_openai import OpenAIEmbeddings
 
-embeddings = OpenAIEmbeddings()
-store_with_search = AsyncPostgresStore.from_conn_string(
+embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
+async with AsyncPostgresStore.from_conn_string(
     "postgresql://user:password@localhost/langgraph_db",
-    embeddings=embeddings
-)
+    index={"dims": 1536, "embed": embeddings, "fields": ["content"]},
+) as store_with_search:
+    await store_with_search.setup()
 
-# Store documents with embeddings
-await store_with_search.aput(
-    namespace=("docs", "kb"),
-    key="api-guide",
-    value={
-        "title": "API Guide",
-        "content": "LangGraph provides APIs for building stateful agents..."
-    },
-    index=["content"]  # Fields to embed
-)
+    # Store documents with embeddings
+    await store_with_search.aput(
+        namespace=("docs", "kb"),
+        key="api-guide",
+        value={
+            "title": "API Guide",
+            "content": "LangGraph provides APIs for building stateful agents..."
+        },
+        index=["content"]  # Fields to embed
+    )
 
-# Semantic search
-results = await store_with_search.asearch(
-    namespace_prefix=("docs",),
-    query="how to build agents",
-    limit=5
-)
+    # Semantic search
+    results = await store_with_search.asearch(
+        ("docs",),  # namespace prefix (positional-only)
+        query="how to build agents",
+        limit=5
+    )
 
-for result in results:
-    print(f"Score: {result.score}, {result.value['title']}")
+    for result in results:
+        print(f"Score: {result.score}, {result.value['title']}")
 ```
 
 ### Injecting Store into Nodes
@@ -1283,7 +1272,8 @@ def store_memory_node(
     return {}
 
 # Build with memory
-checkpointer = SqliteSaver.from_conn_string("memory.db")
+import sqlite3
+checkpointer = SqliteSaver(sqlite3.connect("memory.db", check_same_thread=False))
 store = InMemoryStore()
 
 builder = StateGraph(MemoryState)
@@ -1806,50 +1796,39 @@ stream_events(debug_workflow.stream(
 
 ### Pattern 1: ReAct (Reasoning + Acting)
 
-The Reflection-Action pattern for autonomous agents, now built with modern LangChain components.
+ReAct interleaves reasoning with tool calls in a loop until the model can answer. LangChain 1.x provides it ready-made as `create_agent`, which compiles to a LangGraph graph (so it supports checkpointers, streaming and interrupts like any other graph).
 
 ```python
-# Note: AgentExecutor and create_tool_calling_agent require `pip install langchain langchain-anthropic`
-# from langchain.agents import AgentExecutor, create_tool_calling_agent
-# from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
+# pip install langchain langchain-anthropic
+from langchain.agents import create_agent
 from langchain_core.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
 
-# Define tools
 @tool
 def search_web(query: str) -> str:
     """Search the web."""
     return f"Results for {query}..."
 
 @tool
-def calculator(expression: str) -> str:
-    """Calculate expression."""
-    return str(eval(expression))
+def percentage(value: float, percent: float) -> float:
+    """Return `percent` per cent of `value`."""
+    return value * percent / 100
 
-tools = [search_web, calculator]
-
-# Create the ReAct agent
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-prompt = ChatPromptTemplate.from_messages(
-    [
-        ("system", "You are a helpful research assistant. Think before acting."),
-        ("placeholder", "{chat_history}"),
-        ("human", "{input}"),
-        ("placeholder", "{agent_scratchpad}"),
-    ]
+react_agent = create_agent(
+    "anthropic:claude-sonnet-5-5",
+    tools=[search_web, percentage],
+    system_prompt="You are a helpful research assistant. Think before acting.",
+    checkpointer=InMemorySaver(),
 )
-agent = create_tool_calling_agent(llm, tools, prompt)
-react_agent = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
-
-# Use it - the AgentExecutor automatically handles the ReAct loop
-result = react_agent.invoke({
-    "input": "Research population of Tokyo and calculate 15% of that",
-    "chat_history": []
-})
-
-print(result["output"])
+result = react_agent.invoke(
+    {"messages": [{"role": "user", "content": "Research the population of Tokyo and calculate 15% of it"}]},
+    {"configurable": {"thread_id": "react-1"}},
+)
+print(result["messages"][-1].content)
 ```
+
+To build the same loop by hand with `ToolNode` and `tools_condition`, see [Chapter 2](/langgraph-guide/python/chapter-02-simple-agents/).
 
 ### Pattern 2: Tree-of-Thoughts
 
@@ -2766,7 +2745,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 Source-verified reference for the classes, functions, and types developers actually
 touch — consolidated from LangGraph's full class-by-class audit and re-verified
-against the installed `langgraph==1.2.12` (`langgraph-checkpoint==4.2.0`,
+against the installed `langgraph==%%version=langgraph%%` (`langgraph-checkpoint==4.3.0`,
 `langgraph-prebuilt==1.1.0`, `langchain-core==1.6.0`). Each entry gives the module
 path, the verified signature, why it matters, and a runnable example. Deeply
 private, underscore-prefixed implementation details (`langgraph.pregel._algo`,
@@ -2784,10 +2763,12 @@ top-level `langgraph.prebuilt.__init__` but remains importable from
 from `langgraph.prebuilt.tool_validator`. The deprecation notices target
 `langchain.agents` as migration destination (requires the separate `langchain`
 package). `create_react_agent` is **deprecated** per official LangGraph v1
-migration docs in favour of `langchain.agents.create_agent`; the installed
-`langgraph==1.2.12` source does not carry a runtime `@deprecated` decorator but
-migration guidance is clear. The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
-`langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` and
+migration docs in favour of `langchain.agents.create_agent`; in `langgraph==%%version=langgraph%%` the
+agent state classes in `langgraph.prebuilt.chat_agent_executor` carry `@deprecated`
+markers pointing to `langchain.agents`. The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest`
+family is deprecated too; its deprecation message points to `langchain.agents.interrupt`, but that
+module does not exist in `langchain` 1.4.x — the equivalent types for agents are `HITLRequest` /
+`HITLResponse` in `langchain.agents.middleware.human_in_the_loop`. `langchain.agents.create_agent` and
 `langchain.agents.middleware` exist in the separate `langchain` package.
 
 ### Graph Construction & State
@@ -3443,7 +3424,7 @@ Pregel(*, nodes: dict[str, PregelNode | NodeBuilder], channels: dict[str, BaseCh
        checkpointer=None, store=None, cache=None, context_schema=None,
        interrupt_before_nodes=(), interrupt_after_nodes=(), name: str = "LangGraph", ...)
 
-# NodeBuilder (verified 1.2.12 — note the real method names differ from some older docs)
+# NodeBuilder (verified %%version=langgraph%% — note the real method names differ from some older docs)
 nb = NodeBuilder()
 nb.subscribe_only("channel")            # or .subscribe_to("ch1", "ch2", read=True)
 nb.do(my_function)                      # set the node action
@@ -4751,7 +4732,7 @@ async with graph.astream({"messages": []}, stream_mode="tools", version="v2") as
 `create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. It is
 **deprecated** per official LangGraph v1 migration docs in favour of
 `langchain.agents.create_agent` (from the separate `langchain` package; install
-with `pip install langchain`). The installed `langgraph==1.2.12` source does not
+with `pip install langchain`). The installed `langgraph==%%version=langgraph%%` source does not
 carry a runtime `@deprecated` decorator, but official migration guidance is clear.
 `pre_model_hook`/`post_model_hook` hooks remain available on `create_react_agent`
 for users working with `langgraph` standalone.
@@ -4807,7 +4788,7 @@ def create_react_agent(
 
 **Correction vs. some older write-ups:** `from langgraph.prebuilt import
 AgentState` does **not** merely warn — it raises `ImportError` in the installed
-1.2.12 (`AgentState` isn't re-exported from the `langgraph.prebuilt` package
+%%version=langgraph%% (`AgentState` isn't re-exported from the `langgraph.prebuilt` package
 `__init__` at all). Import it from `langgraph.prebuilt.chat_agent_executor`
 instead.
 
@@ -5405,12 +5386,12 @@ resuming node also needs to patch state or route explicitly.
 
 #### `HumanResponse` (+ deprecated `HumanInterrupt` / `ActionRequest` / `HumanInterruptConfig`)
 
-**Module:** `langgraph.prebuilt.interrupt` (moved to `langchain.agents.interrupt`
-as of LangGraph 1.0; the `langgraph.prebuilt.interrupt` re-exports still work but
-each emits `LangGraphDeprecatedSinceV10` — the `langchain` package itself isn't
-installed in the verification venv, so the `langchain.agents.interrupt` import
-path is confirmed only via the deprecation shim's pointer, not independently
-re-verified). `HumanResponse` is the conventional shape a human-review resume
+**Module:** `langgraph.prebuilt.interrupt`. The classes still work but each emits
+`LangGraphDeprecatedSinceV10`. The deprecation message says they moved to
+`langchain.agents.interrupt`, but no such module exists in `langchain` 1.4.x
+(checked with `langchain` 1.4.6 installed); for agents use `HumanInTheLoopMiddleware`
+and the `HITLRequest` / `HITLResponse` types in
+`langchain.agents.middleware.human_in_the_loop`. `HumanResponse` is the conventional shape a human-review resume
 value takes; it remains a stable, non-deprecated `TypedDict`.
 
 A structured HITL contract standardising what a human operator can do with a
@@ -5437,10 +5418,10 @@ class HumanResponse(TypedDict):
 
 ```python
 from langgraph.types import interrupt, Command
-try:
-    from langchain.agents.interrupt import ActionRequest, HumanInterrupt, HumanInterruptConfig, HumanResponse
-except ImportError:
-    from langgraph.prebuilt.interrupt import ActionRequest, HumanInterrupt, HumanInterruptConfig, HumanResponse  # deprecated fallback
+# Deprecated since LangGraph 1.0 (still importable). For agents built with
+# langchain's create_agent, use HumanInTheLoopMiddleware and its HITLRequest /
+# HITLResponse types from langchain.agents.middleware.human_in_the_loop instead.
+from langgraph.prebuilt.interrupt import ActionRequest, HumanInterrupt, HumanInterruptConfig, HumanResponse
 
 def request_approval(state) -> dict:
     request: HumanInterrupt = {
@@ -5547,8 +5528,8 @@ print(compute.invoke([1, 2, 3, 4], {"configurable": {"thread_id": "t1"}}))  # [1
 
 #### `call()` + `SyncAsyncFuture`
 
-**Modules:** `langgraph.pregel._call` (implementation); public re-export
-`langgraph.types.call`
+**Module:** `langgraph.pregel._call` (private; there is no public re-export in
+`langgraph.types`, so prefer `@task` in application code)
 
 The low-level primitive `@task` compiles down to: `call(fn, *args, retry_policy=...,
 cache_policy=..., timeout=..., **kwargs)` dispatches `fn` as a sub-task with its own
@@ -5566,14 +5547,19 @@ def call(func: Callable[..., T], *args,
 ```
 
 ```python
-from langgraph.types import call, RetryPolicy
-from langgraph.func import entrypoint
+# Public equivalent: per-task policies on @task, then fan out
+from langgraph.types import RetryPolicy
+from langgraph.func import entrypoint, task
 from langgraph.checkpoint.memory import InMemorySaver
 import asyncio
 
+@task(retry_policy=RetryPolicy(max_attempts=3), timeout=30.0)
+async def llm_task(prompt: str) -> str:
+    return await call_llm(prompt)
+
 @entrypoint(checkpointer=InMemorySaver())
 async def pipeline(prompts: list[str]) -> list[str]:
-    futures = [call(call_llm, p, retry_policy=[RetryPolicy(max_attempts=3)], timeout=30.0) for p in prompts]
+    futures = [llm_task(p) for p in prompts]
     return list(await asyncio.gather(*futures))
 ```
 
@@ -6031,7 +6017,7 @@ machinery underneath every `invoke()`/`stream()` call.
 
 A short list of symbols and signatures that differ from what circulates in older
 blog posts, outdated docs, or earlier drafts of this reference — the installed
-`langgraph==1.2.12` source is the tiebreaker throughout this section:
+`langgraph==%%version=langgraph%%` source is the tiebreaker throughout this section:
 
 - **`ToolOutputMixin` at `langgraph.prebuilt.tool_node`** — never actually lived there;
   it's `langchain_core.messages.tool.ToolOutputMixin`, re-exported (unofficially) via
@@ -6046,7 +6032,7 @@ blog posts, outdated docs, or earlier drafts of this reference — the installed
   value is the function `_default_handle_tool_errors`, not the literal `True`
   (see Tools & Tool Calling above).
 - **`from langgraph.prebuilt import AgentState`** — raises `ImportError` in
-  1.2.12; it was never re-exported from the `langgraph.prebuilt` package
+  %%version=langgraph%%; it was never re-exported from the `langgraph.prebuilt` package
   `__init__`. Import from `langgraph.prebuilt.chat_agent_executor` instead.
 - **`SqliteSaver.from_conn_string(...)` / `PostgresSaver.from_conn_string(...)`**
   — these are **context managers** (`with ... as saver:`), not factories that

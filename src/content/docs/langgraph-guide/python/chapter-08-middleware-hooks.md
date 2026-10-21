@@ -1,6 +1,6 @@
 ---
 title: "Chapter 8 — Middleware & Hooks"
-description: "Intercept model and tool calls in LangGraph using pre_model_hook, post_model_hook, per-node error handlers, retry policies, and set_node_defaults — all verified against langgraph==1.2.12."
+description: "Intercept model and tool calls in LangGraph using pre_model_hook, post_model_hook, per-node error handlers, retry policies, and set_node_defaults."
 framework: langgraph
 language: python
 sidebar:
@@ -10,9 +10,9 @@ sidebar:
 
 # Chapter 8 — Middleware & Hooks
 
-**What you'll learn:** how to intercept, transform, and guard model and tool calls without rewriting node business logic. LangGraph 1.2.12 provides four complementary mechanisms: `pre_model_hook` / `post_model_hook` on `create_react_agent`, per-node `error_handler` and `retry_policy` on `add_node`, `set_node_defaults` for graph-wide policy, and `ToolNode`'s `handle_tool_errors` for tool-specific error handling.
+**What you'll learn:** how to intercept, transform, and guard model and tool calls without rewriting node business logic. LangGraph provides four complementary mechanisms: `pre_model_hook` / `post_model_hook` on `create_react_agent`, per-node `error_handler` and `retry_policy` on `add_node`, `set_node_defaults` for graph-wide policy, and `ToolNode`'s `handle_tool_errors` for tool-specific error handling.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.prebuilt`, `langgraph.graph`, `langgraph.types`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.prebuilt`, `langgraph.graph`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -114,7 +114,7 @@ def trim_to_last_n(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[],
     pre_model_hook=trim_to_last_n,
 )
@@ -133,7 +133,7 @@ def inject_system_prompt(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[],
     pre_model_hook=inject_system_prompt,
 )
@@ -213,7 +213,7 @@ def truncate_long_messages(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[],
     pre_model_hook=truncate_long_messages,
 )
@@ -252,7 +252,7 @@ def log_token_usage(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[],
     post_model_hook=log_token_usage,
 )
@@ -293,7 +293,7 @@ class CostTracker:
 tracker = CostTracker()
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[],
     post_model_hook=tracker,
 )
@@ -320,7 +320,7 @@ def guard_empty_response(state: dict) -> dict | Command:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[],
     post_model_hook=guard_empty_response,
 )
@@ -362,7 +362,7 @@ def post_hook(state: dict) -> dict:
 
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[get_weather],
     pre_model_hook=pre_hook,
     post_model_hook=post_hook,
@@ -698,7 +698,7 @@ def get_stock_price(ticker: str) -> str:
     return f"{ticker}: ${prices[ticker]}"
 
 
-model = ChatAnthropic(model="claude-sonnet-5").bind_tools([get_stock_price])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([get_stock_price])
 
 tool_node = ToolNode(
     tools=[get_stock_price],
@@ -866,7 +866,7 @@ def invoke_once(user_message: str) -> str:
     """Build a fresh agent (and fresh budget) for each independent request."""
     budget = TokenBudget()   # brand-new counter for this request only
     agent = create_react_agent(
-        model=ChatAnthropic(model="claude-sonnet-5"),
+        model=ChatAnthropic(model="claude-sonnet-5-5"),
         tools=[search_docs, send_alert],
         pre_model_hook=enforce_system_prompt,
         post_model_hook=budget,
@@ -903,7 +903,7 @@ def send_alert(message: str) -> str:
     return "Alert sent."
 
 
-model = ChatAnthropic(model="claude-sonnet-5").bind_tools([search_docs, send_alert])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([search_docs, send_alert])
 
 
 def call_model(state: MessagesState) -> dict:

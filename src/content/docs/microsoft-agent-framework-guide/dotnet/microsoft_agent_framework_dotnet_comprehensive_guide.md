@@ -237,79 +237,71 @@ public class ConversationalAgent
 
     public async Task StartConversation()
     {
-        // Each conversation gets its own thread
-        var thread = _agent.GetNewThread();
+        // Each conversation gets its own session
+        AgentSession session = await _agent.CreateSessionAsync();
 
-        var response1 = await _agent.RunAsync("What is the latest version of .NET?", thread);
+        var response1 = await _agent.RunAsync("What is the latest version of .NET?", session);
         Console.WriteLine($"Assistant: {response1.Text}");
 
-        // The thread carries history forward on the next turn
-        var response2 = await _agent.RunAsync("What were the key features in that release?", thread);
+        // The session carries history forward on the next turn
+        var response2 = await _agent.RunAsync("What were the key features in that release?", session);
         Console.WriteLine($"Assistant: {response2.Text}");
     }
 }
 ```
 
-> The `AgentFactory.CreateAgent<T>()` pattern from earlier drafts is not part of the public `Microsoft.Agents.AI` surface. Construct `ChatClientAgent` directly, or use the `chatClient.CreateAIAgent(...)` extension method shipped with `Microsoft.Agents.AI.OpenAI` / `Microsoft.Agents.AI.Foundry`.
+> The `AgentFactory.CreateAgent<T>()` pattern from earlier drafts is not part of the public `Microsoft.Agents.AI` surface. Construct `ChatClientAgent` directly, or use the `AsAIAgent(...)` extension method (on `IChatClient` in `Microsoft.Agents.AI`, and on the OpenAI SDK's `ChatClient` / `ResponsesClient` in `Microsoft.Agents.AI.OpenAI`). It was called `CreateAIAgent` in early previews, and `AgentThread` / `GetNewThread()` became `AgentSession` / `CreateSessionAsync()` before GA.
 
 ### Agent Lifecycle Management
 
-Agents are typically registered as transient or scoped services in a DI container. The `AgentFactory` manages the underlying resources, ensuring that components like `OpenAIClient` are reused efficiently.
+Agents are typically registered as singleton, scoped or transient services in a DI container, with the underlying `IChatClient` (and the `OpenAIClient` / `AzureOpenAIClient` behind it) registered once and reused. `ChatClientAgent` itself is cheap to construct; per-conversation state lives in an `AgentSession`, not in the agent.
 
 ### Task Execution Models
 
-Agents execute tasks asynchronously. The `InvokeAsync` method is the primary way to interact with an agent. It takes an input, processes it through the LLM (along with any history and tools), and returns the resulting `AgentResponse`.
+Agents execute tasks asynchronously. `RunAsync` is the primary way to interact with an agent: it takes a string, a `ChatMessage` or a list of messages, plus an optional `AgentSession`, and returns an `AgentResponse`. `RunStreamingAsync` yields `AgentResponseUpdate`s as they arrive.
 
 ### Testing Individual Agents
 
-Testing is crucial. You can mock the `AgentFactory` and `ChatClientAgent` to test your application logic without making live LLM calls.
+Because `ChatClientAgent` sits on top of `IChatClient`, the simplest seam for unit tests is a mocked chat client — no live LLM calls, no framework internals to fake.
 
 ```csharp
 // In your test project
-using Moq;
 using Microsoft.Agents.AI;
-using System.Threading.Tasks;
+using Microsoft.Extensions.AI;
+using Moq;
 using Xunit;
 
 public class AgentTests
 {
     [Fact]
-    public async Task MyAgent_Should_Respond_Correctly()
+    public async Task Agent_returns_the_model_reply()
     {
         // Arrange
-        var mockResponse = new AgentResponse(new { Content = "This is a mock response." });
-        
-        var mockThread = new Mock<AgentThread>();
-        mockThread.Setup(t => t.InvokeAsync(It.IsAny<object>(), default))
-                  .ReturnsAsync(mockResponse);
+        var chatClient = new Mock<IChatClient>();
+        chatClient
+            .Setup(c => c.GetResponseAsync(
+                It.IsAny<IEnumerable<ChatMessage>>(),
+                It.IsAny<ChatOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ChatResponse(new ChatMessage(ChatRole.Assistant, "This is a mock response.")));
 
-        var mockAgent = new Mock<ChatClientAgent>();
-        mockAgent.Setup(a => a.CreateThread()).Returns(mockThread.Object);
-
-        var mockFactory = new Mock<AgentFactory>();
-        mockFactory.Setup(f => f.CreateAgent<ChatClientAgent>(It.IsAny<AgentOptions>()))
-                   .Returns(mockAgent.Object);
-
-        var myConversationalAgent = new ConversationalAgent(mockFactory.Object);
+        var agent = new ChatClientAgent(chatClient.Object, instructions: "You are helpful.");
 
         // Act
-        // Since we are mocking, the actual conversation logic is bypassed
-        // In a real test, you would call your method that uses the agent
-        // For demonstration, we assume the test directly verifies the mock setup.
-        var thread = myConversationalAgent.CreateThread(); // This would be inside your method
-        var result = await thread.InvokeAsync("test");
-
+        AgentResponse response = await agent.RunAsync("test");
 
         // Assert
-        Assert.Equal("This is a mock response.", result.GetContent<string>());
-        mockThread.Verify(t => t.InvokeAsync("test", default), Times.Once);
+        Assert.Equal("This is a mock response.", response.Text);
     }
 }
 ```
 
+An earlier draft of this section mocked `AgentFactory`, `AgentThread.InvokeAsync` and `ChatClientAgent.CreateThread()`; none of those exist in current `Microsoft.Agents.AI`.
+
 ---
 
 ## Multi-Agent Systems
+
 
 The true power of the framework lies in orchestrating multiple agents to solve complex problems.
 
@@ -323,7 +315,7 @@ The framework supports several patterns for agent collaboration:
 
 ### Communication Patterns Between Agents
 
-Agents communicate through a shared `AgentThread`. One agent can add a message to the thread, and another agent can then be invoked with that thread's state, allowing it to see the full history.
+Agents can share context through an `AgentSession` or, more simply, by passing one agent's output messages to the next. For anything beyond two or three hops, prefer the orchestration builders in `Microsoft.Agents.AI.Workflows` (`AgentWorkflowBuilder.BuildSequential`, `BuildConcurrent`, handoff and group chat).
 
 **Example: A Simple Sequential Workflow**
 
@@ -345,16 +337,16 @@ public class ResearchWorkflow
 
     public async Task<string> RunAsync(string topic)
     {
-        var thread = _researcher.CreateThread();
+        AgentSession session = await _researcher.CreateSessionAsync();
 
         // 1. Researcher agent finds information
-        var researchResult = await thread.InvokeAsync($"Research the topic: {topic}");
-        Console.WriteLine($"Researcher found: {researchResult.GetContent<string>().Substring(0, 100)}...");
+        var researchResult = await _researcher.RunAsync($"Research the topic: {topic}", session);
+        Console.WriteLine($"Researcher found: {researchResult.Text.Substring(0, 100)}...");
 
         // 2. Writer agent is invoked with the same thread, so it sees the research
-        var finalReport = await _writer.InvokeAsync(thread, "Write a one-paragraph summary of your findings.");
+        var finalReport = await _writer.RunAsync("Write a one-paragraph summary of your findings.", session);
         
-        return finalReport.GetContent<string>();
+        return finalReport.Text;
     }
 }
 ```
@@ -394,14 +386,14 @@ public class ExplicitWorkflow
 
         // Define the flow
         workflow.AddEdge(researchStep, writeStep, (thread) => 
-            !string.IsNullOrEmpty(thread.GetLastMessage()?.GetContent<string>())
+            !string.IsNullOrEmpty(thread.GetLastMessage()?.Text)
         );
 
         // Execute the workflow
         var initialMessage = new { Topic = topic };
         var result = await workflow.ExecuteAsync(initialMessage);
 
-        return result.GetLastMessage().GetContent<string>();
+        return result.GetLastMessage().Text;
     }
 }
 ```
@@ -446,11 +438,11 @@ var agentOptions = new AgentOptions
 };
 
 var agent = factory.CreateAgent<ChatClientAgent>(agentOptions);
-var thread = agent.CreateThread();
+AgentSession session = await agent.CreateSessionAsync();
 
-var response = await thread.InvokeAsync("What's the weather like in Seattle today?");
+var response = await agent.RunAsync("What's the weather like in Seattle today?", session);
 // The agent will automatically call the GetCurrentWeatherAsync tool
-Console.WriteLine(response.GetContent<string>());
+Console.WriteLine(response.Text);
 ```
 
 ### Built-in Azure Tools
@@ -507,7 +499,7 @@ public record Person(
 
 ### Forcing Structured Output from an Agent
 
-You can instruct an agent to respond with a specific structure by passing the type to the `InvokeAsync` call.
+You can instruct an agent to respond with a specific structure by passing the type to `RunAsync<T>`; the typed value is on `response.Result`.
 
 ```csharp
 public class DataExtractionAgent
@@ -523,12 +515,12 @@ public class DataExtractionAgent
 
     public async Task<Person> ExtractPersonAsync(string text)
     {
-        var thread = _agent.CreateThread();
+        AgentSession session = await _agent.CreateSessionAsync();
         
         // The agent will format its response to match the Person record schema
-        var response = await thread.InvokeAsync<Person>(text);
+        var response = await _agent.RunAsync<Person>(text, session);
         
-        return response.GetContent();
+        return response.Result;
     }
 }
 
@@ -598,15 +590,15 @@ var plannerAgent = factory.CreateAgent<ChatClientAgent>(new() {
 });
 
 var goal = "Plan a 3-day trip to Seattle, including finding flights, booking a hotel, and suggesting an itinerary.";
-var thread = plannerAgent.CreateThread();
+AgentSession session = await plannerAgent.CreateSessionAsync();
 
 // The agent will first generate a plan
-var planResponse = await thread.InvokeAsync(goal);
-Console.WriteLine($"The Plan:\n{planResponse.GetContent<string>()}");
+var planResponse = await plannerAgent.RunAsync(goal, session);
+Console.WriteLine($"The Plan:\n{planResponse.Text}");
 
 // You can then have another agent (or the same one) execute the plan step-by-step
 var executorAgent = factory.CreateAgent<ChatClientAgent>(new() { Tools = { ... } });
-var executionResponse = await executorAgent.InvokeAsync(thread, "Execute the first step of the plan.");
+var executionResponse = await executorAgent.RunAsync("Execute the first step of the plan.", session);
 ```
 
 ### Autonomous Decision-Making
@@ -626,18 +618,18 @@ var writerAgent = factory.CreateAgent<ChatClientAgent>(new() { Instructions = "Y
 var criticAgent = factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a critical editor. Review the following text and provide feedback for improvement." });
 
 var topic = "The Future of AI in .NET";
-var thread = writerAgent.CreateThread();
+AgentSession session = await writerAgent.CreateSessionAsync();
 
 // 1. Draft the post
-var draft = await thread.InvokeAsync($"Write a blog post about: {topic}");
+var draft = await writerAgent.RunAsync($"Write a blog post about: {topic}", session);
 
 // 2. Have the critic review the draft
-var feedback = await criticAgent.InvokeAsync(thread, $"Please review this draft:\n\n{draft.GetContent<string>()}");
+var feedback = await criticAgent.RunAsync($"Please review this draft:\n\n{draft.Text}", session);
 
 // 3. Have the writer revise the draft based on feedback
-var finalVersion = await writerAgent.InvokeAsync(thread, $"Revise the draft based on this feedback:\n\n{feedback.GetContent<string>()}");
+var finalVersion = await writerAgent.RunAsync($"Revise the draft based on this feedback:\n\n{feedback.Text}", session);
 
-Console.WriteLine($"Final Version:\n{finalVersion.GetContent<string>()}");
+Console.WriteLine($"Final Version:\n{finalVersion.Text}");
 ```
 
 ---
@@ -753,17 +745,20 @@ public class MultiTenantService
     {
         var agent = _agentFactory.CreateAgent<ChatClientAgent>();
 
-        // Each user gets their own thread, ensuring conversation isolation.
-        // The thread ID is a combination of agent ID and a unique user identifier.
-        var threadId = $"{agent.Id}:{userId}"; 
-        var thread = agent.GetThread(threadId);
+        // Each user gets their own session, ensuring conversation isolation.
+        // Persist sessions between requests with agent.SerializeSessionAsync(...) /
+        // agent.DeserializeSessionAsync(...), keyed by an authenticated user id.
+        var key = $"{agent.Id}:{userId}";
+        AgentSession session = await _sessionStore.LoadAsync(agent, key)   // your own store
+                               ?? await agent.CreateSessionAsync();
 
-        var response = await thread.InvokeAsync(userInput);
-        return response.GetContent<string>();
+        var response = await agent.RunAsync(userInput, session);
+        await _sessionStore.SaveAsync(agent, key, session);
+        return response.Text;
     }
 }
 ```
-When using a persistent memory backend (like Cosmos DB or SQL Server), the framework automatically partitions the data based on the thread ID, providing a strong security boundary between tenants.
+When using a persistent memory backend (like Cosmos DB or SQL Server), your store partitions the serialised sessions by that key, providing a strong security boundary between tenants.
 
 ---
 

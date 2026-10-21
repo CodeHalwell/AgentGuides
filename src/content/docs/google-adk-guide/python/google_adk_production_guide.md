@@ -1,14 +1,38 @@
 ---
 title: "Google Agent Development Kit (ADK) - Production Guide"
-description: "Version: 1.0 Focus: Enterprise Deployment, Reliability, Performance, Security"
+description: "Deploying, scaling, monitoring, securing and testing Google ADK agents in production."
 framework: google-adk
 language: python
 ---
 
 # Google Agent Development Kit (ADK) - Production Guide
 
-**Version:** 1.0  
-**Focus:** Enterprise Deployment, Reliability, Performance, Security
+**Focus:** Enterprise deployment, reliability, performance, security. Verified against `google-adk` %%version=google-adk%% (checked %%versions-checked%%).
+
+**A note on the snippets.** ADK agents have no `run()`/`execute()` method of their own; a `Runner` drives them. To keep the operational examples short, several of them call this small helper, which runs one turn and returns the final text:
+
+```python
+from google.adk.runners import InMemoryRunner
+from google.genai import types
+
+async def ask(agent, text: str, *, user_id: str = "u1", session_id: str = "s1") -> str:
+    """Run one turn against `agent` and return the final response text."""
+    runner = InMemoryRunner(agent=agent, app_name="prod_examples")
+    await runner.session_service.create_session(
+        app_name="prod_examples", user_id=user_id, session_id=session_id
+    )
+    final_text = ""
+    async for event in runner.run_async(
+        user_id=user_id,
+        session_id=session_id,
+        new_message=types.Content(role="user", parts=[types.Part(text=text)]),
+    ):
+        if event.is_final_response() and event.content:
+            final_text = "".join(p.text or "" for p in event.content.parts)
+    return final_text
+```
+
+In production you would build the `Runner` once, with persistent session, memory and artifact services, rather than per call.
 
 ---
 
@@ -1112,7 +1136,7 @@ async def track_agent_cost(agent, query: str):
     """Execute agent and track cost."""
     
     # Simulate response with token counts
-    response = await agent.execute(query)
+    response = await ask(agent, query)
     
     cost = calculate_cost(
         model=agent.model,
@@ -1243,7 +1267,7 @@ async def secure_agent_call(agent, user_input: str):
     sanitised_input = validator.sanitise_input(user_input)
     
     # Call agent with sanitised input
-    return await agent.execute(sanitised_input)
+    return await ask(agent, sanitised_input)
 ```
 
 ### Access Control
@@ -1374,7 +1398,7 @@ async def rate_limited_agent_call(agent, user_id: str, query: str):
         remaining = limiter.get_remaining(user_id)
         return {"error": f"Rate limit exceeded. Try again in 1 minute."}
     
-    return await agent.execute(query)
+    return await ask(agent, query)
 ```
 
 ---
@@ -1512,7 +1536,7 @@ async def test_agent_latency():
     start = time.time()
     
     # Execute agent (simplified)
-    result = await agent.execute("Test query")
+    result = await ask(agent, "Test query")
     
     elapsed = time.time() - start
     
@@ -1648,7 +1672,7 @@ class MultiTenantAgentManager:
         agent = self.tenant_agents[tenant_id]
         
         # Execute with tenant-specific context
-        response = await agent.execute(
+        response = await ask(agent,
             f"[Tenant: {tenant_id}] {query}"
         )
         

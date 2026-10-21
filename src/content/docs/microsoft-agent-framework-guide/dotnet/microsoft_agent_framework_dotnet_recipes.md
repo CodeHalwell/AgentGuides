@@ -44,7 +44,7 @@ public class SimpleChatAgent
     public async Task RunInteractiveAsync()
     {
         Console.WriteLine("Chat Agent Initialized. Type 'exit' to quit.");
-        var thread = _agent.CreateThread();
+        AgentSession session = await _agent.CreateSessionAsync();
 
         while (true)
         {
@@ -56,8 +56,8 @@ public class SimpleChatAgent
                 break;
             }
 
-            var response = await thread.InvokeAsync(userInput);
-            Console.WriteLine($"Assistant: {response.GetContent<string>()}");
+            var response = await _agent.RunAsync(userInput, session);
+            Console.WriteLine($"Assistant: {response.Text}");
         }
     }
 }
@@ -108,9 +108,9 @@ public class ToolAgent
 
     public async Task<string> AskAboutTimeAsync()
     {
-        var thread = _agent.CreateThread();
-        var response = await thread.InvokeAsync("What time is it right now?");
-        return response.GetContent<string>();
+        AgentSession session = await _agent.CreateSessionAsync();
+        var response = await _agent.RunAsync("What time is it right now?", session);
+        return response.Text;
     }
 }
 ```
@@ -142,7 +142,7 @@ public class MathTool
 // var mathTool = new MathTool();
 // var agentOptions = new AgentOptions { Tools = { AIFunctionFactory.CreateTool(mathTool) } };
 // var agent = factory.CreateAgent<ChatClientAgent>(agentOptions);
-// var response = await agent.CreateThread().InvokeAsync("What is 10 divided by 0?");
+// var response = await agent.RunAsync("What is 10 divided by 0?");
 // The agent will respond with something like: "I cannot divide by zero. Could you please provide a different number?"
 ```
 
@@ -176,15 +176,15 @@ public class SequentialWorkflow
     public async Task<string> RunAsync(string topic)
     {
         // Use a single thread to pass context between agents
-        var thread = _researcher.CreateThread();
+        AgentSession session = await _researcher.CreateSessionAsync();
 
         // Step 1: Researcher gathers information
-        var researchResponse = await thread.InvokeAsync($"Please research the topic: {topic}");
+        var researchResponse = await _researcher.RunAsync($"Please research the topic: {topic}", session);
 
         // Step 2: Summarizer is invoked on the same thread. It sees the researcher's output.
-        var summaryResponse = await _summarizer.InvokeAsync(thread, "Please summarize your findings.");
+        var summaryResponse = await _summarizer.RunAsync("Please summarize your findings.", session);
 
-        return summaryResponse.GetContent<string>();
+        return summaryResponse.Text;
     }
 }
 ```
@@ -212,21 +212,21 @@ public class RouterWorkflow
 
     public async Task<string> RouteAndHandleRequestAsync(string userInput)
     {
-        var routingResponse = await _routerAgent.CreateThread().InvokeAsync(userInput);
-        var route = routingResponse.GetContent<string>();
+        var routingResponse = await _routerAgent.RunAsync(userInput);
+        var route = routingResponse.Text;
 
-        var conversationThread = _billingAgent.CreateThread(); // Thread can be from any agent
+        AgentSession conversationSession = await _billingAgent.CreateSessionAsync(); // Thread can be from any agent
         await conversationThread.AddMessageAsync(new { Role = "user", Content = userInput });
 
         if (route.Contains("Billing", StringComparison.OrdinalIgnoreCase))
         {
-            var response = await _billingAgent.InvokeAsync(conversationThread, "Provide a response to the user's billing question.");
-            return response.GetContent<string>();
+            var response = await _billingAgent.RunAsync("Provide a response to the user's billing question.", conversationSession);
+            return response.Text;
         }
         else // Default to technical support
         {
-            var response = await _techSupportAgent.InvokeAsync(conversationThread, "Provide a response to the user's technical question.");
-            return response.GetContent<string>();
+            var response = await _techSupportAgent.RunAsync("Provide a response to the user's technical question.", conversationSession);
+            return response.Text;
         }
     }
 }
@@ -272,9 +272,9 @@ public class KnowledgeWorker
 
     public async Task<string> AnswerQuestionAsync(string question)
     {
-        var thread = _ragAgent.CreateThread();
-        var response = await thread.InvokeAsync(question);
-        return response.GetContent<string>();
+        AgentSession session = await _ragAgent.CreateSessionAsync();
+        var response = await _ragAgent.RunAsync(question, session);
+        return response.Text;
     }
 }
 ```
@@ -357,7 +357,7 @@ public class AdvancedWorkflow
         var initialContext = new { Topic = topic, Instructions = "Find three key points on the topic." };
         var result = await workflow.ExecuteAsync(initialContext);
 
-        return result.GetLastMessage().GetContent<string>();
+        return result.GetLastMessage().Text;
     }
 }
 ```
@@ -394,15 +394,18 @@ app.Run();
 
 public record ChatRequest(string UserId, string Message);
 
-// Modify the SimpleChatAgent to support specific threads
+// Modify the SimpleChatAgent to keep one session per user
 public class SimpleChatAgent 
 {
     // ... constructor ...
     public async Task<string> RespondToAsync(string userId, string message)
     {
-        var thread = _agent.GetThread($"user-{userId}");
-        var response = await thread.InvokeAsync(message);
-        return response.GetContent<string>();
+        // Load this user's serialised session from your own store, or start a new one.
+        AgentSession session = await _sessionStore.LoadAsync(_agent, $"user-{userId}")
+                               ?? await _agent.CreateSessionAsync();
+        var response = await _agent.RunAsync(message, session);
+        await _sessionStore.SaveAsync(_agent, $"user-{userId}", session);
+        return response.Text;
     }
 }
 ```
@@ -466,7 +469,7 @@ Stream the agent's thoughts and tool calls in real-time to understand its decisi
 public async Task DebugWithStreamingAsync(string userInput)
 {
     var agent = new ToolAgent(factory).GetAgent(); // Assuming ToolAgent exposes its agent
-    var thread = agent.CreateThread();
+    AgentSession session = await agent.CreateSessionAsync();
 
     await foreach (var message in thread.StreamAsync(userInput))
     {
@@ -482,7 +485,7 @@ public async Task DebugWithStreamingAsync(string userInput)
         {
             // This is the final response or an intermediate thought
             Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"[Assistant]: {message.GetContent<string>()}");
+            Console.WriteLine($"[Assistant]: {message.Text}");
             Console.ResetColor();
         }
     }

@@ -1,88 +1,178 @@
 ---
-title: "AG2 (AutoGen) Recipes"
-description: "Version: 0.12.0 Last Updated: April 2026 Focus: Ready-to-Use Examples"
+title: "AG2 Recipes"
+description: "Copy-pasteable AG2 1.x recipes — chatbot loop, tool use, structured extraction, sub-agents, a reviewed pipeline on the Network, and MCP tools."
 framework: ag2
 ---
 
-# AG2 (AutoGen) Recipes
+> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). These recipes use the 1.x API (`import ag2`). For AG2 Classic (`import autogen`) recipes, see [classic.docs.ag2.ai](https://classic.docs.ag2.ai).
 
-**Version:** 0.12.0
-**Last Updated:** April 2026
-**Focus:** Ready-to-Use Examples
+All recipes assume `pip install "ag2[openai]"` and `OPENAI_API_KEY` in the environment. Swap `OpenAIConfig` for any other provider config.
 
-## Overview
+## Recipe 1: Terminal chatbot
 
-This collection of recipes provides copy-pasteable code for common AG2 use cases.
-
-## Recipe 1: Simple Chatbot
-
-A basic agent that chats with the user.
+`AgentReply.ask` continues the same conversation, so a chat loop just keeps the latest reply.
 
 ```python
-from autogen import Agent, UserProxyAgent
+import asyncio
 
-assistant = Agent(name="assistant", system_message="You are a helpful AI assistant.")
-user_proxy = UserProxyAgent(name="user_proxy", human_input_mode="ALWAYS")
+from ag2 import Agent
+from ag2.config import OpenAIConfig
 
-user_proxy.initiate_chat(assistant, message="Hello!")
+assistant = Agent("assistant", prompt="You are a helpful assistant.", config=OpenAIConfig(model="gpt-4.1-mini"))
+
+
+async def main() -> None:
+    reply = None
+    while (text := input("you> ").strip()) not in {"", "exit"}:
+        reply = await (reply.ask(text) if reply else assistant.ask(text))
+        print("bot>", reply.body)
+
+
+asyncio.run(main())
 ```
 
-## Recipe 2: Code Execution Agent
-
-An agent that can write and execute Python code.
+## Recipe 2: Calculator tool
 
 ```python
-from autogen import Agent, UserProxyAgent
+import asyncio
+import operator
 
-assistant = Agent(
-    name="coder",
-    system_message="You are a python expert. Write code to solve problems."
+from ag2 import Agent, tool
+from ag2.config import OpenAIConfig
+
+OPS = {"+": operator.add, "-": operator.sub, "*": operator.mul, "/": operator.truediv}
+
+
+@tool
+def calculator(a: float, b: float, op: str) -> float:
+    """Apply a binary operator (+, -, *, /) to two numbers."""
+    return OPS[op](a, b)
+
+
+agent = Agent(
+    "maths",
+    prompt="Use the calculator for every arithmetic step.",
+    config=OpenAIConfig(model="gpt-4.1-mini"),
+    tools=[calculator],
 )
-user_proxy = UserProxyAgent(
-    name="user_proxy",
-    human_input_mode="NEVER",
-    code_execution_config={"work_dir": "coding", "use_docker": False}
+
+print(asyncio.run(agent.ask("What is 123 * 456?")).body)
+```
+
+## Recipe 3: Structured extraction
+
+```python
+import asyncio
+from dataclasses import dataclass
+
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+
+
+@dataclass
+class Invoice:
+    supplier: str
+    total: float
+    currency: str
+
+
+extractor = Agent(
+    "extractor",
+    prompt="Extract invoice fields exactly as written.",
+    config=OpenAIConfig(model="gpt-4.1-mini"),
+    response_schema=Invoice,
 )
 
-user_proxy.initiate_chat(assistant, message="Plot a chart of NVDA stock price YTD.")
+
+async def main() -> None:
+    reply = await extractor.ask("ACME Ltd — total due GBP 1,240.50 by 30 November.")
+    invoice = await reply.content()
+    print(invoice)
+
+
+asyncio.run(main())
 ```
 
-## Recipe 3: Two-Agent Debate
+## Recipe 4: A specialist as a sub-agent
 
-Two agents debating a topic.
+`Agent.as_tool()` lets a coordinator call another agent like any other tool.
 
 ```python
-from autogen import Agent, GroupChat, GroupChatManager
+import asyncio
 
-pro_agent = Agent(name="Pro", system_message="Argue in favor of remote work.")
-con_agent = Agent(name="Con", system_message="Argue against remote work.")
-judge = Agent(name="Judge", system_message="Evaluate the debate.")
+from ag2 import Agent
+from ag2.config import OpenAIConfig
 
-groupchat = GroupChat(agents=[pro_agent, con_agent, judge], messages=[], max_round=6)
-manager = GroupChatManager(groupchat=groupchat)
+config = OpenAIConfig(model="gpt-4.1-mini")
 
-pro_agent.initiate_chat(manager, message="Let's debate remote work.")
+translator = Agent("translator", prompt="Translate the given text into French. Reply with the translation only.", config=config)
+
+coordinator = Agent(
+    "coordinator",
+    prompt="Answer the user. When they ask for French, delegate to the translator tool.",
+    config=config,
+    tools=[translator.as_tool(description="Translate text into French.")],
+)
+
+print(asyncio.run(coordinator.ask("Say 'good morning, team' in French.")).body)
 ```
 
-## Recipe 4: Tool Use with Calculator
+## Recipe 5: Write → review pipeline on the Network
 
-An agent that uses a calculator tool.
+The 1.x replacement for a sequential `GroupChat`: a `workflow` channel driven by a `TransitionGraph`.
 
 ```python
-from autogen import Agent, UserProxyAgent
+import asyncio
 
-def calculator(a: int, b: int, op: str) -> int:
-    if op == "+": return a + b
-    elif op == "-": return a - b
-    elif op == "*": return a * b
-    elif op == "/": return a // b
-    else: return 0
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.knowledge import MemoryKnowledgeStore
+from ag2.network import EV_CHANNEL_CLOSED, EV_PACKET, Hub, TransitionGraph
 
-assistant = Agent(name="assistant", system_message="Use the calculator tool.")
-assistant.register_function(function_map={"calculator": calculator})
 
-user_proxy = UserProxyAgent(name="user_proxy", human_input_mode="NEVER")
+async def main() -> None:
+    config = OpenAIConfig(model="gpt-4.1-mini")
+    hub = await Hub.open(MemoryKnowledgeStore(), ttl_sweep_interval=0)
 
-user_proxy.initiate_chat(assistant, message="Calculate 123 * 456")
+    client = await hub.register(Agent("client", prompt="You commission short pieces.", config=config))
+    writer = await hub.register(Agent("writer", prompt="Write 100 words on the brief.", config=config))
+    reviewer = await hub.register(Agent("reviewer", prompt="List concrete improvements, then a revised draft.", config=config))
+
+    graph = TransitionGraph.sequence([client.agent_id, writer.agent_id, reviewer.agent_id])
+    channel = await client.open(type="workflow", target=[writer.agent_id, reviewer.agent_id], knobs={"graph": graph.to_dict()})
+    await channel.send("Brief: why teams should write ADRs.")
+
+    while not any(e.event_type == EV_CHANNEL_CLOSED for e in await hub.read_wal(channel.channel_id)):
+        await asyncio.sleep(0.1)
+    for envelope in await hub.read_wal(channel.channel_id):
+        if envelope.event_type == EV_PACKET:
+            print(envelope.event_data["body"], "\n---")
+    await hub.close()
+
+
+asyncio.run(main())
 ```
 
+## Recipe 6: Filesystem tools over MCP
+
+Requires `pip install "ag2[openai,mcp]"` and Node.js for `npx`.
+
+```python
+import asyncio
+
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.tools import MCPStdioServerConfig, MCPToolkit
+
+files = MCPToolkit(
+    MCPStdioServerConfig(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "."],
+        allowed_tools=["list_directory", "read_text_file"],  # read-only surface
+    )
+)
+
+agent = Agent("librarian", prompt="Answer questions about files in the current directory.", config=OpenAIConfig(model="gpt-4.1-mini"), tools=[files])
+
+print(asyncio.run(agent.ask("Which Markdown files are here, and what is the first heading of each?")).body)
+```

@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** LangGraph's two memory tiers. **Checkpointers** save graph state at each step so you can resume after a failure. **Stores** provide durable key/value storage (and optional semantic search) that survives across threads and users. You'll also see the **cross-thread memory** pattern that lets one conversation learn from another.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).
 
 **Time:** ~25 minutes.
 
@@ -50,14 +50,20 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
 checkpointer = SqliteSaver(conn)
 
-# Or use the convenience class method:
-checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
-
-# Async variant (requires aiosqlite)
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-async_checkpointer = AsyncSqliteSaver.from_conn_string("checkpoints.db")
-
 graph = builder.compile(checkpointer=checkpointer)
+
+# Or use the convenience class method, which is a context manager:
+with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    graph = builder.compile(checkpointer=checkpointer)
+    graph.invoke(inputs, {"configurable": {"thread_id": "t1"}})
+
+# Async variant (requires aiosqlite), an async context manager
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+async def run():
+    async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as async_checkpointer:
+        graph = builder.compile(checkpointer=async_checkpointer)
+        await graph.ainvoke(inputs, {"configurable": {"thread_id": "t1"}})
 ```
 
 ### `PostgresSaver` (production)

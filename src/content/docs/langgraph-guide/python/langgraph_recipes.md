@@ -1,34 +1,46 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.12 (September 2026)"
+description: "Real-world LangGraph recipes: caching, fan-in, model hooks, long-term memory, map-reduce, ToolRuntime, tracing, streaming and graph-wide node policies."
 framework: langgraph
 language: python
 ---
 
 # LangGraph: Advanced Recipes & Real-World Patterns
 
-**Updated for LangGraph 1.2.12 (September 2026)**
+**Verified against `langgraph` %%version=langgraph%%** (checked %%versions-checked%%). A version in a recipe title is the release that recipe was first written for.
 
-This guide includes recipes demonstrating the latest v1.2.12 features:
-- Node Caching for performance
-- Deferred Nodes for fan-in patterns
-- Pre/Post Model Hooks for LLM customization
-- Cross-Thread Memory for persistent context
-- Tools State Updates for dynamic behavior
-- Command Tool for edgeless flows
-- `InjectedState` + `InjectedStore` for context-aware tools (Recipe 9)
-- `Overwrite` for resetting accumulated channels (Recipe 10)
-- `CheckpointTuple` for checkpoint history browsing and time-travel (Recipe 11)
-- `update_state` / `StateUpdate` for human-in-the-loop approval flows (Recipe 12)
-- Functional API (`@entrypoint` + `@task`) for workflow-without-StateGraph (Recipe 13)
-- `RetryPolicy` + `TimeoutPolicy` + `CachePolicy` for resilient, cached nodes (Recipe 14)
-- `BinaryOperatorAggregate` custom reducer patterns (Recipe 15)
-- `Send` with per-instance timeout for safe parallel map-reduce (Recipe 16)
-- `Command` with `Command.PARENT` for subgraph-to-parent signalling (Recipe 17)
-- `TracePolicy` + `omit_payload` for trimming a node's payload in LangSmith traces (Recipe 18)
-- `ToolNode` with `ToolRuntime.emit_output_delta` for incremental tool streaming (Recipe 19)
-- `entrypoint.final` for separating return value from checkpoint state (Recipe 20)
-- `GraphOutput` + `Durability` for the v2 invoke API (Recipe 21)
+This guide includes:
+- Recipe 1: RAG System with Quality Control
+- Recipe 2: Customer Support Ticket Classifier & Router
+- Recipe 3: Research Agent with Parallel Data Sources
+- Recipe 4: Agentic Loop with Tool Calling
+- Recipe 5: Document Processing Pipeline
+- Recipe 6: Conversation with Long-term Memory
+- Recipe 7: Cached Multi-Agent Research System (v1.2.1)
+- Recipe 8: Smart Shopping Assistant with Pre/Post Model Hooks (v1.2.1)
+- Recipe 9: Intelligent Workflow Coordinator (v1.2.1)
+- Recipe 10: Long-Term Memory with Vector Search and InMemoryStore (v1.2.1)
+- Recipe 11: Parallel Map-Reduce with Send and BinaryOperatorAggregate (v1.2.1)
+- Recipe 12: ToolRuntime All-In-One (v1.2.1)
+- Recipe 13: State-Aware Shopping Agent with `InjectedState` + `InjectedStore`
+- Recipe 14: Resetting Accumulated State with `Overwrite`
+- Recipe 15: Checkpoint History Browser with `CheckpointTuple`
+- Recipe 16: Human-in-the-Loop Approval with `update_state` and `StateUpdate`
+- Recipe 17: `ToolRuntime` — unified runtime injection
+- Recipe 18: `ToolNode.wrap_tool_call` — interceptor for retries, caching, and auditing
+- Recipe 19: Custom channels — `BinaryOperatorAggregate`, `Topic`, and `EphemeralValue`
+- Recipe 20: `NamedBarrierValue` — fan-in that waits for named contributors
+- Recipe 21: Functional API — `@entrypoint` + `@task` Workflow
+- Recipe 22: Resilient Nodes — `RetryPolicy`, `TimeoutPolicy`, `CachePolicy`
+- Recipe 23: Custom Reducer Channels with `BinaryOperatorAggregate` and `Overwrite`
+- Recipe 24: Safe Parallel Map-Reduce with `Send` + Per-Instance Timeout
+- Recipe 25: `Command.PARENT` — Subgraph Writing to Parent State
+- Recipe 26: `TracePolicy` — Controlling a Node's Trace Payload (v1.2.11)
+- Recipe 27: `ToolCallTransformer` — Structured Per-Tool Streaming (v1.2.11)
+- Recipe 28: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
+- Recipe 29: `GraphOutput` and `Durability` — v2 Invoke API (v1.2.11)
+- Recipe 30: `set_node_defaults()` — Graph-Wide Node Policies (v1.2.11+)
+- Recipe 31: `ToolRuntime` — All-in-One Tool Injection
 
 ---
 
@@ -689,7 +701,7 @@ tools = [
 ]
 
 # Create agent
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 # Build custom agent for more control
 class AgentState(TypedDict):
@@ -961,7 +973,7 @@ async def retrieve_memories(
     namespace = ("users", user_id, "memories")
     
     memories = await store.asearch(
-        namespace_prefix=namespace,
+        namespace,  # namespace prefix is positional-only
         query=current_message,
         limit=5
     )
@@ -1133,7 +1145,7 @@ async def stream_processing():
 **Uses:** `CachePolicy`, `InMemoryCache`, `InMemoryStore`, parallel `Send` fan-out
 
 ```python
-# Correct imports — all verified against langgraph==1.2.1
+# Imports verified against langgraph==%%version=langgraph%%
 import operator
 from typing import Annotated
 from typing_extensions import TypedDict
@@ -1286,7 +1298,7 @@ print(result2["final_report"])  # same content, returned from cache
 **Uses:** `create_react_agent` with `pre_model_hook` / `post_model_hook`, `Command`-returning tools, custom state schema
 
 ```python
-# Correct imports — verified against langgraph==1.2.1 / langgraph-prebuilt==1.1.0
+# Imports verified against langgraph==%%version=langgraph%% / langgraph-prebuilt==1.1.1
 import operator
 from typing import Annotated, Any
 from typing_extensions import TypedDict
@@ -1408,7 +1420,7 @@ tools = [add_to_cart, view_cart, search_products]
 
 # Replace with a real LLM in production:
 # from langchain_anthropic import ChatAnthropic
-# llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+# llm = ChatAnthropic(model="claude-sonnet-5-5")
 from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage
 llm = MagicMock()
@@ -1454,7 +1466,7 @@ print(f"Last reply: {result['messages'][-1].content}")
 **Uses:** `Command` routing, `Send` fan-out, `defer=True` node, `RetryPolicy`
 
 ```python
-# Correct imports — all verified against langgraph==1.2.1
+# Imports verified against langgraph==%%version=langgraph%%
 import operator
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
@@ -1619,7 +1631,7 @@ print(f"Failed tasks:    {result['failed']}")
 
 ---
 
-This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph 1.2.1.
+This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph.
 
 Adapt and combine them for your specific use cases!
 
@@ -1945,7 +1957,7 @@ Key points:
 
 ---
 
-## Recipe 9: State-Aware Shopping Agent with `InjectedState` + `InjectedStore`
+## Recipe 13: State-Aware Shopping Agent with `InjectedState` + `InjectedStore`
 
 This recipe demonstrates how `InjectedState` and `InjectedStore` let tools access graph state and persistent storage **without exposing internal details to the LLM**.
 
@@ -2023,7 +2035,7 @@ def get_preference(
 # ── Agent setup ───────────────────────────────────────────────────────────────
 
 tools = [add_to_cart, view_cart, save_preference, get_preference]
-model = ChatAnthropic(model="claude-3-5-haiku-20241022").bind_tools(tools)
+model = ChatAnthropic(model="claude-haiku-5-5").bind_tools(tools)
 persistent_store = InMemoryStore()
 
 def agent_node(state: ShopState) -> dict:
@@ -2054,7 +2066,7 @@ print(result["messages"][-1].content)
 
 ---
 
-## Recipe 10: Resetting Accumulated State with `Overwrite`
+## Recipe 14: Resetting Accumulated State with `Overwrite`
 
 When a node needs to **replace** an accumulator channel rather than append to it, use `Overwrite` to bypass the reducer entirely.
 
@@ -2132,7 +2144,7 @@ Only one node may `Overwrite` a given channel per super-step. If two concurrent 
 
 ---
 
-## Recipe 11: Checkpoint History Browser with `CheckpointTuple`
+## Recipe 15: Checkpoint History Browser with `CheckpointTuple`
 
 Use `CheckpointTuple` to build a debugging tool that inspects every state the graph passed through, and supports rewinding to any historical step.
 
@@ -2201,7 +2213,7 @@ print(f"\nLoop checkpoints: {len(loop_checkpoints)}")
 
 ---
 
-## Recipe 12: Human-in-the-Loop Approval with `update_state` and `StateUpdate`
+## Recipe 16: Human-in-the-Loop Approval with `update_state` and `StateUpdate`
 
 Pause the graph at a sensitive step, let a human review and modify state, then resume:
 
@@ -2289,7 +2301,7 @@ graph.bulk_update_state(
 
 ---
 
-## Recipe 13: `ToolRuntime` — unified runtime injection
+## Recipe 17: `ToolRuntime` — unified runtime injection
 
 `ToolRuntime` is the single dataclass injected into any tool that declares `runtime: ToolRuntime`. It replaces the older `InjectedState` / `InjectedStore` annotations with one unified parameter, and additionally exposes `tool_call_id`, `config`, `stream_writer`, and the full `tools` list.
 
@@ -2383,7 +2395,7 @@ result = app.invoke(
 
 ---
 
-## Recipe 14: `ToolNode.wrap_tool_call` — interceptor for retries, caching, and auditing
+## Recipe 18: `ToolNode.wrap_tool_call` — interceptor for retries, caching, and auditing
 
 `wrap_tool_call` is a sync interceptor that wraps every tool execution inside a `ToolNode`. Use it for cross-cutting concerns — rate-limiting, audit logging, result caching — without modifying each tool individually.
 
@@ -2504,7 +2516,7 @@ print(f"Audit log entries: {len(_call_log)}")
 
 ---
 
-## Recipe 15: Custom channels — `BinaryOperatorAggregate`, `Topic`, and `EphemeralValue`
+## Recipe 19: Custom channels — `BinaryOperatorAggregate`, `Topic`, and `EphemeralValue`
 
 Custom channels give you precise control over how state fields merge when multiple nodes write to them in the same step.
 
@@ -2634,7 +2646,7 @@ print(f"All labels accumulated: {result['all_labels']}")
 
 ---
 
-## Recipe 16: `NamedBarrierValue` — fan-in that waits for named contributors
+## Recipe 20: `NamedBarrierValue` — fan-in that waits for named contributors
 
 `NamedBarrierValue` blocks a node from running until every named token has been written. This is stronger than a standard fan-in edge because it is declared in the state schema and enforced by the channel runtime, not by graph topology alone.
 
@@ -2732,7 +2744,7 @@ print(result["response_status"], result["response_body"])
 
 ---
 
-## Recipe 13: Functional API — `@entrypoint` + `@task` Workflow
+## Recipe 21: Functional API — `@entrypoint` + `@task` Workflow
 
 Use the Functional API when you want a plain-Python workflow with full LangGraph checkpoint/interrupt support, without declaring a `StateGraph`:
 
@@ -2814,7 +2826,7 @@ asyncio.run(run())
 
 ---
 
-## Recipe 14: Resilient Nodes — `RetryPolicy`, `TimeoutPolicy`, `CachePolicy`
+## Recipe 22: Resilient Nodes — `RetryPolicy`, `TimeoutPolicy`, `CachePolicy`
 
 Attach policies at the node level (or task level) to get automatic retries, timeouts, and memoisation without wrapping every function in try/except:
 
@@ -2907,7 +2919,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 15: Custom Reducer Channels with `BinaryOperatorAggregate` and `Overwrite`
+## Recipe 23: Custom Reducer Channels with `BinaryOperatorAggregate` and `Overwrite`
 
 `Annotated[T, fn]` state fields compile to `BinaryOperatorAggregate` channels. Use `Overwrite` to bypass the accumulator when you need a force-set:
 
@@ -2979,7 +2991,7 @@ print(result)
 
 ---
 
-## Recipe 16: Safe Parallel Map-Reduce with `Send` + Per-Instance Timeout
+## Recipe 24: Safe Parallel Map-Reduce with `Send` + Per-Instance Timeout
 
 `Send` supports a `timeout` kwarg so you can give individual tasks different time budgets based on their priority or expected cost:
 
@@ -3040,7 +3052,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 17: `Command.PARENT` — Subgraph Writing to Parent State
+## Recipe 25: `Command.PARENT` — Subgraph Writing to Parent State
 
 When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., graph=Command.PARENT)`. Omit `goto` to let the parent's defined edges handle routing — setting `goto=END` would terminate the parent immediately and bypass any downstream nodes. Adding `goto="some_node"` in a `Command.PARENT` schedules that node in the parent alongside any static edges already defined there:
 
@@ -3110,7 +3122,7 @@ print(result)
 - Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
 - Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.
 
-## Recipe 18: `TracePolicy` — Controlling a Node's Trace Payload (v1.2.11)
+## Recipe 26: `TracePolicy` — Controlling a Node's Trace Payload (v1.2.11)
 
 **Goal:** Keep one node's inputs and outputs out of its LangSmith span (here, a node that handles PII) while every other node is traced normally. For real secrets/PII redaction, see the note at the end of this recipe.
 
@@ -3217,7 +3229,7 @@ print(result2["result"])   # Processed: [REDACTED]
 
 ---
 
-## Recipe 19: `ToolCallTransformer` — Structured Per-Tool Streaming (v1.2.11)
+## Recipe 27: `ToolCallTransformer` — Structured Per-Tool Streaming (v1.2.11)
 
 **Goal:** Stream a tool-calling agent and consume each tool's output incrementally as it arrives, using the structured `ToolCallStream` API rather than parsing raw event dicts.
 
@@ -3344,7 +3356,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 20: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
+## Recipe 28: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
 
 **Goal:** Build a conversation workflow where the agent returns a rich result to the caller but feeds only a compact state forward to the next turn via `previous`.
 
@@ -3455,7 +3467,7 @@ print(type(snap.values))   # TurnResult — the value= output from the last entr
 
 ---
 
-## Recipe 21: `GraphOutput` and `Durability` — v2 Invoke API (v1.2.11)
+## Recipe 29: `GraphOutput` and `Durability` — v2 Invoke API (v1.2.11)
 
 **Goal:** Use the v2 invoke API to get a typed `GraphOutput` wrapper that includes both the final state and any interrupts that occurred, while controlling when checkpoints are persisted with `Durability` modes.
 
@@ -3559,7 +3571,7 @@ Use `version="v2"` to opt into the typed `GraphOutput` wrapper. The v1 API (defa
 
 ---
 
-## Recipe 22: `set_node_defaults()` — Graph-Wide Node Policies (v1.2.11+)
+## Recipe 30: `set_node_defaults()` — Graph-Wide Node Policies (v1.2.11+)
 
 **Goal:** Apply consistent retry, cache, timeout, and error-handler policies to every node in a graph without repeating the same arguments on each `add_node` call. Override for specific nodes when needed.
 
@@ -3685,7 +3697,7 @@ When no graph-wide `cache_policy` default is set, assign `cache_policy=CachePoli
 
 ---
 
-## Recipe 23: `ToolRuntime` — All-in-One Tool Injection
+## Recipe 31: `ToolRuntime` — All-in-One Tool Injection
 
 **Goal:** Access graph state, the long-term store, the tool call ID, and the stream writer from inside a tool without stacking multiple `Annotated` parameters.
 
@@ -3771,7 +3783,7 @@ store.put(("docs", "acme"), "doc2", {"text": "LangGraph checkpointing reference"
 
 # ── Build the graph ─────────────────────────────────────────────────────────
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([intelligent_search])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([intelligent_search])
 
 
 def agent_node(state: AgentState) -> dict:

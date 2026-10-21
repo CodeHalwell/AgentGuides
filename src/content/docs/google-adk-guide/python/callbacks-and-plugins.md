@@ -7,9 +7,9 @@ sidebar:
   order: 40
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
 
-Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py:41-71`).
+Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py`).
 
 ## Minimal example
 
@@ -37,7 +37,7 @@ runner = InMemoryRunner(app=app)
 
 ## Per-agent callbacks
 
-Set these as fields on `LlmAgent` (or `BaseAgent` for agent-level hooks). Each accepts **a single callable or a list** — the list is called in order until one returns non-`None` (`llm_agent.py:77-484`).
+Set these as fields on `LlmAgent` (or `BaseAgent` for agent-level hooks). Each accepts **a single callable or a list** — the list is called in order until one returns non-`None` (`llm_agent.py`).
 
 | Field | Signature | Return meaning |
 |---|---|---|
@@ -369,7 +369,7 @@ All are `async def`. All return `Optional[<relevant type>]` — non-`None` short
 
 ## Built-in plugins
 
-ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file for google-adk==2.3.0):
+ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file; first listed for 2.3.0, re-checked against %%version=google-adk%%):
 
 ### `LoggingPlugin`
 
@@ -389,7 +389,7 @@ import logging
 logging.getLogger("google_adk").setLevel(logging.DEBUG)
 ```
 
-**What it actually logs (source-verified, google-adk==2.7.1).** Each callback prints a compact block with an emoji prefix so you can `grep` it out of noisy stdout:
+**What it actually logs (source-verified in 2.7.1; re-checked against %%version=google-adk%%).** Each callback prints a compact block with an emoji prefix so you can `grep` it out of noisy stdout:
 
 | Callback | Prefix | Payload |
 |---|---|---|
@@ -533,7 +533,7 @@ runner = Runner(
 
 After a turn, any `types.Part(inline_data=...)` in the user message is replaced by an artifact reference, keeping the LLM context small.
 
-**Two modes controlled by `attach_file_reference`** (source-verified, google-adk==2.7.1):
+**Two modes controlled by `attach_file_reference`** (source-verified in 2.7.1; re-checked against %%version=google-adk%%):
 
 ```python
 # Default — attach a FileData reference so the model can *use* the artifact.

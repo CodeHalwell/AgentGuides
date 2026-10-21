@@ -1,13 +1,13 @@
 ---
 title: "agent-framework (Python) — Installation & Quickstart"
-description: "Get started with agent-framework 1.15.0: installation, authentication, your first agent, tools, sessions, and async patterns."
+description: "Get started with agent-framework: installation, authentication, your first agent, tools, sessions, and async patterns."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — Installation & Quickstart
 
-This guide covers everything you need to get your first agent running in Python using `agent-framework` (version 1.15.0).
+This guide covers everything you need to get your first agent running in Python using `agent-framework` (version %%version=agent-framework%%, checked %%versions-checked%%).
 
 ---
 
@@ -16,7 +16,7 @@ This guide covers everything you need to get your first agent running in Python 
 | Property | Value |
 |---|---|
 | Package name | `agent-framework` |
-| Current version | `1.15.0` |
+| Current version | `%%version=agent-framework%%` |
 | Import root | `agent_framework` |
 | Python requirement | 3.10 or later |
 
@@ -27,10 +27,10 @@ pip install agent-framework
 Provider-specific sub-packages (install whichever chat backend you need):
 
 ```bash
-pip install agent-framework-azure-ai       # Azure AI Foundry (FoundryChatClient)
+pip install agent-framework-foundry        # Microsoft Foundry (FoundryChatClient)
 pip install agent-framework-openai         # OpenAI / Azure OpenAI (OpenAIChatClient)
 pip install agent-framework-a2a --pre      # A2A protocol (pre-release)
-pip install agent-framework-declarative --pre  # Declarative YAML agents (pre-release)
+pip install agent-framework-declarative    # Declarative YAML agents
 ```
 
 ---
@@ -79,12 +79,14 @@ import asyncio
 import os
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from azure.identity import AzureCliCredential
 
 
 async def main() -> None:
     client = FoundryChatClient(
-        endpoint=os.environ["AZURE_AI_FOUNDRY_ENDPOINT"],
-        deployment=os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o"),
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ.get("FOUNDRY_MODEL", "gpt-4o"),
+        credential=AzureCliCredential(),
     )
     agent = Agent(
         client=client,

@@ -154,7 +154,7 @@ agent = Agent(
 )
 ```
 
-The collection name defaults to the agent's `role`; storage lives at `./knowledge/<collection>` (LanceDB).
+The collection name defaults to the agent's `role` (stored as `knowledge_<role>`); vectors go into the shared RAG client, ChromaDB by default, persisted under CrewAI's platform data directory (`db_storage_path()`, overridable with `CREWAI_STORAGE_DIR`). Source files themselves are read from `./knowledge/`.
 
 ### To a whole crew
 
@@ -274,4 +274,4 @@ Docling treats URLs and local paths the same as long as the format is supported.
 - **Chunking is naive by default** — a sliding window over characters. Override `_chunk_text` in a subclass if you need sentence-aware splits.
 - **`file_path` is deprecated.** Always use `file_paths=[...]`, even for a single file.
 - **Knowledge is read-heavy.** It doesn't auto-update. For dynamic content, use Memory or rebuild the collection.
-- **`knowledge_storage=` on an agent overrides the default LanceDB store.** Pass a custom `BaseKnowledgeStorage` if you need Qdrant/Pinecone/etc.
+- **`knowledge_storage=` on an agent overrides the default ChromaDB-backed store.** Pass a custom `BaseKnowledgeStorage` if you need Qdrant/Pinecone/etc., or register one process-wide with `crewai.knowledge.storage.factory.set_knowledge_storage_factory`.

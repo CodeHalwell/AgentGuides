@@ -674,18 +674,17 @@ retriever_tool = RetrieverTool.from_defaults(
 
 ### 9.1 `Context`
 
-`Context` holds a workflow run's state: the chat memory for agents, any values you store, and the event stream. It can be serialised and restored, which is how you persist a conversation between HTTP requests.
+`Context` holds a workflow run's state: the agent's chat memory, any values you store, and the event stream. Reuse one `Context` per conversation while the process is alive:
 
 ```python
-from llama_index.core.workflow import Context, JsonSerializer
+from llama_index.core.workflow import Context
 
 ctx = Context(agent)
 await agent.run(user_msg="Remember that my favourite colour is green.", ctx=ctx)
-
-saved = ctx.to_dict(serializer=JsonSerializer())   # store this in Redis/DB
-restored = Context.from_dict(agent, saved, serializer=JsonSerializer())
-await agent.run(user_msg="What is my favourite colour?", ctx=restored)
+await agent.run(user_msg="What is my favourite colour?", ctx=ctx)   # remembers
 ```
+
+A context can be serialised with `ctx.to_dict(serializer=JsonSerializer())` and restored with `Context.from_dict(agent, data, serializer=JsonSerializer())`, which keeps your own state keys. **It does not keep the prebuilt agents' chat history**: the `memory` entry is skipped during serialisation (you will see an `UnserializableKeyWarning`). To persist conversations across processes, use a database-backed `Memory` (section 9.3) and pass it on every `run()`.
 
 ### 9.2 Reading and writing state from tools
 
@@ -731,7 +730,16 @@ memory = Memory.from_defaults(
 response = await agent.run(user_msg="Hi!", memory=memory)
 ```
 
-Pass `async_database_uri=` (e.g. a `postgresql+asyncpg://` URI) to persist the chat history outside the process; the default is an in-memory SQLite database.
+By default the chat history lives in an in-memory SQLite database. Pass `async_database_uri=` (for example `postgresql+asyncpg://...` or `sqlite+aiosqlite:///memory.db`) and a stable `session_id` to persist it; a new `Memory` object built with the same two values on the next request picks the conversation up where it left off:
+
+```python
+async def handle_turn(user_id: str, message: str) -> str:
+    memory = Memory.from_defaults(
+        session_id=user_id,
+        async_database_uri="postgresql+asyncpg://app:secret@db/agents",
+    )
+    return str(await agent.run(user_msg=message, memory=memory))
+```
 
 ---
 
@@ -1092,7 +1100,7 @@ async for event in handler.stream_events():
 print(await handler)
 ```
 
-For approval that takes hours, serialise `handler.ctx` after the `InputRequiredEvent` arrives, stop the process, and resume later with `Context.from_dict(...)` and `agent.run(ctx=restored_ctx)`.
+Within one process you can keep the handler alive and call `handler.ctx.send_event(...)` whenever the answer arrives. Approval that must survive a restart is easier with a small custom workflow whose state is all serialisable — see [durable approval](../llamaindex_advanced_agents_python/#42-approval-that-outlives-the-process); a prebuilt agent paused inside a tool cannot currently be resumed from a serialised context, because its memory is not serialised.
 
 ---
 
@@ -1444,7 +1452,7 @@ Also available: `CorrectnessEvaluator` (against a reference answer), `AnswerRele
 | `QueryPipeline` | A custom `Workflow` |
 | `llama-agents` (`ControlPlaneServer`, `AgentService`) | `AgentWorkflow` in-process; `llamactl` / LlamaAgents for deployment |
 
-Sync callers can still drive an agent with `asyncio.run(agent.run(user_msg=...))`, but note that `run()` returns a handler, so in sync code you must wrap it in a coroutine (`asyncio.run(main())`) rather than calling `agent.run(...)` and printing the result.
+`run()` must be called while an event loop is running — `asyncio.run(agent.run(...))` fails with `RuntimeError: no running event loop`. From synchronous code, wrap the call in a coroutine: `async def main(): return await agent.run(user_msg=...)` and then `asyncio.run(main())`.
 
 ---
 

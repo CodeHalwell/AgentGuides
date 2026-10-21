@@ -76,7 +76,7 @@ export CLAUDE_CODE_USE_BEDROCK=1 AWS_REGION=us-east-1
 export CLAUDE_CODE_USE_VERTEX=1 CLOUD_ML_REGION=global ANTHROPIC_VERTEX_PROJECT_ID=my-project
 ```
 
-There is no `apiKey` or `apiProvider` option.
+There is no `apiKey` or `apiProvider` option. Note that `options.env` replaces the child process's environment rather than merging with it, so write `env: { ...process.env, CLAUDE_CODE_USE_BEDROCK: '1' }`.
 
 ### First agent
 

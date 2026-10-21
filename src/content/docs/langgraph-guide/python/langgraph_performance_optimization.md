@@ -1,13 +1,13 @@
 ---
 title: "LangGraph Performance Optimization (Python)"
-description: "Native CachePolicy, RetryPolicy, TimeoutPolicy, async batching, and set_node_defaults — source-verified patterns for LangGraph 1.2.2."
+description: "Native CachePolicy, RetryPolicy, TimeoutPolicy, async batching, and set_node_defaults — source-verified patterns."
 framework: langgraph
 language: python
 ---
 
 # LangGraph Performance Optimization (Python)
 
-Verified against **`langgraph==1.2.2`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.cache.memory`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.cache.memory`).
 
 This guide covers the five levers you have for performance in LangGraph:
 
@@ -26,7 +26,7 @@ This guide covers the five levers you have for performance in LangGraph:
 `CachePolicy` caches the output of a node by a hash of its input. When the same input arrives again within the TTL, LangGraph returns the cached result instead of re-running the node.
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.2)
+# langgraph.types (source-verified, langgraph %%version=langgraph%%)
 @dataclass
 class CachePolicy(Generic[KeyFuncT]):
     key_func: KeyFuncT = default_cache_key   # default: pickle-hash of full input
@@ -54,7 +54,7 @@ class State(TypedDict):
     result: str
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 
 def classify(state: State) -> dict:
@@ -134,7 +134,7 @@ async def refresh_and_run(query: str):
 `RetryPolicy` is a `NamedTuple` that configures automatic retries for a node when it raises an exception. No external library (e.g. `tenacity`) needed — LangGraph handles the backoff loop.
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.2)
+# langgraph.types (source-verified, langgraph %%version=langgraph%%)
 class RetryPolicy(NamedTuple):
     initial_interval: float = 0.5      # seconds before the first retry
     backoff_factor:   float = 2.0      # multiplier applied after each retry
@@ -276,7 +276,7 @@ def weather_pipeline(cities: list[str]) -> list[dict]:
 > **Sync nodes cannot be timed out in-process.** Passing `timeout=` to a sync node raises `ValueError` at compile time. Wrap blocking code in `asyncio.to_thread()` to make it cancellable.
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.2)
+# langgraph.types (source-verified, langgraph %%version=langgraph%%)
 @dataclass
 class TimeoutPolicy:
     run_timeout:  float | timedelta | None = None   # hard wall-clock cap per attempt

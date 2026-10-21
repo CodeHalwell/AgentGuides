@@ -693,9 +693,6 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.tools import Tool
 
-agent = Agent('openai:gpt-4o-mini')
-
-
 async def write_to_db(table: str, data: dict) -> str:
     """Write a record — must not overlap with other DB writes."""
     await asyncio.sleep(0.1)  # simulate DB write
@@ -706,7 +703,8 @@ async def write_to_db(table: str, data: dict) -> str:
 # turn complete first, then this one runs alone, then any remaining tools start.
 # This prevents overlapping DB writes within a single model turn.
 # For cross-run exclusion, use an application-level lock or transaction.
-agent.add_tool(Tool(write_to_db, sequential=True))
+# (Equivalent decorator form: @agent.tool_plain(sequential=True).)
+agent = Agent('openai:gpt-4o-mini', tools=[Tool(write_to_db, sequential=True)])
 
 
 @agent.tool_plain
@@ -723,15 +721,14 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### `ToolManager.parallel_execution_mode` — run-level control
+### `Agent.parallel_tool_call_execution_mode` — run-level control
 
-Use `ToolManager.parallel_execution_mode` as a context manager to switch all tools
+Use `agent.parallel_tool_call_execution_mode(...)` (the public wrapper around `ToolManager.parallel_execution_mode`; it replaced V1's `Agent.sequential_tool_calls()`) as a context manager to switch all tools
 in a run to sequential execution without touching individual tool definitions:
 
 ```python
 import asyncio
 from pydantic_ai import Agent
-from pydantic_ai.tool_manager import ToolManager
 
 agent = Agent('openai:gpt-4o-mini')
 
@@ -748,7 +745,7 @@ def step_two(x: int) -> int:
 
 async def main() -> None:
     # Force all tool calls to run one at a time, in order.
-    with ToolManager.parallel_execution_mode('sequential'):
+    with agent.parallel_tool_call_execution_mode('sequential'):
         result = await agent.run('Apply step_one then step_two to 5.')
     print(result.output)
 

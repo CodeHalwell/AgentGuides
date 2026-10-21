@@ -45,41 +45,67 @@ You can implement middleware using Amazon API Gateway and AWS Lambda.
 
 **Example Lambda Middleware (Python):**
 
+An API Gateway (REST, Lambda proxy integration) handler that authenticates via a Cognito authorizer, logs, caches in DynamoDB and calls the agent through `bedrock-agent-runtime`:
+
 ```python
+import hashlib
 import json
+import logging
+import os
+import time
+
 import boto3
 
-bedrock_runtime = boto3.client('bedrock-runtime')
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+agent_runtime = boto3.client("bedrock-agent-runtime")
+cache = boto3.resource("dynamodb").Table(os.environ["CACHE_TABLE"])
+
+AGENT_ID = os.environ["AGENT_ID"]
+AGENT_ALIAS_ID = os.environ["AGENT_ALIAS_ID"]
+CACHE_TTL_SECONDS = 300
+
 
 def middleware_handler(event, context):
-    # 1. Authentication
-    #    - Get the user's identity from the request headers
-    #    - Verify the user's credentials
-    #    - Check if the user has permission to invoke the agent
+    # 1. Authentication: API Gateway's Cognito authorizer has already validated the token
+    claims = event["requestContext"]["authorizer"]["claims"]
+    user_id = claims["sub"]
+    if "agent-users" not in claims.get("cognito:groups", ""):
+        return {"statusCode": 403, "body": json.dumps({"error": "forbidden"})}
 
-    # 2. Logging
-    #    - Log the incoming request
+    body = json.loads(event["body"])
+    question, session_id = body["question"], body.get("sessionId", user_id)
 
-    # 3. Caching
-    #    - Check if the request is already in the cache
-    #    - If so, return the cached response
-    #    - If not, proceed to the next step
+    # 2. Logging (never log tokens or full PII)
+    logger.info(json.dumps({"event": "request", "user": user_id, "session": session_id}))
 
-    # 4. Invoke the Bedrock Agent
-    response = bedrock_runtime.invoke_agent(
-        agentId='YOUR_AGENT_ID',
-        # ...
+    # 3. Caching: only for stateless, repeatable questions
+    key = hashlib.sha256(question.strip().lower().encode()).hexdigest()
+    cached = cache.get_item(Key={"pk": key}).get("Item")
+    if cached and cached["expires_at"] > time.time():
+        return {"statusCode": 200, "body": json.dumps({"answer": cached["answer"], "cached": True})}
+
+    # 4. Invoke the Bedrock Agent (pass user context as session attributes, not in the prompt)
+    response = agent_runtime.invoke_agent(
+        agentId=AGENT_ID,
+        agentAliasId=AGENT_ALIAS_ID,
+        sessionId=session_id,
+        inputText=question,
+        sessionState={"sessionAttributes": {"userId": user_id}},
+    )
+    answer = "".join(
+        e["chunk"]["bytes"].decode() for e in response["completion"] if "chunk" in e
     )
 
-    # 5. Logging
-    #    - Log the agent's response
-
-    # 6. Caching
-    #    - Store the response in the cache
+    # 5. Logging and 6. caching the response
+    logger.info(json.dumps({"event": "response", "user": user_id, "chars": len(answer)}))
+    cache.put_item(Item={"pk": key, "answer": answer, "expires_at": int(time.time()) + CACHE_TTL_SECONDS})
 
     # 7. Return the response to the user
-    return {
-        'statusCode': 200,
-        'body': json.dumps(response)
-    }
+    return {"statusCode": 200, "body": json.dumps({"answer": answer, "cached": False})}
 ```
+
+`invoke_agent` returns an event stream, so the response must be read before it can be serialised. Session attributes reach action-group Lambdas in `event["sessionAttributes"]`, which is the safe way to pass identity to tools.
+
+For code-defined agents (Strands on AgentCore Runtime), the same concerns are handled with **Strands hooks** (for example `BeforeToolCallEvent` / `AfterInvocationEvent`) inside the agent and **AgentCore Identity** JWT authorisation in front of it — see the [Strands guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/#best-practices) and [AgentCore security](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#security-and-compliance).

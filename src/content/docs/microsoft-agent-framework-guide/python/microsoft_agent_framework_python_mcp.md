@@ -17,7 +17,7 @@ Model Context Protocol (MCP) servers are first-class tool sources in `agent-fram
 
 All three are async context managers that connect lazily, discover tools and prompts from the server, and register them as `FunctionTool` instances on the agent.
 
-Verified against `agent-framework-core==1.6.0` and `mcp==1.27`.
+Verified against `agent-framework` %%version=agent-framework%% and the `mcp` SDK it resolves (1.30 at the %%versions-checked%% check; first written for 1.6.0 and `mcp` 1.27).
 
 ## Install
 
@@ -196,7 +196,8 @@ ws_tool = MCPWebsocketTool(
 Use `MCPSpecificApproval` to gate only the write/action tools while letting read tools run freely:
 
 ```python
-from agent_framework import MCPWebsocketTool, MCPSpecificApproval
+from agent_framework import MCPWebsocketTool
+from agent_framework._mcp import MCPSpecificApproval  # TypedDict, not re-exported from agent_framework
 
 ws_approval: MCPSpecificApproval = {
     "always_require_approval": ["rt_publish_event", "rt_delete_subscription"],
@@ -229,7 +230,8 @@ The `approval_mode` parameter accepts four shapes — three string sentinels and
 For per-tool control, use the typed dict — it gives you static type checking and the exact key names the framework expects:
 
 ```python
-from agent_framework import MCPStdioTool, MCPSpecificApproval
+from agent_framework import MCPStdioTool
+from agent_framework._mcp import MCPSpecificApproval  # TypedDict, not re-exported from agent_framework
 
 # Use the TypedDict for the dict literal — IDE autocompletes the keys.
 git_approval: MCPSpecificApproval = {

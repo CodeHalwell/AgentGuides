@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -48,7 +48,7 @@ def get_stock_price(symbol: str) -> str:
 
 tools = [get_weather, get_stock_price]
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 model_with_tools = model.bind_tools(tools)
 
 
@@ -183,7 +183,7 @@ def lookup_order(order_id: str) -> str:
     return f"Order {order_id}: shipped"
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([lookup_order])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([lookup_order])
 
 
 def agent(state: CustomerState) -> dict:
@@ -238,7 +238,7 @@ def perform_action(
     return f"Action '{action}' executed for user {state['user_id']}."
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([perform_action])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([perform_action])
 
 
 def agent(state: AppState) -> dict:
@@ -313,7 +313,7 @@ memory_store = InMemoryStore(
     index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
 )
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools(
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools(
     [save_preference, recall_preferences]
 )
 
@@ -336,7 +336,7 @@ graph = builder.compile(store=memory_store)
 
 `ToolRuntime` is a dataclass that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
 
-Verified against the installed source (`langgraph-prebuilt==1.1.0`):
+Verified against the installed source (`langgraph-prebuilt==1.1.1`):
 
 ```python
 @dataclass
@@ -409,7 +409,7 @@ memory_store = InMemoryStore(
     index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
 )
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([smart_search])
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools([smart_search])
 
 
 def agent(state: WorkspaceState) -> dict:
@@ -509,7 +509,7 @@ def technical_agent(state: SupportState) -> dict:
     return {"messages": [("assistant", "Tech support here. Describe the issue.")]}
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools(
+model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools(
     [escalate_to_billing, escalate_to_technical]
 )
 

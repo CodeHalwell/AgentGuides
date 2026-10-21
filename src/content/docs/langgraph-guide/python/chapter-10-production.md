@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** the node-level reliability primitives (`RetryPolicy`, `TimeoutPolicy`, `CachePolicy`), checkpoint durability modes, loop-safeguard managed values (`IsLastStep`, `RemainingSteps`), the `Topic` channel for fan-in aggregation, per-Send timeouts, async execution, Docker deployment, CLI config, and troubleshooting the most common runtime errors.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.types`, `langgraph.managed`, `langgraph.channels`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.managed`, `langgraph.channels`).
 
 **Time:** ~30 minutes.
 
@@ -481,7 +481,7 @@ def my_tool(x: str) -> str:
     return x
 
 agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+    model=ChatAnthropic(model="claude-sonnet-5-5"),
     tools=[my_tool],
 )
 ```

@@ -7,7 +7,7 @@ sidebar:
   order: 70
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted; `to_mcp_server` needs 2.5.0+. MCP and A2A are optional extras: `pip install "google-adk[mcp,a2a]"`.
 
 ADK supports both **Model Context Protocol** (Anthropic's tool-server protocol) and **Agent-to-Agent** (Google's cross-framework agent-handoff protocol). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
 
@@ -73,10 +73,10 @@ toolset = McpToolset(
 )
 ```
 
-All args are keyword-only (see `mcp_toolset.py:97-160`). Key behaviours:
+All args are keyword-only (see `mcp_toolset.py`). Key behaviours:
 
 - **Filtering** — `tool_filter=["name1", "name2"]` or a `ToolPredicate` `(tool, ctx) -> bool`.
-- **Auth** — `auth_scheme` + `auth_credential` drive ADK's auth flow; exchanged tokens are injected as `Authorization` headers on each MCP request (`mcp_toolset.py:206-245`).
+- **Auth** — `auth_scheme` + `auth_credential` drive ADK's auth flow; exchanged tokens are injected as `Authorization` headers on each MCP request (`mcp_toolset.py`).
 - **Progress** — `progress_callback` can be a single `ProgressFnT(progress, total, message)` or a factory that returns per-tool callbacks.
 - **Resources** — set `use_mcp_resources=True` to expose MCP resources via a `load_mcp_resource` tool that the model can call.
 - **Credential key** — `credential_key` is a user-specified string used to load and save this toolset's credential in a credential service. When two toolsets share the same `credential_key`, they share the same exchanged token, avoiding duplicate OAuth flows.
@@ -164,7 +164,7 @@ Agent card sources:
 - `str` starting with `http://` / `https://` — fetched via `A2ACardResolver`.
 - Any other `str` — treated as a local file path.
 
-Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_request_meta_provider`, `full_history_when_stateless`, `config: A2aRemoteAgentConfig`, and `use_legacy: bool = True`. `use_legacy=False` emits the new-integration extension header (`remote_a2a_agent.py:108-212`).
+Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_request_meta_provider`, `full_history_when_stateless`, `config: A2aRemoteAgentConfig`, and `use_legacy: bool = True`. `use_legacy=False` emits the new-integration extension header (`remote_a2a_agent.py`).
 
 ## `A2aRemoteAgentConfig`
 

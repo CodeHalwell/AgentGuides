@@ -1,16 +1,15 @@
 ---
 title: "Microsoft Agent Framework - Enterprise Features 2025"
-description: "Document Version: 1.0 Last Updated: November 2025 Target Audience: Enterprise Architects, Security Teams, Compliance Officers Preview Status: October 2025 Public Preview"
+description: "Enterprise patterns around the Microsoft Agent Framework — OpenTelemetry, Entra ID, Content Safety and regulated-industry considerations. Many configuration classes on this page are design sketches, not framework APIs."
 framework: microsoft-agent-framework
 ---
 
-# Microsoft Agent Framework - Enterprise Features 2025
-## October 2025 Release - Production-Grade Enterprise Capabilities
+# Microsoft Agent Framework - Enterprise Features
 
-**Document Version:** 1.0
-**Last Updated:** November 2025
 **Target Audience:** Enterprise Architects, Security Teams, Compliance Officers
-**Preview Status:** October 2025 Public Preview
+**First written:** October 2025 (public preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)
+
+> **Read this first.** This page was drafted during the 2025 preview, and much of it describes configuration objects the framework does not ship. A check against `agent-framework` %%version=agent-framework%% found **no** `agent_framework.telemetry`, `agent_framework.safety`, `agent_framework.auth`, `agent_framework.compliance`, `agent_framework.governance` or `agent_framework.audit` modules, and no `EncryptionConfig` / `NetworkSecurityConfig` / `ZeroTrustConfig` in `agent_framework.security` (that module holds the FIDES prompt-injection defences: `SecureAgentConfig`, `SecureMCPToolProxy`, label-tracking middleware). `Agent` takes no `content_safety=` or `credential=` arguments. Treat those sections as architecture sketches of what you would build yourself — typically as [middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) or context providers over the Azure SDKs — not as copy-paste code. The OpenTelemetry and managed-identity sections use real APIs; on .NET, verify extension methods against the `Microsoft.Agents.AI` packages before use.
 
 ---
 
@@ -28,7 +27,7 @@ framework: microsoft-agent-framework
 
 ## OpenTelemetry Instrumentation
 
-The October 2025 release includes comprehensive OpenTelemetry (OTel) instrumentation for distributed tracing, metrics, and logging.
+The framework ships OpenTelemetry (OTel) instrumentation for distributed tracing, metrics and logging, following the GenAI semantic conventions.
 
 ### Automatic Instrumentation
 
@@ -38,39 +37,19 @@ All agent operations are automatically instrumented with OpenTelemetry spans:
 import os
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
-from agent_framework.telemetry import configure_telemetry
+from agent_framework.observability import configure_otel_providers
 from azure.identity.aio import DefaultAzureCredential
-from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-# Configure OpenTelemetry
-def setup_telemetry():
-    """Configure OpenTelemetry for agent operations"""
-
-    # Create tracer provider
-    tracer_provider = TracerProvider()
-    trace.set_tracer_provider(tracer_provider)
-
-    # Configure OTLP exporter (to Azure Monitor, Datadog, etc.)
-    otlp_exporter = OTLPSpanExporter(
-        endpoint="https://otel-collector.contoso.com:4317",
-        headers={
-            "api-key": os.getenv("OTEL_API_KEY")
-        }
-    )
-
-    # Add span processor
-    span_processor = BatchSpanProcessor(otlp_exporter)
-    tracer_provider.add_span_processor(span_processor)
-
-    # Configure agent framework telemetry
-    configure_telemetry(
+# Configure OpenTelemetry once at start-up. configure_otel_providers() builds the
+# tracer / meter / logger providers and an OTLP exporter for you (to an
+# OpenTelemetry Collector, Azure Monitor via the collector, Datadog, etc.).
+def setup_telemetry() -> None:
+    configure_otel_providers(
         service_name="customer-support-agents",
-        service_version="1.0.0",
-        environment="production",
-        enable_auto_instrumentation=True
+        service_version="2.3.0",                      # your service's version
+        resource_attributes={"deployment.environment": "production"},
+        otlp_endpoint="https://otel-collector.contoso.com:4317",
+        otlp_headers={"api-key": os.environ["OTEL_API_KEY"]},
     )
 
 # All agent operations are now traced
@@ -78,20 +57,15 @@ async def traced_agent_execution():
     setup_telemetry()
 
     async with DefaultAzureCredential() as credential:
-        async with FoundryChatClient(credential=credential) as client:
-            agent = Agent(
-                client=client,
-                instructions="You are helpful."
-            )
+        client = FoundryChatClient(credential=credential)   # reads FOUNDRY_PROJECT_ENDPOINT / model from env
+        agent = Agent(client=client, instructions="You are helpful.")
 
-            # This operation creates spans automatically
-            response = await agent.run("Hello!")
-            # Spans created:
-            # - agent.run
-            # - llm.request
-            # - tool.execution (if tools used)
-            # - memory.read / memory.write
+        # This call emits GenAI semantic-convention spans for the agent run,
+        # the chat request and any tool executions.
+        response = await agent.run("Hello!")
 ```
+
+If your application already owns its OpenTelemetry set-up, skip `configure_otel_providers()` and call `agent_framework.observability.enable_instrumentation()` instead. The [Python observability page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/) has the verified details.
 
 ### Custom Spans and Metrics
 
@@ -485,17 +459,18 @@ async def production_agent_with_managed_identity():
 
     # Use system-assigned managed identity
     async with ManagedIdentityCredential() as credential:
-        async with FoundryChatClient(
-            endpoint=os.getenv("AZURE_AI_ENDPOINT"),
-            credential=credential
-        ) as client:
-            agent = Agent(
-                client=client,
-                instructions="Production agent"
-            )
+        client = FoundryChatClient(
+            project_endpoint=os.getenv("FOUNDRY_PROJECT_ENDPOINT"),
+            model=os.getenv("FOUNDRY_MODEL"),
+            credential=credential,
+        )
+        agent = Agent(
+            client=client,
+            instructions="Production agent"
+        )
 
-            response = await agent.run("Query")
-            return response
+        response = await agent.run("Query")
+        return response
 
 # Assign roles to the managed identity:
 # az role assignment create \

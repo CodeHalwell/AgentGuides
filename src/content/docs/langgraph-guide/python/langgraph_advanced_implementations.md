@@ -243,7 +243,7 @@ def context_manager_node(state: dict) -> dict:
 
     if token_count > MAX_HISTORY_TOKENS:
         # Use a cheaper model to summarize
-        summarizer_llm = ChatAnthropic(model="claude-3-haiku-20240307")
+        summarizer_llm = ChatAnthropic(model="claude-haiku-5-5")
         
         summary_prompt = "Summarize this conversation concisely."
         # Keep the last few messages for context, summarize the rest
@@ -393,7 +393,8 @@ builder.add_edge("request_approval", "process_approval")
 builder.add_conditional_edges("process_approval", route_after_approval)
 builder.add_edge("execute_action", "end")
 
-memory = SqliteSaver.from_conn_string(":memory:")
+import sqlite3
+memory = SqliteSaver(sqlite3.connect(":memory:", check_same_thread=False))
 approval_graph = builder.compile(checkpointer=memory)
 
 # This would be run in separate steps by different services

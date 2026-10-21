@@ -1,13 +1,13 @@
 ---
 title: "Google ADK — IAM, Auth & Credentials"
-description: "Least-privilege IAM roles, service account setup, AuthenticatedFunctionTool, Secret Manager integration, and credential patterns for google-adk 2.1.0."
+description: "Least-privilege IAM roles, service account setup, AuthenticatedFunctionTool, Secret Manager integration, and credential patterns for Google ADK agents."
 framework: google-adk
 language: python
 sidebar:
   order: 80
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`), checked %%versions-checked%%. Examples work on 2.3.0 and later unless noted.
 
 This guide covers the full credential story for ADK agents deployed on Google Cloud: which IAM roles each service needs, how to create and bind a service account, how to inject secrets via Secret Manager, and how to wire OAuth2 / API-key auth into your tools with `AuthenticatedFunctionTool`.
 
@@ -585,7 +585,7 @@ gcloud secrets add-iam-policy-binding "my-secret" \
 
 ## 9 · Gotchas
 
-- `AuthenticatedFunctionTool` is `@experimental(FeatureName.PLUGGABLE_AUTH)` — suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
+- `AuthenticatedFunctionTool` is `@experimental(FeatureName.AUTHENTICATED_FUNCTION_TOOL)` — suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
 - `credential_key` in `AuthConfig` allows two tools to share a cached token. Without it, each tool triggers its own auth flow even when they use the same provider.
 - `AuthenticatedFunctionTool` marks `"credential"` as an `_ignore_params` name — it does **not** appear in the model's function schema. Always name the parameter exactly `credential` in your function signature.
 - On Cloud Run with min-instances=0, the SA key rotation is picked up on cold start. Warm instances keep the old secret until their memory is cleared.

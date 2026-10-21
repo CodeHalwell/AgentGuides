@@ -7,7 +7,7 @@ sidebar:
   order: 25
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/workflow/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.4.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/workflow/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted; the human-in-the-loop helpers changed after 2.10 (see that section).
 
 `Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
 
@@ -284,7 +284,7 @@ All fields from `BaseNode` (`retry_config`, `timeout`, `wait_for_output`, ...) a
 
 ### `Workflow` — `max_concurrency` and `state_schema` in action
 
-Source-verified against `google.adk.workflow._workflow.Workflow` and its `_validate_state_schema` method (google-adk==2.7.1). Two fields deserve dedicated coverage because they change failure modes at graph-build time (`state_schema`) and at runtime (`max_concurrency`).
+Source-verified against `google.adk.workflow._workflow.Workflow` and its `_validate_state_schema` method (first verified in 2.7.1; re-checked against %%version=google-adk%%). Two fields deserve dedicated coverage because they change failure modes at graph-build time (`state_schema`) and at runtime (`max_concurrency`).
 
 ```python
 from pydantic import BaseModel, Field
@@ -415,7 +415,7 @@ wf = Workflow(
 
 ## Dynamic nodes (`ctx.run_node`)
 
-Call another node from inside a node — the result is awaited in-place. **The caller must have `rerun_on_resume=True`** or `run_node` raises `ValueError` (`agents/context.py:399-405`).
+Call another node from inside a node — the result is awaited in-place. **The caller must have `rerun_on_resume=True`** or `run_node` raises `ValueError` (`agents/context.py`).
 
 ```python
 @node(rerun_on_resume=True)
@@ -698,7 +698,7 @@ approval_wf = Workflow(
 
 async def main():
     session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
-    await session_svc.prepare_tables()   # public method (source: database_session_service.py:403); also called lazily on first use
+    await session_svc.prepare_tables()   # public method (source: database_session_service.py); also called lazily on first use
 
     app = App(
         name="email_app",
@@ -731,7 +731,7 @@ async def main():
 asyncio.run(main())
 ```
 
-To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. The `has_request_input_function_call` / `get_request_input_interrupt_ids` helpers that earlier 2.x releases shipped in `_workflow_hitl_utils` are gone; read the id from the event's `adk_request_input` function call (the `request_input_ids` helper above), then build the response with `create_request_input_response`, which is still there (it is a private module, so pin your ADK version if you rely on it):
+To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. The `has_request_input_function_call` / `get_request_input_interrupt_ids` helpers that `_workflow_hitl_utils` shipped up to 2.10 have been removed; read the id from the event's `adk_request_input` function call (the `request_input_ids` helper above), then build the response with `create_request_input_response`, which is still there (it is a private module, so pin your ADK version if you rely on it):
 
 ```python
 from google.adk.workflow.utils._workflow_hitl_utils import create_request_input_response

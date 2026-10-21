@@ -1,13 +1,13 @@
 ---
 title: "LangGraph Advanced Error Handling and Recovery (Python)"
-description: "Native RetryPolicy, TimeoutPolicy, node-level error_handler, dead-letter patterns, checkpoint-based resumption, and structured error types (NodeError, NodeTimeoutError, NodeCancelledError, GraphRecursionError, ErrorCode) — source-verified for LangGraph 1.2.11."
+description: "Native RetryPolicy, TimeoutPolicy, node-level error_handler, dead-letter patterns, checkpoint-based resumption, and structured error types (NodeError, NodeTimeoutError, NodeCancelledError, GraphRecursionError, ErrorCode) — source-verified."
 framework: langgraph
 language: python
 ---
 
 # LangGraph Advanced Error Handling and Recovery (Python)
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`, `langgraph.errors`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`, `langgraph.errors`).
 
 LangGraph provides first-class primitives for every layer of error handling, with no external retry library needed:
 
@@ -27,7 +27,7 @@ LangGraph provides first-class primitives for every layer of error handling, wit
 `RetryPolicy` is a `NamedTuple` that wraps node execution in an automatic retry loop with configurable backoff and jitter. Verified source:
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.11)
+# langgraph.types (source-verified, langgraph %%version=langgraph%%)
 class RetryPolicy(NamedTuple):
     initial_interval: float = 0.5      # seconds before the first retry
     backoff_factor:   float = 2.0      # multiplier applied after each retry
@@ -182,7 +182,7 @@ builder.add_node(
 `TimeoutPolicy` cancels an async node attempt if it runs too long. Two cancellation modes:
 
 ```python
-# langgraph.types (source-verified, langgraph 1.2.11)
+# langgraph.types (source-verified, langgraph %%version=langgraph%%)
 @dataclass
 class TimeoutPolicy:
     run_timeout:  float | timedelta | None = None   # hard wall-clock cap
@@ -517,14 +517,14 @@ graph = builder.compile(checkpointer=checkpointer)
 
 ## 6. Structured error types — catching and inspecting failures
 
-LangGraph 1.2.11 defines a hierarchy of typed exceptions in `langgraph.errors`. Knowing which type is raised lets you write targeted `except` blocks in error handlers, retry predicates, and observability callbacks.
+LangGraph defines a hierarchy of typed exceptions in `langgraph.errors`. Knowing which type is raised lets you write targeted `except` blocks in error handlers, retry predicates, and observability callbacks.
 
 ### `NodeError` — error handler context (source-verified)
 
 `NodeError` is a frozen dataclass injected into any function registered as an `error_handler=`. It gives the handler structured access to what failed and where:
 
 ```python
-from langgraph.errors import NodeError  # langgraph.errors, 1.2.11
+from langgraph.errors import NodeError  # langgraph.errors, %%version=langgraph%%
 
 # NodeError is a frozen dataclass with two fields:
 #   node: str            — name of the failing node
@@ -638,7 +638,7 @@ graph = (
 `asyncio.CancelledError` is a `BaseException`, which the Pregel runner interprets as a framework-initiated cancellation signal (tearing down sibling tasks after a peer fails). When a node's own body raises it, LangGraph converts it into `NodeCancelledError` so it surfaces as a proper node failure rather than silently succeeding:
 
 ```python
-# langgraph.errors — source-verified, 1.2.11
+# langgraph.errors — source-verified, %%version=langgraph%%
 class NodeCancelledError(Exception):
     node: str   # the node whose body raised asyncio.CancelledError
 ```
@@ -685,7 +685,7 @@ graph = (
 
 ### `GraphRecursionError` — handling the recursion limit (source-verified)
 
-`GraphRecursionError` is raised when the graph has exhausted the maximum number of steps (`recursion_limit`). In LangGraph 1.2.11 the default is **10007** (set via `DEFAULT_RECURSION_LIMIT` in `langgraph._internal._config`; override the baseline with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable). It inherits from the built-in `RecursionError`:
+`GraphRecursionError` is raised when the graph has exhausted the maximum number of steps (`recursion_limit`). In LangGraph %%version=langgraph%% the default is **10007** (set via `DEFAULT_RECURSION_LIMIT` in `langgraph._internal._config`; override the baseline with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable). It inherits from the built-in `RecursionError`:
 
 ```python
 class GraphRecursionError(RecursionError):
@@ -728,7 +728,7 @@ except GraphRecursionError:
 ```python
 from langgraph.errors import ErrorCode
 
-# ErrorCode members (source-verified, 1.2.11):
+# ErrorCode members (source-verified, %%version=langgraph%%):
 # ErrorCode.GRAPH_RECURSION_LIMIT          — recursion_limit exceeded
 # ErrorCode.INVALID_CONCURRENT_GRAPH_UPDATE — parallel nodes wrote to a channel accepting
 #                                             only one value per super-step (unannotated key

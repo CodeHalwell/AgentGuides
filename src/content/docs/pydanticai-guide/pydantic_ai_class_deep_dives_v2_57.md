@@ -493,16 +493,19 @@ import ast, operator as op
 _OPS = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv}
 
 def _safe_eval(node: ast.expr) -> float:
-    if isinstance(node, ast.Constant):
-        return float(node.n)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
     if isinstance(node, ast.BinOp) and type(node.op) in _OPS:
         return _OPS[type(node.op)](_safe_eval(node.left), _safe_eval(node.right))
     raise ValueError(f"Unsupported expression node: {type(node).__name__}")
 
 @toolset.tool_plain
-def calculate(expr: str) -> float:
+def calculate(expr: str) -> str:
     """Evaluate a simple arithmetic expression (+, -, *, /)."""
-    return _safe_eval(ast.parse(expr, mode="eval").body)
+    try:
+        return str(_safe_eval(ast.parse(expr, mode="eval").body))
+    except (ValueError, SyntaxError, ZeroDivisionError) as exc:
+        return f"Error: {exc}"
 
 @toolset.tool_plain
 def format_number(n: float, decimals: int = 2) -> str:
@@ -557,7 +560,7 @@ class ExternalToolset(AbstractToolset[AgentDepsT]):
 
 ```python
 import asyncio
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests
 from pydantic_ai import ExternalToolset, ToolDefinition
 from pydantic_ai.models.test import TestModel
 

@@ -7,7 +7,7 @@ sidebar:
   order: 30
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). As of 2026-09-28 the latest release was **2.10.0** — most examples are compatible with 2.3.0 and later; the `BigQueryToolset` section requires 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work on 2.3.0 and later; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -33,7 +33,7 @@ agent = LlmAgent(
 )
 ```
 
-`LlmAgent` wraps bare callables with `FunctionTool(func=...)` at registration time (`llm_agent.py:178-182`). Wrap manually only when you need `require_confirmation=`.
+`LlmAgent` wraps bare callables with `FunctionTool(func=...)` at registration time (`llm_agent.py`). Wrap manually only when you need `require_confirmation=`.
 
 ## Public surface
 
@@ -88,7 +88,7 @@ Signature rules (`function_tool.py`):
 
 - The tool **name** is `func.__name__` (or `func.__class__.__name__` for callable objects).
 - The tool **description** is the docstring — one sentence + Google-style `Args`/`Returns`. It's passed to the model verbatim, so keep it tight.
-- Parameters are introspected with `inspect.signature` + `get_type_hints`. Pydantic model params are auto-converted (`_preprocess_args`, `function_tool.py:106`).
+- Parameters are introspected with `inspect.signature` + `get_type_hints`. Pydantic model params are auto-converted (`_preprocess_args`, `function_tool.py`).
 - A parameter named `tool_context` (or typed as `ToolContext`) gets the `ToolContext` injected — it is **not** exposed to the model.
 - Sync and async callables both work.
 
@@ -141,7 +141,7 @@ async def save_and_return(
     return {"saved": filename}
 ```
 
-**Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py:219-224`).
+**Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py`).
 
 ### `require_confirmation`
 
@@ -589,7 +589,7 @@ writer = LlmAgent(
 )
 ```
 
-Constructor args (`agent_tool.py:111-122`):
+Constructor args (`agent_tool.py`):
 
 | Arg | Default | Purpose |
 |---|---|---|
@@ -600,7 +600,7 @@ Constructor args (`agent_tool.py:111-122`):
 
 ## Built-in Gemini tools
 
-These run **server-side inside Gemini** and cannot be combined freely. When mixed with custom tools, ADK wraps them automatically to stay within Gemini's single-built-in constraint (see `llm_agent.py:149-176`):
+These run **server-side inside Gemini** and cannot be combined freely. When mixed with custom tools, ADK wraps them automatically to stay within Gemini's single-built-in constraint (see `llm_agent.py`):
 
 | Tool | What it does | Multi-tool-safe |
 |---|---|---|
@@ -1512,7 +1512,7 @@ toolset = SkillToolset(skills_folder="my_skills")
 
 ### `TransferToAgentTool` — enum-constrained transfer
 
-Source-verified against `google.adk.tools.transfer_to_agent_tool` (google-adk==2.7.1). Unlike the module-level `transfer_to_agent` singleton, the **class** is used when ADK auto-injects transfer into an `LlmAgent` with sub-agents. Its one job over `FunctionTool(transfer_to_agent)` is adding a JSON Schema `enum` constraint to `agent_name`, so the model cannot hallucinate a sub-agent that doesn't exist.
+Source-verified against `google.adk.tools.transfer_to_agent_tool` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Unlike the module-level `transfer_to_agent` singleton, the **class** is used when ADK auto-injects transfer into an `LlmAgent` with sub-agents. Its one job over `FunctionTool(transfer_to_agent)` is adding a JSON Schema `enum` constraint to `agent_name`, so the model cannot hallucinate a sub-agent that doesn't exist.
 
 ```python
 from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
@@ -1537,7 +1537,7 @@ else:
 
 ## `LoadMemoryTool` — memory search with auto instruction
 
-Source-verified against `google.adk.tools.load_memory_tool` (google-adk==2.7.1). The exported symbol `load_memory` is a module-level `LoadMemoryTool()` instance — you pass either interchangeably to `tools=[]`.
+Source-verified against `google.adk.tools.load_memory_tool` (first verified in 2.7.1; re-checked against %%version=google-adk%%). The exported symbol `load_memory` is a module-level `LoadMemoryTool()` instance — you pass either interchangeably to `tools=[]`.
 
 ```python
 from google.adk.tools.load_memory_tool import LoadMemoryTool, load_memory
@@ -1606,7 +1606,7 @@ Spin up `McpToolset` at runtime (e.g. per-tenant filesystem); pass `tool_name_pr
 
 ## Gotchas
 
-- In ADK 2.3.0 `output_schema=` and `tools=` can be used together on an `LlmAgent` — tools run during the thought loop and the schema is enforced only on the final reply.
+- Since ADK 2.3.0, `output_schema=` and `tools=` can be used together on an `LlmAgent` — tools run during the thought loop and the schema is enforced only on the final reply.
 - `tool_context` is injected by parameter name (`tool_context`) **or** type (`ToolContext`). Any other parameter of type `ToolContext` would also be treated as the context slot.
 - `FunctionTool` treats the first sentence of the docstring as the tool description. Keep it focused — the model obeys it.
 - Built-in Gemini tools (`google_search`, `url_context`, `google_maps_grounding`) cannot coexist freely. ADK tries to wrap them, but if you hit `400 INVALID_ARGUMENT` try `bypass_multi_tools_limit=True` where available.

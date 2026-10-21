@@ -1,13 +1,13 @@
 ---
-title: "Class Deep Dives Vol. 7 — v2.12.0"
-description: "Source-verified deep dives for 10 entries in google-adk 2.12.0: LlmRequest, LlmResponse, BaseLlm + LLMRegistry, InvocationContext, State, AgentTool, TransferToAgentTool, BaseCodeExecutor + UnsafeLocalCodeExecutor, PluginManager, and CascadeLive."
+title: "Class Deep Dives Vol. 7"
+description: "Source-verified deep dives for 10 entries covering LlmRequest, LlmResponse, BaseLlm + LLMRegistry, InvocationContext, State, AgentTool, TransferToAgentTool, BaseCodeExecutor + UnsafeLocalCodeExecutor, PluginManager, and CascadeLive."
 framework: google-adk
 language: python
 sidebar:
   order: 137
 ---
 
-All examples and field tables on this page are source-verified against **google-adk==2.12.0**. The ten entries cover the **model request/response pipeline** (`LlmRequest`, `LlmResponse`), **custom model backends** (`BaseLlm`, `LLMRegistry`), the **invocation lifecycle** (`InvocationContext`, `State`), **agent-as-tool patterns** (`AgentTool`, `TransferToAgentTool`), **code execution** (`BaseCodeExecutor`, `UnsafeLocalCodeExecutor`), **plugin lifecycle management** (`PluginManager`), and the **cascade live** speech-to-speech layer (`CascadeLive`).
+Source-verified against `google-adk` %%version=google-adk%% (checked %%versions-checked%%). The ten entries cover the **model request/response pipeline** (`LlmRequest`, `LlmResponse`), **custom model backends** (`BaseLlm`, `LLMRegistry`), the **invocation lifecycle** (`InvocationContext`, `State`), **agent-as-tool patterns** (`AgentTool`, `TransferToAgentTool`), **code execution** (`BaseCodeExecutor`, `UnsafeLocalCodeExecutor`), **plugin lifecycle management** (`PluginManager`), and the **cascade live** speech-to-speech layer (`CascadeLive`).
 
 | # | Class / Symbol | Module | Subject |
 |---|---|---|---|

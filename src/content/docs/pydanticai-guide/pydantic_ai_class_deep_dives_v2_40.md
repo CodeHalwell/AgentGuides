@@ -504,39 +504,43 @@ from pydantic_ai.tools import RunContext
 
 hooks = Hooks()
 
+# Per-run scratch state, keyed by run_id. Don't stash it on ctx.metadata:
+# that is the agent/run metadata you passed in, not a mutable per-run store,
+# and it is None unless you set metadata= on the agent or the run.
+_runs: dict[str, dict] = {}
+
 
 @hooks.on.before_run
-async def start_timer(ctx: RunContext[None]) -> None:
-    if ctx.metadata is None:
-        ctx.metadata = {}
-    ctx.metadata["_start"] = time.monotonic()
-    ctx.metadata["_req"] = 0
+async def start_timer(ctx: RunContext) -> None:
+    _runs[ctx.run_id] = {"start": time.monotonic(), "requests": 0}
     agent_name = ctx.agent.name if ctx.agent else "unknown"
     print(f"Run started for agent: {agent_name}")
 
 
 @hooks.on.after_run
-async def log_duration(ctx: RunContext[None], *, result):
-    elapsed = time.monotonic() - ctx.metadata.get("_start", time.monotonic())
-    print(f"Run finished in {elapsed:.2f}s")
+async def log_duration(ctx: RunContext, *, result):
+    state = _runs.pop(ctx.run_id, {})
+    elapsed = time.monotonic() - state.get("start", time.monotonic())
+    print(f"Run finished in {elapsed:.2f}s after {state.get('requests', 0)} model request(s)")
     return result
 
 
 @hooks.on.before_model_request
-async def log_request(ctx: RunContext[None], request_context):
-    ctx.metadata["_req"] = ctx.metadata.get("_req", 0) + 1
-    print(f"  → Model request #{ctx.metadata['_req']}")
+async def log_request(ctx: RunContext, request_context):
+    state = _runs.setdefault(ctx.run_id, {"start": time.monotonic(), "requests": 0})
+    state["requests"] += 1
+    print(f"  → Model request #{state['requests']}")
     return request_context
 
 
 @hooks.on.after_model_request
-async def log_response(ctx: RunContext[None], *, response, request_context):
+async def log_response(ctx: RunContext, *, response, request_context):
     print(f"  ← Model responded")
     return response
 
 
 @hooks.on.before_tool_execute
-async def log_tool(ctx: RunContext[None], *, call, tool_def, args):
+async def log_tool(ctx: RunContext, *, call, tool_def, args):
     print(f"  🔧 Calling tool '{tool_def.name}' with {args}")
     return args
 
@@ -1070,13 +1074,12 @@ retry_transport = AsyncHTTPX2TenacityTransport(
 )
 
 # Inject into the OpenAI provider's HTTP client
-from pydantic_ai.models.openai import OpenAIModel
-import openai
+# (OpenAIModel was renamed OpenAIChatModel in 2.0; OpenAIResponsesModel is the Responses-API twin)
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
-openai_client = openai.AsyncOpenAI(
-    http_client=httpx2.AsyncClient(transport=retry_transport)
-)
-model = OpenAIModel("gpt-4o", openai_client=openai_client)
+provider = OpenAIProvider(http_client=httpx2.AsyncClient(transport=retry_transport))
+model = OpenAIChatModel("gpt-4o", provider=provider)
 agent = Agent(model)
 ```
 

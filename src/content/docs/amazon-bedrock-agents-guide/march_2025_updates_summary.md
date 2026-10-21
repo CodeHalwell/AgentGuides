@@ -1,10 +1,21 @@
 ---
-title: "Amazon Bedrock Agents Documentation - March 2025 Updates Summary"
-description: "The Amazon Bedrock Agents documentation has been comprehensively updated with critical March 2025 features announced at AWS Summit NYC 2025 and released on March 10, 2025. This upd"
+title: "March 2025 Updates Summary (Archived)"
+description: "Archived changelog from the March 2025 documentation update to this guide. Kept for history; several claims in it have since been corrected."
 framework: amazon-bedrock-agents
 ---
 
 # Amazon Bedrock Agents Documentation - March 2025 Updates Summary
+
+> **Archived — historical record only.** This page is the changelog written for the guide's March 2025 update. It is not current and several statements in it were wrong at the time or have since been overtaken. Corrections, as of %%versions-checked%%:
+>
+> - **AgentCore** was not part of the March 2025 release. It was announced in preview at AWS Summit New York in **July 2025** and became generally available in **October 2025**; the "free until 16 September 2025" offer was preview pricing. Its runtime hosts Python and Node.js agents; the old guide's `AgentCore`, `WorkflowOrchestrator` and similar classes never existed.
+> - **A2A** is an open protocol introduced by Google in **April 2025** (now a Linux Foundation project), not an AWS feature that went GA on 10 March 2025. Bedrock Agents (Classic) does not implement it; AgentCore Runtime and Strands do.
+> - **Multi-agent collaboration** in Bedrock Agents did become generally available in March 2025, but with `SUPERVISOR` and `SUPERVISOR_ROUTER` modes configured through `agentCollaboration` and `associate_agent_collaborator` — not the `multiAgentConfig`, keyword or complexity routing shown in that update.
+> - **Strands Agents** 1.0 was released in July 2025 and requires Python 3.10+. Its patterns are `Agent.as_tool`, `Swarm` (hand-offs, not parallel aggregation), `GraphBuilder` and the `workflow` tool.
+> - **Bedrock Agents (Classic)** has been closed to new customers since 30 July 2026 and is in maintenance mode; AWS recommends AgentCore for new work.
+> - The file names, line counts and the `README.md` referred to below describe the repository as it was then.
+>
+> For current material see the [overview](/amazon-bedrock-agents-guide/), the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/), the [Strands guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) and the [A2A guide](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/).
 
 ## Overview
 
@@ -345,14 +356,12 @@ All examples are:
 
 ---
 
-## Status: ✅ COMPLETE
+## Status (as recorded in March 2025)
 
-All critical March 2025 features have been comprehensively documented with production-ready examples, integration guides, and best practices.
-
-**Documentation is ready for immediate use.**
+The March 2025 update was recorded as complete at the time. Its examples have since been rewritten against the real SDKs; see the archive note at the top of this page.
 
 ---
 
-**Last Updated**: March 2025
-**Maintained By**: Amazon Bedrock Documentation Team (simulated)
+**Written**: March 2025 · **Archived**: October 2026
+**Maintained by**: the AgentGuides project (not affiliated with AWS)
 

@@ -1,38 +1,74 @@
 ---
 title: "OpenAI Agents Streaming Server (Express)"
-description: "Stream OpenAI model output in Node/Express using the OpenAI SDK."
+description: "Stream Agents SDK runs (and raw model output) to clients over SSE from Node/Express."
 framework: openai-agents-sdk-typescript
 ---
 
 # OpenAI Agents Streaming Server (Express)
 
-Latest: @openai/agents 0.11.6 | Updated: May 29, 2026
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Requires `express`, `zod` and `@openai/agents@%%version=@openai/agents%%`; Node.js 22+.
 
-> The snippets on this page stream through the base `openai` SDK (6.8.1) rather than the Agents SDK runner — use them when you want raw token streaming over SSE without an agent loop.
+## Streaming an agent run over SSE
+
+`run(agent, input, { stream: true })` returns a stream you can iterate for events, or turn into plain text with `toTextStream()`. Tools, handoffs and guardrails still run inside the agent loop.
+
+```ts
+import express from "express";
+import { Agent, run } from "@openai/agents";
+
+const app = express();
+const agent = new Agent({ name: "Assistant", instructions: "Answer concisely." });
+
+app.get("/stream", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  const q = String(req.query.q || "");
+
+  const controller = new AbortController();
+  req.on("close", () => controller.abort()); // stop the run if the client disconnects
+
+  const stream = await run(agent, q, { stream: true, signal: controller.signal });
+  for await (const event of stream) {
+    if (event.type === "raw_model_stream_event" && event.data.type === "output_text_delta") {
+      res.write(`data: ${JSON.stringify({ delta: event.data.delta })}\n\n`);
+    } else if (event.type === "agent_updated_stream_event") {
+      res.write(`event: agent\ndata: ${JSON.stringify({ agent: event.agent.name })}\n\n`);
+    }
+  }
+  await stream.completed;
+  res.write("event: done\ndata: {}\n\n");
+  res.end();
+});
+
+app.listen(8080, () => console.log("listening on 8080"));
+```
+
+## Raw model streaming without an agent loop
+
+For a single model call, the base `openai` SDK (v7, a dependency of the Agents SDK) is enough:
 
 ```ts
 import express from "express";
 import OpenAI from "openai";
 
 const app = express();
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const client = new OpenAI(); // reads OPENAI_API_KEY
 
-app.get("/stream", async (req, res) => {
+app.get("/raw", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
-  const q = String(req.query.q || "");
-  const stream = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: q }],
+  const stream = await client.responses.create({
+    model: "gpt-5.6-luna",
+    input: String(req.query.q || ""),
     stream: true,
   });
-  for await (const chunk of stream) {
-    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") res.write(`data: ${JSON.stringify(event.delta)}\n\n`);
   }
   res.end();
 });
 
-app.listen(8080, () => console.log("listening on 8080"));
+app.listen(8081);
 ```
 
 ## Deployment
@@ -40,7 +76,7 @@ app.listen(8080, () => console.log("listening on 8080"));
 ### Dockerfile
 
 ```dockerfile
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev

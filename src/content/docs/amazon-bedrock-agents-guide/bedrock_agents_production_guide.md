@@ -8,6 +8,12 @@ framework: amazon-bedrock-agents
 
 A comprehensive guide for deploying, operating, monitoring, and optimising Amazon Bedrock Agents in production environments at enterprise scale.
 
+> **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%).
+>
+> **Scope.** These patterns target **Bedrock Agents (Agents Classic)**, which stopped accepting new customers on 30 July 2026 and is in maintenance mode. For new production agents AWS recommends **AgentCore Runtime**, whose versions, endpoints, VPC networking and observability are covered in the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#production-deployment).
+>
+> **Clients:** agent management uses `bedrock-agent`, invocation uses `bedrock-agent-runtime`, model listing and guardrails use `bedrock`.
+
 ---
 
 ## Table of Contents
@@ -32,9 +38,10 @@ A comprehensive guide for deploying, operating, monitoring, and optimising Amazo
 ```python
 import boto3
 import json
+import time
 from typing import Dict, List, Optional
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 class ProductionBedrockArchitecture:
     """Enterprise-grade Bedrock Agents production architecture"""
@@ -47,8 +54,8 @@ class ProductionBedrockArchitecture:
         self.primary_region = 'us-east-1'
         self.secondary_region = 'eu-west-1'
         
-        self.bedrock_primary = boto3.client('bedrock', region_name=self.primary_region)
-        self.bedrock_secondary = boto3.client('bedrock', region_name=self.secondary_region)
+        self.bedrock_primary = boto3.client('bedrock-agent', region_name=self.primary_region)
+        self.bedrock_secondary = boto3.client('bedrock-agent', region_name=self.secondary_region)
         self.cloudwatch = boto3.client('cloudwatch')
         self.s3 = boto3.client('s3')
         self.dynamodb = boto3.resource('dynamodb')
@@ -80,17 +87,18 @@ class ProductionBedrockArchitecture:
             # Validate configuration
             self._validate_agent_config(agent_config)
             
-            # Deploy to primary region
-            primary_response = self.bedrock_primary.create_agent(**agent_config)
-            primary_agent_id = primary_response['agentId']
+            # Deploy to primary region (agent config must reference resources valid in that Region)
+            primary_agent_id = self.bedrock_primary.create_agent(**agent_config)['agent']['agentId']
             self.logger.info(f"✓ Deployed agent to {self.primary_region}: {primary_agent_id}")
             
             # Deploy to secondary region for DR
-            secondary_response = self.bedrock_secondary.create_agent(**agent_config)
-            secondary_agent_id = secondary_response['agentId']
+            secondary_agent_id = self.bedrock_secondary.create_agent(**agent_config)['agent']['agentId']
             self.logger.info(f"✓ Deployed agent to {self.secondary_region}: {secondary_agent_id}")
             
-            # Create production alias
+            # Prepare the DRAFT version, then create the production alias (which snapshots a version)
+            self._wait_until(self.bedrock_primary, primary_agent_id, ('NOT_PREPARED', 'PREPARED'))
+            self.bedrock_primary.prepare_agent(agentId=primary_agent_id)
+            self._wait_until(self.bedrock_primary, primary_agent_id, ('PREPARED',))
             alias_response = self.bedrock_primary.create_agent_alias(
                 agentId=primary_agent_id,
                 agentAliasName='production',
@@ -99,11 +107,11 @@ class ProductionBedrockArchitecture:
             
             # Store deployment metadata
             deployment_info = {
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': datetime.now(timezone.utc).isoformat(),
                 'environment': self.environment,
                 'primary_agent_id': primary_agent_id,
                 'secondary_agent_id': secondary_agent_id,
-                'alias_id': alias_response['agentAliasId'],
+                'alias_id': alias_response['agentAlias']['agentAliasId'],
                 'status': 'DEPLOYED',
                 'health_check': 'PASSED'
             }
@@ -115,10 +123,15 @@ class ProductionBedrockArchitecture:
             self.logger.error(f"✗ Deployment failed: {e}")
             raise
     
+    @staticmethod
+    def _wait_until(client, agent_id: str, statuses) -> None:
+        while client.get_agent(agentId=agent_id)['agent']['agentStatus'] not in statuses:
+            time.sleep(2)
+    
     def _validate_agent_config(self, config: Dict) -> bool:
         """Validate agent configuration against production standards"""
         
-        required_fields = ['agentName', 'foundationModelId', 'agentRoleArn']
+        required_fields = ['agentName', 'foundationModel', 'agentResourceRoleArn', 'instruction']
         for field in required_fields:
             if field not in config:
                 raise ValueError(f"Missing required field: {field}")
@@ -140,6 +153,7 @@ class ProductionHealthChecker:
     """Monitor production agent health"""
     
     def __init__(self, region: str = 'us-east-1'):
+        self.agents = boto3.client('bedrock-agent', region_name=region)
         self.bedrock = boto3.client('bedrock', region_name=region)
         self.cloudwatch = boto3.client('cloudwatch')
     
@@ -153,20 +167,26 @@ class ProductionHealthChecker:
         
         health_status = {
             'agent_id': agent_id,
-            'timestamp': datetime.utcnow().isoformat(),
+            'timestamp': datetime.now(timezone.utc).isoformat(),
             'checks': {}
         }
         
         # Check 1: Agent accessibility
         try:
-            agent = self.bedrock.get_agent(agentId=agent_id)
-            health_status['checks']['agent_access'] = 'PASS'
+            agent = self.agents.get_agent(agentId=agent_id)['agent']
+            health_status['checks']['agent_access'] = (
+                'PASS' if agent['agentStatus'] == 'PREPARED' else f"WARN: status {agent['agentStatus']}"
+            )
         except Exception as e:
             health_status['checks']['agent_access'] = f'FAIL: {e}'
         
         # Check 2: Foundation model availability
         try:
-            models = self.bedrock.list_foundation_models()
+            model = agent['foundationModel']
+            if model.split('.')[0] in ('us', 'eu', 'jp', 'au', 'apac', 'global'):
+                self.bedrock.get_inference_profile(inferenceProfileIdentifier=model)
+            else:
+                self.bedrock.get_foundation_model(modelIdentifier=model)
             health_status['checks']['model_availability'] = 'PASS'
         except Exception as e:
             health_status['checks']['model_availability'] = f'FAIL: {e}'
@@ -199,181 +219,128 @@ class ProductionHealthChecker:
 
 ### Blue-Green Deployment Pattern
 
+Bedrock Agents has built-in versioning: each `create_agent_alias` (or `update_agent_alias` without a version) snapshots the prepared `DRAFT` into a new numbered version, and an alias points at exactly one version. Blue/green therefore means *moving an alias*, not creating a second agent:
+
 ```python
 class BlueGreenDeployment:
-    """Blue-Green deployment strategy for Bedrock Agents"""
+    """Blue/green for Bedrock Agents using versions and aliases."""
     
-    def __init__(self):
-        self.bedrock = boto3.client('bedrock')
-        self.route53 = boto3.client('route53')
+    def __init__(self, region: str = 'us-east-1'):
+        self.agents = boto3.client('bedrock-agent', region_name=region)
+        self.runtime = boto3.client('bedrock-agent-runtime', region_name=region)
     
-    def perform_blue_green_deployment(self, 
-                                      new_agent_config: Dict,
-                                      current_agent_id: str) -> Dict:
-        """
-        Deploy new agent (Green) alongside current (Blue)
-        with automatic failover
-        """
+    def _wait_prepared(self, agent_id: str) -> None:
+        while self.agents.get_agent(agentId=agent_id)['agent']['agentStatus'] != 'PREPARED':
+            time.sleep(2)
+    
+    def perform_blue_green_deployment(self, agent_id: str, prod_alias_id: str) -> Dict:
+        """Snapshot DRAFT as 'green', test it via a staging alias, then repoint production."""
         
-        # Step 1: Deploy green agent
-        green_response = self.bedrock.create_agent(**new_agent_config)
-        green_agent_id = green_response['agentId']
+        # Step 1: prepare the updated DRAFT and snapshot it behind a staging alias
+        self.agents.prepare_agent(agentId=agent_id)
+        self._wait_prepared(agent_id)
+        staging = self.agents.create_agent_alias(agentId=agent_id, agentAliasName=f'staging-{int(time.time())}')['agentAlias']
+        while True:
+            alias = self.agents.get_agent_alias(agentId=agent_id, agentAliasId=staging['agentAliasId'])['agentAlias']
+            if alias['agentAliasStatus'] == 'PREPARED':
+                break
+            time.sleep(2)
+        green_version = alias['routingConfiguration'][0]['agentVersion']
         
-        # Step 2: Run comprehensive tests
-        test_results = self._run_test_suite(green_agent_id)
-        
+        # Step 2: run the test suite against the staging alias
+        test_results = self._run_test_suite(agent_id, staging['agentAliasId'])
         if not test_results['all_passed']:
-            raise Exception(f"Tests failed: {test_results['failures']}")
+            raise RuntimeError(f"Tests failed: {test_results['failures']}")
         
-        # Step 3: Gradual traffic shift
-        self._gradual_traffic_shift(current_agent_id, green_agent_id)
-        
-        # Step 4: Monitor and validate
-        monitoring_results = self._monitor_transition(green_agent_id)
-        
-        return {
-            'blue_agent_id': current_agent_id,
-            'green_agent_id': green_agent_id,
-            'status': 'DEPLOYED',
-            'monitoring': monitoring_results
-        }
+        # Step 3: switch production to the green version (instant; roll back by pointing at the old version)
+        prod = self.agents.get_agent_alias(agentId=agent_id, agentAliasId=prod_alias_id)['agentAlias']
+        blue_version = prod['routingConfiguration'][0]['agentVersion']
+        self.agents.update_agent_alias(
+            agentId=agent_id,
+            agentAliasId=prod_alias_id,
+            agentAliasName=prod['agentAliasName'],
+            routingConfiguration=[{'agentVersion': green_version}],
+        )
+        return {'blue_version': blue_version, 'green_version': green_version, 'status': 'DEPLOYED'}
     
-    def _run_test_suite(self, agent_id: str) -> Dict:
-        """Run comprehensive test suite"""
-        tests = [
-            self._test_basic_invocation,
-            self._test_action_groups,
-            self._test_knowledge_bases,
-            self._test_guardrails
+    def rollback(self, agent_id: str, prod_alias_id: str, alias_name: str, version: str) -> None:
+        self.agents.update_agent_alias(
+            agentId=agent_id, agentAliasId=prod_alias_id, agentAliasName=alias_name,
+            routingConfiguration=[{'agentVersion': version}],
+        )
+    
+    def _run_test_suite(self, agent_id: str, alias_id: str) -> Dict:
+        cases = [
+            ("What is your refund policy?", "refund"),
+            ("Show me ticket TICKET-1", "TICKET-1"),
         ]
-        
         results = {'all_passed': True, 'failures': []}
-        for test in tests:
-            try:
-                test(agent_id)
-            except Exception as e:
+        for prompt, expected in cases:
+            response = self.runtime.invoke_agent(
+                agentId=agent_id, agentAliasId=alias_id, sessionId=f'test-{int(time.time())}', inputText=prompt,
+            )
+            text = ''.join(e['chunk']['bytes'].decode() for e in response['completion'] if 'chunk' in e)
+            if expected.lower() not in text.lower():
                 results['all_passed'] = False
-                results['failures'].append(str(e))
-        
+                results['failures'].append(prompt)
         return results
-    
-    def _gradual_traffic_shift(self, blue_id: str, green_id: str, duration_minutes: int = 30):
-        """Gradually shift traffic from blue to green"""
-        traffic_distribution = [
-            (100, 0),    # All to blue
-            (90, 10),
-            (75, 25),
-            (50, 50),
-            (25, 75),
-            (10, 90),
-            (0, 100)     # All to green
-        ]
-        
-        for blue_percent, green_percent in traffic_distribution:
-            # Update Route 53 weighted routing
-            # Wait 5 minutes between shifts
-            print(f"Traffic: {blue_percent}% → {green_percent}%")
-            time.sleep(300)
 ```
 
 ### Canary Deployment Pattern
 
+An alias routes to a single version, so percentage-based canaries are done in your application: send a small share of sessions to a canary alias and compare metrics (the `AgentAliasArn` dimension separates them in CloudWatch).
+
+```python
+import hashlib
+
+
+class CanaryRouter:
+    """Route a stable percentage of sessions to a canary alias."""
+    
+    def __init__(self, agent_id: str, stable_alias_id: str, canary_alias_id: str, canary_percent: int = 5):
+        self.runtime = boto3.client('bedrock-agent-runtime')
+        self.agent_id = agent_id
+        self.stable_alias_id = stable_alias_id
+        self.canary_alias_id = canary_alias_id
+        self.canary_percent = canary_percent
+    
+    def alias_for(self, session_id: str) -> str:
+        bucket = int(hashlib.sha256(session_id.encode()).hexdigest(), 16) % 100
+        return self.canary_alias_id if bucket < self.canary_percent else self.stable_alias_id
+    
+    def invoke(self, session_id: str, text: str) -> str:
+        response = self.runtime.invoke_agent(
+            agentId=self.agent_id, agentAliasId=self.alias_for(session_id),
+            sessionId=session_id, inputText=text,
+        )
+        return ''.join(e['chunk']['bytes'].decode() for e in response['completion'] if 'chunk' in e)
+```
+
+Hashing the session ID keeps each conversation on one version. Roll back by setting `canary_percent` to 0; promote by moving the stable alias to the canary's version.
+
 ### A/B Testing
 
-A/B testing allows you to compare two or more versions of an agent to determine which one performs better. This is useful for testing different prompts, models, or action group configurations.
-
+A/B testing compares two agent configurations (prompts, models, action groups) on live traffic. Use the same session-hash routing as the canary, with two aliases at 50/50, and compare business outcomes alongside the CloudWatch metrics:
 
 ```python
 class ABTesting:
-    """A/B testing for Bedrock Agents"""
+    """Compare two aliases on latency and a business metric."""
 
-    def __init__(self):
-        self.bedrock = boto3.client('bedrock')
+    def __init__(self, router: CanaryRouter):
+        self.router = router                      # canary_percent=50 gives a 50/50 split
         self.cloudwatch = boto3.client('cloudwatch')
 
-    def run_ab_test(self, agent_a_id: str, agent_b_id: str, traffic_split: int = 50):
-        """
-        Run an A/B test between two agents
-        """
-        # Configure traffic splitting using Route 53 or a feature flagging service
-        self._configure_traffic_split(agent_a_id, agent_b_id, traffic_split)
-
-        # Monitor key metrics for each agent
-        metrics_a = self._collect_metrics(agent_a_id)
-        metrics_b = self._collect_metrics(agent_b_id)
-
-        # Compare the results
-        if metrics_a['user_satisfaction'] > metrics_b['user_satisfaction']:
-            return {'winner': 'A', 'metrics': {'A': metrics_a, 'B': metrics_b}}
-        else:
-            return {'winner': 'B', 'metrics': {'A': metrics_a, 'B': metrics_b}}
-
-    def _configure_traffic_split(self, agent_a_id: str, agent_b_id: str, split: int):
-        # Implementation for traffic splitting
-        pass
-
-    def _collect_metrics(self, agent_id: str) -> Dict:
-        # Implementation for collecting metrics
-        return {
-            'error_rate': 0.01,
-            'latency': 1200,
-            'user_satisfaction': 0.95
-        }
-```
-
-
-```python
-class CanaryDeployment:
-    """Canary deployment for risk mitigation"""
-    
-    def __init__(self):
-        self.bedrock = boto3.client('bedrock')
-        self.cloudwatch = boto3.client('cloudwatch')
-    
-    def deploy_with_canary(self, 
-                          new_agent_config: Dict,
-                          current_agent_id: str,
-                          canary_percentage: int = 5) -> Dict:
-        """
-        Deploy new agent to small user segment (canary)
-        before full rollout
-        """
-        
-        # Deploy new agent
-        canary_response = self.bedrock.create_agent(**new_agent_config)
-        canary_agent_id = canary_response['agentId']
-        
-        # Configure canary traffic
-        self._configure_canary_routing(current_agent_id, canary_agent_id, canary_percentage)
-        
-        # Monitor canary metrics
-        canary_metrics = {
-            'error_rate': None,
-            'latency': None,
-            'user_satisfaction': None
-        }
-        
-        # Wait 1 hour for canary monitoring
-        monitoring_duration = 3600
-        start_time = datetime.utcnow()
-        
-        while (datetime.utcnow() - start_time).seconds < monitoring_duration:
-            canary_metrics = self._collect_canary_metrics(canary_agent_id)
-            
-            # Check for issues
-            if canary_metrics['error_rate'] > 0.05:  # >5% error rate
-                print("⚠ Canary error rate exceeded threshold, rolling back...")
-                self._rollback_canary(current_agent_id, canary_agent_id)
-                return {'status': 'ROLLED_BACK'}
-            
-            time.sleep(60)  # Check every minute
-        
-        # If canary successful, proceed with full deployment
-        return {
-            'status': 'CANARY_PASSED',
-            'canary_agent_id': canary_agent_id,
-            'final_metrics': canary_metrics
-        }
+    def record_outcome(self, session_id: str, resolved: bool) -> None:
+        variant = 'B' if self.router.alias_for(session_id) == self.router.canary_alias_id else 'A'
+        self.cloudwatch.put_metric_data(
+            Namespace='BedrockAgents/Experiments',
+            MetricData=[{
+                'MetricName': 'Resolved',
+                'Dimensions': [{'Name': 'Variant', 'Value': variant}],
+                'Value': 1 if resolved else 0,
+                'Unit': 'Count',
+            }],
+        )
 ```
 
 ---
@@ -395,14 +362,17 @@ class EncryptionAndKeyManagement:
                                        kms_key_id: str) -> Dict:
         """Create knowledge base with encryption"""
         
-        bedrock = boto3.client('bedrock')
+        agents = boto3.client('bedrock-agent')
         
-        response = bedrock.create_knowledge_base(
-            name=kb_name,
-            encryptionConfiguration={
-                'kmsKeyArn': f'arn:aws:kms:us-east-1:ACCOUNT:key/{kms_key_id}'
+        # Knowledge-base encryption is configured on the data source (transient ingestion data)
+        # and on the vector store itself (e.g. an OpenSearch Serverless encryption policy).
+        response = agents.create_data_source(
+            knowledgeBaseId='KB_ID',
+            name=f'{kb_name}-docs',
+            dataSourceConfiguration={'type': 'S3', 's3Configuration': {'bucketArn': 'arn:aws:s3:::kb-docs'}},
+            serverSideEncryptionConfiguration={
+                'kmsKeyArn': f'arn:aws:kms:us-east-1:111122223333:key/{kms_key_id}'
             },
-            # ... other config
         )
         
         return response
@@ -440,32 +410,33 @@ class EncryptionAndKeyManagement:
 
 
 class NetworkSecurityConfiguration:
-    """Configure VPC and network security for agents"""
+    """Keep agent traffic on the AWS network with VPC interface endpoints."""
     
     def __init__(self):
         self.ec2 = boto3.client('ec2')
-        self.bedrock = boto3.client('bedrock')
     
-    def create_private_agent(self,
-                            agent_name: str,
-                            vpc_id: str,
-                            subnet_ids: List[str],
-                            security_group_ids: List[str]) -> Dict:
-        """Deploy agent in private VPC without internet access"""
-        
-        response = self.bedrock.create_agent(
-            agentName=agent_name,
-            networkConfiguration={
-                'vpcConfiguration': {
-                    'vpcId': vpc_id,
-                    'subnetIds': subnet_ids,
-                    'securityGroupIds': security_group_ids,
-                    'enablePrivateEndpoint': True
-                }
-            }
-        )
-        
-        return response
+    def create_private_endpoints(self,
+                                 vpc_id: str,
+                                 subnet_ids: List[str],
+                                 security_group_ids: List[str],
+                                 region: str = 'us-east-1') -> Dict:
+        """
+        Bedrock Agents is a managed service and is not deployed into your VPC.
+        Applications in private subnets reach it through PrivateLink endpoints;
+        action-group Lambdas can run in your VPC to reach private resources.
+        """
+        endpoints = {}
+        for service in ('bedrock-agent-runtime', 'bedrock-agent', 'bedrock-runtime'):
+            response = self.ec2.create_vpc_endpoint(
+                VpcEndpointType='Interface',
+                VpcId=vpc_id,
+                ServiceName=f'com.amazonaws.{region}.{service}',
+                SubnetIds=subnet_ids,
+                SecurityGroupIds=security_group_ids,
+                PrivateDnsEnabled=True,
+            )
+            endpoints[service] = response['VpcEndpoint']['VpcEndpointId']
+        return endpoints
     
     def configure_endpoint_policies(self,
                                    vpc_endpoint_id: str) -> None:
@@ -478,10 +449,9 @@ class NetworkSecurityConfiguration:
                     "Effect": "Allow",
                     "Principal": "*",
                     "Action": [
-                        "bedrock:InvokeAgent",
-                        "bedrock:GetAgent"
+                        "bedrock:InvokeAgent"
                     ],
-                    "Resource": "arn:aws:bedrock:*:*:agent/*",
+                    "Resource": "arn:aws:bedrock:*:*:agent-alias/*",
                     "Condition": {
                         "StringEquals": {
                             "aws:PrincipalOrgID": "o-xxxxxxxxxx"
@@ -552,15 +522,16 @@ class IAMPoliciesAndRoles:
             "Version": "2012-10-17",
             "Statement": [
                 {
-                    "Sid": "BedrockAgentInvocation",
+                    "Sid": "ModelInvocation",
                     "Effect": "Allow",
                     "Action": [
-                        "bedrock:InvokeAgent",
-                        "bedrock:GetAgent"
+                        "bedrock:InvokeModel",
+                        "bedrock:InvokeModelWithResponseStream",
+                        "bedrock:GetInferenceProfile"
                     ],
                     "Resource": [
-                        "arn:aws:bedrock:us-east-1:*:agent/*",
-                        "arn:aws:bedrock:eu-west-1:*:agent/*"
+                        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-5-5",
+                        "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-sonnet-5-5"
                     ]
                 },
                 {
@@ -589,7 +560,7 @@ class IAMPoliciesAndRoles:
                         "bedrock:DeleteAgent",
                         "bedrock:DeleteKnowledgeBase",
                         "iam:*",
-                        "organisations:*"
+                        "organizations:*"
                     ],
                     "Resource": "*"
                 }
@@ -608,57 +579,58 @@ class LatencyOptimisation:
     """Reduce agent invocation latency"""
     
     def __init__(self):
-        self.bedrock = boto3.client('bedrock')
         self.cloudwatch = boto3.client('cloudwatch')
     
-    def analyze_latency_bottlenecks(self, agent_id: str) -> Dict:
-        """Identify latency bottlenecks"""
+    def _average(self, metric: str, dimensions: List[Dict]) -> float:
+        end = datetime.now(timezone.utc)
+        points = self.cloudwatch.get_metric_statistics(
+            Namespace='AWS/Bedrock/Agents',
+            MetricName=metric,
+            Dimensions=dimensions,
+            StartTime=end - timedelta(hours=1),
+            EndTime=end,
+            Period=300,
+            Statistics=['Average'],
+        )['Datapoints']
+        return sum(p['Average'] for p in points) / len(points) if points else 0.0
+    
+    def analyze_latency_bottlenecks(self, agent_alias_arn: str, model_id: str) -> Dict:
+        """Split end-to-end time into model time and everything else (tools, KB, orchestration)."""
         
-        metrics = self.cloudwatch.get_metric_statistics(
-            Namespace='AWS/Bedrock',
-            MetricName='AgentInvocationLatency',
-            Dimensions=[{'Name': 'AgentId', 'Value': agent_id}],
-            StartTime=datetime.utcnow() - timedelta(hours=1),
-            EndTime=datetime.utcnow(),
-            Period=60,
-            Statistics=['Average', 'Maximum', 'Minimum']
-        )
-        
-        latency_breakdown = {
-            'model_latency': self._measure_model_latency(agent_id),
-            'action_group_latency': self._measure_action_group_latency(agent_id),
-            'knowledge_base_latency': self._measure_kb_latency(agent_id),
-            'network_latency': self._measure_network_latency()
-        }
-        
-        return latency_breakdown
+        dims = [
+            {'Name': 'Operation', 'Value': 'InvokeAgent'},
+            {'Name': 'AgentAliasArn', 'Value': agent_alias_arn},
+            {'Name': 'ModelId', 'Value': model_id},
+        ]
+        total = self._average('TotalTime', dims)
+        model = self._average('ModelLatency', dims)
+        return {'total_ms': total, 'model_latency': model, 'non_model_ms': max(total - model, 0.0)}
     
     def implement_caching_layer(self, agent_id: str) -> None:
         """Implement ElastiCache for frequently accessed data"""
         
         # Cache configuration
-        cache_config = {
-            'CacheClusterId': f'{agent_id}-cache',
-            'CacheNodeType': 'cache.t3.medium',
-            'Engine': 'redis',
-            'NumCacheNodes': 2,
-            'AutomaticFailover': True,
-            'MultiAZEnabled': True,
-            'CacheSubnetGroupName': 'bedrock-subnet-group'
-        }
-        
         elasticache = boto3.client('elasticache')
-        elasticache.create_cache_cluster(**cache_config)
+        elasticache.create_replication_group(
+            ReplicationGroupId=f'{agent_id.lower()}-cache',
+            ReplicationGroupDescription='Cache for agent tool results',
+            CacheNodeType='cache.t4g.medium',
+            Engine='valkey',
+            NumCacheClusters=2,
+            AutomaticFailoverEnabled=True,
+            MultiAZEnabled=True,
+            CacheSubnetGroupName='bedrock-subnet-group',
+        )
     
-    def optimize_model_selection(self, agent_id: str) -> str:
-        """Select appropriate model based on performance requirements"""
+    def optimize_model_selection(self, agent_alias_arn: str, model_id: str) -> str:
+        """Suggest a faster model when model time dominates"""
         
-        metrics = self.analyze_latency_bottlenecks(agent_id)
+        metrics = self.analyze_latency_bottlenecks(agent_alias_arn, model_id)
         
         if metrics['model_latency'] > 5000:  # >5 seconds
-            return 'claude-3-haiku'  # Faster model
+            return 'us.anthropic.claude-haiku-5-5'   # faster, cheaper
         else:
-            return 'claude-3-sonnet'  # Better quality
+            return 'us.anthropic.claude-sonnet-5-5'  # better quality
 ```
 
 ---
@@ -680,7 +652,6 @@ class CostOptimisation:
     
     def __init__(self):
         self.ce = boto3.client('ce')  # Cost Explorer
-        self.bedrock = boto3.client('bedrock')
     
     def analyze_agent_costs(self, agent_id: str) -> Dict:
         """Detailed cost analysis per agent"""
@@ -688,12 +659,14 @@ class CostOptimisation:
         # Get cost data from Cost Explorer
         response = self.ce.get_cost_and_usage(
             TimePeriod={
-                'Start': (datetime.utcnow() - timedelta(days=30)).strftime('%Y-%m-%d'),
-                'End': datetime.utcnow().strftime('%Y-%m-%d')
+                'Start': (datetime.now(timezone.utc) - timedelta(days=30)).strftime('%Y-%m-%d'),
+                'End': datetime.now(timezone.utc).strftime('%Y-%m-%d')
             },
             Granularity='MONTHLY',
             Metrics=['UnblendedCost'],
             Filter={
+                # Requires an activated cost-allocation tag; model usage is attributed to whatever
+                # tags you put on application inference profiles, not to the agent itself
                 'Tags': {
                     'Key': 'AgentId',
                     'Values': [agent_id]
@@ -729,12 +702,6 @@ class CostOptimisation:
         
         return cost_breakdown
     
-    def implement_reserved_capacity(self) -> None:
-        """Reserve capacity for predictable workloads"""
-        
-        # Implementation for reserved capacity
-        pass
-    
     def optimize_token_usage(self, agent_id: str) -> Dict:
         """Optimise model token consumption"""
         
@@ -742,7 +709,7 @@ class CostOptimisation:
             'prompt_caching': True,
             'context_compression': True,
             'batch_processing': True,
-            'model_optimization': 'claude-3-haiku'  # Lower cost
+            'model_optimization': 'us.anthropic.claude-haiku-5-5'  # lower cost for simple routes
         }
         
         return optimisations
@@ -757,6 +724,8 @@ class CostOptimisation:
 Amazon Bedrock AgentCore provides a dedicated solution for monitoring, analyzing, and auditing AI agent interactions. It offers full visibility into agent operations, including tracking interactions, analyzing performance metrics, and debugging issues across various deployment environments.
 
 **Key Features:**
+
+AgentCore Observability applies to agents on AgentCore; Bedrock Agents (Classic) is monitored through CloudWatch metrics in the `AWS/Bedrock/Agents` namespace and invocation traces (see the [observability guide](/amazon-bedrock-agents-guide/bedrock_agents_observability_python/)).
 
 *   **OpenTelemetry (OTEL) Compatibility:** AgentCore Observability emits telemetry data in a standardized OpenTelemetry-compatible format. This enables seamless integration with existing monitoring and observability stacks, promoting a unified approach to monitoring.
 *   **CloudWatch Integration:** Amazon Bedrock Agents provide native support for CloudWatch metrics. This allows developers to track detailed runtime metrics for operations like `InvokeAgent` and `InvokeInlineAgent`.
@@ -795,8 +764,6 @@ class ComprehensiveMonitoring:
         # Create alarms
         self._create_critical_alarms(agent_id)
         
-        # Enable X-Ray tracing
-        self._enable_xray_tracing(agent_id)
     
     def _create_agent_dashboard(self, agent_id: str) -> None:
         """Create operational dashboard"""
@@ -807,10 +774,10 @@ class ComprehensiveMonitoring:
                     "type": "metric",
                     "properties": {
                         "metrics": [
-                            ["AWS/Bedrock", "AgentInvocationLatency", 
-                             {"stat": "Average"}],
-                            [".", ".", {"stat": "p99"}],
-                            [".", "AgentInvocationErrors", {"stat": "Sum"}]
+                            ["AWS/Bedrock/Agents", "TotalTime", "Operation", "InvokeAgent", {"stat": "Average"}],
+                            ["...", {"stat": "p99"}],
+                            [".", "InvocationServerErrors", ".", ".", {"stat": "Sum"}],
+                            [".", "InvocationThrottles", ".", ".", {"stat": "Sum"}]
                         ],
                         "period": 60,
                         "stat": "Average",
@@ -832,27 +799,29 @@ class ComprehensiveMonitoring:
         # High error rate alarm
         self.cloudwatch.put_metric_alarm(
             AlarmName=f'{agent_id}-high-error-rate',
-            MetricName='AgentInvocationErrors',
-            Namespace='AWS/Bedrock',
+            MetricName='InvocationServerErrors',
+            Namespace='AWS/Bedrock/Agents',
+            Dimensions=[{'Name': 'Operation', 'Value': 'InvokeAgent'}],
             Statistic='Sum',
             Period=300,
             EvaluationPeriods=2,
             Threshold=10,
             ComparisonOperator='GreaterThanThreshold',
-            AlarmActions=['arn:aws:sns:us-east-1:ACCOUNT:bedrock-alerts']
+            AlarmActions=['arn:aws:sns:us-east-1:111122223333:bedrock-alerts']
         )
         
         # High latency alarm
         self.cloudwatch.put_metric_alarm(
             AlarmName=f'{agent_id}-high-latency',
-            MetricName='AgentInvocationLatency',
-            Namespace='AWS/Bedrock',
+            MetricName='TotalTime',
+            Namespace='AWS/Bedrock/Agents',
+            Dimensions=[{'Name': 'Operation', 'Value': 'InvokeAgent'}],
             Statistic='Average',
             Period=300,
             EvaluationPeriods=2,
             Threshold=5000,  # 5 seconds
             ComparisonOperator='GreaterThanThreshold',
-            AlarmActions=['arn:aws:sns:us-east-1:ACCOUNT:bedrock-alerts']
+            AlarmActions=['arn:aws:sns:us-east-1:111122223333:bedrock-alerts']
         )
 ```
 
@@ -867,8 +836,8 @@ class DisasterRecoveryStrategy:
     """Production disaster recovery for Bedrock Agents"""
     
     def __init__(self):
-        self.bedrock_primary = boto3.client('bedrock', region_name='us-east-1')
-        self.bedrock_secondary = boto3.client('bedrock', region_name='eu-west-1')
+        self.bedrock_primary = boto3.client('bedrock-agent', region_name='us-east-1')
+        self.bedrock_secondary = boto3.client('bedrock-agent', region_name='eu-west-1')
         self.s3 = boto3.client('s3')
         self.dynamodb = boto3.resource('dynamodb')
     
@@ -876,16 +845,17 @@ class DisasterRecoveryStrategy:
         """Backup agent configuration for disaster recovery"""
         
         # Get agent configuration
-        agent = self.bedrock_primary.get_agent(agentId=agent_id)
+        agent = self.bedrock_primary.get_agent(agentId=agent_id)['agent']
+        action_groups = self.bedrock_primary.list_agent_action_groups(
+            agentId=agent_id, agentVersion='DRAFT')['actionGroupSummaries']
         
-        # Store in S3
-        backup_key = f'bedrock-backups/{agent_id}/{datetime.utcnow().isoformat()}.json'
+        # Store in S3 (enable versioning on the bucket itself)
+        backup_key = f'bedrock-backups/{agent_id}/{datetime.now(timezone.utc).isoformat()}.json'
         self.s3.put_object(
             Bucket='bedrock-disaster-recovery',
             Key=backup_key,
-            Body=json.dumps(agent),
-            ServerSideEncryption='AES256',
-            VersioningConfiguration={'Status': 'Enabled'}
+            Body=json.dumps({'agent': agent, 'action_groups': action_groups}, default=str),
+            ServerSideEncryption='aws:kms',
         )
         
         return backup_key
@@ -896,17 +866,17 @@ class DisasterRecoveryStrategy:
         """Enable cross-region replication for disaster recovery"""
         
         # Deploy to secondary region
-        secondary_response = self.bedrock_secondary.create_agent(**config)
+        secondary_agent_id = self.bedrock_secondary.create_agent(**config)['agent']['agentId']
         
         # Setup replication for knowledge bases
         self._replicate_knowledge_bases(primary_agent_id)
         
         # Setup Route 53 failover
-        self._setup_route53_failover(primary_agent_id, secondary_response['agentId'])
+        self._setup_route53_failover(primary_agent_id, secondary_agent_id)
         
         return {
             'primary_agent_id': primary_agent_id,
-            'secondary_agent_id': secondary_response['agentId'],
+            'secondary_agent_id': secondary_agent_id,
             'status': 'REPLICATED'
         }
     
@@ -945,7 +915,6 @@ class AgentDeploymentPipeline:
     def __init__(self):
         self.codepipeline = boto3.client('codepipeline')
         self.codebuild = boto3.client('codebuild')
-        self.bedrock = boto3.client('bedrock')
     
     def create_deployment_pipeline(self, 
                                   agent_name: str,
@@ -1022,9 +991,9 @@ class AgentDeploymentPipeline:
         phases:
           install:
             runtime-versions:
-              python: 3.11
+              python: 3.13
             commands:
-              - pip install boto3 pytest
+              - pip install "boto3==%%version=boto3%%" pytest
           pre_build:
             commands:
               - echo "Running pre-build validations..."
@@ -1096,17 +1065,14 @@ class ComplianceFramework:
         """Setup compliance monitoring"""
         
         # Enable AWS Config
-        self.config.put_config_recorder(
-            ConfigRecorderName='bedrock-recorder',
-            RoleARN='arn:aws:iam::ACCOUNT:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig',
-            RecordingGroup={
-                'allSupported': True,
-                'includedResources': [
-                    'AWS::Bedrock::Agent',
-                    'AWS::Bedrock::KnowledgeBase'
-                ]
+        self.config.put_configuration_recorder(
+            ConfigurationRecorder={
+                'name': 'default',
+                'roleARN': 'arn:aws:iam::111122223333:role/aws-service-role/config.amazonaws.com/AWSServiceRoleForConfig',
+                'recordingGroup': {'allSupported': True, 'includeGlobalResourceTypes': True},
             }
         )
+        self.config.start_configuration_recorder(ConfigurationRecorderName='default')
         
         # Enable Security Hub
         self.securityhub.enable_security_hub()
@@ -1160,7 +1126,7 @@ class TroubleshootingGuide:
         Latency Optimisation Steps:
         1. Profile individual components (model, KB, actions)
         2. Implement caching layer for frequently accessed data
-        3. Switch to faster model (Haiku) for non-complex queries
+        3. Switch to a faster model (Claude Haiku 5.5) for non-complex queries
         4. Review and optimise action group implementations
         5. Ensure proper database indexing for KB queries
         """

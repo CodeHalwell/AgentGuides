@@ -6,7 +6,7 @@ framework: openai-agents-sdk-typescript
 
 # OpenAI Agents SDK Middleware and Guardrails (TypeScript)
 
-Last verified: 2025-11
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
 
 ## Goals
 - Add request/response middlewares to Agent and Runner
@@ -30,29 +30,33 @@ const redactMw: Middleware = async (input, next) => {
 };
 
 function chain(mws: Middleware[], handler: Next): Next {
-  return mws.reduceRight((acc, mw) => (input) => mw(input, acc), handler);
+  return mws.reduceRight<Next>((acc, mw) => (input) => mw(input, acc), handler);
 }
 ```
 
 ## Integrate with Agent/Runner
 
 ```ts
-import { Agent, Runner } from "openai-agents"; // adjust to actual package
+import { Agent, run } from "@openai/agents";
 
-async function llmHandler(input: string) {
-  // invoke agent/runner here and return stringified content
-  return `OK: ${input}`;
+const agent = new Agent({ name: "Assistant", instructions: "Answer concisely." });
+
+async function llmHandler(input: string): Promise<string> {
+  const result = await run(agent, input);
+  return result.finalOutput ?? "";
 }
 
 const wrapped = chain([policyMw, redactMw], llmHandler);
 
-export async function run(input: string) {
+export async function handle(input: string) {
   return wrapped(input);
 }
 ```
 
+For checks that belong inside the agent loop, prefer the SDK's own hooks: `inputGuardrails` / `outputGuardrails` on the agent, tool-level guardrails on `tool()`, and `needsApproval` for actions a human must sign off.
+
 ## HITL
-- On guardrail failure, persist state and handoff to a human queue.
+- Mark sensitive tools with `needsApproval`; the run returns `result.interruptions`, and `JSON.stringify(result.state)` lets you persist it while a human decides, then resume with `RunState.fromString(agent, saved)`.
 
 ## Tracing
 - Create spans per agent step; add attributes: model, tokens, tool names.

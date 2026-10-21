@@ -7,7 +7,9 @@ language: python
 
 # LlamaIndex Production Guide
 
-Deploying LlamaIndex Applications to Production: Best Practices, Deployment Strategies, and Optimization Techniques
+Deploying LlamaIndex applications to production: deployment, performance, observability, security and cost.
+
+> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). The web-service scaffolding (FastAPI, Prometheus, Kubernetes) is ordinary Python infrastructure; the LlamaIndex-specific parts are index loading, query/agent calls, instrumentation and token accounting.
 
 ---
 
@@ -30,44 +32,42 @@ Deploying LlamaIndex Applications to Production: Best Practices, Deployment Stra
 
 ### Production-Ready LlamaIndex Stack
 
-```python
+```text
 # requirements-prod.txt
-llama-index==0.14.22
-llama-index-core==0.14.22
-llama-index-llms-openai==0.3.1
-llama-index-embeddings-openai==0.2.1
-llama-index-vector-stores-chroma==0.4.1
-llama-index-vector-stores-pinecone==0.4.1
+llama-index-core==%%version=llama-index%%
+# Integrations version independently of core; let pip resolve them against the
+# core pin above, then freeze the result in a lock file (pip-compile / uv lock).
+llama-index-llms-openai
+llama-index-embeddings-openai
+llama-index-vector-stores-pinecone
+llama-index-observability-otel
 
 # Web framework
-fastapi==0.109.0
-uvicorn==0.27.0
-pydantic==2.5.0
+fastapi
+uvicorn[standard]
 
 # Monitoring and logging
-prometheus-client==0.19.0
-python-json-logger==2.0.7
-opentelemetry-api==1.21.0
-opentelemetry-sdk==1.21.0
+prometheus-client
+structlog
+python-json-logger
+opentelemetry-exporter-otlp
 
-# Database and caching
-redis==5.0.1
-sqlalchemy==2.0.23
-psycopg2-binary==2.9.9
-
-# Security
-python-jose==3.3.0
-passlib==1.7.4
-python-dotenv==1.0.0
+# Storage, caching and security
+pinecone
+redis
+sqlalchemy
+psycopg[binary]
+python-jose
+slowapi
+cryptography
 
 # Testing
-pytest==7.4.3
-pytest-asyncio==0.23.1
-pytest-cov==4.1.0
+pytest
+pytest-asyncio
 
 # Utilities
-tenacity==8.2.3
-structlog==23.3.0
+tenacity
+python-dotenv
 ```
 
 ### Multi-Tier Architecture
@@ -117,36 +117,34 @@ async def lifespan(app: FastAPI):
     # Initialize expensive resources
     from llama_index.llms.openai import OpenAI
     from llama_index.embeddings.openai import OpenAIEmbedding
+    from llama_index.core import VectorStoreIndex
     from llama_index.vector_stores.pinecone import PineconeVectorStore
-    import pinecone
+    from pinecone import Pinecone
+    import os
     
-    # Setup vector store
-    pinecone.init(
-        api_key="your-key",
-        environment="your-env"
-    )
-    pc_index = pinecone.Index("llamaindex-prod")
+    # Vector store (Pinecone SDK v3+; the old pinecone.init() API is gone)
+    pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
     app_state.vector_store = PineconeVectorStore(
-        pinecone_index=pc_index,
+        pinecone_index=pc.Index("llamaindex-prod"),
         namespace="production",
     )
     
-    # Setup LLM and embeddings
-    app_state.llm = OpenAI(
-        model="gpt-4",
-        temperature=0.7,
+    # Models — reuse one client per process
+    app_state.llm = OpenAI(model="gpt-5-mini", max_retries=3, timeout=60)
+    app_state.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
+    
+    # Reconnect to the existing index; ingestion runs as a separate job
+    index = VectorStoreIndex.from_vector_store(
+        app_state.vector_store, embed_model=app_state.embed_model
     )
-    app_state.embed_model = OpenAIEmbedding(
-        model="text-embedding-3-large",
-    )
+    app_state.indexes["default"] = index
+    app_state.query_engines["default"] = index.as_query_engine(llm=app_state.llm)
     
     logger.info("resources_initialized")
     
     yield
     
-    # Cleanup
     logger.info("application_shutdown")
-    pinecone.deinit()
 
 app = FastAPI(lifespan=lifespan, title="LlamaIndex Production API")
 
@@ -182,7 +180,7 @@ async def add_request_id(request, call_next):
 
 ```dockerfile
 # Dockerfile for LlamaIndex application
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
@@ -218,8 +216,6 @@ CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ```yaml
 # docker-compose.yml
-version: '3.8'
-
 services:
   # Main API
   api:
@@ -398,8 +394,6 @@ spec:
 ### Query Optimization
 
 ```python
-from llama_index.core import VectorStoreIndex, Document
-from llama_index.core.retrievers import BM25Retriever
 import time
 from functools import wraps
 
@@ -429,8 +423,7 @@ def track_performance(func):
             raise
     return wrapper
 
-# Optimized query engine with caching
-from functools import lru_cache
+# Query engine with a simple exact-match cache
 import hashlib
 
 class OptimizedQueryEngine:
@@ -445,7 +438,7 @@ class OptimizedQueryEngine:
     
     def _get_cache_key(self, query: str) -> str:
         """Generate cache key for query."""
-        return hashlib.md5(query.encode()).hexdigest()
+        return hashlib.sha256(query.encode()).hexdigest()
     
     @track_performance
     async def query(self, query: str, use_cache: bool = True):
@@ -501,7 +494,7 @@ class BatchProcessor:
             # Process queries in parallel
             import asyncio
             batch_results = await asyncio.gather(
-                *[self.query_engine.query(q) for q in batch]
+                *[self.query_engine.aquery(q) for q in batch]
             )
             
             results.extend(batch_results)
@@ -516,7 +509,7 @@ class BatchProcessor:
             batch = queries[i:i + self.batch_size]
             
             batch_results = await asyncio.gather(
-                *[self.query_engine.query(q) for q in batch]
+                *[self.query_engine.aquery(q) for q in batch]
             )
             
             for result in batch_results:
@@ -600,22 +593,18 @@ async def track_metrics(request: Request, call_next):
 
 ```python
 from opentelemetry import trace
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from llama_index.observability.otel import LlamaIndexOpenTelemetry
 
-# Setup Jaeger exporter
-jaeger_exporter = JaegerExporter(
-    agent_host_name="localhost",
-    agent_port=6831,
-)
+# Export LlamaIndex's own spans (retrieval, LLM calls, agent steps) over OTLP.
+# Jaeger, Tempo and most vendors accept OTLP directly; the old Jaeger Thrift
+# exporter is no longer published.
+LlamaIndexOpenTelemetry(
+    service_name_or_resource="llamaindex-api",
+    span_exporter=OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces"),
+).start_registering()
 
-trace.set_tracer_provider(TracerProvider())
-trace.get_tracer_provider().add_span_processor(
-    BatchSpanProcessor(jaeger_exporter)
-)
-
-tracer = trace.get_tracer(__name__)
+tracer = trace.get_tracer(__name__)   # for your own application spans
 
 # Use in operations
 @app.post("/query")
@@ -672,29 +661,26 @@ logger.info(
 
 ```python
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthCredentials
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 
 security = HTTPBearer()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")
+SECRET_KEY = os.environ["SECRET_KEY"]   # fail fast rather than fall back to a default
 ALGORITHM = "HS256"
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
     """Create JWT token."""
     to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(hours=1)
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=1))
     
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def get_current_user(credentials: HTTPAuthCredentials = Depends(security)):
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Validate token and extract user."""
     token = credentials.credentials
     try:
@@ -807,7 +793,7 @@ class ErrorResponse(BaseModel):
 async def global_exception_handler(request: Request, exc: Exception):
     """Global exception handler."""
     import uuid
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     error_id = str(uuid.uuid4())
     
@@ -826,9 +812,9 @@ async def global_exception_handler(request: Request, exc: Exception):
             error_id=error_id,
             message="Internal server error",
             status_code=500,
-            timestamp=datetime.utcnow().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             request_id=getattr(request.state, "request_id", None),
-        ).dict(),
+        ).model_dump(),
     )
 
 # Specific exception handlers
@@ -902,7 +888,7 @@ class ResilientQueryEngine:
 
 ### Horizontal Scaling
 
-```python
+```nginx
 # Load balancer configuration (nginx)
 upstream llamaindex_backend {
     least_conn;
@@ -926,7 +912,9 @@ server {
 ### Database Sharding
 
 ```python
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+
+import hashlib
 
 class ShardedRepository:
     """Database repository with sharding."""
@@ -934,23 +922,24 @@ class ShardedRepository:
     def __init__(self, num_shards: int = 4):
         self.num_shards = num_shards
         self.engines = [
-            create_engine(f"postgresql://user:pwd@shard{i}.db/llamaindex")
+            create_engine(f"postgresql+psycopg://user:pwd@shard{i}.db/llamaindex")
             for i in range(num_shards)
         ]
     
     def get_shard(self, user_id: str) -> int:
         """Determine shard for user."""
-        return hash(user_id) % self.num_shards
+        # hash() is salted per process; use a stable hash for routing
+        return int(hashlib.sha256(user_id.encode()).hexdigest(), 16) % self.num_shards
     
     def store_query(self, user_id: str, query: str):
         """Store query in appropriate shard."""
         shard_idx = self.get_shard(user_id)
         engine = self.engines[shard_idx]
         
-        with engine.connect() as conn:
+        with engine.begin() as conn:
             conn.execute(
-                "INSERT INTO queries (user_id, query) VALUES (?, ?)",
-                (user_id, query)
+                text("INSERT INTO queries (user_id, query) VALUES (:user_id, :query)"),
+                {"user_id": user_id, "query": query},
             )
 ```
 
@@ -1010,15 +999,18 @@ class DistributedCache:
 
 ### Token Usage Tracking
 
+`TokenCountingHandler` (see the [observability page](../llamaindex_observability_python/#4-token-counting)) gives per-request counts; the tracker below aggregates them against budgets.
+
 ```python
 class TokenUsageTracker:
     """Track and optimize token usage."""
     
     def __init__(self):
         self.usage = {}
+        # Daily token budgets per model — set from your own limits
         self.limits = {
-            "gpt-4": 100000,
-            "gpt-3.5-turbo": 500000,
+            "gpt-5-mini": 2_000_000,
+            "gpt-5-nano": 10_000_000,
         }
     
     def log_usage(self, model: str, input_tokens: int, output_tokens: int):
@@ -1041,11 +1033,9 @@ class TokenUsageTracker:
     
     def get_cost_estimate(self) -> dict:
         """Estimate API costs."""
-        # Pricing as of 2024
-        pricing = {
-            "gpt-4": {"input": 0.03, "output": 0.06},
-            "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
-        }
+        # USD per 1K tokens. Prices change: load them from config, filled in from
+        # your provider's current price list, rather than hard-coding them.
+        pricing = PRICING_PER_1K_TOKENS   # e.g. {"gpt-5-mini": {"input": ..., "output": ...}}
         
         total_cost = 0
         for model, tokens in self.usage.items():
@@ -1078,7 +1068,7 @@ class CostOptimizedQueryEngine:
         """Query within cost budget."""
         # Use cheaper model for simple queries
         if len(query) < 50 and not any(c in query for c in "[]{}()"):
-            cheap_llm = OpenAI(model="gpt-3.5-turbo")
+            cheap_llm = OpenAI(model="gpt-5-nano")
             engine = self.index.as_query_engine(llm=cheap_llm)
         else:
             engine = self.index.as_query_engine(llm=self.llm)
@@ -1105,41 +1095,33 @@ class CostOptimizedQueryEngine:
 
 ```python
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
 
+from llama_index.core.embeddings import MockEmbedding
+from llama_index.core.llms import MockLLM
+
+# unittest.mock objects do not satisfy LlamaIndex's model interfaces;
+# use the built-in mock models instead.
 @pytest.fixture
 def mock_llm():
-    """Mock LLM for testing."""
-    llm = Mock()
-    llm.complete = Mock(return_value="Test response")
-    return llm
+    return MockLLM(max_tokens=16)
 
 @pytest.fixture
 def mock_embed():
-    """Mock embeddings."""
-    embed = Mock()
-    embed.get_text_embedding = Mock(
-        return_value=[0.1] * 1536
-    )
-    return embed
+    return MockEmbedding(embed_dim=1536)
 
 @pytest.mark.asyncio
 async def test_query_engine(mock_llm, mock_embed):
-    """Test query engine."""
+    """The pipeline runs end to end without network calls."""
     from llama_index.core import VectorStoreIndex, Document
     
-    docs = [Document(text="Test content")]
     index = VectorStoreIndex.from_documents(
-        docs,
-        llm=mock_llm,
-        embed_model=mock_embed,
+        [Document(text="Test content")], embed_model=mock_embed
     )
-    
-    query_engine = index.as_query_engine()
+    query_engine = index.as_query_engine(llm=mock_llm)
     response = await query_engine.aquery("Test question")
     
-    assert response is not None
-    mock_llm.complete.assert_called()
+    assert response.response
+    assert response.source_nodes
 
 def test_authentication():
     """Test authentication."""
@@ -1188,15 +1170,15 @@ def test_query_performance():
     
     for _ in range(10):
         start = time.time()
-        result = query_engine.query("Test query")
+        query_engine.query("Test query")
         duration = time.time() - start
         times.append(duration)
     
     avg_time = statistics.mean(times)
-    p99_time = sorted(times)[9]
+    worst = max(times)   # with 10 samples, the maximum is the only honest "tail" figure
     
     assert avg_time < 0.5, f"Average query time {avg_time}s exceeds 0.5s"
-    assert p99_time < 1.0, f"P99 query time {p99_time}s exceeds 1.0s"
+    assert worst < 1.0, f"Slowest query {worst}s exceeds 1.0s"
 ```
 
 ---
@@ -1205,9 +1187,7 @@ def test_query_performance():
 
 ### GitHub Actions Pipeline
 
-
 ```yaml
-
 # .github/workflows/deploy.yml
 name: Deploy LlamaIndex
 
@@ -1233,12 +1213,12 @@ jobs:
           --health-retries 5
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
         cache: 'pip'
     
     - name: Install dependencies
@@ -1266,7 +1246,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Run Trivy vulnerability scanner
       uses: aquasecurity/trivy-action@master
@@ -1287,7 +1267,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v4
@@ -1300,18 +1280,14 @@ jobs:
     - name: Deploy to K8s
       run: |
         kubectl set image deployment/llamaindex-api \
-          api=ghcr.io/${{ github.repository }}:${{ github.sha }} \
-          --record
+          api=ghcr.io/${{ github.repository }}:${{ github.sha }}
         kubectl rollout status deployment/llamaindex-api
       env:
         KUBECONFIG: ${{ secrets.KUBE_CONFIG }}
-
 ```
-
-
 
 ---
 
-This production guide provides comprehensive strategies for deploying and maintaining LlamaIndex applications at scale. Each section includes ready-to-use code examples and best practices for production environments.
+For serving workflows without writing the HTTP layer yourself, see [Deploying workflows (LlamaAgents)](../llamaindex_comprehensive_guide/#14-deploying-workflows-llamaagents).
 
 

@@ -1,13 +1,13 @@
 ---
 title: "Google ADK - Practical Recipes and Examples"
-description: "Version: 2.2.0 Focus: Real-world implementations and use cases"
+description: "Practical, runnable Google ADK recipes: multi-agent support desks, research pipelines, tools, sessions, evaluation and cost control."
 framework: google-adk
 language: python
 ---
 
 # Google ADK - Practical Recipes and Examples
 
-**Version:** Verified against google-adk==2.2.0  
+**Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%); first written for 2.2.0.  
 **Focus:** Real-world implementations and use cases
 
 ---
@@ -131,7 +131,7 @@ async def chat_loop():
 
 An agent that conducts comprehensive web research on topics.
 
-> **Note:** `SequentialAgent` and `ParallelAgent` are deprecated in google-adk==2.0.0.
+> **Note:** `SequentialAgent` and `ParallelAgent` are deprecated since google-adk 2.0.0.
 > For new projects, prefer the `Workflow` API (see [Resilient Tool Pipeline](#resilient-tool-pipeline)).
 > These agents remain functional but the `instruction` field belongs only on `LlmAgent`, not on
 > `SequentialAgent`/`ParallelAgent`.
@@ -399,7 +399,7 @@ async def handle_support_request(customer_issue: str, customer_id: str) -> dict:
     """Handle a customer support request."""
     # DatabaseSessionService persists sessions to a SQLite database.
     # For production on GCP, replace with VertexAiSessionService(project=..., location=...).
-    # FirestoreSessionService does NOT exist in google-adk==2.0.0.
+    # Firestore sessions: google.adk.integrations.firestore.FirestoreSessionService.
     session_service = DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk_support.db")
 
     runner = Runner(
@@ -450,7 +450,7 @@ async def handle_support_request(customer_issue: str, customer_id: str) -> dict:
 
 A sophisticated content generation system.
 
-> **Note:** `SequentialAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
+> **Note:** `SequentialAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
 > valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
 
 ```python
@@ -594,7 +594,7 @@ async def generate_content(request: ContentRequest) -> dict:
 
 An intelligent code review system.
 
-> **Note:** `ParallelAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
+> **Note:** `ParallelAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
 > valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
 
 ````python
@@ -790,7 +790,7 @@ async def schedule_meeting(request: MeetingRequest) -> dict:
 
 An agent that processes and extracts information from documents.
 
-> **Note:** `SequentialAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
+> **Note:** `SequentialAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
 > valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
 
 ```python
@@ -980,7 +980,7 @@ Provide:
 
 An agent that monitors system health.
 
-> **Note:** `ParallelAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
+> **Note:** `ParallelAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
 > valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
 
 ```python
@@ -1392,7 +1392,9 @@ session_service = DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db")
 # from google.adk.sessions import VertexAiSessionService
 # session_service = VertexAiSessionService(project="my-project", location="us-central1")
 
-# NOTE: FirestoreSessionService does NOT exist in google-adk==2.0.0
+# Firestore — FirestoreSessionService lives under google.adk.integrations.firestore
+# from google.adk.integrations.firestore import FirestoreSessionService
+# session_service = FirestoreSessionService()  # or client=firestore.AsyncClient(...)
 ```
 
 ### 5. Cost Monitoring

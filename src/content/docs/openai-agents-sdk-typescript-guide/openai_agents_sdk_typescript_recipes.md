@@ -1,12 +1,13 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Practical Recipes & Code Examples"
-description: "Version: 1.0 Focus: Ready-to-use implementations, real-world patterns, copy-paste recipes"
+description: "Ready-to-use implementations and real-world patterns for the OpenAI Agents SDK in TypeScript."
 framework: openai-agents-sdk-typescript
 ---
 
 # OpenAI Agents SDK TypeScript: Practical Recipes & Code Examples
 
-**Version:** 1.0  
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
+
 **Focus:** Ready-to-use implementations, real-world patterns, copy-paste recipes
 
 ---
@@ -200,7 +201,7 @@ async function customerSupportRouter(customerQuery: string) {
   const result = await run(routerAgent, customerQuery);
   
   console.log(`Query: ${customerQuery}`);
-  console.log(`Routed to: ${result.currentAgent?.name || 'General'}`);
+  console.log(`Routed to: ${result.lastAgent?.name || 'General'}`);
   console.log(`Response: ${result.finalOutput}`);
 
   return result;

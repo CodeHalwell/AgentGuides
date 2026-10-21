@@ -1,11 +1,16 @@
 ---
-title: "Class Deep Dives Vol. 1 — 10 API Classes (v1.2.12)"
+title: "Class Deep Dives Vol. 1 — 10 API Classes"
 description: "Source-verified deep dives for Send, Command, StateSnapshot, Interrupt, TracePolicy, InMemoryStore, InjectedState, InjectedStore, RetryPolicy, and CachePolicy — each with multiple runnable code examples."
+framework: langgraph
+language: python
+sidebar:
+  label: "Ref · Class Deep Dives Vol. 1"
+  order: 43
 ---
 
-# Class Deep Dives Vol. 1 — 10 API Classes (v1.2.12)
+# Class Deep Dives Vol. 1 — 10 API Classes
 
-> **Source-verified against `langgraph==1.2.12`** — October 2026.
+> **Source-verified against `langgraph==%%version=langgraph%%`** (checked %%versions-checked%%). First written for 1.2.12.
 
 This reference dives into ten classes that appear throughout LangGraph but are often
 used only in their simplest form. Each section shows the complete constructor signature,
@@ -1662,4 +1667,4 @@ print(result["output"])  # "HELLO!"
 | `RetryPolicy` | `langgraph.types` | Custom retry predicates, first-match policy lists, per-node overrides |
 | `CachePolicy` | `langgraph.types` | Memoise deterministic nodes with custom keys and TTL |
 
-> All examples verified against **`langgraph==1.2.12`** — October 2026.
+> All examples verified against **`langgraph==%%version=langgraph%%`** (checked %%versions-checked%%).

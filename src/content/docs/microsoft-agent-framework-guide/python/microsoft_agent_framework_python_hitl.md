@@ -174,22 +174,16 @@ workflow = (
     MagenticBuilder(
         participants=[researcher, analyst, writer],
         manager_agent=manager_agent,
-        enable_plan_review=True,        # pause after initial plan
-        max_stall_count=3,              # how many stalled rounds before HITL fires
+        enable_plan_review=True,        # pause after the initial plan (and after each stall replan)
+        max_stall_count=3,              # stalled rounds before the manager replans
         max_round_count=20,             # absolute upper bound — fail fast on runaway
         max_reset_count=2,              # cap how often the manager replans
     )
-    .with_human_input_on_stall()        # intervene instead of auto-replanning
     .build()
 )
 ```
 
-These emit `MagenticHumanInterventionRequest` events with `kind=PLAN_REVIEW` or `kind=STALL`. Respond with a `MagenticHumanInterventionReply` containing a decision:
-
-- `APPROVE` — continue with the plan.
-- `REVISE` — pass a revised plan.
-- `REPLAN` — force the manager to replan.
-- `GUIDANCE` — attach free-text guidance for the manager.
+With plan review enabled, the workflow emits a `request_info` event whose data is a `MagenticPlanReviewRequest` (fields `plan`, `current_progress`, `is_stalled`) — once after the initial plan and again whenever a stall forces a replan (`is_stalled=True`). Reply with `request.approve()` to continue or `request.revise(feedback)` to send the manager back with guidance. Earlier drafts of this page described a `with_human_input_on_stall()` builder method and `MagenticHumanInterventionRequest` / `Reply` types; none of those exist.
 
 #### Driving plan review end-to-end
 
@@ -211,7 +205,7 @@ async def review_loop(workflow, task: str) -> str:
         async for event in stream:
             if event.type == "request_info" and isinstance(event.data, MagenticPlanReviewRequest):
                 request: MagenticPlanReviewRequest = event.data
-                print("Plan:\n", request.plan_text)
+                print("Plan:\n", request.plan.text)
                 choice = await ask_user(request)              # your UX
 
                 if choice == "approve":

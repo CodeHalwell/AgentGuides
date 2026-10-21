@@ -525,7 +525,7 @@ class ResearchState(TypedDict):
     summary: str
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="claude-sonnet-5-5")
 
 
 def research_and_summarize(state: ResearchState) -> dict:
@@ -567,7 +567,7 @@ class OrchestratorState(TypedDict):
 
 
 tools = [research_tool]
-orchestrator_model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools(tools)
+orchestrator_model = ChatAnthropic(model="claude-sonnet-5-5").bind_tools(tools)
 tool_node = ToolNode(tools)
 
 

@@ -1,21 +1,28 @@
 ---
 title: "Advanced Multi-Agent Patterns for Amazon Bedrock Agents (Python)"
-description: "This guide explores advanced multi-agent patterns for building sophisticated and scalable agentic systems with Amazon Bedrock."
+description: "Hierarchical, dynamic and supervisor-based multi-agent patterns on Amazon Bedrock: Bedrock Agents multi-agent collaboration, Strands, A2A on AgentCore, and monitoring."
 framework: amazon-bedrock-agents
 ---
 
 # Advanced Multi-Agent Patterns for Amazon Bedrock Agents (Python)
 
-This guide explores advanced multi-agent patterns for building sophisticated and scalable agentic systems with Amazon Bedrock.
+Patterns for building multi-agent systems on Amazon Bedrock, with two implementation routes:
+
+- **Bedrock Agents multi-agent collaboration** (GA March 2025) — a managed supervisor with collaborator agents. Bedrock Agents (Agents Classic) closed to new customers on 30 July 2026 and is in maintenance mode, so this route is for existing accounts.
+- **Code-defined agents** with Strands (or another framework) hosted on **AgentCore Runtime** — AWS's recommended route for new work.
+
+> **Verified against:** `boto3` %%version=boto3%% and `strands-agents` %%version=strands-agents%% (checked %%versions-checked%%).
+
+The examples reuse `AGENT_ROLE_ARN`, the model constants and the `prepare_and_alias` / `read_completion` helpers defined at the top of the [Recipes](/amazon-bedrock-agents-guide/bedrock_agents_recipes/) page.
 
 ## 1. Hierarchical Agent Systems
 
-In a hierarchical agent system, agents are organized in a tree-like structure with a top-level supervisor agent that delegates tasks to sub-supervisors or specialist agents.
+Agents form a tree: a top-level supervisor delegates to department supervisors, which delegate to specialists.
 
 **Use Cases:**
 
 *   Large-scale enterprise systems with multiple departments or business units.
-*   Complex workflows that require multiple levels of abstraction and control.
+*   Complex workflows that need several levels of delegation and control.
 
 **Example: A Hierarchical Customer Support System**
 
@@ -28,440 +35,355 @@ In a hierarchical agent system, agents are organized in a tree-like structure wi
               │                 │                 │
       ┌───────▼───────┐ ┌───────▼───────┐ ┌───────▼───────┐
       │ Sales         │ │ Support       │ │ Billing       │
-      │ Supervisor    │ │ Supervisor    │ │ Supervisor    │
-      └───────┬───────┘ └───────┬───────┘ └───────┬───────┘
-              │                 │                 │
-      ┌───────┴───────┐ ┌───────┴───────┐ ┌───────┴───────┐
-      │               │ │               │ │               │
-┌─────▼──┐      ┌─────▼──┐      ┌─────▼──┐      ┌─────▼──┐
+      │ Supervisor    │ │ Supervisor    │ │ Agent         │
+      └───────┬───────┘ └───────┬───────┘ └───────────────┘
+              │                 │
+      ┌───────┴───────┐ ┌───────┴───────┐
+      │               │ │               │
+┌─────▼──┐      ┌─────▼──┐      ┌─────▼──┐      ┌────────┐
 │ Product│      │ Lead   │      │ Tier 1 │      │ Tier 2 │
 │ Agent  │      │ Gen    │      │ Agent  │      │ Agent  │
 └────────┘      └────────┘      └────────┘      └────────┘
 ```
 
-**Implementation:**
+**Implementation with Bedrock Agents.** Build bottom-up: collaborators must be prepared and aliased before they can be associated with a supervisor (by alias ARN), and a supervisor can have up to 10 collaborators.
 
 ```python
+import boto3
+
+
 class HierarchicalAgentSystem:
-    def __init__(self):
-        self.bedrock = boto3.client('bedrock')
+    def __init__(self, region="us-east-1"):
+        self.agents = boto3.client("bedrock-agent", region_name=region)
 
-    def create_system(self):
-        # Create the global supervisor
-        global_supervisor = self._create_agent("GlobalSupervisor", "Routes requests to the appropriate department.")
+    def _create_agent(self, name: str, instruction: str, model: str, collaboration: str = "DISABLED") -> str:
+        return self.agents.create_agent(
+            agentName=name,
+            foundationModel=model,
+            instruction=instruction,
+            agentResourceRoleArn=AGENT_ROLE_ARN,
+            agentCollaboration=collaboration,   # SUPERVISOR, SUPERVISOR_ROUTER or DISABLED
+        )["agent"]["agentId"]
 
-        # Create departmental supervisors
-        sales_supervisor = self._create_agent("SalesSupervisor", "Manages sales-related tasks.")
-        support_supervisor = self._create_agent("SupportSupervisor", "Manages support-related tasks.")
+    def _alias_arn(self, agent_id: str) -> str:
+        alias_id = prepare_and_alias(self.agents, agent_id)
+        return self.agents.get_agent_alias(agentId=agent_id, agentAliasId=alias_id)["agentAlias"]["agentAliasArn"]
 
-        # Create specialist agents
-        product_agent = self._create_agent("ProductAgent", "Provides product information.")
-        lead_gen_agent = self._create_agent("LeadGenAgent", "Generates sales leads.")
-        tier1_agent = self._create_agent("Tier1SupportAgent", "Handles basic support requests.")
-        tier2_agent = self._create_agent("Tier2SupportAgent", "Handles complex support requests.")
+    def _associate(self, supervisor_id: str, collaborators: dict) -> str:
+        """collaborators maps name -> (alias_arn, when-to-use instruction). Returns the supervisor's alias ARN."""
+        for name, (alias_arn, instruction) in collaborators.items():
+            self.agents.associate_agent_collaborator(
+                agentId=supervisor_id,
+                agentVersion="DRAFT",
+                agentDescriptor={"aliasArn": alias_arn},
+                collaboratorName=name,
+                collaborationInstruction=instruction,
+                relayConversationHistory="TO_COLLABORATOR",
+            )
+        return self._alias_arn(supervisor_id)
 
-        # Associate agents in a hierarchy
-        self._associate(global_supervisor, [sales_supervisor, support_supervisor])
-        self._associate(sales_supervisor, [product_agent, lead_gen_agent])
-        self._associate(support_supervisor, [tier1_agent, tier2_agent])
+    def create_system(self) -> str:
+        # Specialists
+        product = self._alias_arn(self._create_agent("ProductAgent", "Provide product information.", HAIKU))
+        lead_gen = self._alias_arn(self._create_agent("LeadGenAgent", "Qualify and record sales leads.", HAIKU))
+        tier1 = self._alias_arn(self._create_agent("Tier1SupportAgent", "Handle basic support requests.", HAIKU))
+        tier2 = self._alias_arn(self._create_agent("Tier2SupportAgent", "Handle complex support requests.", SONNET))
+        billing = self._alias_arn(self._create_agent("BillingAgent", "Handle invoices and payments.", HAIKU))
 
-    def _create_agent(self, name, instruction):
-        # ... implementation for creating an agent ...
-        pass
+        # Department supervisors (routers: pick one collaborator, lower latency)
+        sales_sup = self._create_agent("SalesSupervisor", "Route sales requests.", SONNET, "SUPERVISOR_ROUTER")
+        sales_sup_arn = self._associate(sales_sup, {
+            "product": (product, "Questions about product features and specifications."),
+            "lead_gen": (lead_gen, "Prospects who want a demo, a quote or to be contacted."),
+        })
+        support_sup = self._create_agent("SupportSupervisor", "Route support requests by complexity.", SONNET, "SUPERVISOR_ROUTER")
+        support_sup_arn = self._associate(support_sup, {
+            "tier1": (tier1, "Password resets, account status and simple how-to questions."),
+            "tier2": (tier2, "Errors, outages, performance problems and integrations."),
+        })
 
-    def _associate(self, supervisor, specialists):
-        # ... implementation for associating agents ...
-        pass
+        # Global supervisor (coordinates and synthesises across departments)
+        global_sup = self._create_agent(
+            "GlobalSupervisor",
+            "Top-level customer service coordinator. Delegate to the right department and combine answers.",
+            SONNET,
+            "SUPERVISOR",
+        )
+        self._associate(global_sup, {
+            "sales": (sales_sup_arn, "Anything about buying, pricing or products."),
+            "support": (support_sup_arn, "Anything technical or about using the product."),
+            "billing": (billing, "Invoices, payments and refunds."),
+        })
+        return global_sup
+```
+
+Check the current [multi-agent collaboration documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-multi-agent-collaboration.html) for collaborator limits and nesting rules before designing deep hierarchies; flatter trees are also faster and cheaper.
+
+**The same hierarchy in Strands** is a few lines, because agents can be tools of other agents:
+
+```python
+from strands import Agent
+
+product = Agent(model=HAIKU, name="product", description="Product features and specifications.")
+lead_gen = Agent(model=HAIKU, name="lead_gen", description="Demos, quotes and contact requests.")
+tier1 = Agent(model=HAIKU, name="tier1", description="Simple support questions.")
+tier2 = Agent(model=SONNET, name="tier2", description="Errors, outages and integrations.")
+
+sales = Agent(model=SONNET, name="sales", description="Sales department.", tools=[product, lead_gen])
+support = Agent(model=SONNET, name="support", description="Support department.", tools=[tier1, tier2])
+
+global_supervisor = Agent(
+    model=SONNET,
+    system_prompt="Delegate to the right department and combine their answers.",
+    tools=[sales, support],
+)
 ```
 
 ## 2. Dynamic Agent Composition
 
-Dynamic agent composition allows a supervisor agent to select and combine the capabilities of different specialist agents at runtime to fulfill a user's request.
+A coordinator selects specialists at run time from a registry, rather than having them fixed at build time.
 
 **Use Cases:**
 
-*   Handling ad-hoc or unpredictable user requests.
-*   Creating highly flexible and adaptable agentic systems.
+*   Handling ad-hoc or unpredictable requests.
+*   Platforms where teams register new specialist agents independently.
 
-**Implementation:**
+**Implementation.** Keep a registry of deployed agents (here a dict; in production a DynamoDB table or the AgentCore registry), expose each as a tool, and let the model choose:
 
 ```python
-class DynamicAgentComposition:
-    def __init__(self):
-        self.bedrock = boto3.client('bedrock')
-        self.runtime = boto3.client('bedrock-runtime')
-        self.agents = self._discover_agents()
+import boto3
+from strands import Agent, tool
 
-    def _discover_agents(self):
-        # Discover available agents and their capabilities
-        # This could be done by querying a service registry or a database
-        return {
-            "WeatherAgent": "Provides weather forecasts.",
-            "NewsAgent": "Provides the latest news headlines.",
-            "TranslationAgent": "Translates text between languages."
-        }
+runtime = boto3.client("bedrock-agent-runtime")
 
-    def invoke(self, request):
-        # 1. Understand the user's request
-        # 2. Identify the required capabilities
-        # 3. Select the appropriate agents
-        # 4. Orchestrate the interaction between the selected agents
-        # 5. Synthesize the final response
+# name -> (agent_id, alias_id, capability description)
+REGISTRY = {
+    "weather": ("AGENT_ID_1", "ALIAS_ID_1", "Weather forecasts for a location."),
+    "news": ("AGENT_ID_2", "ALIAS_ID_2", "Latest news headlines on a topic."),
+    "translation": ("AGENT_ID_3", "ALIAS_ID_3", "Translates text between languages."),
+}
 
-        if "weather" in request.lower():
-            # Invoke the WeatherAgent
-            pass
-        elif "news" in request.lower():
-            # Invoke the NewsAgent
-            pass
-        elif "translate" in request.lower():
-            # Invoke the TranslationAgent
-            pass
-        else:
-            # Handle requests that don't match any agent's capabilities
-            pass
+
+@tool
+def list_specialists() -> dict:
+    """List the specialist agents that are available and what each one does."""
+    return {name: desc for name, (_, _, desc) in REGISTRY.items()}
+
+
+@tool
+def ask_specialist(name: str, request: str, session_id: str) -> str:
+    """Send a request to one specialist agent and return its answer.
+
+    Args:
+        name: Specialist name from list_specialists.
+        request: What to ask the specialist.
+        session_id: Conversation session ID to reuse across calls.
+    """
+    agent_id, alias_id, _ = REGISTRY[name]
+    response = runtime.invoke_agent(agentId=agent_id, agentAliasId=alias_id,
+                                    sessionId=session_id, inputText=request)
+    return read_completion(response)
+
+
+coordinator = Agent(
+    model=SONNET,
+    system_prompt="Check which specialists exist, call the ones you need, then write one combined answer.",
+    tools=[list_specialists, ask_specialist],
+)
+
+coordinator("Translate today's top AI headline into French. Session: s-123")
 ```
 
 ## 3. Agent-to-Agent (A2A) Communication with the A2A Protocol
 
-The Agent-to-Agent (A2A) protocol enables seamless communication and coordination between agents built using different frameworks.
+[A2A](https://a2a-protocol.org/) is an open protocol (introduced by Google in April 2025 and now a Linux Foundation project) that lets agents built in different frameworks discover each other through *agent cards* and exchange tasks and messages. Bedrock Agents (Classic) does not speak A2A; `invoke_agent` has no A2A parameters. On AWS, A2A is supported by **AgentCore Runtime** (`serverProtocol="A2A"`), and Strands provides both an A2A server executor and a client (`A2AAgent`).
 
-**Status**: Generally Available (March 10, 2025)
-
-**Example:**
-
-An Amazon Bedrock Agent can communicate with an agent built using the OpenAI Agents SDK.
+**Example:** a Strands coordinator calling a remote agent — which could be built with LangGraph, Google ADK or the OpenAI Agents SDK — over A2A:
 
 ```python
-# Bedrock Agent (Python)
-response = bedrock_runtime.invoke_agent(
-    agentId='BEDROCK_AGENT_ID',
-    # ...
-    a2a_payload={
-        'protocol': 'a2a',
-        'version': '1.0',
-        'recipient': 'OPENAI_AGENT_ID',
-        'message': 'Can you summarize the latest news about AI?'
-    }
+from strands import Agent
+from strands.agent.a2a_agent import A2AAgent
+
+summariser = A2AAgent(
+    endpoint="https://summariser.example.com/",   # any A2A-compliant agent
+    name="summariser",
+    description="Summarises news articles.",
 )
 
-# OpenAI Agent (Python)
-@tool
-def receive_a2a_message(message: str, sender: str):
-    """Receives a message from another agent."""
-    # Process the message and return a response
-    pass
+coordinator = Agent(model=SONNET, tools=[summariser])
+coordinator("Summarise the latest news about AI regulation in the EU.")
 ```
 
-For complete A2A protocol documentation, see **bedrock_a2a_protocol_guide.md**
+The server side, deployment to AgentCore and authentication are covered in the [A2A guide](/amazon-bedrock-agents-guide/bedrock_a2a_protocol_guide/).
 
 ---
 
-## 4. Multi-Agent Collaboration (GA March 10, 2025)
+## 4. Multi-Agent Collaboration (GA March 2025)
 
-Amazon Bedrock now provides native multi-agent collaboration with two operational modes:
+Bedrock Agents multi-agent collaboration has two supervisor modes, set with `agentCollaboration` on the supervisor:
+
+| Mode | Behaviour | Use when |
+|------|-----------|----------|
+| `SUPERVISOR` | Plans, calls one or more collaborators (in parallel where possible) and synthesises their answers | Requests that span several specialists |
+| `SUPERVISOR_ROUTER` | Routes each request to the single most suitable collaborator, which answers directly; falls back to full supervisor behaviour when the request is ambiguous | Lower latency for clearly separable requests |
+
+There are no keyword- or intent-rule routing settings: routing is driven by the supervisor's instructions and each collaborator's `collaborationInstruction`.
 
 ### Supervisor Mode
 
-In supervisor mode, a supervisor agent coordinates specialist agents to handle complex tasks.
-
 ```python
 import boto3
-import json
 
-bedrock = boto3.client('bedrock')
+agents = boto3.client("bedrock-agent")
+runtime = boto3.client("bedrock-agent-runtime")
 
-# Create specialist agents
-sales_agent = bedrock.create_agent(
-    agentName='SalesSpecialist',
-    foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    instruction='You are a sales specialist. Handle product inquiries, pricing, and quotes.',
-    tools=[get_product_info, calculate_pricing, generate_quote]
+# 1. Collaborators (tools are attached as action groups, not passed to create_agent)
+sales_id = agents.create_agent(
+    agentName="SalesSpecialist",
+    foundationModel=SONNET,
+    agentResourceRoleArn=AGENT_ROLE_ARN,
+    instruction="You are a sales specialist. Handle product inquiries, pricing and quotes.",
+)["agent"]["agentId"]
+support_id = agents.create_agent(
+    agentName="SupportSpecialist",
+    foundationModel=SONNET,
+    agentResourceRoleArn=AGENT_ROLE_ARN,
+    instruction="You are a technical support specialist. Handle troubleshooting and technical issues.",
+)["agent"]["agentId"]
+# ... create_agent_action_group(...) for each collaborator's tools ...
+
+collaborators = {}
+for name, agent_id in {"sales_specialist": sales_id, "support_specialist": support_id}.items():
+    alias_id = prepare_and_alias(agents, agent_id)
+    collaborators[name] = agents.get_agent_alias(agentId=agent_id, agentAliasId=alias_id)["agentAlias"]["agentAliasArn"]
+
+# 2. Supervisor
+supervisor_id = agents.create_agent(
+    agentName="CustomerServiceSupervisor",
+    foundationModel=SONNET,
+    agentResourceRoleArn=AGENT_ROLE_ARN,
+    instruction="You coordinate customer service. Delegate to the sales or support specialist as needed and combine their answers.",
+    agentCollaboration="SUPERVISOR",
+)["agent"]["agentId"]
+
+agents.associate_agent_collaborator(
+    agentId=supervisor_id, agentVersion="DRAFT",
+    agentDescriptor={"aliasArn": collaborators["sales_specialist"]},
+    collaboratorName="sales_specialist",
+    collaborationInstruction="Sales, pricing and product information.",
+    relayConversationHistory="TO_COLLABORATOR",
 )
-
-support_agent = bedrock.create_agent(
-    agentName='SupportSpecialist',
-    foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    instruction='You are a technical support specialist. Handle troubleshooting and technical issues.',
-    tools=[check_system_status, create_ticket, search_kb]
+agents.associate_agent_collaborator(
+    agentId=supervisor_id, agentVersion="DRAFT",
+    agentDescriptor={"aliasArn": collaborators["support_specialist"]},
+    collaboratorName="support_specialist",
+    collaborationInstruction="Technical support and troubleshooting.",
+    relayConversationHistory="TO_COLLABORATOR",
 )
+supervisor_alias = prepare_and_alias(agents, supervisor_id)
 
-# Create supervisor agent
-supervisor = bedrock.create_agent(
-    agentName='CustomerServiceSupervisor',
-    foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    instruction='You coordinate customer service. Delegate to sales or support specialists as needed.',
-    multiAgentConfig={
-        'mode': 'SUPERVISOR',
-        'supervisorConfig': {
-            'subAgents': [
-                {
-                    'agentId': sales_agent['agentId'],
-                    'name': 'sales_specialist',
-                    'description': 'Handles sales, pricing, and product information'
-                },
-                {
-                    'agentId': support_agent['agentId'],
-                    'name': 'support_specialist',
-                    'description': 'Handles technical support and troubleshooting'
-                }
-            ],
-            'parallelCommunication': True  # Enable parallel execution
-        }
-    }
+# 3. Invoke
+response = runtime.invoke_agent(
+    agentId=supervisor_id,
+    agentAliasId=supervisor_alias,
+    sessionId="session-123",
+    inputText="I need pricing for the enterprise plan and help with a technical issue",
 )
-
-# Use supervisor
-bedrock_runtime = boto3.client('bedrock-runtime')
-
-response = bedrock_runtime.invoke_agent(
-    agentId=supervisor['agentId'],
-    agentAliasId='PROD',
-    sessionId='session-123',
-    inputText='I need pricing for enterprise plan and help with a technical issue'
-)
-
-# Supervisor delegates to both sales and support agents in parallel
-print(response['completion'])
+print(read_completion(response))
 ```
 
 ### Supervisor with Routing Mode
 
-In this mode, the supervisor uses explicit routing logic to determine which specialist agent(s) to invoke.
+Identical, except for the supervisor's collaboration mode:
 
 ```python
-# Create supervisor with routing
-supervisor_with_routing = bedrock.create_agent(
-    agentName='SmartSupervisor',
-    foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-    instruction='Route customer requests intelligently based on intent classification.',
-    multiAgentConfig={
-        'mode': 'SUPERVISOR_WITH_ROUTING',
-        'supervisorConfig': {
-            'subAgents': [
-                {
-                    'agentId': sales_agent['agentId'],
-                    'name': 'sales_specialist',
-                    'description': 'Handles sales, pricing, and product information',
-                    'routingCriteria': {
-                        'keywords': ['price', 'buy', 'purchase', 'quote', 'cost'],
-                        'intentClassifications': ['SALES_INQUIRY', 'PRICING_REQUEST']
-                    }
-                },
-                {
-                    'agentId': support_agent['agentId'],
-                    'name': 'support_specialist',
-                    'description': 'Handles technical support and troubleshooting',
-                    'routingCriteria': {
-                        'keywords': ['error', 'issue', 'not working', 'bug', 'help'],
-                        'intentClassifications': ['TECHNICAL_SUPPORT', 'TROUBLESHOOTING']
-                    }
-                }
-            ],
-            'routingStrategy': 'INTENT_BASED',
-            'fallbackAgent': support_agent['agentId']  # Default if no match
-        }
-    }
-)
+router_id = agents.create_agent(
+    agentName="SmartSupervisor",
+    foundationModel=HAIKU,   # routing is a light task
+    agentResourceRoleArn=AGENT_ROLE_ARN,
+    instruction="Send each request to the one specialist best placed to answer it.",
+    agentCollaboration="SUPERVISOR_ROUTER",
+)["agent"]["agentId"]
+# associate_agent_collaborator(...) as above, then prepare_and_alias(agents, router_id)
 ```
 
 ### Complete Multi-Agent System Example
 
+Invoking a supervisor and inspecting which collaborators it used, from the trace:
+
 ```python
+import uuid
+
+import boto3
+
+
 class ProductionMultiAgentSystem:
-    """Production-ready multi-agent collaboration system"""
+    def __init__(self, supervisor_id: str, supervisor_alias_id: str, region="us-east-1"):
+        self.runtime = boto3.client("bedrock-agent-runtime", region_name=region)
+        self.supervisor_id = supervisor_id
+        self.supervisor_alias_id = supervisor_alias_id
 
-    def __init__(self, region='us-east-1'):
-        self.bedrock = boto3.client('bedrock', region_name=region)
-        self.bedrock_runtime = boto3.client('bedrock-runtime', region_name=region)
-        self.agents = {}
-
-    def create_specialist_agents(self):
-        """Create all specialist agents"""
-
-        # Tier 1 Support Agent
-        self.agents['tier1_support'] = self.bedrock.create_agent(
-            agentName='Tier1Support',
-            foundationModel='anthropic.claude-3-haiku-20240307-v1:0',  # Fast, cost-effective
-            instruction='Handle basic customer support questions quickly and efficiently.',
-            tools=[get_account_info, check_order_status, update_contact_info]
-        )
-
-        # Tier 2 Support Agent
-        self.agents['tier2_support'] = self.bedrock.create_agent(
-            agentName='Tier2Support',
-            foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',  # More capable
-            instruction='Handle complex technical issues requiring deep analysis.',
-            tools=[run_diagnostics, access_logs, escalate_ticket, create_bug_report]
-        )
-
-        # Sales Agent
-        self.agents['sales'] = self.bedrock.create_agent(
-            agentName='SalesAgent',
-            foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-            instruction='Provide product information, pricing, and generate quotes.',
-            tools=[get_product_catalog, calculate_pricing, generate_quote, check_inventory],
-            knowledgeBases=[self.create_product_knowledge_base()]
-        )
-
-        # Billing Agent
-        self.agents['billing'] = self.bedrock.create_agent(
-            agentName='BillingAgent',
-            foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-            instruction='Handle billing inquiries, invoices, and payment processing.',
-            tools=[get_invoice, process_payment, update_billing_info, check_payment_status]
-        )
-
-    def create_department_supervisors(self):
-        """Create mid-level supervisors for each department"""
-
-        # Support Supervisor
-        self.agents['support_supervisor'] = self.bedrock.create_agent(
-            agentName='SupportSupervisor',
-            foundationModel='anthropic.claude-3-5-sonnet-20241022-v2:0',
-            instruction='Coordinate support requests by routing to appropriate tier.',
-            multiAgentConfig={
-                'mode': 'SUPERVISOR_WITH_ROUTING',
-                'supervisorConfig': {
-                    'subAgents': [
-                        {
-                            'agentId': self.agents['tier1_support']['agentId'],
-                            'name': 'tier1',
-                            'description': 'Basic support questions',
-                            'routingCriteria': {
-                                'complexity': 'LOW',
-                                'keywords': ['account', 'password', 'status', 'contact']
-                            }
-                        },
-                        {
-                            'agentId': self.agents['tier2_support']['agentId'],
-                            'name': 'tier2',
-                            'description': 'Complex technical issues',
-                            'routingCriteria': {
-                                'complexity': 'HIGH',
-                                'keywords': ['error', 'bug', 'crash', 'performance']
-                            }
-                        }
-                    ],
-                    'routingStrategy': 'COMPLEXITY_BASED'
-                }
-            }
-        )
-
-    def create_global_supervisor(self):
-        """Create top-level supervisor that coordinates all departments"""
-
-        self.agents['global_supervisor'] = self.bedrock.create_agent(
-            agentName='GlobalSupervisor',
-            foundationModel='anthropic.claude-3-opus-20240229-v1:0',  # Most capable
-            instruction='Top-level customer service coordinator. Route to appropriate department.',
-            multiAgentConfig={
-                'mode': 'SUPERVISOR_WITH_ROUTING',
-                'supervisorConfig': {
-                    'subAgents': [
-                        {
-                            'agentId': self.agents['support_supervisor']['agentId'],
-                            'name': 'support',
-                            'description': 'All technical support requests'
-                        },
-                        {
-                            'agentId': self.agents['sales']['agentId'],
-                            'name': 'sales',
-                            'description': 'Sales, products, and pricing'
-                        },
-                        {
-                            'agentId': self.agents['billing']['agentId'],
-                            'name': 'billing',
-                            'description': 'Billing, invoices, and payments'
-                        }
-                    ],
-                    'parallelCommunication': True,
-                    'routingStrategy': 'INTENT_BASED'
-                }
-            }
-        )
-
-    def invoke_system(self, user_request: str, session_id: str = None):
-        """Invoke the multi-agent system"""
-
-        import uuid
+    def invoke_system(self, user_request: str, session_id: str | None = None) -> dict:
         session_id = session_id or str(uuid.uuid4())
-
-        response = self.bedrock_runtime.invoke_agent(
-            agentId=self.agents['global_supervisor']['agentId'],
-            agentAliasId='PROD',
+        response = self.runtime.invoke_agent(
+            agentId=self.supervisor_id,
+            agentAliasId=self.supervisor_alias_id,
             sessionId=session_id,
             inputText=user_request,
-            enableTrace=True  # Enable to see routing decisions
+            enableTrace=True,   # traces include collaborator invocations
         )
 
-        # Parse streaming response
-        completion = ''
-        for event in response['completion']:
-            if 'chunk' in event:
-                completion += event['chunk']['bytes'].decode()
+        completion, collaborators_used = "", set()
+        for event in response["completion"]:
+            if "chunk" in event:
+                completion += event["chunk"]["bytes"].decode()
+            elif "trace" in event:
+                trace = event["trace"]
+                if trace.get("collaboratorName"):
+                    collaborators_used.add(trace["collaboratorName"])
 
-        return {
-            'response': completion,
-            'trace': response.get('trace', []),
-            'session_id': session_id
-        }
+        return {"response": completion, "collaborators": sorted(collaborators_used), "session_id": session_id}
 
-# Usage
-system = ProductionMultiAgentSystem()
-system.create_specialist_agents()
-system.create_department_supervisors()
-system.create_global_supervisor()
 
-# Test multi-agent system
-result = system.invoke_system(
-    "I need help with a billing issue and also want to know about your enterprise pricing"
-)
-
-print(f"Response: {result['response']}")
-print(f"Routing trace: {result['trace']}")
+system = ProductionMultiAgentSystem("SUPERVISOR_AGENT_ID", "SUPERVISOR_ALIAS_ID")
+result = system.invoke_system("I need help with a billing issue and also want to know about enterprise pricing")
+print(result["response"])
+print("Collaborators used:", result["collaborators"])
 ```
 
 ### Monitoring Multi-Agent Systems
 
+Bedrock Agents publishes runtime metrics such as `InvocationCount`, `TotalTime`, `TTFT`, `InvocationThrottles`, `ModelLatency`, `InputTokenCount` and `OutputTokenCount`, with dimensions `Operation`, `ModelId` and `AgentAliasArn`. Discover the exact dimension sets in your account rather than hard-coding them:
+
 ```python
+from datetime import datetime, timedelta, timezone
+
 import boto3
 
-cloudwatch = boto3.client('cloudwatch')
+cloudwatch = boto3.client("cloudwatch")
 
-def monitor_multi_agent_system(supervisor_agent_id: str):
-    """Monitor multi-agent system performance"""
 
-    # Get agent invocation metrics
-    metrics = cloudwatch.get_metric_statistics(
-        Namespace='AWS/Bedrock',
-        MetricName='AgentInvocations',
-        Dimensions=[
-            {'Name': 'AgentId', 'Value': supervisor_agent_id}
-        ],
-        StartTime=datetime.utcnow() - timedelta(hours=1),
-        EndTime=datetime.utcnow(),
-        Period=300,
-        Statistics=['Sum', 'Average']
-    )
-
-    # Get subagent delegation metrics
-    delegation_metrics = cloudwatch.get_metric_statistics(
-        Namespace='AWS/Bedrock',
-        MetricName='SubAgentDelegations',
-        Dimensions=[
-            {'Name': 'SupervisorAgentId', 'Value': supervisor_agent_id}
-        ],
-        StartTime=datetime.utcnow() - timedelta(hours=1),
-        EndTime=datetime.utcnow(),
-        Period=300,
-        Statistics=['Sum']
-    )
-
-    return {
-        'invocations': metrics,
-        'delegations': delegation_metrics
-    }
+def monitor_agent_alias(agent_alias_arn: str, hours: int = 1) -> dict:
+    end = datetime.now(timezone.utc)
+    results = {}
+    for metric in ("InvocationCount", "TotalTime", "InvocationThrottles"):
+        for m in cloudwatch.list_metrics(Namespace="AWS/Bedrock/Agents", MetricName=metric)["Metrics"]:
+            dims = {d["Name"]: d["Value"] for d in m["Dimensions"]}
+            if dims.get("AgentAliasArn") != agent_alias_arn:
+                continue
+            stats = cloudwatch.get_metric_statistics(
+                Namespace="AWS/Bedrock/Agents",
+                MetricName=metric,
+                Dimensions=m["Dimensions"],
+                StartTime=end - timedelta(hours=hours),
+                EndTime=end,
+                Period=300,
+                Statistics=["Sum", "Average"],
+            )
+            results.setdefault(metric, []).extend(stats["Datapoints"])
+    return results
 ```
 
-For complete multi-agent collaboration patterns, see **bedrock_agents_comprehensive_guide.md** and **bedrock_strands_sdk_guide.md**
+For per-collaborator detail, enable traces (as above) or model-invocation logging; for code-defined agents on AgentCore, use AgentCore Observability's OpenTelemetry traces.
+
+See also: the [comprehensive guide](/amazon-bedrock-agents-guide/bedrock_agents_comprehensive_guide/), the [Strands SDK guide](/amazon-bedrock-agents-guide/bedrock_strands_sdk_guide/) and the [Recipes](/amazon-bedrock-agents-guide/bedrock_agents_recipes/#multi-agent-customer-service-system).

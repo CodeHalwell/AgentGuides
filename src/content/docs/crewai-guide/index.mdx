@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.14.6** · May 2026 · Python 3.10+
+    **v%%version=crewai%%** · checked %%versions-checked%% · Python 3.10–3.13
   </Card>
   <Card title="Best for" icon="puzzle">
     Team simulations, research pipelines, content creation, analyst crews.
@@ -78,7 +78,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Tools" href="./crewai_tools_python/" description="BaseTool, @tool, MCP servers, caching, usage caps." />
   <LinkCard title="LLM providers" href="./crewai_llm_providers_python/" description="Routing, native SDKs, LiteLLM fallback, reasoning." />
   <LinkCard title="CLI" href="./crewai_cli_python/" description="Every CLI command verified against source." />
-  <LinkCard title="Comprehensive guide" href="./crewai_comprehensive_guide/" description="Single-page technical tour (some errata — see note)." />
+  <LinkCard title="Comprehensive guide" href="./crewai_comprehensive_guide/" description="Single-page technical tour." />
   <LinkCard title="Advanced multi-agent" href="./crewai_advanced_multi_agent_python/" />
   <LinkCard title="Flows guide" href="./crewai_flows_guide/" description="Event-driven workflows." />
   <LinkCard title="Recipes" href="./crewai_recipes/" description="Blog generation, BI, support, code review, marketing, legal." />
@@ -86,29 +86,34 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./crewai_production_guide/" />
 </CardGrid>
 
-## What's new in v1.14.6 (May 2026)
+## What's new in the 1.15 line (June–October 2026)
 
-- **v1.14.6 (May 2026)** — Patch release; stability improvements. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions.
-- **v1.14.5 (May 2026)** — Patch release; stability improvements. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.5` (`.routine-envs/check-0519-crewai`); no `DeprecationWarning` emissions.
-- **v1.14.4 (May 1)** — Patch release; stability improvements.
+- **JSON-first scaffolds** — `crewai create crew` now runs an interactive wizard and writes `crew.jsonc` + `agents/*.jsonc`. Pass `--classic` for the Python/YAML `@CrewBase` layout this guide uses. Tools, skills and templates are scaffolded through the same command (`crewai create tool|skill|template`); the older `crewai tool create` / `crewai template add` forms are deprecated.
+- **Declarative and conversational flows** — `crewai create flow --declarative`, `crewai run --definition <file>`; conversational flows are stable since 1.15.18. `crewai run` runs flows as well as crews.
+- **`crewai eval`** — grades the last traced run through CrewAI AMP and exits non-zero on a failed gate; `--models` compares models on a deployment.
+- **Agent defaults** — the newer `AgentExecutor` is now the default `executor_class`; new `skills=` and `tool_failure_policy=` fields; tool failures are surfaced rather than reported as success.
+- **Packaging** — the CLI moved to its own `crewai-cli` distribution (installed with `crewai`; `crewai.cli` is a deprecated alias for `crewai_cli`). Provider SDKs and LiteLLM are optional extras (`crewai[anthropic]`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`).
+- **New native providers** — Snowflake and DeepInfra join the native list; DashScope routes natively for all models.
+- **Memory** — default analysis model `gpt-5.4-mini` and embedder `text-embedding-3-large`; stores built with the old 1536-dimension default need a reset or an explicit embedder (see [Memory](./crewai_memory_python/)).
 
-## Earlier highlights (v1.14.3, April 2026)
+## Earlier highlights (1.14 line, April–May 2026)
 
-- **New reference pages** — Agent, Task, Memory, Knowledge, Tools, LLM, CLI — each verified against installed source.
-- **Checkpoint forking with lineage tracking** — branch execution from any saved checkpoint.
-- **`from_checkpoint` on `Crew.kickoff` / `Flow.kickoff`** — resume a crew or flow with `from_checkpoint=CheckpointConfig(restore_from=...)`.
+- **Checkpoint system** and checkpoint forking with lineage tracking.
+- **`from_checkpoint` on `Crew.kickoff` / `Flow.kickoff` / `Agent.kickoff`** — resume with `from_checkpoint=CheckpointConfig(restore_from=...)`.
 - **Checkpoint CLI** — `crewai checkpoint list|info|resume|diff|prune`.
-- **Template management CLI** — `crewai template list|add`.
 - **Enriched token tracking** — `reasoning_tokens`, `cache_creation_tokens` on `CrewOutput.token_usage`.
 - **Scoped streaming handlers** — per-run isolation across concurrent crews.
 
-<Aside type="caution" title="Breaking changes since v1.5.0">
-  - `CodeInterpreterTool` removed from the public API — use E2B / Modal / a custom `BaseTool`.
+<Aside type="caution" title="Breaking and behavioural changes since v1.5.0">
+  - `CodeInterpreterTool` removed from the public API (1.14.0) — use E2B / Modal / a custom `BaseTool`.
   - `CrewStructuredTool` moved to internal API — external code should use `BaseTool`.
-  - `stop=` parameter stripped for GPT-5 / o-series models by the LLM router.
+  - `stop=` parameter stripped for GPT-5 / o-series (and later OpenAI reasoning) models by the LLM router.
   - `Agent.reasoning` deprecated → use `planning` + `PlanningConfig`.
-  - `Agent.multimodal` deprecated → use `Task.input_files={"name": path}`.
-  - `from crewai.amp import ...` **is not a valid import** in the stable package. AMP is accessed through the CLI (`crewai login`, `crewai deploy ...`). The AMP Suite section of the comprehensive guide includes pre-existing fabricated imports and is flagged with an errata note.
+  - `Agent.multimodal` deprecated → use `Task.input_files=...`.
+  - `StateProxy` removed from flow state access (1.15.0).
+  - `crewai create crew` defaults to the JSON-first layout (1.15 line) — add `--classic` for YAML.
+  - LiteLLM is no longer installed by default; non-native model prefixes need `crewai[litellm]`.
+  - `from crewai.amp import ...` **is not a valid import**. AMP is accessed through the CLI (`crewai login`, `crewai deploy ...`) and `Agent(apps=[...])`.
   - v1.10.0 yanked — use 1.10.1+.
 </Aside>
 
@@ -145,6 +150,7 @@ Ready? **[Start Zero → Hero Step 1 →](./crewai_comprehensive_guide/#core-fun
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-10-21 | 1.15.28 | Re-verified the whole guide against 1.15.28 in a clean venv (imports, constructor keywords, CLI `--help`). Current-version mentions now come from the shared versions file. Documented JSON-first scaffolds, `crewai eval`, `crewai_cli` split, new Agent fields and defaults, Memory default embedder change; fixed `memory_tools_for` → `create_memory_tools`, `A2AClientConfig(endpoint=...)`, `crewai_tools` imports; removed the fabricated `crewai.amp` examples. | Claude |
 | 2026-05-29 | 1.14.6 | Version bumped 1.14.5 → 1.14.6; "What's new" heading updated to v1.14.6; v1.14.6 bullet added; comprehensive guide header updated; revision history entry added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-19 | 1.14.5 | Version bumped 1.14.4 → 1.14.5; "What's new" section updated; comprehensive guide header updated; revision history entries added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.5` (`.routine-envs/check-0519-crewai`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-01 | 1.14.4 | Version bumped 1.14.3 → 1.14.4; "What's new" section updated; revision history entry added. `Agent`, `Task`, `Crew` imports verified against installed 1.14.4 (`.routine-envs/check-crewai-0501`). | Claude routine |

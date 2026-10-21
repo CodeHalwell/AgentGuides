@@ -1,29 +1,25 @@
 ---
-title: "OpenAI Agents SDK TypeScript: Critical 2025 Features and Updates"
-description: "Status: Production-Ready Last Updated: January 2025 SDK Version: Latest Language: TypeScript TypeScript Version: 5.0+"
+title: "OpenAI Agents SDK TypeScript: Features and Updates (2025–2026)"
+description: "Type-safe agents, human-in-the-loop approvals, tracing, guardrails, MCP and provider-agnostic models in the TypeScript SDK, plus what changed in 2026."
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK TypeScript: Critical 2025 Features and Updates
+# OpenAI Agents SDK TypeScript: Features and Updates (2025–2026)
 
-**Status:** Production-Ready
-**Last Updated:** January 2025
-**SDK Version:** Latest
-**Language:** TypeScript
-**TypeScript Version:** 5.0+
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). First written in January 2025. TypeScript 5+, Node.js 22+.
 
 ---
 
 ## Overview
 
-The OpenAI Agents SDK for TypeScript is the **official production-ready framework** for building type-safe agentic AI applications. This guide covers all critical 2025 features that make TypeScript Agents SDK the definitive choice for modern development.
+The OpenAI Agents SDK for TypeScript is the **official production-ready framework** for building type-safe agentic AI applications. This page covers the main features of the TypeScript SDK; [What changed in 2026](#what-changed-in-2026) summarises the recent releases.
 
 ---
 
 ## Table of Contents
 
 1. [Production-Ready Status](#production-ready-status)
-2. [TypeScript-Specific 2025 Features](#typescript-specific-2025-features)
+2. [TypeScript-Specific Features](#typescript-specific-features)
 3. [Human-in-the-Loop Approvals](#human-in-the-loop-approvals)
 4. [Built-in Tracing and Observability](#built-in-tracing-and-observability)
 5. [Guardrails System](#guardrails-system)
@@ -32,12 +28,13 @@ The OpenAI Agents SDK for TypeScript is the **official production-ready framewor
 8. [Provider-Agnostic Support](#provider-agnostic-support)
 9. [Type-Safe Tools](#type-safe-tools)
 10. [Production Features](#production-features)
+11. [What changed in 2026](#what-changed-in-2026)
 
 ---
 
 ## Production-Ready Status
 
-### Why Choose TypeScript Agents SDK (2025)?
+### Why Choose the TypeScript Agents SDK?
 
 - ✅ **TypeScript-First Design**: Full type safety, excellent IDE support
 - ✅ **Production-Ready**: Stable API, comprehensive testing
@@ -50,7 +47,7 @@ The OpenAI Agents SDK for TypeScript is the **official production-ready framewor
 **The Agents SDK is the official production replacement for experimental Swarm implementations.**
 
 ```typescript
-// BEFORE: Swarm-like (Experimental)
+// BEFORE: Swarm (a Python-only experiment; TypeScript-style pseudo-code)
 import { Swarm, Agent } from 'swarm';
 
 const client = new Swarm();
@@ -67,7 +64,7 @@ console.log(result.finalOutput);
 
 ---
 
-## TypeScript-Specific 2025 Features
+## TypeScript-Specific Features
 
 ### 1. Full Type Inference
 
@@ -118,16 +115,16 @@ import { Agent } from '@openai/agents';
 import { z } from 'zod';
 
 // Generic typed agent creator
-function createTypedAgent<TOutput extends z.ZodSchema>(config: {
+function createTypedAgent<TOutput extends z.ZodObject<any>>(config: {
   name: string;
   instructions: string;
-  outputSchema: TOutput;
+  outputType: TOutput;
   tools?: any[];
-}): Agent {
+}) {
   return new Agent({
     name: config.name,
     instructions: config.instructions,
-    outputSchema: config.outputSchema,
+    outputType: config.outputType,
     tools: config.tools,
   });
 }
@@ -144,12 +141,12 @@ type SentimentAnalysis = z.infer<typeof SentimentSchema>;
 const sentimentAgent = createTypedAgent({
   name: 'Sentiment Analyzer',
   instructions: 'Analyze sentiment of text',
-  outputSchema: SentimentSchema,
+  outputType: SentimentSchema,
 });
 
-// Full type safety in results
+// finalOutput is already parsed and typed from the schema
 const result = await run(sentimentAgent, 'I love TypeScript!');
-const analysis: SentimentAnalysis = JSON.parse(result.finalOutput);
+const analysis: SentimentAnalysis | undefined = result.finalOutput;
 ```
 
 ### 3. Type-Safe Context Injection
@@ -181,7 +178,7 @@ async function executeWithContext(
     context,
   });
 
-  return result.finalOutput;
+  return result.finalOutput ?? '';
 }
 
 // Usage
@@ -203,10 +200,12 @@ const response = await executeWithContext(
 
 ## Human-in-the-Loop Approvals
 
-### NEW 2025: Approval Workflow
+### Approval Workflow
+
+Mark a tool with `needsApproval` (a boolean or an async predicate). When the model calls it, the run pauses and returns the pending calls in `result.interruptions`; approve or reject each one on `result.state`, then resume by passing the state back to `run()`:
 
 ```typescript
-import { Agent, run, tool } from '@openai/agents';
+import { Agent, run, tool, RunState } from '@openai/agents';
 import { z } from 'zod';
 
 // Critical action requiring human approval
@@ -214,172 +213,68 @@ const deleteUserTool = tool({
   name: 'delete_user',
   description: 'Delete user account permanently',
   parameters: z.object({
-    userId: z.string().uuid(),
+    userId: z.string(),
     reason: z.string().min(20),
   }),
-  requiresApproval: true, // NEW: Human approval required
+  needsApproval: true,
   execute: async ({ userId, reason }) => {
-    return {
-      status: 'deleted',
-      userId,
-      timestamp: new Date().toISOString(),
-    };
+    return { status: 'deleted', userId, timestamp: new Date().toISOString() };
   },
 });
 
-const moderatorTool = tool({
+// Conditional approval: only permanent bans need a human
+const banUserTool = tool({
   name: 'ban_user',
   description: 'Ban user from platform',
   parameters: z.object({
-    userId: z.string().uuid(),
+    userId: z.string(),
     duration: z.enum(['temporary', 'permanent']),
   }),
-  requiresApproval: true,
-  execute: async ({ userId, duration }) => {
-    return { status: 'banned', userId, duration };
-  },
+  needsApproval: async (_ctx, { duration }) => duration === 'permanent',
+  execute: async ({ userId, duration }) => ({ status: 'banned', userId, duration }),
 });
 
 const adminAgent = new Agent({
   name: 'Admin Agent',
   instructions: 'Manage users with appropriate caution',
-  tools: [deleteUserTool, moderatorTool],
+  tools: [deleteUserTool, banUserTool],
 });
 
-// Approval handler
-interface ApprovalRequest {
-  toolName: string;
-  parameters: Record<string, any>;
-  agentName: string;
-}
-
-interface ApprovalResponse {
-  approved: boolean;
-  reason?: string;
-  modifiedParameters?: Record<string, any>;
-}
-
-async function customApprovalHandler(
-  request: ApprovalRequest
-): Promise<ApprovalResponse> {
-  console.log(`\n🔔 APPROVAL REQUIRED`);
-  console.log(`Tool: ${request.toolName}`);
-  console.log(`Agent: ${request.agentName}`);
-  console.log(`Parameters:`, request.parameters);
-
-  // In production: Show UI, send notification, log to audit system
-  const approved = await getUserConfirmation(request);
-
-  if (approved) {
-    return {
-      approved: true,
-      reason: 'Approved by administrator',
-    };
-  } else {
-    return {
-      approved: false,
-      reason: 'Rejected by administrator',
-    };
-  }
-}
-
-// Execute with approval workflow
-const result = await run(
+let result = await run(
   adminAgent,
-  'Delete user account user_123 due to Terms of Service violation',
-  {
-    approvalHandler: customApprovalHandler,
-  }
+  'Delete user account user_123 due to repeated Terms of Service violations',
 );
 
-// Slack Integration Example
-async function slackApprovalHandler(
-  request: ApprovalRequest
-): Promise<ApprovalResponse> {
-  const slackMessage = {
-    channel: '#admin-approvals',
-    text: 'Action Requires Approval',
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*${request.toolName}* requires approval\n\`\`\`${JSON.stringify(request.parameters, null, 2)}\`\`\``,
-        },
-      },
-      {
-        type: 'actions',
-        elements: [
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: 'Approve' },
-            value: 'approve',
-            action_id: 'approve_action',
-          },
-          {
-            type: 'button',
-            text: { type: 'plain_text', text: 'Reject' },
-            value: 'reject',
-            action_id: 'reject_action',
-          },
-        ],
-      },
-    ],
-  };
+while (result.interruptions.length > 0) {
+  for (const interruption of result.interruptions) {
+    console.log(`Approval required: ${interruption.name}`, interruption.arguments);
 
-  // Send to Slack and wait for response
-  const approval = await sendSlackApprovalRequest(slackMessage);
-
-  return {
-    approved: approval.action === 'approve',
-    reason: approval.reason,
-  };
+    // In production: show UI, post to Slack, write to an audit log...
+    const approved = await getUserConfirmation(interruption);
+    if (approved) result.state.approve(interruption);
+    else result.state.reject(interruption);
+  }
+  result = await run(adminAgent, result.state);
 }
+
+console.log(result.finalOutput);
 ```
 
-### Conditional Approval Rules
+### Pausing across requests
+
+Approvals often arrive minutes or hours later, from another process. Serialise the state, store it, and restore it when the decision comes in:
 
 ```typescript
-interface ApprovalRules {
-  requireApprovalIf: (params: any) => boolean;
-  approvers: string[];
-  timeout: number;
+// When the run pauses
+const serialised = JSON.stringify(result.state);
+await db.saveRunState(runId, serialised);
+
+// Later, e.g. in a Slack button handler
+const state = await RunState.fromString(adminAgent, await db.loadRunState(runId));
+for (const interruption of state.getInterruptions()) {
+  state.approve(interruption);
 }
-
-const approvalRules: Record<string, ApprovalRules> = {
-  delete_user: {
-    requireApprovalIf: (params) => params.userId.startsWith('admin_'),
-    approvers: ['senior_admin@company.com'],
-    timeout: 3600000, // 1 hour
-  },
-  modify_billing: {
-    requireApprovalIf: (params) => params.amount > 1000,
-    approvers: ['finance@company.com'],
-    timeout: 7200000, // 2 hours
-  },
-};
-
-async function ruleBasedApprovalHandler(
-  request: ApprovalRequest
-): Promise<ApprovalResponse> {
-  const rules = approvalRules[request.toolName];
-
-  if (!rules) {
-    return { approved: true }; // No rules = auto-approve
-  }
-
-  if (!rules.requireApprovalIf(request.parameters)) {
-    return { approved: true }; // Doesn't meet threshold
-  }
-
-  // Request approval from designated approvers
-  const approval = await requestApprovalFrom(rules.approvers, request, rules.timeout);
-
-  return {
-    approved: approval.approved,
-    reason: approval.reason,
-  };
-}
+const resumed = await run(adminAgent, state);
 ```
 
 ---
@@ -389,7 +284,7 @@ async function ruleBasedApprovalHandler(
 ### Workflow Visualization
 
 ```typescript
-import { Agent, run, trace } from '@openai/agents';
+import { Agent, run, withTrace } from '@openai/agents';
 
 const agent = new Agent({
   name: 'Data Processor',
@@ -397,7 +292,7 @@ const agent = new Agent({
 });
 
 // Group related operations
-await trace('Customer Data Pipeline', async () => {
+await withTrace('Customer Data Pipeline', async () => {
   const step1 = await run(agent, 'Validate customer data');
   const step2 = await run(agent, 'Enrich customer profiles');
   const step3 = await run(agent, 'Generate insights');
@@ -417,7 +312,7 @@ await trace('Customer Data Pipeline', async () => {
 ### Integration with Observability Platforms
 
 ```typescript
-import { Agent, run, trace } from '@openai/agents';
+import { Agent, run, withTrace } from '@openai/agents';
 import { Logger } from 'winston';
 import { Tracer } from '@opentelemetry/api';
 
@@ -439,7 +334,7 @@ async function observableAgentExecution(
 
     const startTime = Date.now();
 
-    const result = await trace(
+    const result = await withTrace(
       `Execute ${agent.name}`,
       () => run(agent, input),
       {
@@ -498,8 +393,8 @@ class MetricsCollector {
 
       const metrics: ExecutionMetrics = {
         duration: Date.now() - startTime,
-        tokenCount: result.usage?.totalTokens || 0,
-        toolCalls: result.toolCallCount || 0,
+        tokenCount: result.runContext.usage.totalTokens,
+        toolCalls: result.newItems.filter((i) => i.type === 'tool_call_item').length,
         errorRate: 0,
       };
 
@@ -566,112 +461,93 @@ console.log(`Duration: ${metrics.duration}ms, Tokens: ${metrics.tokenCount}`);
 
 ### Input Validation Guardrails
 
+A guardrail is an object with a `name` and an `execute` function returning `{ tripwireTriggered, outputInfo }`. When a tripwire fires, `run()` throws `InputGuardrailTripwireTriggered` (or `OutputGuardrailTripwireTriggered`):
+
 ```typescript
-import { Agent, run } from '@openai/agents';
-import { z } from 'zod';
+import { Agent, run, InputGuardrail, InputGuardrailTripwireTriggered } from '@openai/agents';
 
-interface InputGuardrail<T> {
-  name: string;
-  schema?: z.ZodSchema<T>;
-  validate: (input: string) => Promise<boolean>;
-  onViolation?: (input: string) => string | Promise<string>;
-}
-
-// Email validation guardrail
-const emailGuardrail: InputGuardrail<{ email: string }> = {
-  name: 'email_validator',
-  schema: z.object({
-    email: z.string().email(),
-  }),
-  validate: async (input: string) => {
-    const emailPattern = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i;
-    return emailPattern.test(input);
-  },
-  onViolation: (input) => {
-    return 'Invalid email format provided. Please provide a valid email address.';
-  },
-};
+const toText = (input: unknown) => (typeof input === 'string' ? input : JSON.stringify(input));
 
 // PII detection guardrail
-const piiGuardrail: InputGuardrail<string> = {
+const piiGuardrail: InputGuardrail = {
   name: 'pii_detector',
-  validate: async (input: string) => {
+  execute: async ({ input }) => {
+    const text = toText(input);
     const piiPatterns = [
       /\b\d{3}-\d{2}-\d{4}\b/, // SSN
       /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/, // Credit card
     ];
-
-    return !piiPatterns.some(pattern => pattern.test(input));
+    const found = piiPatterns.some((pattern) => pattern.test(text));
+    return { tripwireTriggered: found, outputInfo: { found } };
   },
-  onViolation: () => {
-    return 'Input contains PII and has been blocked for security reasons.';
+};
+
+// Guardrails can call a cheap model themselves
+const topicGuardrail: InputGuardrail = {
+  name: 'off_topic',
+  runInParallel: false, // block the main agent until this finishes
+  execute: async ({ input, context }) => {
+    const checker = new Agent({
+      name: 'Topic checker',
+      model: 'gpt-5.6-luna',
+      instructions: 'Answer "yes" if the request is about our product, otherwise "no".',
+    });
+    const verdict = await run(checker, toText(input), { context });
+    return { tripwireTriggered: verdict.finalOutput?.trim().toLowerCase() !== 'yes', outputInfo: verdict.finalOutput };
   },
 };
 
 const agent = new Agent({
   name: 'Secure Agent',
   instructions: 'Process user requests securely',
-  inputGuardrails: [emailGuardrail, piiGuardrail],
+  inputGuardrails: [piiGuardrail, topicGuardrail],
 });
 
-// Execute with guardrails
 try {
-  const result = await run(agent, 'My SSN is 123-45-6789');
+  await run(agent, 'My SSN is 123-45-6789');
 } catch (error) {
-  console.error('Input rejected by guardrail:', error.message);
+  if (error instanceof InputGuardrailTripwireTriggered) {
+    console.error('Input rejected by guardrail:', error.result.guardrail.name);
+  } else {
+    throw error;
+  }
 }
 ```
 
 ### Output Content Filtering
 
 ```typescript
-import { Agent, run } from '@openai/agents';
-
-interface OutputGuardrail {
-  name: string;
-  check: (output: string) => boolean | Promise<boolean>;
-  filter?: (output: string) => string | Promise<string>;
-}
-
-// Profanity filter
-const profanityGuardrail: OutputGuardrail = {
-  name: 'profanity_filter',
-  check: async (output: string) => {
-    const bannedWords = ['profanity1', 'profanity2', 'offensive'];
-    return !bannedWords.some(word => output.toLowerCase().includes(word));
-  },
-  filter: (output: string) => {
-    return 'Response has been filtered due to content policy violation.';
-  },
-};
+import { Agent, run, OutputGuardrail, OutputGuardrailTripwireTriggered } from '@openai/agents';
 
 // Sensitive information filter
 const sensitiveDataGuardrail: OutputGuardrail = {
   name: 'sensitive_data_filter',
-  check: async (output: string) => {
-    const sensitivePatterns = [
-      /api[_-]?key/i,
-      /password/i,
-      /secret/i,
-      /token/i,
-    ];
-
-    return !sensitivePatterns.some(pattern => pattern.test(output));
-  },
-  filter: (output: string) => {
-    // Redact sensitive information
-    return output
-      .replace(/api[_-]?key\s*[:=]\s*[\w-]+/gi, 'api_key: [REDACTED]')
-      .replace(/password\s*[:=]\s*[\w-]+/gi, 'password: [REDACTED]');
+  execute: async ({ agentOutput }) => {
+    const text = String(agentOutput);
+    const leaked = [/api[_-]?key/i, /password\s*[:=]/i, /secret/i].some((p) => p.test(text));
+    return { tripwireTriggered: leaked, outputInfo: { leaked } };
   },
 };
 
 const agent = new Agent({
   name: 'Filtered Agent',
   instructions: 'Provide helpful responses',
-  outputGuardrails: [profanityGuardrail, sensitiveDataGuardrail],
+  outputGuardrails: [sensitiveDataGuardrail],
 });
+
+try {
+  const result = await run(agent, 'Show me the deployment config');
+  console.log(result.finalOutput);
+} catch (error) {
+  if (error instanceof OutputGuardrailTripwireTriggered) {
+    console.log('Response withheld by content policy.');
+  } else {
+    throw error;
+  }
+}
 ```
+
+Guardrails can also be attached to individual function tools (`inputGuardrails` / `outputGuardrails` on `tool()`, built with `defineToolInputGuardrail` / `defineToolOutputGuardrail`).
 
 ---
 
@@ -713,7 +589,7 @@ const triageAgent = new Agent({
 
 // Execute with automatic routing
 const result = await run(triageAgent, 'I was charged twice this month');
-console.log(`Routed to: ${result.currentAgent?.name}`);
+console.log(`Routed to: ${result.lastAgent?.name}`);
 console.log(`Response: ${result.finalOutput}`);
 ```
 
@@ -779,85 +655,99 @@ const routerAgent = new Agent({
 ### Filesystem Operations
 
 ```typescript
-import { Agent, run } from '@openai/agents';
-import { createMCPServer } from '@openai/agents/mcp';
+import { Agent, run, MCPServerStdio } from '@openai/agents';
 
 async function filesystemExample() {
-  const filesystemServer = await createMCPServer({
+  const filesystemServer = new MCPServerStdio({
     name: 'filesystem',
-    transport: 'stdio',
     command: 'npx',
     args: ['-y', '@modelcontextprotocol/server-filesystem', './project'],
   });
+  await filesystemServer.connect();
 
-  const agent = new Agent({
-    name: 'File Manager',
-    instructions: 'Help manage project files and directories',
-    mcpServers: [filesystemServer],
-  });
+  try {
+    const agent = new Agent({
+      name: 'File Manager',
+      instructions: 'Help manage project files and directories',
+      mcpServers: [filesystemServer],
+    });
 
-  const result = await run(agent, 'List all TypeScript files in src/');
-  console.log(result.finalOutput);
-
-  await filesystemServer.close();
+    const result = await run(agent, 'List all TypeScript files in src/');
+    console.log(result.finalOutput);
+  } finally {
+    await filesystemServer.close();
+  }
 }
 ```
 
 ### Git Integration
 
 ```typescript
-import { createMCPServer } from '@openai/agents/mcp';
+import { Agent, run, MCPServerStdio } from '@openai/agents';
 
 async function gitExample() {
-  const gitServer = await createMCPServer({
+  const gitServer = new MCPServerStdio({
     name: 'git',
-    transport: 'stdio',
-    command: 'npx',
-    args: ['-y', '@modelcontextprotocol/server-git', './repo'],
+    fullCommand: 'uvx mcp-server-git --repository ./repo',
   });
+  await gitServer.connect();
 
-  const agent = new Agent({
-    name: 'Git Assistant',
-    instructions: 'Help with git operations and code review',
-    mcpServers: [gitServer],
-  });
+  try {
+    const agent = new Agent({
+      name: 'Git Assistant',
+      instructions: 'Help with git operations and code review',
+      mcpServers: [gitServer],
+    });
 
-  const result = await run(agent, 'Show recent commits and their changes');
-  console.log(result.finalOutput);
-
-  await gitServer.close();
+    const result = await run(agent, 'Show recent commits and their changes');
+    console.log(result.finalOutput);
+  } finally {
+    await gitServer.close();
+  }
 }
 ```
 
 ### HTTP MCP Servers
 
 ```typescript
-import { createMCPServer } from '@openai/agents/mcp';
+import { Agent, run, MCPServerStreamableHttp, hostedMcpTool } from '@openai/agents';
 
 async function httpMCPExample() {
-  const apiServer = await createMCPServer({
+  // Local SDK-managed connection to a Streamable HTTP server
+  const apiServer = new MCPServerStreamableHttp({
     name: 'api_server',
-    transport: 'http',
     url: 'https://api.example.com/mcp',
-    headers: {
-      'Authorization': `Bearer ${process.env.API_TOKEN}`,
-      'Content-Type': 'application/json',
+    requestInit: {
+      headers: { Authorization: `Bearer ${process.env.API_TOKEN}` },
     },
-    timeout: 30000,
+    // Discovery stops after 64 pages by default since 0.20.0
+    // maxListPages: 200,
   });
+  await apiServer.connect();
 
-  const agent = new Agent({
-    name: 'API Assistant',
-    instructions: 'Interact with external APIs via MCP',
-    mcpServers: [apiServer],
-  });
+  try {
+    const agent = new Agent({
+      name: 'API Assistant',
+      instructions: 'Interact with external APIs via MCP',
+      mcpServers: [apiServer],
+    });
 
-  const result = await run(agent, 'Fetch latest data from the API');
-  console.log(result.finalOutput);
-
-  await apiServer.close();
+    const result = await run(agent, 'Fetch latest data from the API');
+    console.log(result.finalOutput);
+  } finally {
+    await apiServer.close();
+  }
 }
+
+// Alternatively, let the Responses API call a public MCP server itself
+const hostedAgent = new Agent({
+  name: 'Docs Assistant',
+  instructions: 'Answer questions using the docs server.',
+  tools: [hostedMcpTool({ serverLabel: 'docs', serverUrl: 'https://example.com/mcp' })],
+});
 ```
+
+`connectMcpServers()` connects several servers at once and closes them together.
 
 ---
 
@@ -865,33 +755,32 @@ async function httpMCPExample() {
 
 ### Multiple LLM Providers
 
+OpenAI models are referenced by name. Other providers go through the Vercel AI SDK adapter (`npm install @openai/agents-extensions` plus the provider package, e.g. `@ai-sdk/anthropic`). There is no `litellm/` model prefix in the TypeScript SDK.
+
 ```typescript
 import { Agent, run } from '@openai/agents';
+import { aisdk } from '@openai/agents-extensions/ai-sdk';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 
 // Configure different providers
 const providers = {
   openai: new Agent({
     name: 'OpenAI Assistant',
-    model: 'gpt-4o',
-    instructions: 'You are GPT-4',
+    model: 'gpt-5.6-sol',
+    instructions: 'Answer clearly and concisely.',
   }),
 
   claude: new Agent({
     name: 'Claude Assistant',
-    model: 'litellm/anthropic/claude-3-5-sonnet-20240620',
-    instructions: 'You are Claude 3.5 Sonnet',
+    model: aisdk(anthropic('claude-sonnet-4-5')),
+    instructions: 'Answer clearly and concisely.',
   }),
 
   gemini: new Agent({
     name: 'Gemini Assistant',
-    model: 'litellm/gemini/gemini-2.0-flash',
-    instructions: 'You are Gemini 2.0',
-  }),
-
-  llama: new Agent({
-    name: 'Llama Assistant',
-    model: 'litellm/replicate/meta-llama/llama-2-70b-chat',
-    instructions: 'You are Llama 2',
+    model: aisdk(google('gemini-2.5-flash')),
+    instructions: 'Answer clearly and concisely.',
   }),
 };
 
@@ -978,23 +867,37 @@ const createOrderTool = tool({
 
 ### Error Handling
 
+`run()` has no timeout or retry options; use an `AbortSignal` for timeouts, model-level `retry` settings for transient API failures, and the SDK's error classes to tell failures apart:
+
 ```typescript
-import { Agent, run } from '@openai/agents';
+import {
+  Agent,
+  run,
+  MaxTurnsExceededError,
+  ModelBehaviorError,
+  ModelRefusalError,
+  InputGuardrailTripwireTriggered,
+} from '@openai/agents';
 
 async function robustExecution(agent: Agent, input: string): Promise<string> {
   try {
     const result = await run(agent, input, {
-      timeout: 30000, // 30 second timeout
-      maxRetries: 3,
-      retryDelay: 1000,
+      signal: AbortSignal.timeout(30_000), // 30 second timeout
+      maxTurns: 8,
     });
 
-    return result.finalOutput;
+    return result.finalOutput ?? '';
   } catch (error) {
-    if (error.code === 'TIMEOUT') {
+    if (error instanceof MaxTurnsExceededError) {
+      console.error('Agent exceeded its turn limit');
+    } else if (error instanceof ModelRefusalError) {
+      console.error('Model refused the request');
+    } else if (error instanceof ModelBehaviorError) {
+      console.error('Model produced invalid output');
+    } else if (error instanceof InputGuardrailTripwireTriggered) {
+      console.error('Blocked by input guardrail');
+    } else if (error instanceof Error && error.name === 'TimeoutError') {
       console.error('Agent execution timed out');
-    } else if (error.code === 'RATE_LIMIT') {
-      console.error('Rate limit exceeded');
     } else {
       console.error('Unexpected error:', error);
     }
@@ -1007,12 +910,20 @@ async function robustExecution(agent: Agent, input: string): Promise<string> {
 ### Cost Tracking
 
 ```typescript
+import { Agent, run } from '@openai/agents';
+
 interface UsageMetrics {
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
   cost: number;
 }
+
+// USD per 1M tokens — placeholder figures; load current prices from config
+const PRICES: Record<string, { input: number; output: number }> = {
+  'gpt-5.6-luna': { input: 0, output: 0 },
+  'gpt-5.6-sol': { input: 0, output: 0 },
+};
 
 class CostTracker {
   private totalCost = 0;
@@ -1023,28 +934,23 @@ class CostTracker {
     input: string
   ): Promise<{ result: string; metrics: UsageMetrics }> {
     const result = await run(agent, input);
+    const usage = result.runContext.usage;
+    const price = PRICES[String(agent.model)] ?? { input: 0, output: 0 };
 
     const metrics: UsageMetrics = {
-      inputTokens: result.usage?.inputTokens || 0,
-      outputTokens: result.usage?.outputTokens || 0,
-      totalTokens: result.usage?.totalTokens || 0,
-      cost: this.calculateCost(result.usage),
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      totalTokens: usage.totalTokens,
+      cost: (usage.inputTokens * price.input + usage.outputTokens * price.output) / 1_000_000,
     };
 
     this.totalCost += metrics.cost;
     this.usageHistory.push(metrics);
 
     return {
-      result: result.finalOutput,
+      result: result.finalOutput ?? '',
       metrics,
     };
-  }
-
-  private calculateCost(usage: any): number {
-    // GPT-4 pricing example
-    const inputCost = (usage?.inputTokens || 0) * 0.00003;
-    const outputCost = (usage?.outputTokens || 0) * 0.00006;
-    return inputCost + outputCost;
   }
 
   getTotalCost(): number {
@@ -1055,26 +961,41 @@ class CostTracker {
 
 ---
 
+## What changed in 2026
+
+The packages moved from 0.3 to %%version=@openai/agents%% during 2026; all `@openai/agents*` packages share one version number. Minor releases may contain breaking changes. Highlights:
+
+| Release | What changed |
+|---------|--------------|
+| 0.8 | Human-in-the-loop approvals with serialisable `RunState`; browser bundle improvements; Zod 4. |
+| 0.9–0.11 | `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MemorySession`; `shellTool`, `applyPatchTool`, `toolSearchTool`; `MCPServerStreamableHttp`. |
+| 0.13 | Default Realtime model `gpt-realtime-2.1`. |
+| 0.14 | Sensitive model/tool data no longer logged by default; default task and turn tracing. |
+| 0.15 | Requires the `openai` Node SDK v7.2+; default model `gpt-5.6-luna`; newer MCP protocol negotiation. |
+| 0.16 | Testing utilities: scripted models, sandbox sessions, Realtime (`@openai/agents/testing`). |
+| 0.17–0.19 | Security hardening: blocked tool output redacted from replay state; sandbox file operations hardened; resumed MCP calls bound to their original server; agent-tool stream backlog capped at 1024 events. |
+| 0.20 | MCP tool discovery capped at 64 pages by default (`maxListPages`); model calls after approval resumes count towards `maxTurns`. |
+| 0.21 | Runloop sandbox provider removed; usage-detail values need narrowing before arithmetic. |
+
+Sandbox agents are available in TypeScript too, via `@openai/agents/sandbox` (local backends) and `@openai/agents-extensions/sandbox/*` (hosted providers).
+
+---
+
 ## Summary
 
-TypeScript Agents SDK (2025) provides:
+The TypeScript Agents SDK provides:
 
 ✅ **TypeScript-First** design with full type safety
-✅ **Human-in-the-Loop** approvals (NEW 2025)
+✅ **Human-in-the-Loop** approvals with resumable run state
 ✅ **Built-in Tracing** and observability
 ✅ **Guardrails** for input/output validation
 ✅ **Handoffs** for agent delegation
 ✅ **MCP Integration** for filesystem, git, HTTP
-✅ **Provider-Agnostic** support (100+ LLMs)
+✅ **Provider-Agnostic** support via the Vercel AI SDK adapter
 ✅ **Type-Safe Tools** with Zod validation
 ✅ **Production Features** (error handling, cost tracking)
 
-**Recommendation**: Use TypeScript Agents SDK for all production agentic applications.
-
 ---
 
-**Last Updated:** January 2025
-**SDK Version:** Latest
-**TypeScript Version:** 5.0+
 **Next:** [Swarm Migration Guide](./openai_agents_sdk_typescript_swarm_migration_guide/)
 

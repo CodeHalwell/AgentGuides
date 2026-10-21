@@ -1,16 +1,14 @@
 ---
 title: "OpenAI Agents SDK TypeScript: Complete Migration Guide from Swarm"
-description: "Status: Production-Ready (2025) Swarm Status: Experimental - Deprecated Migration Priority: HIGH Last Updated: January 2025 Language: TypeScript"
+description: "Moving Swarm-style multi-agent code to the OpenAI Agents SDK for TypeScript — side-by-side code, checklist, testing and deployment."
 framework: openai-agents-sdk-typescript
 ---
 
 # OpenAI Agents SDK TypeScript: Complete Migration Guide from Swarm
 
-**Status:** Production-Ready (2025)
-**Swarm Status:** Experimental - Deprecated
-**Migration Priority:** HIGH
-**Last Updated:** January 2025
-**Language:** TypeScript
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). First written in January 2025.
+>
+> Swarm itself was a Python-only educational experiment and is no longer developed; there is no official TypeScript Swarm package. The "Swarm" snippets below are TypeScript-style pseudo-code showing the Swarm pattern (agents, `functions`, manual message lists) that you are replacing.
 
 ---
 
@@ -28,7 +26,7 @@ The **OpenAI Agents SDK for TypeScript** is the official, production-ready frame
 ## Table of Contents
 
 1. [Why Migrate to TypeScript Agents SDK?](#why-migrate-to-typescript-agents-sdk)
-2. [2025 Features and Improvements](#2025-features-and-improvements)
+2. [Key Features of the Agents SDK](#key-features-of-the-agents-sdk)
 3. [Side-by-Side Comparison](#side-by-side-comparison)
 4. [TypeScript Migration Checklist](#typescript-migration-checklist)
 5. [Code Migration Examples](#code-migration-examples)
@@ -51,7 +49,7 @@ The **OpenAI Agents SDK for TypeScript** is the official, production-ready frame
 
 1. **TypeScript-First**: Full type safety, excellent IDE support
 2. **Production-Ready**: Stable API, comprehensive testing
-3. **2025 Features**:
+3. **Built-in Features**:
    - ✨ Human-in-the-loop approvals (NEW)
    - ✨ Built-in tracing and visualization
    - ✨ Guardrails for input/output validation
@@ -61,9 +59,9 @@ The **OpenAI Agents SDK for TypeScript** is the official, production-ready frame
 
 ---
 
-## 2025 Features and Improvements
+## Key Features of the Agents SDK
 
-### 1. Human-in-the-Loop Approvals (NEW 2025)
+### 1. Human-in-the-Loop Approvals
 
 ```typescript
 import { Agent, run, tool } from '@openai/agents';
@@ -77,9 +75,8 @@ const criticalActionTool = tool({
     userId: z.string(),
     reason: z.string(),
   }),
-  requiresApproval: true, // NEW: Human approval required
+  needsApproval: true,
   execute: async ({ userId, reason }) => {
-    // This will pause and request human approval
     return { status: 'deleted', userId, reason };
   },
 });
@@ -90,24 +87,25 @@ const agent = new Agent({
   tools: [criticalActionTool],
 });
 
-// Approval workflow
-const result = await run(agent, 'Delete user data for user_123', {
-  approvalHandler: async (toolCall) => {
-    // Custom approval logic
-    console.log(`Approval requested for: ${toolCall.name}`);
-    const approved = await getUserApproval(toolCall);
-    return { approved, reason: 'User confirmed' };
-  },
-});
+// The run pauses with pending approvals in result.interruptions
+let result = await run(agent, 'Delete user data for user_123');
+while (result.interruptions.length > 0) {
+  for (const call of result.interruptions) {
+    console.log(`Approval requested for: ${call.name}`);
+    if (await getUserApproval(call)) result.state.approve(call);
+    else result.state.reject(call);
+  }
+  result = await run(agent, result.state); // resume
+}
 ```
 
 ### 2. Built-in Tracing and Visualization
 
 ```typescript
-import { Agent, run, trace } from '@openai/agents';
+import { run, withTrace } from '@openai/agents';
 
-// Group related runs with tracing
-await trace('Customer Support Workflow', async () => {
+// Group related runs into one trace
+await withTrace('Customer Support Workflow', async () => {
   const result1 = await run(triageAgent, query1);
   const result2 = await run(specialistAgent, query2);
 
@@ -125,53 +123,49 @@ await trace('Customer Support Workflow', async () => {
 ### 3. Guardrails (Input/Output Validation)
 
 ```typescript
-import { Agent, run, inputGuardrail, outputGuardrail } from '@openai/agents';
-import { z } from 'zod';
+import { Agent, InputGuardrail, OutputGuardrail } from '@openai/agents';
 
-// Input validation guardrail
-const emailGuardrail = inputGuardrail({
-  name: 'validate_email',
-  schema: z.object({
-    email: z.string().email(),
-  }),
-  onViolation: (input) => {
-    throw new Error(`Invalid email: ${input.email}`);
+// Input guardrail: trip if the user pastes a card number
+const cardNumberGuardrail: InputGuardrail = {
+  name: 'no_card_numbers',
+  execute: async ({ input }) => {
+    const text = typeof input === 'string' ? input : JSON.stringify(input);
+    const found = /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/.test(text);
+    return { tripwireTriggered: found, outputInfo: { found } };
   },
-});
+};
 
 // Output content filter
-const contentFilterGuardrail = outputGuardrail({
+const contentFilterGuardrail: OutputGuardrail = {
   name: 'filter_profanity',
-  check: (output: string) => {
+  execute: async ({ agentOutput }) => {
     const bannedWords = ['profanity1', 'profanity2'];
-    return !bannedWords.some(word => output.toLowerCase().includes(word));
+    const hit = bannedWords.some((word) => String(agentOutput).toLowerCase().includes(word));
+    return { tripwireTriggered: hit, outputInfo: { hit } };
   },
-  onViolation: (output) => {
-    return 'Response blocked due to content policy violation';
-  },
-});
+};
 
 const agent = new Agent({
   name: 'Safe Assistant',
   instructions: 'Help users safely',
-  inputGuardrails: [emailGuardrail],
+  inputGuardrails: [cardNumberGuardrail],
   outputGuardrails: [contentFilterGuardrail],
 });
+// run() throws InputGuardrailTripwireTriggered / OutputGuardrailTripwireTriggered when they fire
 ```
 
 ### 4. Model Context Protocol (MCP) Integration
 
 ```typescript
-import { Agent, run } from '@openai/agents';
-import { createMCPServer } from '@openai/agents/mcp';
+import { Agent, run, MCPServerStdio } from '@openai/agents';
 
 // Filesystem MCP integration
-const filesystemServer = await createMCPServer({
+const filesystemServer = new MCPServerStdio({
   name: 'filesystem',
-  transport: 'stdio',
   command: 'npx',
   args: ['-y', '@modelcontextprotocol/server-filesystem', './project'],
 });
+await filesystemServer.connect();
 
 const agent = new Agent({
   name: 'File Assistant',
@@ -180,58 +174,43 @@ const agent = new Agent({
 });
 
 const result = await run(agent, 'List all TypeScript files in the project');
+await filesystemServer.close();
 ```
 
 ### 5. Provider-Agnostic Support
 
 ```typescript
 import { Agent, run } from '@openai/agents';
+import { aisdk } from '@openai/agents-extensions/ai-sdk';
+import { anthropic } from '@ai-sdk/anthropic';
+import { google } from '@ai-sdk/google';
 
-// Use Claude
+// Use Claude via the Vercel AI SDK adapter
 const claudeAgent = new Agent({
   name: 'Claude Assistant',
-  model: 'litellm/anthropic/claude-3-5-sonnet-20240620',
-  instructions: 'You are Claude',
+  model: aisdk(anthropic('claude-sonnet-4-5')),
+  instructions: 'Answer concisely',
 });
 
 // Use Gemini
 const geminiAgent = new Agent({
   name: 'Gemini Assistant',
-  model: 'litellm/gemini/gemini-2.0-flash',
-  instructions: 'You are Gemini',
+  model: aisdk(google('gemini-2.5-flash')),
+  instructions: 'Answer concisely',
 });
 
-// Use Llama
-const llamaAgent = new Agent({
-  name: 'Llama Assistant',
-  model: 'litellm/replicate/meta-llama/llama-2-70b-chat',
-  instructions: 'You are Llama',
-});
-
-// Switch providers seamlessly
+// Switch providers without changing the rest of the code
 const result = await run(claudeAgent, 'Explain TypeScript generics');
 ```
 
-### 6. Enhanced Session Management
+### 6. Session Management
 
 ```typescript
-import { Agent, run, Session } from '@openai/agents';
+import { Agent, run, MemorySession } from '@openai/agents';
 
-interface ConversationMetadata {
-  userId: string;
-  tags: string[];
-}
-
-// Type-safe session
-const session = new Session<ConversationMetadata>({
-  id: 'user_123',
-  metadata: {
-    userId: 'user_123',
-    tags: ['support', 'billing'],
-  },
-  maxMessages: 50,
-  ttl: 3600, // 1 hour
-});
+// In-process session (use OpenAIConversationsSession or your own
+// Session implementation for persistence)
+const session = new MemorySession({ sessionId: 'user_123' });
 
 const agent = new Agent({
   name: 'Support Agent',
@@ -434,10 +413,10 @@ const result = client.run({
 });
 ```
 
-**After (Agents SDK 2025):**
+**After (Agents SDK):**
 
 ```typescript
-import { Agent, run, tool, Session } from '@openai/agents';
+import { Agent, run, tool, MemorySession } from '@openai/agents';
 import { z } from 'zod';
 
 // Type-safe tool definition
@@ -488,16 +467,12 @@ async function handleCustomerRequest(
   customerId: string,
   query: string
 ): Promise<string> {
-  const session = new Session<CustomerContext>({
-    id: customerId,
-    metadata: {
-      customerId,
-      tier: 'premium',
-    },
-  });
+  // One session per customer; swap MemorySession for a persistent Session implementation in production
+  const session = new MemorySession({ sessionId: customerId });
+  const context: CustomerContext = { customerId, tier: 'premium' };
 
-  const result = await run(triageAgent, query, { session });
-  return result.finalOutput;
+  const result = await run(triageAgent, query, { session, context });
+  return result.finalOutput ?? '';
 }
 
 // Usage
@@ -528,7 +503,7 @@ const result = client.run({
 });
 ```
 
-**After (Agents SDK 2025):**
+**After (Agents SDK):**
 
 ```typescript
 import { Agent, run, tool } from '@openai/agents';
@@ -571,19 +546,16 @@ const researcher = new Agent({
   instructions: `Research topics thoroughly.
     Provide structured output with sources and confidence scores.`,
   tools: [webSearchTool],
-  outputSchema: ResearchOutputSchema,
+  outputType: ResearchOutputSchema,
 });
 
 // Type-safe execution
 async function conductResearch(topic: string): Promise<ResearchOutput> {
   const result = await run(researcher, `Research: ${topic}`);
 
-  // Automatic validation
-  const research = ResearchOutputSchema.parse(
-    JSON.parse(result.finalOutput)
-  );
-
-  return research;
+  // finalOutput is already parsed and validated against outputType
+  if (!result.finalOutput) throw new Error('No output produced');
+  return result.finalOutput;
 }
 
 // Usage with full type safety
@@ -604,10 +576,10 @@ const result2 = client.run({ agent: agent2, messages: [...] });
 const result3 = client.run({ agent: agent3, messages: [...] });
 ```
 
-**After (Agents SDK 2025):**
+**After (Agents SDK):**
 
 ```typescript
-import { Agent, run, trace } from '@openai/agents';
+import { Agent, run, withTrace } from '@openai/agents';
 
 const dataCollector = new Agent({
   name: 'Data Collector',
@@ -634,7 +606,7 @@ async function executeAnalysisWorkflow(
   query: string
 ): Promise<WorkflowResult> {
   // Built-in tracing for entire workflow
-  return trace('Analysis Workflow', async () => {
+  return withTrace('Analysis Workflow', async () => {
     // Step 1: Collect data
     const dataResult = await run(dataCollector, query);
 
@@ -679,20 +651,20 @@ const result = await executeAnalysisWorkflow('Market analysis for Q1 2025');
 import { Agent } from '@openai/agents';
 import { z } from 'zod';
 
-interface TypedAgentConfig<TOutput extends z.ZodSchema> {
+interface TypedAgentConfig<TOutput extends z.ZodObject<any>> {
   name: string;
   instructions: string;
-  outputSchema: TOutput;
+  outputType: TOutput;
   tools?: any[];
 }
 
-function createTypedAgent<TOutput extends z.ZodSchema>(
+function createTypedAgent<TOutput extends z.ZodObject<any>>(
   config: TypedAgentConfig<TOutput>
-): Agent {
+) {
   return new Agent({
     name: config.name,
     instructions: config.instructions,
-    outputSchema: config.outputSchema,
+    outputType: config.outputType,
     tools: config.tools,
   });
 }
@@ -706,7 +678,7 @@ const AnalysisSchema = z.object({
 const analysisAgent = createTypedAgent({
   name: 'Sentiment Analyzer',
   instructions: 'Analyze sentiment',
-  outputSchema: AnalysisSchema,
+  outputType: AnalysisSchema,
 });
 
 // Type-safe result
@@ -720,7 +692,7 @@ import { tool } from '@openai/agents';
 import { z } from 'zod';
 
 class ToolBuilder<
-  TParams extends z.ZodSchema,
+  TParams extends z.ZodObject<any>,
   TResult
 > {
   constructor(
@@ -834,7 +806,7 @@ describe('Agents SDK Migration', () => {
 
       const result = await run(triage, 'I need specialist help');
 
-      expect(result.currentAgent?.name).toBe('Specialist');
+      expect(result.lastAgent?.name).toBe('Specialist');
     });
   });
 
@@ -846,7 +818,10 @@ describe('Agents SDK Migration', () => {
         inputGuardrails: [
           {
             name: 'content_filter',
-            check: (input: string) => !input.includes('unsafe'),
+            execute: async ({ input }) => ({
+              tripwireTriggered: String(input).includes('unsafe'),
+              outputInfo: null,
+            }),
           },
         ],
       });
@@ -867,7 +842,7 @@ describe('Agents SDK Migration', () => {
 
 ```dockerfile
 # Multi-stage build for TypeScript
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -880,7 +855,7 @@ COPY src ./src
 RUN npm run build
 
 # Production image
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 

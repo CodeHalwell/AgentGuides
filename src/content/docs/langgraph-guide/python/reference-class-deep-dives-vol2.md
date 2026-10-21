@@ -1,6 +1,6 @@
 ---
-title: "Class Deep Dives Vol. 2 — 10 API Classes (v1.2.14)"
-description: "Source-verified deep dives for DeltaChannel, EncryptedSerializer, TimeoutPolicy, NamedBarrierValueAfterFinish, GraphOutput, Durability, TaskPayload/TaskResultPayload, CheckpointPayload, ToolCallTransformer/ToolCallStream, and StateUpdate — each with multiple runnable code examples. Verified against langgraph==1.2.14."
+title: "Class Deep Dives Vol. 2 — 10 API Classes"
+description: "Source-verified deep dives for DeltaChannel, EncryptedSerializer, TimeoutPolicy, NamedBarrierValueAfterFinish, GraphOutput, Durability, TaskPayload/TaskResultPayload, CheckpointPayload, ToolCallTransformer/ToolCallStream, and StateUpdate — each with multiple runnable code examples."
 framework: langgraph
 language: python
 sidebar:
@@ -8,9 +8,9 @@ sidebar:
   order: 44
 ---
 
-# Class Deep Dives Vol. 2 — 10 API Classes (v1.2.14)
+# Class Deep Dives Vol. 2 — 10 API Classes
 
-> **Source-verified against `langgraph==1.2.14`** — October 2026.
+> **Source-verified against `langgraph==%%version=langgraph%%`** (checked %%versions-checked%%). First written for 1.2.14.
 
 This second volume dives into ten classes that are either new, beta, or under-documented
 in the main reference pages. Each section shows the complete constructor or type
@@ -1575,7 +1575,7 @@ print(state.values["result_b"])   # 'branch_b_output'  — unchanged
 
 | Version | Change |
 |---|---|
-| 1.2.14 | Current. `TimeoutPolicy.refresh_on` added `"heartbeat"` mode. `ToolCallStream` gains `__iter__` / `__aiter__` convenience wrappers. |
+| 1.2.14 | `TimeoutPolicy.refresh_on` added `"heartbeat"` mode. `ToolCallStream` gains `__iter__` / `__aiter__` convenience wrappers. |
 | 1.2.13 | `DeltaChannel.snapshot_frequency` minimum enforced at init. `StateUpdate.task_id` field added to `bulk_update_state`. |
 | 1.2.12 | `ToolCallTransformer` and `ToolCallStream` introduced. `GraphOutput` dataclass replaces raw dict return from `invoke(version="v2")`. |
 | 1.2.11 | `TimeoutPolicy` introduced with `run_timeout` and `idle_timeout`. |

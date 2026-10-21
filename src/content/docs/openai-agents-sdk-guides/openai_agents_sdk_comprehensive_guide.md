@@ -155,7 +155,7 @@ The SDK uses `0.Y.Z` versioning: a minor (`Y`) bump may break public interfaces,
 | 0.21.0 | Requires `openai>=3.0.0,<4`; OpenAI HTTP integrations move to HTTPX2. Custom `http_client=` objects must migrate from `httpx` to `httpx2`. |
 | 0.22.0 | Non-streaming Responses calls with status `failed`/`incomplete` raise `ModelBehaviorError`. `OpenAIProvider(openai_client=...)` rejects `organization`/`project` arguments. |
 
-0.23.0 and 0.24.0 carry no documented breaking changes (MCP listing page limits, opt-in Docker removal protection, MCP tool annotations, run-wide tool error formatting, and many fixes).
+The 0.23 and 0.24 releases carry no documented breaking changes (MCP listing page limits, opt-in Docker removal protection, MCP tool annotations, run-wide tool error formatting, and many fixes).
 
 ---
 

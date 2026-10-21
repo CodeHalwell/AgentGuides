@@ -886,8 +886,9 @@ agent = Agent(
     capabilities=[
         WebSearch(
             allowed_domains=["arxiv.org", "openreview.net"],
-            max_uses=3,
             search_context_size="medium",
+            # max_uses=3 is Anthropic-only: on OpenAI it raises UserError rather
+            # than being silently dropped, so leave it out here.
         )
     ],
 )

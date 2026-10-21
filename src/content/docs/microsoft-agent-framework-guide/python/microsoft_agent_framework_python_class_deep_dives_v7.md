@@ -56,9 +56,9 @@ from agent_framework import (
     Agent, AgentExecutorRequest, WorkflowBuilder,
     AgentExecutor, WorkflowRunResult, Message,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 support_agent = Agent(client, instructions="You are a helpful support agent.")
 
@@ -144,9 +144,9 @@ from agent_framework import (
     Agent, AgentExecutorResponse, WorkflowContext,
     WorkflowBuilder, AgentExecutor, executor, handler,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 summariser = Agent(client, instructions="Summarise the following text in one sentence.")
 
 @executor(id="log_response", input=AgentExecutorResponse, output=AgentExecutorResponse)
@@ -220,9 +220,9 @@ from agent_framework import (
     Agent, AgentExecutor, WorkflowBuilder,
     InMemoryCheckpointStorage, WorkflowRunResult,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 agent = Agent(client, instructions="You are helpful.")
 
 storage = InMemoryCheckpointStorage()
@@ -343,9 +343,9 @@ import asyncio
 from agent_framework import (
     Agent, AgentExecutor, WorkflowBuilder, WorkflowRunResult,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 researcher = Agent(client, name="researcher", instructions="Research the topic thoroughly.")
 writer = Agent(client, name="writer", instructions="Write a concise report.")
@@ -388,9 +388,9 @@ import asyncio
 from agent_framework import (
     Agent, AgentExecutor, AgentResponseUpdate, WorkflowBuilder,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 agent = Agent(client, name="streamer")
 
 streamer_exec = AgentExecutor(agent)
@@ -415,9 +415,9 @@ from agent_framework import (
     Agent, AgentExecutor, Content, WorkflowBuilder, WorkflowRunResult,
     ToolApprovalMiddleware, WorkflowRunState,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 # ToolApprovalMiddleware with no auto-approval rules requires manual approval for all tools
 approval_mw = ToolApprovalMiddleware(source_id="db")
@@ -495,9 +495,9 @@ from agent_framework import (
     Agent, AgentExecutor, AgentResponse, WorkflowBuilder, WorkflowContext,
     WorkflowExecutor, WorkflowRunResult, executor,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 # ---- sub-workflow: summarise ----
 summariser = Agent(client, name="summariser", instructions="Summarise the input text.")
@@ -539,9 +539,9 @@ import asyncio
 from agent_framework import (
     Agent, AgentExecutor, WorkflowBuilder, WorkflowExecutor,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 inner_agent = Agent(client, name="inner")
 inner_exec = AgentExecutor(inner_agent)
@@ -728,9 +728,9 @@ from agent_framework import (
     Agent, AgentExecutor, WorkflowBuilder,
     InMemoryCheckpointStorage, WorkflowRunResult,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 agent = Agent(client, name="a")
 storage = InMemoryCheckpointStorage()
 
@@ -832,9 +832,9 @@ TodoProvider(store=TodoSessionStore())
 ```python
 import asyncio
 from agent_framework import Agent, AgentSession, TodoProvider, TodoSessionStore
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 store = TodoSessionStore()
 
@@ -892,9 +892,9 @@ from agent_framework import (
     Agent, AgentExecutor, WorkflowBuilder,
     TodoProvider, TodoSessionStore, AgentSession,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 store = TodoSessionStore()
 
 task_agent = Agent(
@@ -971,7 +971,7 @@ Override the `resources` and `scripts` properties to return lists of `InlineSkil
 ```python
 import json
 from agent_framework import Agent, ClassSkill, SkillFrontmatter, SkillsProvider
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
 CONVERSION_TABLE = {
     "km_to_miles": 0.621371,
@@ -1013,7 +1013,7 @@ class UnitConverterSkill(ClassSkill):
         return json.dumps({"result": round(value * factor, 4)})
 
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 agent = Agent(
     client,
     context_providers=[
@@ -1128,9 +1128,9 @@ from agent_framework import (
     Agent, AggregatingSkillsSource, InlineSkill,
     SkillFrontmatter, SkillsProvider,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 # Inline skills
 code_skill = InlineSkill(
@@ -1226,9 +1226,9 @@ from agent_framework import (
     Agent, AggregatingSkillsSource, CachingSkillsSource,
     InlineSkill, SkillFrontmatter, SkillsProvider,
 )
-from agent_framework_openai import AzureOpenAIChatClient
+from agent_framework.openai import OpenAIChatClient
 
-client = AzureOpenAIChatClient.from_env()
+client = OpenAIChatClient()  # reads OPENAI_* (or AZURE_OPENAI_*) settings from the environment
 
 skill_a = InlineSkill(
     frontmatter=SkillFrontmatter(name="skill-a", description="Skill A."),

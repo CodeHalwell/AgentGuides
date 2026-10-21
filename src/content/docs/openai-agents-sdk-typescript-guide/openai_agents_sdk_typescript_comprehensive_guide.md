@@ -1,16 +1,12 @@
 ---
 title: "OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide"
-description: "Version: 1.0 Last Updated: May 2026 Language: TypeScript Framework: OpenAI Agents SDK"
+description: "Agents, runner, handoffs, guardrails, sessions, tools and structured output with the OpenAI Agents SDK for TypeScript."
 framework: openai-agents-sdk-typescript
 ---
 
-Latest: @openai/agents 0.11.6 | Updated: May 29, 2026
 # OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
 
-**Version:** 1.0  
-**Last Updated:** May 2026  
-**Language:** TypeScript  
-**Framework:** OpenAI Agents SDK
+> Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Node.js 22+ (also Deno, Bun and Cloudflare Workers with `nodejs_compat`), Zod 4, `openai` v7.
 
 ---
 
@@ -23,7 +19,7 @@ Latest: @openai/agents 0.11.6 | Updated: May 29, 2026
 5. [Structured Output](#structured-output)
 6. [Summary](#summary)
 
-**Continue elsewhere in this guide:** [2025 features](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_2025_features/) for MCP, realtime and the Responses API · [Middleware & guardrails](/openai-agents-sdk-typescript-guide/openai_agents_sdk_middleware_typescript/) · [Streaming server (Express)](/openai-agents-sdk-typescript-guide/openai_agents_streaming_server_express/) · [Production guide](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_production_guide/) for deployment, tracing and testing · [Recipes](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_recipes/).
+**Continue elsewhere in this guide:** [Features and updates](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_2025_features/) for MCP, realtime and the Responses API · [Middleware & guardrails](/openai-agents-sdk-typescript-guide/openai_agents_sdk_middleware_typescript/) · [Streaming server (Express)](/openai-agents-sdk-typescript-guide/openai_agents_streaming_server_express/) · [Production guide](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_production_guide/) for deployment, tracing and testing · [Recipes](/openai-agents-sdk-typescript-guide/openai_agents_sdk_typescript_recipes/).
 
 ---
 
@@ -31,19 +27,19 @@ Latest: @openai/agents 0.11.6 | Updated: May 29, 2026
 
 ### Installation and Setup
 
-The OpenAI Agents SDK provides a lightweight framework for building agentic AI applications with minimal abstractions. The SDK has moved to a monorepo structure. Begin by installing the necessary dependencies:
+The OpenAI Agents SDK provides a lightweight framework for building agentic AI applications with minimal abstractions. `@openai/agents` bundles the core, the OpenAI provider and realtime support; Zod is a peer dependency:
 
 ```bash
-npm install openai-agents
-# Extensions (optional):
-npm install @openai/agents-extensions-vercel-ai-sdk
+npm install @openai/agents@%%version=@openai/agents%% zod
+# Optional: non-OpenAI models via the Vercel AI SDK, Twilio/Cloudflare realtime transports, hosted sandboxes
+npm install @openai/agents-extensions@%%version=@openai/agents%% @ai-sdk/anthropic
 ```
 
-> **Note:** The `aisdk()` helper import changed from the internal SDK package to the separate `@openai/agents-extensions-vercel-ai-sdk` package. Update any existing imports accordingly.
+> **Note:** The AI SDK adapter lives in `@openai/agents-extensions` and is imported from the `ai-sdk` subpath: `import { aisdk } from '@openai/agents-extensions/ai-sdk'`. The `@openai/agents*` packages are versioned together, so keep them on the same version.
 
 ```bash
 # Additional development dependencies
-npm install zod dotenv
+npm install dotenv
 npm install --save-dev typescript @types/node
 ```
 
@@ -55,14 +51,15 @@ OPENAI_API_KEY=your_openai_api_key_here
 
 ### TypeScript Configuration
 
-Configure your `tsconfig.json` for optimal TypeScript support:
+The SDK ships ES modules; a modern `tsconfig.json`:
 
 ```json
 {
   "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "lib": ["ES2020"],
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": true,
@@ -71,14 +68,14 @@ Configure your `tsconfig.json` for optimal TypeScript support:
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "moduleResolution": "node"
+    "sourceMap": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
 ```
+
+Set `"type": "module"` in `package.json` so top-level `await` works in the examples below.
 
 ### Design Philosophy
 
@@ -108,232 +105,176 @@ The Agents SDK represents the production-ready evolution of OpenAI's experimenta
 
 #### Agent
 
-An `Agent` represents an autonomous AI entity. Here's a comprehensive example:
+An `Agent` is configuration: a name, instructions, a model, and optionally tools, handoffs, guardrails and an output type. Sampling parameters go in `modelSettings`:
 
 ```typescript
 import { Agent } from '@openai/agents';
 
-interface AgentConfig {
-  name: string;
-  instructions: string;
-  model?: string;
-  tools?: any[];
-  temperature?: number;
-  maxTokens?: number;
-}
-
-const agentConfig: AgentConfig = {
+const researchAgent = new Agent({
   name: 'Research Assistant',
-  instructions: `You are a thorough research assistant. 
+  instructions: `You are a thorough research assistant.
     - Provide detailed, well-sourced information
     - Always cite your sources
     - Acknowledge uncertainty when appropriate
     - Break down complex topics into understandable parts`,
-  model: 'gpt-4-turbo',
-  temperature: 0.7,
-  maxTokens: 2048,
-};
-
-const researchAgent = new Agent(agentConfig);
+  model: 'gpt-5.6-sol',
+  modelSettings: { maxTokens: 2048 },
+});
 ```
+
+If `model` is omitted the SDK uses its default (`gpt-5.6-luna` at the time of writing, since 0.15.0) or the `OPENAI_DEFAULT_MODEL` environment variable.
 
 #### Runner
 
-The `Runner` orchestrates agent execution and manages the flow:
+`run()` executes an agent loop — model calls, tool calls, handoffs and guardrails — until a final output is produced. A `Runner` instance holds defaults shared by many runs:
 
 ```typescript
-import { run } from '@openai/agents';
+import { Agent, Runner, run, MaxTurnsExceededError } from '@openai/agents';
 
-interface RunnerOptions {
-  session?: Session;
-  stream?: boolean;
-  timeout?: number;
-  maxRetries?: number;
-}
-
-// Simple synchronous execution
-async function executeAgent(
-  agent: Agent,
-  input: string,
-  options?: RunnerOptions
-): Promise<AgentResult> {
-  const result = await run(agent, input, options);
-  return result;
-}
-
-// Type-safe wrapper with error handling
-async function executeWithErrorHandling<T>(
-  agent: Agent,
-  input: string,
-  parseOutput?: (output: string) => T
-): Promise<T | Error> {
-  try {
-    const result = await run(agent, input);
-    
-    if (parseOutput) {
-      return parseOutput(result.finalOutput);
-    }
-    
-    return result.finalOutput as T;
-  } catch (error) {
-    console.error(`Agent execution failed: ${error}`);
-    return error as Error;
-  }
-}
-
-// Example usage
-const result = await executeAgent(researchAgent, 'What are the latest AI trends?');
+// One-off run with the default runner
+const result = await run(researchAgent, 'What are the latest AI trends?', {
+  maxTurns: 10,            // null disables the limit
+  // session, context, signal, previousResponseId, conversationId, errorHandlers ...
+});
 console.log(result.finalOutput);
+console.log(result.lastAgent?.name);          // agent that produced the output
+console.log(result.runContext.usage);         // { requests, inputTokens, outputTokens, totalTokens, ... }
+
+// Shared configuration
+const runner = new Runner({
+  model: 'gpt-5.6-luna',          // overrides every agent's model
+  workflowName: 'Research',
+  traceIncludeSensitiveData: false,
+});
+
+try {
+  const r = await runner.run(researchAgent, 'Summarise the field in three bullets.');
+  console.log(r.finalOutput);
+} catch (error) {
+  if (error instanceof MaxTurnsExceededError) console.error('Agent looped');
+  else throw error;
+}
 ```
 
 #### Handoff
 
-Handoffs enable seamless delegation between agents:
+Handoffs let one agent delegate the conversation to another. List agents directly, or wrap them with `handoff()` to override the tool name, add input data or filter history:
 
 ```typescript
-import { Agent, Handoff } from '@openai/agents';
+import { Agent, handoff } from '@openai/agents';
+import { z } from 'zod';
 
-interface HandoffConfig {
-  agent: Agent;
-  trigger?: (message: string) => boolean;
-  toolNameOverride?: string;
-  toolDescriptionOverride?: string;
-  inputSchema?: any;
-}
-
-// Define specialist agents
 const billingAgent = new Agent({
   name: 'Billing Specialist',
+  handoffDescription: 'Billing, invoices and payments',
   instructions: 'Handle all billing-related inquiries with accuracy and professionalism.',
 });
 
 const technicalAgent = new Agent({
   name: 'Technical Support',
+  handoffDescription: 'Bugs, errors and crashes',
   instructions: 'Resolve technical issues with clear, step-by-step solutions.',
 });
 
-// Create handoff configurations
-const billingHandoff: HandoffConfig = {
-  agent: billingAgent,
-  trigger: (message) => /billing|invoice|payment/i.test(message),
-  toolNameOverride: 'transfer_to_billing',
-  toolDescriptionOverride: 'Transfer customer to billing department',
-};
-
-const technicalHandoff: HandoffConfig = {
-  agent: technicalAgent,
-  trigger: (message) => /bug|error|crash|technical/i.test(message),
-  toolNameOverride: 'transfer_to_technical',
-  toolDescriptionOverride: 'Transfer customer to technical support',
-};
-
-// Create main agent with handoffs
-const customerServiceAgent = new Agent({
+const customerServiceAgent = Agent.create({
   name: 'Customer Service Triage',
   instructions: 'Route customers to the appropriate specialist.',
-  handoffs: [billingAgent, technicalAgent],
+  handoffs: [
+    billingAgent,
+    handoff(technicalAgent, {
+      toolNameOverride: 'transfer_to_technical',
+      toolDescriptionOverride: 'Transfer customer to technical support',
+      inputType: z.object({ summary: z.string() }),
+      onHandoff: (_ctx, input) => console.log('Escalation summary:', input?.summary),
+    }),
+  ],
 });
 ```
 
+`Agent.create()` (rather than `new Agent()`) keeps the output type correct when handoff targets have different output types.
+
 #### Guardrail
 
-Guardrails validate and enforce constraints:
+Guardrails are objects with a `name` and an `execute` function that returns `{ tripwireTriggered, outputInfo }`. Input guardrails run on the user input of the first agent; output guardrails run on the final output:
 
 ```typescript
+import {
+  Agent,
+  run,
+  InputGuardrail,
+  OutputGuardrail,
+  InputGuardrailTripwireTriggered,
+  OutputGuardrailTripwireTriggered,
+} from '@openai/agents';
 import { z } from 'zod';
 
-interface GuardrailConfig<T> {
-  schema: z.ZodSchema<T>;
-  name: string;
-  description: string;
-  onFailure?: (input: any, error: string) => string;
-}
-
-// Input validation guardrail
-const emailGuardrail: GuardrailConfig<string> = {
-  name: 'email_validator',
-  description: 'Validates email format',
-  schema: z.string().email(),
-  onFailure: (input, error) => `Invalid email format: ${input}. Please provide a valid email.`,
+const noEmailsGuardrail: InputGuardrail = {
+  name: 'no_email_addresses',
+  execute: async ({ input }) => {
+    const text = typeof input === 'string' ? input : JSON.stringify(input);
+    const found = /[\w.+-]+@[\w-]+\.[\w.]+/.test(text);
+    return { tripwireTriggered: found, outputInfo: { found } };
+  },
 };
 
-// Output validation guardrail
 const responseSchema = z.object({
   status: z.enum(['success', 'error', 'pending']),
   message: z.string(),
-  timestamp: z.number().optional(),
 });
 
-const responseGuardrail: GuardrailConfig<typeof responseSchema> = {
-  name: 'response_validator',
-  description: 'Ensures responses follow required format',
-  schema: responseSchema,
-  onFailure: (input, error) => `Response validation failed: ${error}`,
+const statusGuardrail: OutputGuardrail<typeof responseSchema> = {
+  name: 'no_error_status',
+  execute: async ({ agentOutput }) => ({
+    tripwireTriggered: agentOutput.status === 'error',
+    outputInfo: { status: agentOutput.status },
+  }),
 };
 
-// Apply guardrails
-async function validateInput(input: any, guardrail: GuardrailConfig<any>): Promise<boolean> {
-  try {
-    const validated = guardrail.schema.parse(input);
-    return true;
-  } catch (error) {
-    if (guardrail.onFailure) {
-      const message = guardrail.onFailure(input, error.message);
-      console.error(message);
-    }
-    return false;
-  }
+const agent = new Agent({
+  name: 'Support',
+  instructions: 'Answer support questions.',
+  outputType: responseSchema,
+  inputGuardrails: [noEmailsGuardrail],
+  outputGuardrails: [statusGuardrail],
+});
+
+try {
+  await run(agent, 'My email is jane@example.com, please reset my password');
+} catch (e) {
+  if (e instanceof InputGuardrailTripwireTriggered) console.log('Input blocked');
+  else if (e instanceof OutputGuardrailTripwireTriggered) console.log('Output blocked');
+  else throw e;
 }
 ```
 
 #### Session
 
-Sessions maintain conversation state across multiple interactions:
+Pass a session to `run()` and the SDK loads prior items before the turn and stores new ones afterwards. `MemorySession` is in-process; `OpenAIConversationsSession` stores history server-side; implement the `Session` interface for your own store:
 
 ```typescript
-import { Session } from '@openai/agents';
+import { Agent, MemorySession, run } from '@openai/agents';
 
-interface SessionConfig {
-  id?: string;
-  maxMessages?: number;
-  ttl?: number; // Time to live in seconds
-  metadata?: Record<string, any>;
-}
+const agent = new Agent({ name: 'Tutor', instructions: 'Explain concepts simply.' });
+const session = new MemorySession();
 
-async function createAndManageSession(
-  agent: Agent,
-  config?: SessionConfig
-): Promise<void> {
-  const session = new Session(config);
-  
-  // First turn
-  const result1 = await run(agent, 'What is machine learning?', { session });
-  console.log('Turn 1:', result1.finalOutput);
-  
-  // Second turn - maintains context
-  const result2 = await run(agent, 'Explain neural networks.', { session });
-  console.log('Turn 2:', result2.finalOutput);
-  
-  // Access conversation history
-  const history = session.getHistory();
-  console.log('Total messages:', history.length);
-}
+const result1 = await run(agent, 'What is machine learning?', { session });
+console.log('Turn 1:', result1.finalOutput);
+
+// Second turn - maintains context
+const result2 = await run(agent, 'Explain neural networks in that context.', { session });
+console.log('Turn 2:', result2.finalOutput);
+
+const history = await session.getItems();
+console.log('Stored items:', history.length);
 ```
 
 #### Tool
 
-Tools extend agent capabilities:
+`tool()` builds a function tool from a Zod schema; the parameters are validated before `execute` runs:
 
 ```typescript
 import { tool } from '@openai/agents';
 import { z } from 'zod';
-
-interface ToolDefinition<P extends z.ZodSchema, R> {
-  name: string;
-  description: string;
-  parameters: P;
-  execute: (input: z.infer<P>) => Promise<R>;
-}
 
 // Type-safe tool definition
 const calculateTool = tool({
@@ -369,74 +310,49 @@ const weatherTool = tool({
   },
 });
 
-// Error-handling tool
+// Tool that needs human approval before it runs
 const databaseQueryTool = tool({
   name: 'query_database',
   description: 'Executes safe database queries',
   parameters: z.object({
     query: z.string().describe('SQL query (SELECT only)'),
   }),
+  needsApproval: async (_ctx, { query }) => !query.toUpperCase().startsWith('SELECT'),
   execute: async ({ query }) => {
-    try {
-      if (!query.toUpperCase().startsWith('SELECT')) {
-        throw new Error('Only SELECT queries are allowed');
-      }
-      // Mock database execution
-      return { success: true, rows: [] };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
+    // Mock database execution
+    return { success: true, rows: [] };
   },
+  // Thrown errors are reported back to the model by default; customise with errorFunction
 });
 ```
 
 ### Model Configuration
 
-Configure various LLM providers:
+OpenAI models are referenced by name. Other providers go through the AI SDK adapter in `@openai/agents-extensions`:
 
 ```typescript
-interface ModelConfig {
-  provider: 'openai' | 'anthropic' | 'google' | 'mistral';
-  model: string;
-  apiKey: string;
-  baseURL?: string;
-  temperature?: number;
-  topP?: number;
-  maxTokens?: number;
-}
+import { Agent } from '@openai/agents';
+import { aisdk } from '@openai/agents-extensions/ai-sdk';
+import { anthropic } from '@ai-sdk/anthropic';
 
-// OpenAI configuration
-const openaiConfig: ModelConfig = {
-  provider: 'openai',
-  model: 'gpt-4-turbo',
-  apiKey: process.env.OPENAI_API_KEY!,
-  temperature: 0.7,
-  maxTokens: 2048,
-};
+// OpenAI (Responses API by default)
+const openaiAgent = new Agent({
+  name: 'OpenAI Assistant',
+  instructions: 'Be concise.',
+  model: 'gpt-5.6-sol',
+  modelSettings: { maxTokens: 2048, reasoning: { effort: 'low' } },
+});
 
-// Anthropic configuration
-const anthropicConfig: ModelConfig = {
-  provider: 'anthropic',
-  model: 'claude-3-opus',
-  apiKey: process.env.ANTHROPIC_API_KEY!,
-  temperature: 0.7,
-};
-
-// Type-safe model factory
-function createAgent(
-  name: string,
-  instructions: string,
-  config: ModelConfig
-): Agent {
-  // Configuration passed to agent constructor
-  return new Agent({
-    name,
-    instructions,
-    model: config.model,
-    temperature: config.temperature,
-  });
-}
+// Anthropic via the Vercel AI SDK
+const claudeAgent = new Agent({
+  name: 'Claude Assistant',
+  instructions: 'Be concise.',
+  model: aisdk(anthropic('claude-sonnet-4-5')),
+  modelSettings: { temperature: 0.7 },
+});
 ```
+
+To use Chat Completions instead of Responses for OpenAI models, call `setOpenAIAPI('chat_completions')` once at startup.
 
 ### Environment Setup Best Practices
 
@@ -583,7 +499,7 @@ Use TypeScript interfaces to ensure configuration completeness:
 interface StrictAgentConfig {
   name: string;
   instructions: string;
-  model?: 'gpt-4-turbo' | 'gpt-4' | 'gpt-3.5-turbo';
+  model?: 'gpt-5.6-sol' | 'gpt-5.6-luna';
   temperature?: number & { __brand: 'temperature' };
   maxTokens?: number;
   tools?: Tool[];
@@ -600,27 +516,30 @@ function createTemperature(value: number): number & { __brand: 'temperature' } {
 const strictConfig: StrictAgentConfig = {
   name: 'Strict Agent',
   instructions: 'Follow instructions precisely.',
-  model: 'gpt-4-turbo',
+  model: 'gpt-5.6-luna',
   temperature: createTemperature(0.7),
   maxTokens: 1024,
 };
 
-const strictAgent = new Agent(strictConfig);
+// Sampling options belong in modelSettings on the real Agent
+const { temperature, maxTokens, ...rest } = strictConfig;
+const strictAgent = new Agent({ ...rest, modelSettings: { temperature, maxTokens } });
 ```
 
-### Agent.run() and Runner.run() Patterns
+### run() and Runner.run() Patterns
 
-Different patterns for different scenarios:
+Agents have no `run()` method of their own; pass them to `run()` or to a `Runner`:
 
 ```typescript
-// Pattern 1: Direct agent method
+// Pattern 1: Shared Runner with run-wide defaults
 async function directRun(): Promise<void> {
   const agent = new Agent({
     name: 'Direct Agent',
     instructions: 'Answer briefly.',
   });
 
-  const result = await agent.run('What is AI?');
+  const runner = new Runner({ workflowName: 'direct' });
+  const result = await runner.run(agent, 'What is AI?');
   console.log(result.finalOutput);
 }
 
@@ -637,7 +556,7 @@ async function multiAgentRun(): Promise<void> {
   });
 
   const result1 = await run(agent1, 'What is blockchain?');
-  const result2 = await run(agent2, result1.finalOutput);
+  const result2 = await run(agent2, result1.finalOutput ?? '');
   
   console.log('Final result:', result2.finalOutput);
 }
@@ -752,7 +671,7 @@ singleTurnConversation().catch(console.error);
 Maintain context across turns:
 
 ```typescript
-import { Session } from '@openai/agents';
+import { Agent, MemorySession, run } from '@openai/agents';
 
 interface ConversationTurn {
   userInput: string;
@@ -760,7 +679,7 @@ interface ConversationTurn {
   timestamp: Date;
 }
 
-async function multiTurnDialogue(): Promise<void> {
+async function multiTurnDialogue(): Promise<ConversationTurn[]> {
   const agent = new Agent({
     name: 'Conversational Agent',
     instructions: `You are a helpful assistant that remembers context.
@@ -768,7 +687,7 @@ async function multiTurnDialogue(): Promise<void> {
       Build on prior knowledge to deepen understanding.`,
   });
 
-  const session = new Session({ id: 'conv-001' });
+  const session = new MemorySession({ sessionId: 'conv-001' });
   const conversation: ConversationTurn[] = [];
 
   const exchanges = [
@@ -783,7 +702,7 @@ async function multiTurnDialogue(): Promise<void> {
     
     conversation.push({
       userInput,
-      agentResponse: result.finalOutput,
+      agentResponse: result.finalOutput ?? '',
       timestamp: new Date(),
     });
 
@@ -815,10 +734,11 @@ async function streamingOutput(): Promise<void> {
   try {
     const result = await run(agent, input, { stream: true });
 
-    // Process streamed chunks
-    for await (const chunk of result) {
+    // toTextStream() yields only the text deltas
+    for await (const chunk of result.toTextStream()) {
       process.stdout.write(chunk);
     }
+    await result.completed;
 
     console.log('\n--- Streaming complete ---');
   } catch (error) {
@@ -834,11 +754,16 @@ async function streamToWebSocket(
 ): Promise<void> {
   const result = await run(agent, input, { stream: true });
 
-  for await (const chunk of result) {
-    ws.send(JSON.stringify({ type: 'stream', content: chunk }));
+  // Iterating the result itself yields every event (raw model events,
+  // run items, agent updates); pick out text deltas
+  for await (const event of result) {
+    if (event.type === 'raw_model_stream_event' && event.data.type === 'output_text_delta') {
+      ws.send(JSON.stringify({ type: 'stream', content: event.data.delta }));
+    }
   }
+  await result.completed;
 
-  ws.send(JSON.stringify({ type: 'complete' }));
+  ws.send(JSON.stringify({ type: 'complete', finalOutput: result.finalOutput }));
 }
 ```
 
@@ -847,8 +772,8 @@ async function streamToWebSocket(
 Comprehensive error management:
 
 ```typescript
-interface AgentError extends Error {
-  code: 'VALIDATION_ERROR' | 'RATE_LIMIT' | 'API_ERROR' | 'TIMEOUT' | 'UNKNOWN';
+class AgentError extends Error {
+  code: 'VALIDATION_ERROR' | 'RATE_LIMIT' | 'API_ERROR' | 'TIMEOUT' | 'UNKNOWN' = 'UNKNOWN';
   details?: Record<string, any>;
 }
 
@@ -880,7 +805,7 @@ class AgentErrorHandler {
     code: AgentError['code'],
     details?: Record<string, any>
   ): AgentError {
-    const error = new Error(message) as AgentError;
+    const error = new AgentError(message);
     error.code = code;
     error.details = details;
     return error;
@@ -1106,46 +1031,33 @@ const delegation = await delegateWithType(
 
 ### Message Filtering During Handoffs
 
-Control what information transfers:
+Control what history the receiving agent sees with `inputFilter` on `handoff()`. The filter receives the history and new items and returns a trimmed copy; `removeAllTools` from `@openai/agents-core/extensions` strips tool calls and results:
 
 ```typescript
-interface MessageFilter {
-  includeSystemMessages: boolean;
-  includeToolCalls: boolean;
-  maxHistoryLength: number;
-  filterFn?: (message: any) => boolean;
+import { Agent, handoff, HandoffInputData } from '@openai/agents';
+import { removeAllTools } from '@openai/agents-core/extensions';
+
+const MAX_HISTORY = 10;
+
+// Keep only the last few items and drop tool chatter
+function trimHistory(data: HandoffInputData): HandoffInputData {
+  const withoutTools = removeAllTools(data);
+  const history = Array.isArray(withoutTools.inputHistory)
+    ? withoutTools.inputHistory.slice(-MAX_HISTORY)
+    : withoutTools.inputHistory;
+  return { ...withoutTools, inputHistory: history };
 }
 
-async function filteredHandoff(
-  fromAgent: Agent,
-  toAgent: Agent,
-  input: string,
-  filter: MessageFilter
-): Promise<any> {
-  const session = new Session();
-  
-  // Get conversation with filtering
-  const history = session.getHistory().filter(msg => {
-    if (!filter.includeSystemMessages && msg.role === 'system') {
-      return false;
-    }
-    if (!filter.includeToolCalls && msg.type === 'tool_call') {
-      return false;
-    }
-    if (filter.filterFn && !filter.filterFn(msg)) {
-      return false;
-    }
-    return true;
-  });
+const specialist = new Agent({
+  name: 'Specialist',
+  instructions: 'Answer using only the recent conversation.',
+});
 
-  // Limit history
-  const recentHistory = history.slice(-filter.maxHistoryLength);
-
-  // Execute with filtered context
-  const context = recentHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-  
-  return await run(toAgent, `Context:\n${context}\n\nNew input: ${input}`, { session });
-}
+const frontDesk = new Agent({
+  name: 'Front Desk',
+  instructions: 'Hand complex questions to the specialist.',
+  handoffs: [handoff(specialist, { inputFilter: trimHistory })],
+});
 ```
 
 ### Routing Logic and Conditional Handoffs
@@ -1454,9 +1366,9 @@ async function customerServiceWorkflow(
   const result = await run(triageAgent, customerMessage);
   console.log(`Support: ${result.finalOutput}`);
 
-  if (result.currentAgent?.name === 'Billing Support') {
+  if (result.lastAgent?.name === 'Billing Support') {
     console.log('Routed to Billing Department');
-  } else if (result.currentAgent?.name === 'Technical Support') {
+  } else if (result.lastAgent?.name === 'Technical Support') {
     console.log('Routed to Technical Department');
   }
 }
@@ -1554,7 +1466,7 @@ const readFileTool = tool({
 
 ```typescript
 // Generic tool builder for type safety
-class ToolBuilder<P extends z.ZodSchema, R> {
+class ToolBuilder<P extends z.ZodObject<any>, R> {
   private name: string;
   private description: string;
   private parameters: P;
@@ -1673,7 +1585,7 @@ const createDatabaseTool = <T extends Record<string, any>>(
     name: `query_${tableName}`,
     description: `Query ${tableName} from database`,
     parameters: z.object({
-      where: z.record(z.any()).optional(),
+      where: z.record(z.string(), z.any()).optional(),
       limit: z.number().optional(),
     }),
     execute: async ({ where, limit }): Promise<QueryResult<T>> => {
@@ -1874,7 +1786,7 @@ interface ToolExecutionResult<T> {
   };
 }
 
-const robustToolTemplate = <P extends z.ZodSchema, T>(config: {
+const robustToolTemplate = <P extends z.ZodObject<any>, T>(config: {
   name: string;
   description: string;
   parameters: P;
@@ -1908,7 +1820,7 @@ const robustToolTemplate = <P extends z.ZodSchema, T>(config: {
             error: {
               code: 'VALIDATION_ERROR',
               message: 'Invalid tool parameters',
-              details: error.errors,
+              details: error.issues,
             },
           };
         }
@@ -1995,7 +1907,7 @@ interface ToolResult {
   metadata?: Record<string, any>;
 }
 
-const createTypedTool = <P extends z.ZodSchema, R>(config: {
+const createTypedTool = <P extends z.ZodObject<any>, R>(config: {
   name: string;
   description: string;
   parameters: P;
@@ -2086,7 +1998,7 @@ const documentTypeSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('report'),
     content: z.string(),
-    metrics: z.record(z.number()),
+    metrics: z.record(z.string(), z.number()),
   }),
   z.object({
     type: z.literal('summary'),
@@ -2187,8 +2099,8 @@ const jsonAgent = new Agent({
       "data": {},
       "timestamp": "ISO date string"
     }`,
-  model: 'gpt-4-turbo',
-  temperature: 0,
+  model: 'gpt-5.6-luna',
+  modelSettings: { temperature: 0 },
 });
 
 // Helper to ensure JSON output
@@ -2277,7 +2189,7 @@ async function parseWithRetry<T extends z.ZodSchema>(
       const improvedQuery = `${query}
 
 Please ensure your response is valid JSON matching this structure:
-${JSON.stringify(schema.describe(), null, 2)}`;
+${JSON.stringify(z.toJSONSchema(schema), null, 2)}`;
 
       // Retry with corrected prompt
       continue;
@@ -2468,36 +2380,52 @@ The guide emphasises lightweight primitives, model-agnostic design, and built-in
 
 ---
 
-### Realtime Agents with WebSocket Voice/Audio (v0.8.x)
+### Realtime Voice Agents
 
-TypeScript SDK supports Realtime Agents with WebSocket-based voice/audio input:
+Realtime agents live in `@openai/agents/realtime` (re-exported by `@openai/agents`). A `RealtimeSession` connects over WebRTC in the browser or WebSocket on the server; the default model has been `gpt-realtime-2.1` since 0.13.0.
 
 ```typescript
-import { RealtimeAgent, RealtimeRunner } from 'openai-agents/realtime';
+import { RealtimeAgent, RealtimeSession } from '@openai/agents/realtime';
 
 const agent = new RealtimeAgent({
   name: 'Voice Assistant',
   instructions: 'You are a helpful voice assistant.',
 });
 
-const runner = new RealtimeRunner(agent);
-
-// Connect to WebSocket
-const session = await runner.connect({
-  audio: {
-    inputFormat: 'pcm16',
-    outputFormat: 'pcm16',
-    sampleRate: 24000,
-  },
+const session = new RealtimeSession(agent, {
+  transport: 'websocket', // server-side; browsers default to WebRTC
 });
 
-session.on('audio_delta', (delta: ArrayBuffer) => {
-  // Play audio delta
-  playAudio(delta);
+session.on('audio', (event) => {
+  playAudio(event.data); // ArrayBuffer of PCM16 audio
 });
 
-await session.send({ type: 'input_audio_buffer.append', audio: recordedPcm });
+await session.connect({ apiKey: process.env.OPENAI_API_KEY! });
+
+// Stream microphone audio in as you capture it
+session.sendAudio(recordedPcm);
 ```
+
+In the browser, mint a short-lived client secret on your server and pass it as `apiKey` rather than exposing your API key.
+
+---
+
+### Breaking changes by version
+
+The packages use `0.Y.Z` versioning: a minor bump may break public interfaces. Changes since 0.11 most likely to affect existing code, from the upstream changelogs:
+
+| Version | Change |
+|---------|--------|
+| 0.12.0 | Realtime tool dispatch across handoffs made unambiguous. |
+| 0.13.0 | Default Realtime model `gpt-realtime-2.1`. |
+| 0.14.0 | Sensitive model and tool data are no longer logged by default (programmatic opt-in); default task and turn tracing with a per-run opt-out. |
+| 0.15.0 | Requires `openai` (Node SDK) v7.2+; default model `gpt-5.6-luna`; MCP 2026-07-28 protocol negotiation with legacy fallback. |
+| 0.16.0 | Scripted model, sandbox session and Realtime testing utilities (`@openai/agents/testing`). |
+| 0.17.0 | Blocked tool outputs are redacted from replay state. |
+| 0.18.0 | Unix-local and Docker sandbox file operations hardened (optional Python support; 10 MB editor limit for Docker). |
+| 0.19.0 | Agent-tool streaming callbacks capped at 1024 pending events (`onStreamMaxPendingEvents`); resumed MCP calls bound to their original server; default tool-parse failures redacted. |
+| 0.20.0 | Automatic MCP tool discovery limited to 64 pages (`maxListPages`); model calls after approval resumes count towards `maxTurns`. |
+| 0.21.0 | Runloop sandbox provider removed; usage-detail values need narrowing to numbers before arithmetic. |
 
 ---
 
@@ -2505,12 +2433,7 @@ await session.send({ type: 'input_audio_buffer.append', audio: recordedPcm });
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.11.6 | May 29, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 0.11.5 → 0.11.6. Key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`) confirmed in `@openai/agents@0.11.6` (`/tmp/npm-check-0529`); 163 total exports confirmed. | Claude routine |
-| 0.11.5 | May 23, 2026 | Patch release; stability and dependency updates. `Latest:` header updated 0.11.4 → 0.11.5. Key symbols (`Agent`, `Runner`, `run`, `handoff`, `tool`) confirmed in `@openai/agents@0.11.5` (`.routine-envs/check-0523-node`); 161 total exports confirmed. | Claude routine |
-| 0.11.4 | May 12, 2026 | Patch release; stability improvements. All symbols confirmed in `@openai/agents@0.11.4` (`.routine-envs/check-0512-node`): `Agent`, `Runner`, `run`, `handoff`, `tool`, `shellTool`, `toolSearchTool`, `applyPatchTool`, `applyDiff`, `retryPolicies`, `MemorySession`, `OpenAIConversationsSession`, `OpenAIResponsesCompactionSession`, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`. |
-| 0.11.3 | May 11, 2026 | Two patch releases (0.11.2, 0.11.3); stability improvements. All symbols confirmed in `@openai/agents@0.11.3` (`.routine-envs/check-0511-node`). |
-| 0.11.1 | May 9, 2026 | Version bumped 0.8.5 → 0.11.1 across multiple minor releases. New: `shellTool`/`toolSearchTool`/`applyPatchTool` built-in tools, `retryPolicies` for configurable retry, `MemorySession`/`OpenAIConversationsSession`/`OpenAIResponsesCompactionSession` session types, `MCPServerStreamableHttp`, `RuntimeEventEmitter`, `applySessionHistoryMutations`, `applyDiff`. All symbols confirmed in `@openai/agents@0.11.1` (`.routine-envs/check-0509-node`). Header and revision history updated. |
-| 0.8.3 | April 9, 2026 | Stability improvements; Zod schema validation for tool inputs; built-in tracing |
-| 0.8.0 | March 2026 | Realtime Agents with WebSocket voice/audio; Sessions API for multi-turn persistence |
-| 0.3.2 | November 2025 | Previous documented version |
-
+| %%version=@openai/agents%% | %%versions-checked%% | Re-verified against the current release (last revised for 0.11.6). Rewrote the Core Primitives section against the real API (it previously wrapped invented config types); fixed install commands (`openai-agents` and `@openai/agents-extensions-vercel-ai-sdk` are not the package names); replaced non-existent APIs (`new Session()`, `agent.run()`, `result.currentAgent`, iterating a stream result as text, `RealtimeRunner`); Zod 4 fixes (`z.record` key type, `error.issues`); added a breaking-changes table; updated model names. |
+| 0.11.6 | May 29, 2026 | Version bump; key symbols re-checked. |
+| 0.8.0 | March 2026 | Realtime section added. |
+| 0.3.2 | November 2025 | First version of this guide. |
