@@ -1,11 +1,11 @@
 ---
-title: "AG2 Production Guide"
+title: "AG2 Classic Production Guide"
 description: "Enterprise-Grade Deployment, Monitoring, and Optimisation"
 framework: autogen
 language: python
 ---
 
-# AG2 Production Guide
+> **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
 
 **Enterprise-Grade Deployment, Monitoring, and Optimisation**
 
@@ -44,7 +44,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 agent = ConversableAgent(
     name="assistant",
@@ -60,7 +60,7 @@ logger.info(f"Created agent: {agent.name}")
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 agent1 = ConversableAgent("agent1", llm_config=llm_config)
 agent2 = ConversableAgent("agent2", llm_config=llm_config)
@@ -69,7 +69,7 @@ response = agent1.run(recipient=agent2, message="Test", max_turns=2)
 response.process()
 
 # Inspect each message
-for msg in response.chat_history:
+for msg in response.messages:
     print(f"From: {msg.get('name')}")
     print(f"Role: {msg.get('role')}")
     print(f"Content: {msg.get('content')[:200]}...")
@@ -106,7 +106,7 @@ class LoggingAgent(ConversableAgent):
 # Usage
 logging_agent = LoggingAgent(
     name="logger",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST"),
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST"),
     log_file="production_agent.jsonl"
 )
 ```
@@ -145,7 +145,7 @@ class CostTrackingAgent(ConversableAgent):
 # Usage
 tracker = CostTrackingAgent(
     name="tracker",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
 )
 
 print(f"Total cost: ${tracker.total_cost:.4f}")
@@ -156,7 +156,7 @@ print(f"Total cost: ${tracker.total_cost:.4f}")
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 agent = ConversableAgent(
     name="assistant",
@@ -210,7 +210,7 @@ class OptimisedAgent(ConversableAgent):
 # Usage
 opt_agent = OptimisedAgent(
     name="optimised",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST"),
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST"),
     max_context_tokens=3000
 )
 ```
@@ -246,7 +246,7 @@ def retry_with_backoff(
 
 # Usage
 def chat_with_retry():
-    llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     agent = ConversableAgent("test", llm_config=llm_config)
     
     return agent.run(
@@ -266,7 +266,7 @@ from autogen import ConversableAgent, LLMConfig, AssistantAgent, UserProxyAgent
 def create_resilient_system():
     """Create system that degrades gracefully on API failures."""
     try:
-        llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+        llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     except Exception:
         print("Warning: Could not load LLM config. Using fallback...")
         # Fallback: use basic agent without LLM
@@ -277,7 +277,7 @@ def create_resilient_system():
 def create_fallback_agents():
     """Create agents for offline mode."""
     return (
-        ConversableAgent("assistant", llm_config=False, human_input_mode="ALL"),
+        ConversableAgent("assistant", llm_config=False, human_input_mode="ALWAYS"),
         ConversableAgent("user_proxy", llm_config=False)
     )
 
@@ -315,7 +315,7 @@ class ValidatedAgent(ConversableAgent):
 # Usage
 validated = ValidatedAgent(
     name="validated",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
 )
 ```
 
@@ -332,7 +332,7 @@ from autogen import ConversableAgent, LLMConfig
 class TestAgents(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
-        self.llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+        self.llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     def test_agent_creation(self):
         """Test agent creation."""
@@ -375,7 +375,7 @@ from autogen import ConversableAgent, LLMConfig
 class TestIntegration(unittest.TestCase):
     def test_two_agent_conversation(self):
         """Test conversation between two agents."""
-        llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+        llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
         
         agent1 = ConversableAgent(
             name="agent1",
@@ -395,12 +395,13 @@ class TestIntegration(unittest.TestCase):
             message="Hello, how are you?",
             max_turns=3
         )
-        
+        response.process()
+
         # Verify conversation occurred
-        self.assertGreater(len(response.chat_history), 0)
-        
+        self.assertGreater(len(response.messages), 0)
+
         # Verify both agents participated
-        agents_in_chat = {msg['name'] for msg in response.chat_history}
+        agents_in_chat = {msg['name'] for msg in response.messages}
         self.assertIn('agent1', agents_in_chat)
         self.assertIn('agent2', agents_in_chat)
 ```
@@ -428,7 +429,7 @@ class TestMocking(unittest.TestCase):
         # Create agent
         agent = ConversableAgent(
             name="test",
-            llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+            llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
         )
         
         # Test mocked behavior
@@ -452,7 +453,7 @@ from autogen import ConversableAgent, GroupChat, GroupChatManager, LLMConfig
 
 def deploy_local():
     """Deploy AG2 agents locally for single-machine use."""
-    llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     # Create agents
     agents = [
@@ -552,7 +553,7 @@ from autogen.a2a.server import A2aAgentServer
 
 def deploy_as_rest_service():
     """Deploy AG2 agents as REST services."""
-    llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     agent = ConversableAgent(
         name="api_agent",
@@ -598,7 +599,7 @@ def use_remote_agent():
     
     local_coordinator = ConversableAgent(
         name="coordinator",
-        llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+        llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
     )
     
     # Use remote agent like local
@@ -626,7 +627,7 @@ from autogen import ConversableAgent, LLMConfig
 
 def parallel_agents():
     """Run multiple agents in parallel."""
-    llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     agents = [
         ConversableAgent(
@@ -657,33 +658,21 @@ results = parallel_agents()
 ### Connection Pooling for API Calls
 
 ```python
+import httpx
 from autogen import LLMConfig
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
-def create_optimised_config():
-    """Create LLM config with connection pooling."""
-    # Create session with connection pooling
-    session = requests.Session()
-    
-    retry_strategy = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        method_whitelist=["HEAD", "GET", "POST"],
-        backoff_factor=1
+
+def create_optimised_config() -> LLMConfig:
+    """LLM config whose OpenAI client reuses a pooled HTTP connection."""
+    http_client = httpx.Client(
+        limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        timeout=httpx.Timeout(60.0),
     )
-    
-    adapter = HTTPAdapter(max_retries=retry_strategy)
-    session.mount("http://", adapter)
-    session.mount("https://", adapter)
-    
-    config = LLMConfig({
-        "model": "gpt-4",
-        "api_key": "sk-xxx"
-    })
-    
-    return config
+    return LLMConfig(
+        {"api_type": "openai", "model": "gpt-4.1-mini", "http_client": http_client},
+        timeout=60,
+    )
+
 
 config = create_optimised_config()
 ```
@@ -716,7 +705,7 @@ class CachingAgent(ConversableAgent):
 # Usage
 caching = CachingAgent(
     name="cached",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
 )
 ```
 
@@ -781,7 +770,7 @@ class SecureAgent(ConversableAgent):
 # Usage
 secure_agent = SecureAgent(
     name="secure",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
 )
 ```
 
@@ -816,7 +805,7 @@ class RateLimitedAgent(ConversableAgent):
 # Usage
 rate_limited = RateLimitedAgent(
     name="rate_limited",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST"),
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST"),
     requests_per_minute=30
 )
 ```
@@ -898,7 +887,7 @@ class HealthCheckAgent(ConversableAgent):
 # Usage
 health_agent = HealthCheckAgent(
     name="health",
-    llm_config=LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config=LLMConfig.from_json(path="OAI_CONFIG_LIST")
 )
 status = health_agent.health_check()
 print(f"Agent status: {status.value}")
@@ -955,7 +944,7 @@ def use_llamaindex_retrieval():
     index = GPTVectorStoreIndex.from_documents(documents)
     
     # Use with AG2 agent
-    config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     agent = ConversableAgent(
         name="retrieval_agent",
@@ -980,7 +969,7 @@ from autogen import ConversableAgent, LLMConfig
 
 async def async_agent_example():
     """Example of async agent execution."""
-    llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     agent = ConversableAgent(
         name="async_agent",
@@ -1003,7 +992,7 @@ from autogen import ConversableAgent, LLMConfig
 
 async def process_tasks_concurrently():
     """Process multiple tasks concurrently."""
-    llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+    llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
     
     agents = [
         ConversableAgent(

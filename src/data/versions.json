@@ -108,12 +108,32 @@
       "version": "1.15.28",
       "guide": "crewai-guide"
     },
+    "crewai-tools": {
+      "registry": "pypi",
+      "version": "1.15.28",
+      "guide": "crewai-guide"
+    },
     "ag2": {
       "registry": "pypi",
       "version": "1.2.1",
       "guide": "ag2-guide"
     },
+    "autogen": {
+      "registry": "pypi",
+      "version": "0.14.1",
+      "guide": "autogen-guide"
+    },
     "autogen-agentchat": {
+      "registry": "pypi",
+      "version": "0.7.5",
+      "guide": "autogen-guide"
+    },
+    "autogen-core": {
+      "registry": "pypi",
+      "version": "0.7.5",
+      "guide": "autogen-guide"
+    },
+    "autogen-ext": {
       "registry": "pypi",
       "version": "0.7.5",
       "guide": "autogen-guide"

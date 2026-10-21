@@ -11,7 +11,7 @@ sidebar:
 
 > **Status: archived.** Microsoft put AutoGen into maintenance mode in October 2025, when it announced [Microsoft Agent Framework](/microsoft-agent-framework-guide/) as the successor, and in October 2026 marked the repository archived and no longer maintained — no bug fixes, security fixes or new features. The last release is 0.7.5 (30 September 2025). Use this page to understand and maintain existing AutoGen 0.4–0.7 code; for new work, Microsoft points to Agent Framework and its [AutoGen migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-autogen/).
 
-This page is about **Microsoft AutoGen** (`autogen_agentchat`, `autogen_core`, `autogen_ext`) — the actor-model rewrite Microsoft shipped as 0.4 in January 2025. It is **not** AG2: the other pages in this section describe AG2 Classic, the community fork's `import autogen` API (see [the overview](../) for how the two diverged).
+This page is about **Microsoft AutoGen** (`autogen_agentchat`, `autogen_core`, `autogen_ext`) — the actor-model rewrite Microsoft shipped as 0.4 in January 2025. It is **not** AG2: the other pages in this section describe AG2 Classic, the community fork's `import autogen` API (see [the section overview](/autogen-guide/) for how the two diverged).
 
 ## Packages
 
@@ -22,9 +22,9 @@ This page is about **Microsoft AutoGen** (`autogen_agentchat`, `autogen_core`, `
 | `autogen-ext` | Integrations: model clients (OpenAI, Azure OpenAI, Anthropic, Ollama, …), MCP, code executors, memory stores. |
 
 ```bash
-pip install "autogen-agentchat==%%version=autogen-agentchat%%" "autogen-ext[openai]==%%version=autogen-agentchat%%"
+pip install "autogen-agentchat==%%version=autogen-agentchat%%" "autogen-ext[openai]==%%version=autogen-ext%%"
 # MCP support: the 0.7.5 MCP adapter does not import against mcp 2.x, so pin the 1.x line
-pip install "autogen-ext[mcp]==%%version=autogen-agentchat%%" "mcp<2"
+pip install "autogen-ext[mcp]==%%version=autogen-ext%%" "mcp<2"
 ```
 
 Python 3.10+ is required. Because the project is archived, pin all three packages to the same version and pin integration dependencies (`openai`, `mcp`, `anthropic`) that later broke compatibility.

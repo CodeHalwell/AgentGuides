@@ -5,7 +5,7 @@ framework: autogen
 language: python
 ---
 
-> **Microsoft AutoGen** (`autogen-agentchat` %%version=autogen-agentchat%%, checked %%versions-checked%%) — not AG2. The project is archived; see the [AgentChat & Core reference](../autogen_agentchat_guide/) for status and basics. Examples were run offline with `ReplayChatCompletionClient`.
+> **Microsoft AutoGen** (`autogen-agentchat` %%version=autogen-agentchat%%, checked %%versions-checked%%) — not AG2. The project is archived; see the [AgentChat & Core reference](/autogen-guide/python/autogen_agentchat_guide/) for status and basics. Examples were run offline with `ReplayChatCompletionClient`.
 
 ## Custom speaker selection
 

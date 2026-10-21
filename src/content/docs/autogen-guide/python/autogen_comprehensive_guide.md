@@ -5,7 +5,7 @@ framework: autogen
 language: python
 ---
 
-> **This page covers AG2 Classic** — the `import autogen` API (`ConversableAgent`, `GroupChat`, `initiate_chat`) maintained by the AG2 community fork and published on PyPI as `autogen` (and as `ag2` up to 0.14). It is **not** Microsoft AutoGen 0.4+ (`autogen_agentchat`), which is covered on the [AgentChat & Core page](../autogen_agentchat_guide/). Code here was checked against `autogen` 0.14.1, the Classic line, which is in maintenance mode (security and critical fixes only). AG2's current framework is `ag2` 1.x — see the [AG2 guide](/ag2-guide/).
+> **This page covers AG2 Classic** — the `import autogen` API (`ConversableAgent`, `GroupChat`, `initiate_chat`) maintained by the AG2 community fork and published on PyPI as `autogen` (and as `ag2` up to 0.14). It is **not** Microsoft AutoGen 0.4+ (`autogen_agentchat`), which is covered on the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/). Code here was checked against `autogen` %%version=autogen%%, the Classic line, which is in maintenance mode (security and critical fixes only). AG2's current framework is `ag2` 1.x — see the [AG2 guide](/ag2-guide/).
 
 **A beginner-to-expert tutorial for multi-agent systems with the AG2 Classic API.**
 
@@ -17,7 +17,7 @@ language: python
 - In **November 2024** AutoGen's original creators forked the 0.2 line as **AG2** under the `ag2ai` organisation (Apache 2.0, open governance), keeping the `import autogen` API. Microsoft was not rebranding its project: it continued `microsoft/autogen` separately and shipped the incompatible 0.4 rewrite in January 2025, which it has since archived in favour of Microsoft Agent Framework.
 - In **July 2026** AG2 1.0 replaced this API in the `ag2` package with a new async framework (`import ag2`). The API on this page continues as **AG2 Classic** in the `autogen` package.
 
-The API is broadly compatible with AutoGen 0.2 code; see the [AutoGen 0.2 → AG2 Classic migration guide](../autogen_to_ag2_migration_guide/).
+The API is broadly compatible with AutoGen 0.2 code; see the [AutoGen 0.2 → AG2 Classic migration guide](/autogen-guide/python/autogen_to_ag2_migration_guide/).
 
 ---
 
@@ -608,14 +608,13 @@ llm_config_comprehensive = {
 
 ```python
 import autogen
+from autogen.coding import LocalCommandLineCodeExecutor
 
 executor = autogen.UserProxyAgent(
     name="executor",
     code_execution_config={
-        "executor": "commandline-local",
-        "work_dir": "./code_execution",
-        "timeout": 60,
-        "last_n_messages": "auto"
+        "executor": LocalCommandLineCodeExecutor(work_dir="./code_execution", timeout=60),
+        "last_n_messages": "auto",
     },
     human_input_mode="NEVER",
 )
@@ -637,7 +636,7 @@ assistant = autogen.AssistantAgent(
 
 executor = autogen.UserProxyAgent(
     name="executor",
-    code_execution_config={"executor": "commandline-local", "work_dir": "code"},
+    code_execution_config={"executor": autogen.coding.LocalCommandLineCodeExecutor(work_dir="code")},
     human_input_mode="NEVER"
 )
 
@@ -654,14 +653,12 @@ executor.initiate_chat(
 
 ```python
 import autogen
+from autogen.coding import DockerCommandLineCodeExecutor
 
 executor = autogen.UserProxyAgent(
     name="executor",
     code_execution_config={
-        "executor": "commandline-docker",
-        "use_docker": "python:3.11-slim",  # Docker image
-        "work_dir": "/workspace",
-        "timeout": 120
+        "executor": DockerCommandLineCodeExecutor(image="python:3.12-slim", work_dir="./workspace", timeout=120),
     },
     human_input_mode="NEVER"
 )
@@ -680,9 +677,7 @@ assistant = autogen.AssistantAgent("assistant", llm_config=llm_config)
 executor = autogen.UserProxyAgent(
     name="executor",
     code_execution_config={
-        "executor": "commandline-docker",
-        "use_docker": "python:3.11-slim",
-        "work_dir": "/tmp/code"
+        "executor": autogen.coding.DockerCommandLineCodeExecutor(image="python:3.12-slim", work_dir="./code"),
     },
     human_input_mode="NEVER"
 )
@@ -701,7 +696,7 @@ import autogen
 
 # Create custom executor with specific configuration
 custom_executor = LocalCommandLineCodeExecutor(
-    work_dir="/custom/workspace",
+    work_dir="./custom_workspace",
     timeout=90,
 )
 
@@ -815,7 +810,7 @@ user_proxy.initiate_chat(
 ```python
 from autogen import ConversableAgent, UserProxyAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 analyst = ConversableAgent(
     name="analyst",
@@ -841,7 +836,7 @@ human.initiate_chat(
 ```python
 from autogen import ConversableAgent, UserProxyAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 proposer = ConversableAgent(
     name="proposer",
@@ -851,7 +846,7 @@ proposer = ConversableAgent(
 
 approver = UserProxyAgent(
     name="approver",
-    human_input_mode="ALL",  # Ask for input on every turn
+    human_input_mode="ALWAYS",  # Ask for input on every turn
     system_message="Review proposals and provide approval or feedback."
 )
 
@@ -872,7 +867,7 @@ approver.initiate_chat(
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 agent_a = ConversableAgent(
     name="alice",
@@ -917,7 +912,7 @@ print("Next topic summary:", response.summary)
 ```python
 from autogen import ConversableAgent, GroupChat, GroupChatManager, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Create specialized agents
 planner = ConversableAgent(
@@ -964,7 +959,7 @@ planner.initiate_chat(
 ```python
 from autogen import ConversableAgent, GroupChat, GroupChatManager, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Research agent
 researcher = ConversableAgent(
@@ -1083,7 +1078,7 @@ groupchat = GroupChat(
 ```python
 from autogen import ConversableAgent, UserProxyAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Main agents
 task_planner = ConversableAgent(
@@ -1127,7 +1122,7 @@ implementer.register_nested_chats(
             "max_turns": 2
         }
     ],
-    trigger=lambda sender, msg, recipient: "```python" in msg.get("content", "")
+    trigger=task_planner,  # run the review chain whenever the planner messages the implementer
 )
 
 # Start main conversation (nested chats trigger automatically)
@@ -1142,7 +1137,7 @@ task_planner.initiate_chat(
 ```python
 from autogen import ConversableAgent, initiate_chats, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Stage 1 agent
 ideator = ConversableAgent(
@@ -1215,7 +1210,7 @@ for i, result in enumerate(results):
 from autogen import ConversableAgent, LLMConfig
 from autogen.agentchat.group.context_variables import ContextVariables
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Create shared context
 context = ContextVariables()
@@ -1336,7 +1331,7 @@ except Exception as e:
 ```python
 from autogen import AssistantAgent, UserProxyAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Agent that thinks and acts
 react_agent = AssistantAgent(
@@ -1368,7 +1363,7 @@ executor.initiate_chat(
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 # Initial generator
 generator = ConversableAgent(
@@ -1416,7 +1411,7 @@ response = critic.run(
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 agent1 = ConversableAgent(
     name="agent1",
@@ -1437,9 +1432,10 @@ response1 = agent2.run(
     max_turns=3
 )
 
-# Access conversation history
+# Drive the run to completion, then read its history
+response1.process()
 print("Previous conversation:")
-for msg in response1.chat_history:
+for msg in response1.messages:
     print(f"{msg['name']}: {msg['content'][:100]}...")
 
 # Second conversation (with context from first)
@@ -1488,7 +1484,7 @@ Your role:
 ```python
 from autogen import ConversableAgent, LLMConfig
 
-llm_config = LLMConfig.from_json("OAI_CONFIG_LIST")
+llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST")
 
 few_shot_system_message = """You are a data analyst. Here are examples of how to analyse problems:
 
@@ -1515,7 +1511,7 @@ analyst = ConversableAgent(
 
 ## Later AG2 Classic features
 
-Earlier drafts of this section described "2025 enhancements" such as `context_truncation_strategy=` on `ConversableAgent` and an `autogen.telemetry.TelemetryConfig` class. Neither exists in any Classic release, and AutoGen Studio is a Microsoft AutoGen 0.4+ tool rather than part of AG2, so that material has been removed. The features below are real in `autogen` 0.14.1.
+Earlier drafts of this section described "2025 enhancements" such as `context_truncation_strategy=` on `ConversableAgent` and an `autogen.telemetry.TelemetryConfig` class. Neither exists in the Classic package, and AutoGen Studio is a Microsoft AutoGen 0.4+ tool rather than part of AG2, so that material has been removed. The features below are real in `autogen` %%version=autogen%%.
 
 ### `LLMConfig`
 
@@ -1573,185 +1569,29 @@ From 0.11 Classic shipped `autogen.beta`, a preview of the event-driven API. It 
 
 ## Migration from AutoGen to AG2
 
-### Why Migrate?
+This section is about moving **AutoGen 0.2** code (`pyautogen`, `import autogen`) onto **AG2 Classic**. Code written for Microsoft AutoGen 0.4+ (`autogen_agentchat`) uses a different API and does not migrate this way.
 
-While **AutoGen and AG2 are fully compatible**, migrating to AG2 provides:
+### Steps
 
-1. **Future-proofing**: AG2 is the future of the framework
-2. **Community support**: Active, growing community under open governance
-3. **Latest features**: Access to newest capabilities and enhancements
-4. **Long-term sustainability**: Open governance ensures longevity
+1. **Change the distribution, not the imports.** Uninstall `pyautogen` (which now installs Microsoft's `autogen-agentchat`) and install `autogen` (AG2 Classic), or `ag2<1.0`:
 
-### Migration is Optional
+   ```bash
+   pip uninstall -y pyautogen
+   pip install "autogen[openai]"
+   ```
 
-**Important**: Migration is completely optional. Your existing AutoGen code will continue to work indefinitely. AG2 maintains full backward compatibility.
+2. **Keep `import autogen`.** Classic installs the `autogen` module, so most 0.2 code runs unchanged.
+3. **Prefer `LLMConfig`.** Plain `{"config_list": [...]}` dicts still work; `LLMConfig({...})` or `LLMConfig.from_json(path="OAI_CONFIG_LIST")` is the current form.
+4. **Pass code executors as objects.** `code_execution_config={"executor": LocalCommandLineCodeExecutor(work_dir=...)}` (or `DockerCommandLineCodeExecutor`); mixing `executor` with `work_dir`/`use_docker` keys raises `ValueError`.
+5. **Move swarm imports.** Since 0.13.0, `SwarmAgent` and `initiate_swarm_chat` live in `autogen.agentchat.contrib.swarm_agent`; new code should use group-chat patterns (`autogen.agentchat.group.patterns`).
 
-### Migration Steps
+### Where to go after Classic
 
-#### Step 1: Update Package Name
-
-```bash
-# Old: AutoGen installation
-pip uninstall autogen-agentchat
-
-# New: AG2 installation
-pip install ag2
-```
-
-#### Step 2: Update Imports (Optional)
-
-The package name changes, but imports can remain the same:
-
-```python
-# Option 1: Module-level import (the ag2 package installs as the autogen module)
-import autogen  # Still works with AG2!
-
-# Option 2: Full explicit imports (recommended)
-from autogen import ConversableAgent, AssistantAgent, UserProxyAgent
-```
-
-#### Step 3: Update Configuration Files (Optional)
-
-```json
-// Old: OAI_CONFIG_LIST.json (still works)
-[
-    {
-        "model": "gpt-4",
-        "api_key": "sk-..."
-    }
-]
-
-// New: AG2_CONFIG_LIST.json (optional new name)
-[
-    {
-        "model": "gpt-4",
-        "api_key": "sk-..."
-    }
-]
-```
-
-#### Step 4: Review New Features
-
-Take advantage of AG2 2025 features:
-
-```python
-# Enhanced context management
-agent = autogen.ConversableAgent(
-    name="agent",
-    llm_config=llm_config,
-    context_truncation_strategy="smart"  # New in AG2
-)
-
-# Improved state management
-# Better telemetry
-# Cost management features
-```
-
-### Compatibility Matrix
-
-| Feature | AutoGen | AG2 | Compatible? |
-|---------|---------|-----|-------------|
-| ConversableAgent | ✅ | ✅ | ✅ Yes |
-| AssistantAgent | ✅ | ✅ | ✅ Yes |
-| UserProxyAgent | ✅ | ✅ | ✅ Yes |
-| GroupChat | ✅ | ✅ | ✅ Yes |
-| Function Registration | ✅ | ✅ | ✅ Yes |
-| Code Execution | ✅ | ✅ | ✅ Yes |
-| AutoGen Studio | ✅ | ✅ Enhanced | ✅ Yes |
-| Context Management | Basic | Enhanced | ✅ Compatible |
-| Telemetry | ❌ | ✅ | ⚠️ New feature |
-| Cost Management | ❌ | ✅ | ⚠️ New feature |
-
-### Migration Checklist
-
-- [ ] Update package: `pip install ag2`
-- [ ] Test existing code (no changes needed)
-- [ ] Optionally update imports to `ag2`
-- [ ] Review AG2 2025 features
-- [ ] Enable telemetry (optional)
-- [ ] Configure cost management (optional)
-- [ ] Update documentation references
-- [ ] Join AG2 community channels
-
-### Getting Help
-
-- **AG2 Documentation**: https://ag2.ai/docs
-- **GitHub**: https://github.com/ag2ai/ag2
-- **Discord**: https://discord.gg/ag2ai
-- **Migration Guide**: https://ag2.ai/docs/migration
-
-### Example: Complete Migration
-
-**Before (AutoGen):**
-
-```python
-import autogen
-
-config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
-llm_config = {"config_list": config_list}
-
-assistant = autogen.AssistantAgent(
-    name="assistant",
-    llm_config=llm_config
-)
-
-user_proxy = autogen.UserProxyAgent(
-    name="user_proxy",
-    code_execution_config={"work_dir": "coding"},
-    human_input_mode="NEVER"
-)
-
-user_proxy.initiate_chat(
-    assistant,
-    message="Write a Python function to calculate factorial"
-)
-```
-
-**After (AG2 - with enhancements):**
-
-```python
-# Can still use 'autogen' imports with AG2!
-import autogen
-
-config_list = autogen.llm_config.config.config_list_from_json("OAI_CONFIG_LIST.json")
-llm_config = {
-    "config_list": config_list,
-    "context_truncation_strategy": "smart",  # NEW: AG2 enhancement
-}
-
-assistant = autogen.AssistantAgent(
-    name="assistant",
-    llm_config=llm_config
-)
-
-user_proxy = autogen.UserProxyAgent(
-    name="user_proxy",
-    code_execution_config={"work_dir": "coding"},
-    human_input_mode="NEVER"
-)
-
-user_proxy.initiate_chat(
-    assistant,
-    message="Write a Python function to calculate factorial"
-)
-
-# NEW: Get cost stats (AG2 feature)
-cost_stats = assistant.get_cost_stats()
-print(f"Cost: ${cost_stats['total_cost']:.4f}")
-```
-
-**Key Takeaway**: Your existing code works as-is. AG2 adds new features without breaking changes.
-
----
-
-This comprehensive guide now covers both AutoGen and AG2, including the 2025 enhancements and migration guidance. For a detailed migration walkthrough, see the dedicated [AutoGen to AG2 Migration Guide](./autogen_to_ag2_migration_guide/).
-
-**Welcome to the AG2 era of agentic AI development!**
+Classic is in maintenance mode. For new AG2 work, port to `ag2` 1.x (`import ag2`); the [AG2 guide](/ag2-guide/ag2_comprehensive_guide/#ag2-classic-and-migrating-from-0x) has a porting checklist. For the full 0.2 → Classic walkthrough, see the [migration guide](./autogen_to_ag2_migration_guide/).
 
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 0.11.5 | April 5, 2026 | Security fixes (CVE-2026-23745/23950/24842); QuickResearchTool; Gemini streaming; RemyxCodeExecutor; autogen.beta event-driven redesign; A2A protocol; AG2 CLI |
-| 0.10.0 | November 2025 | Previous documented version |
-
+| autogen 0.14.1 (AG2 Classic) | October 21, 2026 | Reframed as an AG2 Classic page (it never described Microsoft AutoGen 0.4+). Removed the false "Microsoft AutoGen was rebranded as AG2" narrative, the invented `context_truncation_strategy`, `TelemetryConfig`, `get_cost_stats` and AutoGen Studio "2025" material; fixed `LLMConfig.from_json` calls (keyword `path=`), code-executor configuration and a nested-chat trigger that broke the page's code fence. Code blocks executed against `autogen` 0.14.1 with a dummy key. |
+| 0.11.5 | April 5, 2026 | Earlier revision. |

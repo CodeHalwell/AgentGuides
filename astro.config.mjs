@@ -58,12 +58,12 @@ export default defineConfig({
             { label: 'OpenAI Agents SDK (TypeScript)', link: '/openai-agents-sdk-typescript-guide/' },
             { label: 'CrewAI', link: '/crewai-guide/' },
             {
-              label: 'AutoGen / AG2',
+              label: 'AutoGen & AG2',
               collapsed: true,
               items: [
                 { label: 'Overview', link: '/autogen-guide/' },
-                { label: 'AutoGen / AG2 (Python)', link: '/autogen-guide/python/' },
-                { label: 'AG2 (features-focused)', link: '/ag2-guide/' },
+                { label: 'Microsoft AutoGen (Python)', link: '/autogen-guide/python/' },
+                { label: 'AG2', link: '/ag2-guide/' },
               ],
             },
             {

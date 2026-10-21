@@ -1,11 +1,11 @@
 ---
-title: "AG2 Recipes: Practical Tutorials and Working Examples"
+title: "AG2 Classic Recipes: Practical Tutorials and Working Examples"
 description: "Real-world Code Examples and Complete Project Templates"
 framework: autogen
 language: python
 ---
 
-# AG2 Recipes: Practical Tutorials and Working Examples
+> **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
 
 **Real-world Code Examples and Complete Project Templates**
 
@@ -238,9 +238,9 @@ def review_code(code_snippet: str) -> dict:
         manager,
         message=f"""Please review this Python code comprehensively:
 
-```python
+~~~python
 {code_snippet}
-```
+~~~
 
 Each reviewer should provide their specific perspective and recommendations."""
     )
@@ -1088,7 +1088,7 @@ if __name__ == "__main__":
 
 **Setup:**
 ```bash
-pip install ag2[openai]
+pip install "autogen[openai]"   # AG2 Classic; not ag2>=1.0
 export OPENAI_API_KEY="sk-your-key"
 ```
 
@@ -1098,10 +1098,10 @@ python recipe_name.py
 ```
 
 **Customisation Tips:**
-- Replace `LLMConfig.from_json()` with environment variables or hardcoded keys
+- Replace `LLMConfig.from_json(path=...)` with an inline `LLMConfig({...})` that reads the key from the environment
 - Adjust `max_rounds` and `max_turns` for faster/slower execution
 - Modify `system_message` to change agent behaviour
 - Add logging with `logging.basicConfig(level=logging.DEBUG)`
 
-Each recipe is self-contained and production-ready. Mix and match patterns to build your own systems!
+Each recipe is self-contained. Mix and match patterns to build your own systems!
 

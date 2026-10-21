@@ -240,7 +240,7 @@ Each framework section includes links to:
 ---
 
 ### AutoGen / AG2
-**Current:** AG2 `ag2` %%version=ag2%% · Microsoft AutoGen `autogen-agentchat` %%version=autogen-agentchat%%
+**Current:** AG2 `ag2` %%version=ag2%% · AG2 Classic `autogen` %%version=autogen%% · Microsoft AutoGen `autogen-agentchat` %%version=autogen-agentchat%% (archived)
 
 - [📂 AutoGen/AG2 Guide](/autogen-guide/python/)
 - [📖 README](/autogen-guide/python/)
@@ -341,9 +341,9 @@ Each framework section includes links to:
 
 ### By 2025 Features
 
-**Rebranded Frameworks:**
+**Renamed or forked:**
 - [Anthropic Claude SDK](/anthropic-claude-agent-sdk-guide/) (from Code SDK)
-- [AutoGen → AG2](/autogen-guide/python/)
+- [AG2](/ag2-guide/) (community fork of AutoGen; 1.0 is a new framework, the old API lives on as AG2 Classic)
 - [OpenAI Agents SDK](/openai-agents-sdk-guides/) (Swarm replacement)
 
 **New Language Support:**

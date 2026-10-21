@@ -4,7 +4,7 @@ description: "AG2 1.x reference — Agent, model configs, tools, structured outp
 framework: ag2
 ---
 
-> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). Every 1.x example on this page was executed offline against the installed package using `ag2.testing.TestConfig` in place of a real model. The Classic section was checked against the `autogen` distribution (AG2 Classic) 0.14.1.
+> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). Every 1.x example on this page was executed offline against the installed package using `ag2.testing.TestConfig` in place of a real model. The Classic section was checked against the `autogen` distribution (AG2 Classic) %%version=autogen%%.
 
 ## Overview
 
@@ -358,7 +358,7 @@ pip install "autogen[openai]"   # AG2 Classic distribution
 pip install "ag2[openai]<1.0"
 ```
 
-For reference, idiomatic Classic code looks like this (verified against `autogen` 0.14.1 — note it uses `ConversableAgent` and `register_function`, not a bare `Agent`):
+For reference, idiomatic Classic code looks like this (verified against `autogen` %%version=autogen%% — note it uses `ConversableAgent` and `register_function`, not a bare `Agent`):
 
 ```python
 from autogen import ConversableAgent, GroupChat, GroupChatManager, LLMConfig, register_function
