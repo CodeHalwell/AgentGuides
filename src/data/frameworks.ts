@@ -1,3 +1,5 @@
+import versions from './versions.json';
+
 export type Framework = {
   id: string;
   name: string;
@@ -16,6 +18,9 @@ export type Framework = {
   version?: string;
 };
 
+/** Current version of a package, from versions.json (the single source of truth). */
+const v = (pkg: keyof typeof versions.packages): string => `v${versions.packages[pkg].version}`;
+
 export const frameworks: Framework[] = [
   {
     id: 'smolagents',
@@ -26,7 +31,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['chatbot', 'automation', 'prototyping'],
-    version: 'v1.26.0',
+    version: v('smolagents'),
   },
   {
     id: 'pydanticai',
@@ -37,7 +42,7 @@ export const frameworks: Framework[] = [
     category: 'Lightweight',
     difficulty: 'Beginner',
     useCases: ['typed-apis', 'structured-output', 'validation'],
-    version: 'v1.105.0',
+    version: v('pydantic-ai'),
   },
   {
     id: 'openai-agents',
@@ -48,7 +53,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'customer-service'],
-    version: 'v0.17.4',
+    version: v('openai-agents'),
   },
   {
     id: 'openai-agents-ts',
@@ -59,7 +64,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['chatbot', 'multi-agent', 'web'],
-    version: 'v0.11.6',
+    version: v('@openai/agents'),
   },
   {
     id: 'crewai',
@@ -70,7 +75,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Intermediate',
     useCases: ['team-simulation', 'customer-service', 'orchestration'],
-    version: 'v1.14.6',
+    version: v('crewai'),
   },
   {
     id: 'autogen',
@@ -81,7 +86,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['research', 'multi-agent', 'experimentation'],
-    version: 'v0.13.2',
+    version: `AG2 ${v('ag2')} / AutoGen ${v('autogen-agentchat')}`,
   },
   {
     id: 'langgraph-py',
@@ -92,7 +97,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'conditional-routing'],
-    version: 'v1.2.4',
+    version: v('langgraph'),
   },
   {
     id: 'langgraph-ts',
@@ -103,7 +108,7 @@ export const frameworks: Framework[] = [
     category: 'Multi-Agent',
     difficulty: 'Advanced',
     useCases: ['workflows', 'cycles', 'web'],
-    version: 'v1.3.4',
+    version: v('@langchain/langgraph'),
   },
   {
     id: 'llamaindex-py',
@@ -114,7 +119,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Intermediate',
     useCases: ['rag', 'search', 'knowledge-retrieval'],
-    version: 'v0.14.22',
+    version: v('llama-index'),
   },
   {
     id: 'llamaindex-ts',
@@ -125,7 +130,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Intermediate',
     useCases: ['rag', 'search', 'web'],
-    version: 'v0.6.23',
+    version: v('llamaindex'),
   },
   {
     id: 'haystack',
@@ -136,7 +141,7 @@ export const frameworks: Framework[] = [
     category: 'Data & RAG',
     difficulty: 'Advanced',
     useCases: ['search', 'qa', 'rag'],
-    version: 'v2.29.0',
+    version: v('haystack-ai'),
   },
   {
     id: 'bedrock',
@@ -147,6 +152,7 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['aws', 'multi-agent', 'managed'],
+    version: `AgentCore ${v('bedrock-agentcore')}`,
   },
   {
     id: 'ms-agent-fx',
@@ -157,18 +163,18 @@ export const frameworks: Framework[] = [
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: 'v1.7.0',
+    version: `Python ${v('agent-framework')} / .NET ${v('Microsoft.Agents.AI')}`,
   },
   {
     id: 'google-adk',
     name: 'Google ADK',
     tagline: 'Gemini-first agents with multi-language SDKs.',
     href: '/google-adk-guide/',
-    languages: ['Python', 'Go'],
+    languages: ['Python', 'TypeScript', 'Go'],
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['gcp', 'gemini', 'multi-agent'],
-    version: 'v2.9.0',
+    version: `Python ${v('google-adk')} / TS ${v('@google/adk')} / Go ${v('google.golang.org/adk')}`,
   },
   {
     id: 'claude-sdk',
@@ -179,7 +185,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'multi-agent', 'hooks'],
-    version: 'v0.2.88',
+    version: v('claude-agent-sdk'),
   },
   {
     id: 'claude-sdk-ts',
@@ -190,7 +196,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['claude', 'web', 'node'],
-    version: 'v0.3.161',
+    version: v('@anthropic-ai/claude-agent-sdk'),
   },
   {
     id: 'mistral',
@@ -201,7 +207,7 @@ export const frameworks: Framework[] = [
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],
-    version: 'v2.4.8',
+    version: v('mistralai'),
   },
   {
     id: 'semantic-kernel',
@@ -212,7 +218,7 @@ export const frameworks: Framework[] = [
     category: 'Enterprise',
     difficulty: 'Intermediate',
     useCases: ['enterprise', 'microsoft', 'plugins'],
-    version: 'Python 1.42.0 / .NET 1.74.0',
+    version: `Python ${v('semantic-kernel')} / .NET ${v('Microsoft.SemanticKernel')}`,
   },
 ];
 

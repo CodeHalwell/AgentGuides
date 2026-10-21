@@ -1,0 +1,31 @@
+{
+  "$comment": "Single source of truth for the package versions the guides target. Update with `node scripts/check-versions.mjs --latest`, then run `node scripts/check-versions.mjs` to find stale pins in the docs.",
+  "checked": "2026-10-21",
+  "packages": {
+    "agent-framework":               { "registry": "pypi",  "version": "1.22.0",   "guide": "microsoft-agent-framework-guide" },
+    "Microsoft.Agents.AI":           { "registry": "nuget", "version": "1.25.0",   "guide": "microsoft-agent-framework-guide" },
+    "pydantic-ai":                   { "registry": "pypi",  "version": "2.59.0",   "guide": "pydanticai-guide" },
+    "google-adk":                    { "registry": "pypi",  "version": "2.12.0",   "guide": "google-adk-guide" },
+    "@google/adk":                   { "registry": "npm",   "version": "2.3.0",    "guide": "google-adk-guide" },
+    "google.golang.org/adk":         { "registry": "go",    "version": "1.9.0",    "guide": "google-adk-guide" },
+    "langgraph":                     { "registry": "pypi",  "version": "1.2.16",   "guide": "langgraph-guide" },
+    "@langchain/langgraph":          { "registry": "npm",   "version": "1.5.2",    "guide": "langgraph-guide" },
+    "openai-agents":                 { "registry": "pypi",  "version": "0.24.0",   "guide": "openai-agents-sdk-guides" },
+    "@openai/agents":                { "registry": "npm",   "version": "0.21.0",   "guide": "openai-agents-sdk-typescript-guide" },
+    "crewai":                        { "registry": "pypi",  "version": "1.15.28",  "guide": "crewai-guide" },
+    "ag2":                           { "registry": "pypi",  "version": "1.1.2",    "guide": "ag2-guide" },
+    "autogen-agentchat":             { "registry": "pypi",  "version": "0.7.5",    "guide": "autogen-guide" },
+    "llama-index":                   { "registry": "pypi",  "version": "0.14.25",  "guide": "llamaindex-guide" },
+    "llamaindex":                    { "registry": "npm",   "version": "0.12.1",   "guide": "llamaindex-guide" },
+    "haystack-ai":                   { "registry": "pypi",  "version": "3.4.1",    "guide": "haystack-guide" },
+    "smolagents":                    { "registry": "pypi",  "version": "1.26.0",   "guide": "smolagents-guide" },
+    "semantic-kernel":               { "registry": "pypi",  "version": "1.45.0",   "guide": "semantic-kernel-guide" },
+    "Microsoft.SemanticKernel":      { "registry": "nuget", "version": "1.81.0",   "guide": "semantic-kernel-guide" },
+    "claude-agent-sdk":              { "registry": "pypi",  "version": "0.2.170",  "guide": "anthropic-claude-agent-sdk-guide" },
+    "@anthropic-ai/claude-agent-sdk":{ "registry": "npm",   "version": "0.3.306",  "guide": "anthropic-claude-agent-sdk-typescript-guide" },
+    "mistralai":                     { "registry": "pypi",  "version": "3.3.0",    "guide": "mistral-agents-api-guide" },
+    "boto3":                         { "registry": "pypi",  "version": "1.43.117", "guide": "amazon-bedrock-agents-guide" },
+    "bedrock-agentcore":             { "registry": "pypi",  "version": "1.24.2",   "guide": "amazon-bedrock-agents-guide" },
+    "strands-agents":                { "registry": "pypi",  "version": "1.62.0",   "guide": "amazon-bedrock-agents-guide" }
+  }
+}

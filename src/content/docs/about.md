@@ -220,9 +220,9 @@ All guides follow consistent standards:
 
 ---
 
-## 📅 Last Updated
+## 📅 Versions
 
-April 2026
+Every guide targets the current release of its framework, recorded in one place: [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json). Last checked 21 October 2026. `npm run check:versions` flags any install pin in the docs that disagrees with it.
 
 ---
 

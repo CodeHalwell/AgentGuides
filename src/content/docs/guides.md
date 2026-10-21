@@ -1,13 +1,13 @@
 ---
 title: "All Guides"
-description: "Complete list of all agent framework guides - Updated April 2026"
+description: "Complete list of all agent framework guides, with the package version each one targets"
 ---
 
 # All Framework Guides
 
 **Complete Directory of All AI Agent Framework Documentation**
 
-**Last Updated:** April 17, 2026
+**Versions checked:** 21 October 2026
 **Frameworks:** 18
 **Languages:** Python, TypeScript, .NET, Go
 **Total Files:** 219+
@@ -29,8 +29,8 @@ Each framework section includes links to:
 ## 🎯 Multi-Language Frameworks
 
 ### Google ADK
-**Languages:** Python, Go
-**Latest:** Python v1.30.0, Go v1.0.0 GA, TypeScript v0.1.x (April 2026)
+**Languages:** Python, TypeScript, Go
+**Current:** Python `google-adk` 2.12.0 · TypeScript `@google/adk` 2.3.0 · Go `google.golang.org/adk` 1.9.0
 
 #### Python
 - [📂 Python Directory](/google-adk-guide/python/)
@@ -53,7 +53,7 @@ Each framework section includes links to:
 
 ### Semantic Kernel
 **Languages:** Python, .NET
-**Latest:** Python v1.41.2 / .NET v1.74.0 (April 2026)
+**Current:** Python `semantic-kernel` 1.45.0 · .NET `Microsoft.SemanticKernel` 1.81.0
 
 #### Python
 - [📂 Python Directory](/semantic-kernel-guide/python/)
@@ -78,7 +78,7 @@ Each framework section includes links to:
 
 ### LlamaIndex
 **Languages:** Python, TypeScript
-**Latest:** Python v0.14.20, TypeScript @llamaindex/workflow v1.1.4 (April 2026)
+**Current:** Python `llama-index` 0.14.25 · TypeScript `llamaindex` 0.12.1
 
 #### Python
 - [📂 Python Directory](/llamaindex-guide/python/)
@@ -102,7 +102,7 @@ Each framework section includes links to:
 
 ### LangGraph
 **Languages:** Python, TypeScript
-**Latest:** Python v1.1.6 / TypeScript v1.2.8 (April 2026)
+**Current:** Python `langgraph` 1.2.16 · TypeScript `@langchain/langgraph` 1.5.2
 
 #### Python
 - [📂 Python Directory](/langgraph-guide/python/)
@@ -132,7 +132,7 @@ Each framework section includes links to:
 
 ### Microsoft Agent Framework
 **Languages:** Python, .NET
-**Latest:** Preview (October 2025)
+**Current:** Python `agent-framework` 1.22.0 · .NET `Microsoft.Agents.AI` 1.25.0
 
 #### Base Framework
 - [📂 Framework Guide](/microsoft-agent-framework-guide/)
@@ -169,7 +169,7 @@ Each framework section includes links to:
 
 ### OpenAI Agents SDK
 **Languages:** Python, TypeScript
-**Latest:** Production (Swarm replacement)
+**Current:** Python `openai-agents` 0.24.0 · TypeScript `@openai/agents` 0.21.0
 
 #### Python
 - [📂 Python Directory](/openai-agents-sdk-guides/)
@@ -199,7 +199,7 @@ Each framework section includes links to:
 
 ### Anthropic Claude Agent SDK
 **Languages:** Python, TypeScript
-**Latest:** Python v0.72.1, TypeScript v0.68.0 (Rebranded from Code SDK)
+**Current:** Python `claude-agent-sdk` 0.2.170 · TypeScript `@anthropic-ai/claude-agent-sdk` 0.3.306
 
 #### Python
 - [📂 Python Directory](/anthropic-claude-agent-sdk-guide/)
@@ -226,7 +226,7 @@ Each framework section includes links to:
 ## 🐍 Python-Only Frameworks
 
 ### CrewAI
-**Latest:** v1.14.0 (April 2026)
+**Current:** `crewai` 1.15.28
 
 - [📂 CrewAI Guide](/crewai-guide/)
 - [📖 README](/crewai-guide/)
@@ -239,8 +239,8 @@ Each framework section includes links to:
 
 ---
 
-### AutoGen (AG2)
-**Latest:** v0.10.0 (Rebranded to AG2)
+### AutoGen / AG2
+**Current:** AG2 `ag2` 1.1.2 · Microsoft AutoGen `autogen-agentchat` 0.7.5
 
 - [📂 AutoGen/AG2 Guide](/autogen-guide/python/)
 - [📖 README](/autogen-guide/python/)
@@ -255,7 +255,7 @@ Each framework section includes links to:
 ---
 
 ### PydanticAI
-**Latest:** v1.14.1
+**Current:** `pydantic-ai` 2.59.0
 
 - [📂 PydanticAI Guide](/pydanticai-guide/)
 - [📖 README](/pydanticai-guide/)
@@ -272,7 +272,7 @@ Each framework section includes links to:
 ---
 
 ### Haystack
-**Latest:** v2.27.0 (April 2026)
+**Current:** `haystack-ai` 3.4.1
 
 - [📂 Haystack Guide](/haystack-guide/)
 - [📖 README](/haystack-guide/)
@@ -288,7 +288,7 @@ Each framework section includes links to:
 ---
 
 ### SmolAgents
-**Latest:** v1.24.0 (April 2026)
+**Current:** `smolagents` 1.26.0
 
 - [📂 SmolAgents Guide](/smolagents-guide/)
 - [📖 README](/smolagents-guide/)
@@ -300,7 +300,7 @@ Each framework section includes links to:
 ---
 
 ### Amazon Bedrock Agents
-**Latest:** GA (March 10, 2025 - Multi-Agent Collaboration)
+**Current:** `boto3` 1.43.117 · `bedrock-agentcore` 1.24.2 · `strands-agents` 1.62.0
 
 - [📂 Bedrock Guide](/amazon-bedrock-agents-guide/)
 - [📖 README](/amazon-bedrock-agents-guide/)
@@ -321,7 +321,7 @@ Each framework section includes links to:
 ---
 
 ### Mistral Agents API
-**Latest:** v2.0.1 (March 2026)
+**Current:** `mistralai` 3.3.0
 
 - [📂 Mistral Guide](/mistral-agents-api-guide/)
 - [📖 README](/mistral-agents-api-guide/)
@@ -351,7 +351,7 @@ Each framework section includes links to:
 - [LlamaIndex - TypeScript](/llamaindex-guide/typescript/)
 
 **Major Feature Releases:**
-- [LangGraph v1.1.6](/langgraph-guide/python/) - Caching, hooks, memory
+- [LangGraph](/langgraph-guide/python/) - Caching, hooks, memory
 - [PydanticAI](/pydanticai-guide/) - Durable execution, graphs
 - [CrewAI](/crewai-guide/) - Flows
 - [Amazon Bedrock](/amazon-bedrock-agents-guide/) - Multi-agent collaboration, AgentCore
@@ -367,6 +367,5 @@ Each framework section includes links to:
 
 ---
 
-*Last Updated: April 20, 2026*
-*All links verified and updated for GitHub Pages*
+*Versions last checked: 21 October 2026*
 

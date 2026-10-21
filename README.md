@@ -50,6 +50,18 @@ language: "python"               # optional: python | typescript | dotnet | go
 ---
 ```
 
+## Keeping versions right
+
+`src/data/versions.json` is the single source of truth for the package version each guide targets. The framework cards on the home page read from it directly.
+
+```bash
+npm run check:latest              # is versions.json behind PyPI / npm / NuGet / Go?
+node scripts/check-versions.mjs --latest --write   # bump versions.json to the latest releases
+npm run check:versions            # any install pin in the docs that disagrees with versions.json
+```
+
+When a framework releases, bump `versions.json`, update the guide, and make `npm run check:versions` pass. Historical notes such as "added in 1.17.0" are fine; install pins and "this guide targets…" banners should match the current version. The `Check guide versions` workflow runs the pin check on pull requests and the registry check weekly.
+
 ## Deploy
 
 Pushes to `main` trigger `.github/workflows/deploy.yml`, which builds with Astro and publishes to GitHub Pages via `actions/deploy-pages`. The site is served from `https://codehalwell.github.io/AgentGuides/`.

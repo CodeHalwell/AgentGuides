@@ -8,7 +8,9 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "check:versions": "node scripts/check-versions.mjs",
+    "check:latest": "node scripts/check-versions.mjs --latest"
   },
   "dependencies": {
     "@astrojs/react": "^4.3.0",
