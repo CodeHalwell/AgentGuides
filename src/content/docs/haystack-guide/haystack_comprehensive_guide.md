@@ -4,8 +4,6 @@ description: "Components, pipelines, the Agent class, tools, state, hooks and mu
 framework: haystack
 ---
 
-# Haystack Comprehensive Technical Guide
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). This guide was first written for Haystack 2.x; every example has been reworked for the 3.x API. If you are upgrading existing code, start with [Migrating from Haystack 2.x](#migrating-from-haystack-2x).
 
 Haystack is deepset's open-source framework for building LLM applications out of typed **components** wired into **pipelines**. Retrieval, ranking, prompt building and generation are all components; so is the `Agent`, which runs a tool-calling loop and can sit inside a pipeline like anything else.
@@ -46,11 +44,11 @@ Haystack 3 is a consolidation release rather than a rewrite. The component and p
 
 ---
 
-# PART I: CORE FUNDAMENTALS
+## Part I: Core fundamentals
 
-## Installation and Setup
+### Installation and Setup
 
-### Basic Installation
+#### Basic Installation
 
 The core package is `haystack-ai`. It requires Python 3.10 or later.
 
@@ -78,7 +76,7 @@ pip install langfuse-haystack             # LangfuseConnector
 
 There are no `haystack-ai[...]` extras for these; install the integration packages by name.
 
-### Virtual Environment Setup
+#### Virtual Environment Setup
 
 ```bash
 python -m venv .venv
@@ -86,7 +84,7 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install haystack-ai
 ```
 
-### Verifying Installation
+#### Verifying Installation
 
 ```python
 from haystack import Pipeline, component
@@ -108,7 +106,7 @@ print(pipe.run({"upper": {"text": "installation verified"}}))
 # {'upper': {'text': 'INSTALLATION VERIFIED'}}
 ```
 
-### Docker Setup
+#### Docker Setup
 
 ```dockerfile
 FROM python:3.12-slim
@@ -120,9 +118,9 @@ COPY . .
 CMD ["python", "app.py"]
 ```
 
-## Haystack 3 Architecture Overview
+### Haystack 3 Architecture Overview
 
-### Architectural Principles
+#### Architectural Principles
 
 **1. Components.** A component is a class decorated with `@component` whose `run()` method declares typed inputs (its parameters) and typed outputs (via `@component.output_types`). Components can also implement `run_async()`, `warm_up()` and `close()`.
 
@@ -136,7 +134,7 @@ CMD ["python", "app.py"]
 
 **6. Explicit resource lifecycle.** Components that talk to external services create their clients in `warm_up()` and release them in `close()`. Pipelines warm components up automatically on first run; call `pipeline.close()` (or `await pipeline.close_async()`) on shutdown.
 
-### Architectural Layers
+#### Architectural Layers
 
 ```
 ┌─────────────────────────────────────────────────┐
@@ -160,9 +158,9 @@ CMD ["python", "app.py"]
 └─────────────────────────────────────────────────┘
 ```
 
-## Components and Pipelines
+### Components and Pipelines
 
-### Understanding Components
+#### Understanding Components
 
 ```python
 from haystack import component
@@ -199,7 +197,7 @@ Rules worth remembering:
 - Init parameters should be JSON-serialisable values so the component can be saved with `Pipeline.dumps()`; if they are not, implement `to_dict()` / `from_dict()`.
 - For async support, add `async def run_async(...)` with the same signature.
 
-### Creating Pipelines
+#### Creating Pipelines
 
 ```python
 from haystack import Pipeline, component
@@ -226,7 +224,7 @@ print(result["formatter"]["formatted"])  # sample text here (3 words)
 
 `Pipeline.run()` returns the outputs of leaf components only. Pass `include_outputs_from={"stats"}` to also get intermediate outputs.
 
-### A Minimal RAG Pipeline
+#### A Minimal RAG Pipeline
 
 ```python
 from haystack import Document, Pipeline
@@ -263,7 +261,7 @@ result = rag.run({"retriever": {"query": question}, "prompt": {"question": quest
 print(result["llm"]["replies"][0].text)
 ```
 
-### Branching with ConditionalRouter
+#### Branching with ConditionalRouter
 
 `ConditionalRouter` routes are Jinja2 expressions. Each route needs a `condition`, an `output`, an `output_name` and an `output_type`; the first route whose condition is true wins.
 
@@ -291,7 +289,7 @@ print(router.run(query="I want a refund"))  # {'billing': 'I want a refund'}
 
 In a pipeline, connect `router.billing` and `router.general` to different downstream components; only the branch that receives input runs. Use `BranchJoiner` to merge branches back into one stream, and `DocumentJoiner`, `AnswerJoiner`, `ListJoiner` or `StringJoiner` to combine outputs that arrive together.
 
-## Agent Concepts in Haystack
+### Agent Concepts in Haystack
 
 The `Agent` component (`haystack.components.agents.Agent`) runs this loop:
 
@@ -323,7 +321,7 @@ Key points:
 - Everything the agent knows during a run lives in a `State` object. `messages`, `step_count`, `token_usage` and `tool_call_counts` are always present; you add your own keys with `state_schema`.
 - `Agent.run()` returns a dict with `messages`, `last_message`, `step_count`, `token_usage`, `tool_call_counts`, `exit_reason` and any custom state keys that were set during the run.
 
-## Provider-Agnostic Design Philosophy
+### Provider-Agnostic Design Philosophy
 
 Every chat generator takes `messages` and returns `{"replies": list[ChatMessage]}`, and accepts the same `tools` argument. Swapping providers is a one-line change:
 
@@ -365,7 +363,7 @@ generator = OpenAIChatGenerator(
 
 `OpenAIChatGenerator` also works with OpenAI-compatible servers (vLLM, LM Studio, many hosted gateways) via `api_base_url`. For OpenAI's Responses API use `OpenAIResponsesChatGenerator`.
 
-### Document stores
+#### Document stores
 
 All document stores implement the `DocumentStore` protocol (`write_documents`, `filter_documents`, `count_documents`, `delete_documents`). Retrieval is done by store-specific **retriever components**, not by methods on the store:
 
@@ -394,9 +392,9 @@ embedding_retriever = QdrantEmbeddingRetriever(document_store=qdrant, top_k=5)
 
 Note that in Haystack 3, auto-generated `Document.id` values for documents with non-empty `meta` differ from those produced by 2.x. If you rely on IDs for deduplication against an index written by 2.x, see the [migration notes](#migrating-from-haystack-2x).
 
-## Configuration Patterns and Best Practices
+### Configuration Patterns and Best Practices
 
-### Environment-based configuration
+#### Environment-based configuration
 
 Keep secrets in the environment and everything else in a small typed config object:
 
@@ -423,7 +421,7 @@ config = AppConfig()
 
 Remember that from 3.0 a missing API key is reported when the component warms up or first runs, not when it is constructed, so call `config.validate()` (or `pipeline.warm_up()`) at start-up if you want to fail fast.
 
-### YAML pipeline definitions
+#### YAML pipeline definitions
 
 Pipelines serialise to YAML and back:
 
@@ -454,11 +452,11 @@ allow_deserialization_module("myapp.*")                     # process-wide
 
 ---
 
-# PART II: SIMPLE AGENTS
+## Part II: Simple agents
 
-## Creating Agents with the Agent Class
+### Creating Agents with the Agent Class
 
-### Basic agent with tools
+#### Basic agent with tools
 
 ```python
 from typing import Annotated
@@ -496,7 +494,7 @@ print(result["tool_call_counts"], result["token_usage"])
 
 The `@tool` decorator builds the JSON schema from the type hints, using `Annotated[...]` strings as parameter descriptions and the docstring as the tool description.
 
-### Using a `user_prompt` template
+#### Using a `user_prompt` template
 
 Instead of building `ChatMessage`s yourself, give the agent a Jinja2 `user_prompt`. Its variables become run-time inputs (and pipeline input sockets):
 
@@ -513,7 +511,7 @@ print(result["last_message"].text)
 
 Template variables are required by default. Pass `required_variables=["text"]` to make the rest optional, or `required_variables=None` to make them all optional. Prompts are fixed at construction; to vary the prompt per run, build the `ChatMessage`s yourself and pass them as `messages`.
 
-### Async and streaming
+#### Async and streaming
 
 ```python
 import asyncio
@@ -535,7 +533,7 @@ async def main() -> str:
 print(asyncio.run(main()))
 ```
 
-### Runtime tool selection
+#### Runtime tool selection
 
 `Agent.run()` accepts `tools=` to override the tool set for one run. Pass either tool objects or a list of tool names drawn from the tools given at construction:
 
@@ -544,7 +542,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(model="gpt-5-mini"), tools=[get
 agent.run(messages=[ChatMessage.from_user("Weather in Tokyo?")], tools=["get_weather"])
 ```
 
-## Tool Integration and Function Calling
+### Tool Integration and Function Calling
 
 Haystack has several tool types, all subclasses of `haystack.tools.Tool`:
 
@@ -558,7 +556,7 @@ Haystack has several tool types, all subclasses of `haystack.tools.Tool`:
 | `MCPTool` / `MCPToolset` | Tools served by an MCP server (`mcp-haystack`) |
 | `Toolset` / `SearchableToolset` | Grouping tools; letting the agent search a large catalogue |
 
-### Function tools
+#### Function tools
 
 ```python
 from typing import Annotated, Literal
@@ -581,7 +579,7 @@ def compound_interest(
 
 Non-string results are serialised with `json.dumps` before being sent back to the model. Use `outputs_to_string={"handler": my_fn}` (or `{"source": "key"}`) to control that.
 
-### Explicit `Tool` definitions
+#### Explicit `Tool` definitions
 
 Use `Tool` directly when the schema should differ from the Python signature, or the function is not yours:
 
@@ -604,7 +602,7 @@ sql_tool = Tool(
 )
 ```
 
-### Components as tools
+#### Components as tools
 
 ```python
 from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
@@ -628,7 +626,7 @@ web_search = ComponentTool(
 )
 ```
 
-### MCP tools
+#### MCP tools
 
 ```python
 # pip install mcp-haystack
@@ -644,7 +642,7 @@ remote_tools = MCPToolset(server_info=StreamableHttpServerInfo(url="http://local
 agent = Agent(chat_generator=OpenAIChatGenerator(model="gpt-5-mini"), tools=fs_tools)
 ```
 
-### Tool errors
+#### Tool errors
 
 By default a tool that raises is reported back to the model as an error result so it can recover. Set `raise_on_tool_invocation_failure=True` on the `Agent` to raise instead. Validate inputs inside the tool and return a helpful message rather than relying on exceptions for expected failures:
 
@@ -672,11 +670,11 @@ def calculate(expression: Annotated[str, "Arithmetic expression using + - * / an
         return f"Error: {exc}"
 ```
 
-## Single-Purpose Agents
+### Single-Purpose Agents
 
 A single-purpose agent is just an `Agent` with a narrow system prompt and a small, well-described tool set. Wrap it in a function or class if you need extra bookkeeping.
 
-### Customer support agent
+#### Customer support agent
 
 ```python
 from typing import Annotated, Literal
@@ -728,7 +726,7 @@ result = support_agent.run(messages=[ChatMessage.from_user("Can I return order O
 print(result["last_message"].text)
 ```
 
-### Data analysis agent
+#### Data analysis agent
 
 Closures are a tidy way to give tools access to an object without exposing it to the model:
 
@@ -762,7 +760,7 @@ analyst = make_analysis_agent(data)
 print(analyst.run(messages=[ChatMessage.from_user("How do marketing and sales relate?")])["last_message"].text)
 ```
 
-## Conversational Agents with Memory
+### Conversational Agents with Memory
 
 `Agent` is stateless between runs: memory is simply the list of messages you pass in. The `messages` output contains the full transcript of the run (system prompt, user turn, tool calls, tool results and the final reply), so the simplest memory is to keep that list and feed it back.
 
@@ -799,9 +797,9 @@ Truncating by message count can split a tool call from its result. In production
 
 For persistence across processes, serialise messages with `ChatMessage.to_dict()` / `ChatMessage.from_dict()` and store them in Redis, a database or a document store keyed by session ID. The [recipes](/haystack-guide/haystack_recipes/) page has a Redis-backed example.
 
-## Agent Configuration and Customisation
+### Agent Configuration and Customisation
 
-### Constructor reference
+#### Constructor reference
 
 | Parameter | Default | Purpose |
 |-----------|---------|---------|
@@ -821,7 +819,7 @@ For persistence across processes, serialise messages with `ChatMessage.to_dict()
 
 `generation_kwargs` (temperature, max tokens and so on) belong to the chat generator, either at construction or per run via `agent.run(..., generation_kwargs={...})`.
 
-### State and tools
+#### State and tools
 
 Tools can read from and write to the agent's state. In 3.x, reading by name requires an explicit `inputs_from_state` mapping:
 
@@ -853,7 +851,7 @@ print(result.get("notes", []))
 
 A tool can also receive the whole `State` by declaring a parameter typed as `haystack.components.agents.State`. The names `step_count`, `token_usage`, `tool_call_counts`, `continue_run`, `tools` and `hook_context` are reserved and cannot appear in `state_schema`.
 
-### Exit conditions
+#### Exit conditions
 
 ```python
 @tool
@@ -871,7 +869,7 @@ result = agent.run(messages=[ChatMessage.from_user("Research X and submit a fina
 print(result["last_message"].tool_call_result.result)
 ```
 
-### Hooks
+#### Hooks
 
 Hooks are callables that receive the live `State` and influence the run by mutating it. The `@hook` decorator turns a `(state) -> None` function into one:
 
@@ -903,7 +901,7 @@ agent = Agent(
 
 Hook points are `before_run`, `before_llm`, `before_tool`, `after_tool`, `on_exit` and `after_run`. Request-scoped resources (a websocket, a user ID) go in `agent.run(..., hook_context={...})` and are read inside hooks with `state.get("hook_context")`.
 
-### Human-in-the-loop confirmation
+#### Human-in-the-loop confirmation
 
 Tool confirmation is a `before_tool` hook built from confirmation strategies:
 
@@ -933,7 +931,7 @@ agent = Agent(
 
 `AskOncePolicy` and `NeverAskPolicy` are also available; write your own `ConfirmationUI` for web front ends.
 
-## Error Handling and Resilience
+### Error Handling and Resilience
 
 Several layers help:
 
@@ -978,9 +976,9 @@ def run_with_retry(agent: Agent, text: str, attempts: int = 3, backoff: float = 
 
 ---
 
-# PART III: AGENTIC WORKFLOWS AND MULTI-AGENT SYSTEMS
+## Part III: Agentic workflows and multi-agent systems
 
-## Agentic AI Workflows: Production-First Design
+### Agentic AI Workflows: Production-First Design
 
 Haystack's strength is that agents and deterministic components compose in the same graph. A common shape is *retrieve → agent → validate*, with the agent's `user_prompt` variables wired to upstream outputs:
 
@@ -1016,7 +1014,7 @@ print(result["analyst"]["last_message"].text)
 
 `messages` is a mandatory input of `Agent`, so pass an empty list when the `user_prompt` supplies the turn.
 
-### Wrapping a pipeline as a component
+#### Wrapping a pipeline as a component
 
 `SuperComponent` hides a pipeline behind a simple interface, which is handy for reuse and for exposing the pipeline as a tool:
 
@@ -1033,7 +1031,7 @@ print(qa.run(query="How fast did revenue grow?", messages=[])["answer"].text)
 
 `PipelineTool` does the same but produces a `Tool` directly, with `input_mapping`/`output_mapping` and an explicit `name` and `description`.
 
-### Running concurrently and streaming
+#### Running concurrently and streaming
 
 ```python
 import asyncio
@@ -1054,7 +1052,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Iterative refinement loop
+#### Iterative refinement loop
 
 Pipelines may contain cycles. This one regenerates until a validator is satisfied, bounded by `max_runs_per_component`:
 
@@ -1096,11 +1094,11 @@ loop.connect("validator.feedback", "joiner")      # the loop
 print(loop.run({"prompt": {"topic": "vector databases"}})["validator"]["valid"])
 ```
 
-## Multi-Agent Pipeline Design Patterns
+### Multi-Agent Pipeline Design Patterns
 
 There are two main ways to combine agents. Both are covered in more depth in the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/).
 
-### Pattern 1: coordinator with agents as tools
+#### Pattern 1: coordinator with agents as tools
 
 `AgentTool` turns an agent into a tool that another agent can call. The coordinator decides when to delegate:
 
@@ -1133,7 +1131,7 @@ result = coordinator.run(messages=[ChatMessage.from_user("Write a short briefing
 print(result["last_message"].text)
 ```
 
-### Pattern 2: agents as pipeline stages
+#### Pattern 2: agents as pipeline stages
 
 When the order is fixed, wire agents together in a pipeline. Each agent's `last_message` can feed the next agent's `user_prompt` variable:
 
@@ -1161,11 +1159,11 @@ out = seq.run({"research": {"topic": "solid-state batteries", "messages": []}, "
 print(out["write"]["last_message"].text)
 ```
 
-### Pattern 3: routing to specialists
+#### Pattern 3: routing to specialists
 
 `ConditionalRouter` (rule-based) or `LLMMessagesRouter` (model-based classification) can send a request to the right specialist agent; see the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/#coordination--orchestration).
 
-### Pattern 4: parallel fan-out
+#### Pattern 4: parallel fan-out
 
 Run independent agents concurrently with `asyncio.gather` over `run_async`, or place them on parallel branches of a pipeline and use `await pipeline.run_async(...)`.
 
@@ -1180,7 +1178,7 @@ async def fan_out(question: str) -> dict[str, str]:
     return {name: r["last_message"].text for name, r in zip(agents, results)}
 ```
 
-## SearchableToolset
+### SearchableToolset
 
 When an agent has dozens or hundreds of tools, sending every schema on every call wastes tokens and confuses the model. `SearchableToolset` wraps a catalogue and exposes a single `search_tools` tool; the agent searches by keyword and the matching tools are loaded for subsequent steps.
 
@@ -1198,7 +1196,7 @@ toolset = SearchableToolset(
 agent = Agent(chat_generator=OpenAIChatGenerator(model="gpt-5-mini"), tools=toolset)
 ```
 
-## LLMRanker
+### LLMRanker
 
 `LLMRanker` re-ranks retrieved documents with a chat model, returning only the relevant ones in order:
 
@@ -1225,7 +1223,7 @@ The prompt is a Jinja2 template with `query` and `documents`; pass `prompt=` to 
 
 ---
 
-# Migrating from Haystack 2.x
+## Migrating from Haystack 2.x
 
 The upstream [migration guide](https://github.com/deepset-ai/haystack/blob/main/MIGRATION.md) is authoritative; the changes most likely to affect code in this guide's style are below.
 

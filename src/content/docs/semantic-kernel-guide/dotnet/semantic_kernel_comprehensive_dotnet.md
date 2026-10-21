@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: dotnet
 ---
 
-# Semantic Kernel Comprehensive Guide (.NET)
-
 > Verified against `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (checked %%versions-checked%%). Type and member names were checked against the published packages' API documentation and the Semantic Kernel source at that release. The package targets .NET 8, .NET 10 and .NET Standard 2.0.
 
 > **Semantic Kernel and Microsoft Agent Framework.** [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/) (MAF, `Microsoft.Agents.AI`) is the successor to Semantic Kernel, built by the same team, and has been generally available since April 2026. Semantic Kernel 1.x remains supported — critical bug and security fixes for at least a year after MAF's GA — but most new features go to MAF. New agent projects should start on MAF; existing SK applications can migrate gradually, and every SK agent type can be wrapped as a MAF `AIAgent` ([section 14](#14-migrating-to-microsoft-agent-framework)).

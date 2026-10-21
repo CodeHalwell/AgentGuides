@@ -8,8 +8,6 @@ sidebar:
   order: 40
 ---
 
-# RunControl & GraphDrained — graceful shutdown
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.errors`).
 
 LangGraph supports _cooperative drain_: a running graph can be told to stop at the next safe superstep boundary, flush its checkpoint, and raise `GraphDrained` — leaving the run in a state that can be resumed from exactly where it stopped. This is the right pattern for SIGTERM / scale-down scenarios.

@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: dotnet
 ---
 
-# Semantic Kernel Diagrams (.NET)
-
 Diagrams for `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%%. Code for each flow is in the [comprehensive .NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/).
 
 ---

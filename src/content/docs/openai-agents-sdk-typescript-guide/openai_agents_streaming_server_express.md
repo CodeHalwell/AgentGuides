@@ -4,8 +4,6 @@ description: "Stream Agents SDK runs (and raw model output) to clients over SSE 
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents Streaming Server (Express)
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Requires `express`, `zod` and `@openai/agents@%%version=@openai/agents%%`; Node.js 22+.
 
 ## Streaming an agent run over SSE

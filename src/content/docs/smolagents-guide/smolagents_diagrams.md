@@ -4,8 +4,6 @@ description: "ASCII diagrams of smolagents' architecture — agents, tools, mode
 framework: smolagents
 ---
 
-# smolagents Architecture & Flow Diagrams
-
 > Reflects `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Timings and token counts in these diagrams are illustrative, not measurements.
 
 ## Visual Guide to smolagents Concepts

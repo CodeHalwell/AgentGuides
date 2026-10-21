@@ -4,8 +4,6 @@ description: "Enterprise-grade deployment, scaling, monitoring, and architectura
 framework: pydanticai
 ---
 
-# Pydantic AI: Production Deployment & Architecture Guide
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line and updated for V2.
 
 **Focus:** Enterprise-grade deployment, scaling, monitoring, and architectural patterns. Much of this page is ordinary FastAPI / Kubernetes / Prometheus practice; the Pydantic AI-specific parts are the error classes, `UsageLimits`, `RunUsage` and the Logfire instrumentation.

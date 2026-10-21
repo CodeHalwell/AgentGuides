@@ -4,8 +4,6 @@ description: "Comprehensive visual representations of Bedrock Agents architectur
 framework: amazon-bedrock-agents
 ---
 
-# Amazon Bedrock Agents: Architecture Diagrams and Visual References
-
 Comprehensive visual representations of Bedrock Agents architecture, data flows, and deployment patterns.
 
 These diagrams describe **Bedrock Agents (Agents Classic)**, which has been in maintenance mode — closed to new customers — since 30 July 2026. For the AgentCore architecture that AWS recommends for new agents, see the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#agentcore-architecture).

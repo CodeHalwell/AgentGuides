@@ -4,8 +4,6 @@ description: "Advanced multi-agent coordination, handoffs, and guardrails in Pyt
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK Advanced Multi‑Agent (Python)
-
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).
 > Upstream: https://github.com/openai/openai-agents-python
 

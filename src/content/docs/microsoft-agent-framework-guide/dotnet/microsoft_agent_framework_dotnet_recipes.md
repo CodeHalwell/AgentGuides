@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework .NET - Recipes and Code Patterns
-
 A collection of practical C# recipes for common agent patterns with the Microsoft Agent Framework for .NET.
 
 **Target platform:** .NET 8.0+

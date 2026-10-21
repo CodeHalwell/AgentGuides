@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# agent-framework (Python) — Installation & Quickstart
-
 This guide covers everything you need to get your first agent running in Python using `agent-framework` (version %%version=agent-framework%%, checked %%versions-checked%%).
 
 ---

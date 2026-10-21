@@ -8,8 +8,6 @@ sidebar:
   order: 2
 ---
 
-# Chapter 2 — Your First Agent
-
 **What you'll learn:** six concrete agent patterns you can copy-paste and adapt — a linear chat pipeline, conditional routing, looping with a safeguard counter, a ReAct tool-calling agent with `create_react_agent`, `tools_condition` for routing, and streaming execution.
 
 Verified against **`langgraph==%%version=langgraph%%`**.

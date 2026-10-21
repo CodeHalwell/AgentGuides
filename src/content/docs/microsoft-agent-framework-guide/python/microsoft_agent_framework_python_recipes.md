@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Microsoft Agent Framework Python — Recipes and Code Patterns
-
 Practical, runnable patterns for the real `agent_framework` package. Every recipe targets the public surface of the latest release; nothing here relies on private modules.
 
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.

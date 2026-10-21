@@ -8,8 +8,6 @@ sidebar:
   order: 4
 ---
 
-# Chapter 4 — Tools
-
 **What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).

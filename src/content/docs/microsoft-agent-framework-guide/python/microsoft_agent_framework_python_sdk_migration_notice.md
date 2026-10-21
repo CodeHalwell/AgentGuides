@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# `azure-ai-agents` — Integration Add-on Reference
-
 > **Clarification:** `azure-ai-agents` is **not** a replacement for `agent-framework`. It is an optional Microsoft SDK for direct access to the Azure AI Agents service REST API. Use it alongside `agent-framework` when you need low-level control over Azure AI Agents service resources (threads, runs, vector stores). For everyday agent development, use `agent-framework` directly.
 
 ---

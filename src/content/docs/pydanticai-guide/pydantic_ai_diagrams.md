@@ -4,8 +4,6 @@ description: "Visual representations of Pydantic AI patterns, architectures, and
 framework: pydanticai
 ---
 
-# Pydantic AI: Architecture & Flow Diagrams
-
 Visual representations of Pydantic AI patterns, architectures, and workflows. The diagrams are conceptual; API names in them match **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%).
 
 ---

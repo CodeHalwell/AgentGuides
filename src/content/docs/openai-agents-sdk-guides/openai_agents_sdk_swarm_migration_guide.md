@@ -4,8 +4,6 @@ description: "Moving from the experimental Swarm framework to the OpenAI Agents 
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK: Complete Migration Guide from Swarm
-
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). First written in January 2025 for v0.2.9. Swarm itself is an experimental educational repository that is no longer developed.
 
 ---

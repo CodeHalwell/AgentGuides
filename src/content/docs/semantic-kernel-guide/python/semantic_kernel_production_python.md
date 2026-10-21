@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Production Guide (Python)
-
 **Production deployment, monitoring, resilience and testing for Python**
 
 > Targets `semantic-kernel` %%version=semantic-kernel%% on Python 3.10+ (checked %%versions-checked%%). Semantic Kernel is supported, but new agent features land in its successor, [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/); the deployment patterns here apply to both.

@@ -4,8 +4,6 @@ description: "End-to-end reference for Amazon Bedrock Agents (Agents Classic): I
 framework: amazon-bedrock-agents
 ---
 
-# Amazon Bedrock Agents: Comprehensive Technical Guide
-
 > **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%). Service clients and operation names in the examples were checked against that release.
 
 > **Maintenance mode.** Amazon Bedrock Agents — now called *Agents Classic* — stopped accepting new customers on 30 July 2026. Existing customers can keep using it, and this guide remains accurate for them. For new work AWS recommends [Amazon Bedrock AgentCore](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/); see AWS's [migration guidance](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-classic-maintenance-mode.html).

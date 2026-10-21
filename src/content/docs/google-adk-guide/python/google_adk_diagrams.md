@@ -5,8 +5,6 @@ framework: google-adk
 language: python
 ---
 
-# Google ADK - Architecture Diagrams
-
 ---
 
 ## ADK Core Architecture

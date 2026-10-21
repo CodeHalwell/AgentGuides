@@ -8,8 +8,6 @@ sidebar:
   order: 8
 ---
 
-# Chapter 8 — Middleware & Hooks
-
 **What you'll learn:** how to intercept, transform, and guard model and tool calls without rewriting node business logic. LangGraph provides four complementary mechanisms: `pre_model_hook` / `post_model_hook` on `create_react_agent`, per-node `error_handler` and `retry_policy` on `add_node`, `set_node_defaults` for graph-wide policy, and `ToolNode`'s `handle_tool_errors` for tool-specific error handling.
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.prebuilt`, `langgraph.graph`, `langgraph.types`).

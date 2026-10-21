@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Built-in / Native Tools & Common Tools
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.native_tools`, `pydantic_ai.capabilities`, `pydantic_ai.common_tools`.
 
 Native tools execute inside the LLM provider's infrastructure, not in your Python process. PydanticAI forwards a typed config to the provider and streams the results back as `NativeToolCallPart` / `NativeToolReturnPart`.

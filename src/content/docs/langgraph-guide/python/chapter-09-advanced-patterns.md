@@ -8,8 +8,6 @@ sidebar:
   order: 9
 ---
 
-# Chapter 9 — Advanced Patterns
-
 **What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send` (including per-send timeouts), `add_sequence()` for concise linear pipelines, `Overwrite` for bypassing reducers, `GraphOutput` with the `version="v2"` invoke API, `set_node_defaults()` for graph-wide policies, plus the Functional API `@entrypoint`/`@task` with async, timeout, context and more.
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`, `langgraph.graph.state`).

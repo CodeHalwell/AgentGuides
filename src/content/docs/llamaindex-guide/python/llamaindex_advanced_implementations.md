@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex: Advanced Implementation Patterns
-
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). For multi-agent routing and human-in-the-loop see [Advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).
 
 Earlier versions of this page were built on the retired `llama-agents` package (`AgentOrchestrator`, `SimpleMessageQueue`) and on an `AgentWorkflow.from_tools(...)` constructor that never existed. The patterns below use the current Workflows runtime.

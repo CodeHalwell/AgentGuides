@@ -4,8 +4,6 @@ description: "Practical recipes for Amazon Bedrock Agents (Agents Classic) and A
 framework: amazon-bedrock-agents
 ---
 
-# Amazon Bedrock Agents: Recipes and Common Patterns
-
 Practical recipes for common Bedrock agent scenarios.
 
 > **Verified against:** `boto3` %%version=boto3%%, `strands-agents` %%version=strands-agents%% and `bedrock-agentcore` %%version=bedrock-agentcore%% (checked %%versions-checked%%).

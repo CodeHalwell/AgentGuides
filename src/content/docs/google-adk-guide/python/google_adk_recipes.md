@@ -5,8 +5,6 @@ framework: google-adk
 language: python
 ---
 
-# Google ADK - Practical Recipes and Examples
-
 **Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%); first written for 2.2.0.  
 **Focus:** Real-world implementations and use cases
 

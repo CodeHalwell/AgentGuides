@@ -4,8 +4,6 @@ description: "Expert-level patterns and architectural techniques for Pydantic AI
 framework: pydanticai
 ---
 
-# Pydantic AI: Advanced Patterns
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line; the examples have been updated for the V2 API.
 
 **Focus:** Expert-level patterns, optimisations and architectural techniques. Several patterns below are plain-Python orchestration around `Agent`; where Pydantic AI has a built-in equivalent (capabilities, `Hooks`, `ConcurrencyLimiter`, toolsets) it is pointed out.

@@ -4,7 +4,6 @@ description: "Architecture and flow diagrams for the Microsoft Agent Framework â
 framework: microsoft-agent-framework
 ---
 
-# Microsoft Agent Framework - Architecture Diagrams & Visualisations
 **Purpose:** Visual representation of Agent Framework architecture and system design
 **First drawn:** October 2025 (preview) Â· **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)
 

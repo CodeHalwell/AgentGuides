@@ -4,8 +4,6 @@ description: "Stream agent tokens and tool events over server-sent events with H
 framework: haystack
 ---
 
-# Haystack Streaming Server (FastAPI)
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%).
 
 This server streams an agent's output over server-sent events (SSE). The agent's `streaming_callback` receives `StreamingChunk`s; an async callback pushes them onto a queue that the HTTP response drains. Tool calls and tool results arrive as chunks too, so the client can show progress.

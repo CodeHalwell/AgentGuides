@@ -4,8 +4,6 @@ description: "Complex team orchestration, error recovery, HITL, and performance 
 framework: crewai
 ---
 
-# CrewAI Advanced Multi‑Agent Patterns (Python)
-
 > **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%).
 
 ## Goals

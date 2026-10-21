@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph: Advanced Recipes & Real-World Patterns
-
 **Verified against `langgraph` %%version=langgraph%%** (checked %%versions-checked%%). A version in a recipe title is the release that recipe was first written for.
 
 This guide includes:

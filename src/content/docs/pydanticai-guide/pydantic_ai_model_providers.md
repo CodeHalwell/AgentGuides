@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Model Providers, FallbackModel & InstrumentationSettings
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.
 
 A PydanticAI `Agent` talks to an `LLM` through a `Model` backed by a `Provider`. The quickest way to wire one up is the `'provider:model-name'` string; the full way is constructing `SpecificModel(..., provider=SpecificProvider(...))` yourself. This page lists every prefix the installed source recognises and how to compose, gateway, or fall back between them.

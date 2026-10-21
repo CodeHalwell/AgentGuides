@@ -4,8 +4,6 @@ description: "Moving from claude-code-sdk to claude-agent-sdk, and upgrading acr
 framework: anthropic-claude-agent-sdk
 ---
 
-# Migration Guide: Claude Code SDK → Claude Agent SDK (Python)
-
 **Target:** `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).
 
 This page covers two things:

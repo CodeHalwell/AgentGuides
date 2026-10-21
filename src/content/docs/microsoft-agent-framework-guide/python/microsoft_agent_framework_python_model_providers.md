@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Model Providers — Python
-
 Every chat client in `agent-framework` implements the same `SupportsChatGetResponse` protocol, so `Agent(client=...)` accepts them interchangeably. The import is always `agent_framework.<provider>.<ClassName>` — **no Azure SDK import is required for any of these**. The Azure SDK only becomes relevant for authentication (`azure-identity`) or for Azure-specific storage providers.
 
 This page was verified against `agent-framework` %%version=agent-framework%% and the provider packages it installs (re-checked %%versions-checked%%; first written for 1.5.0 and the `1.0.0b260514` provider line). Each sub-package is imported lazily from the `agent_framework.<provider>` namespace — you install the provider package and import from `agent_framework.<provider>`.

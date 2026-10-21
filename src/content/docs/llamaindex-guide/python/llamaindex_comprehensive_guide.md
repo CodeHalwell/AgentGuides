@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex Comprehensive Technical Guide (Python)
-
 > Verified against `llama-index` / `llama-index-core` %%version=llama-index%% (versions checked %%versions-checked%%). Every import and constructor on this page was checked against an installed copy of that release.
 
 LlamaIndex has two halves that are worth keeping separate in your head:

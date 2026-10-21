@@ -4,8 +4,6 @@ description: "Guardrails, redaction, auditing and tracing for the TypeScript Cla
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Claude Agent SDK Middleware (TypeScript)
-
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).
 
 The Agent SDK has no middleware class. Three mechanisms cover what middleware usually does:

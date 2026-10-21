@@ -4,8 +4,6 @@ description: "A comprehensive guide to deploying, scaling, and operating agents 
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK: Production Guide
-
 A comprehensive guide to deploying, scaling, and operating agents in production environments. This guide covers deployment architectures, observability, security, performance optimisation, and operational best practices.
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Pin the minor version in production: `0.Y` bumps may contain breaking changes.

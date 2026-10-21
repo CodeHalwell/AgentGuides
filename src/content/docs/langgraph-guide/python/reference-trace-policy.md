@@ -8,8 +8,6 @@ sidebar:
   order: 41
 ---
 
-# TracePolicy — per-node LangSmith tracing
-
 Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.types`).
 
 `TracePolicy` lets you control what each node records in LangSmith at a fine-grained level. Rather than blanket-hiding inputs/outputs across all runs, you can selectively truncate, redact, or silence individual nodes while leaving the rest fully traced.

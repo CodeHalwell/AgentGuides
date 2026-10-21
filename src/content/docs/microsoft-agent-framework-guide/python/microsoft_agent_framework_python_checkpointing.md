@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Checkpointing — Python
-
 Checkpointing captures the full execution state of a workflow at every superstep so you can pause, crash, redeploy, or hand off to a different process and pick up exactly where you left off. It's the backbone for long-running agent workflows, human-in-the-loop pauses that last days, and durable multi-agent orchestrations.
 
 Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._workflows._checkpoint`, re-checked %%versions-checked%%; first written for 1.6.0).

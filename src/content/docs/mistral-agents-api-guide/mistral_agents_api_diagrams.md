@@ -4,8 +4,6 @@ description: "Agent lifecycle, conversation flow, streaming, handoff and tool-ex
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Comprehensive Visual Architecture Guide
-
 Diagrams of the Agents and Conversations APIs. Endpoint names, entry types and event names match `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Parts 5 to 7 sketch how such a service is typically built and deployed; they are illustrations, not a description of Mistral's internal systems.
 
 ---

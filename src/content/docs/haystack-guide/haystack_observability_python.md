@@ -4,8 +4,6 @@ description: "Tracing pipelines and agents, logging, retries, fallbacks and dead
 framework: haystack
 ---
 
-# Haystack Observability & Error Recovery (Python)
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Upstream: [release notes](https://github.com/deepset-ai/haystack/releases) · [tracing docs](https://docs.haystack.deepset.ai/docs/tracing)
 
 Haystack 3 changed observability in three ways that matter when upgrading:

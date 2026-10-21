@@ -4,8 +4,6 @@ description: "Building collaborative multi-agent applications with Haystack 3 â€
 framework: haystack
 ---
 
-# Haystack Multi-Agent Systems Guide
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). First written in 2025 for Haystack 2.x; rewritten for the 3.x `Agent` API.
 
 ---

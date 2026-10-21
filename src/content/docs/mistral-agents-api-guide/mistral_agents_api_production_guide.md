@@ -4,8 +4,6 @@ description: "Running services on Mistral's Agents API in production: configurat
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Production Deployment Guide
-
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).
 
 The agent loop, built-in tools and conversation storage run on Mistral's side, so your service is mostly an API client: it needs sensible concurrency, retries, observability, its own record of which conversations belong to whom, and careful handling of secrets.

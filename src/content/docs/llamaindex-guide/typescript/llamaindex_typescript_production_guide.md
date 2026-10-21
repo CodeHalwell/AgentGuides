@@ -5,8 +5,6 @@ framework: llamaindex
 language: typescript
 ---
 
-# LlamaIndex TypeScript Production Guide
-
 **Version:** `@llamaindex/workflow` 1.1.25 (final release) · umbrella `llamaindex` %%version=llamaindex%% · checked %%versions-checked%%  
 **Target:** Node.js 20+ deployments
 

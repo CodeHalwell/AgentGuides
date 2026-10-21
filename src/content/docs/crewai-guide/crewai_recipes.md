@@ -4,7 +4,6 @@ description: "Ten end-to-end CrewAI crews — research, data analysis, customer 
 framework: crewai
 ---
 
-# CrewAI Recipes
 ## Practical Implementation Examples and Real-World Solutions
 
 ---

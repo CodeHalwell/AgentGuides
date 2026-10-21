@@ -4,8 +4,6 @@ description: "The SDK's core features plus what changed in 2026 — sandbox agen
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK: Features and Updates (2025–2026)
-
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). First written in January 2025 for v0.2.9. Language: Python.
 
 ---

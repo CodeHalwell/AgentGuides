@@ -5,8 +5,6 @@ framework: llamaindex
 language: typescript
 ---
 
-# LlamaIndex TypeScript Workflows — Comprehensive Guide
-
 **Packages:** `@llamaindex/workflow` 1.1.25 (with `@llamaindex/workflow-core` 1.3.x) · umbrella package `llamaindex` %%version=llamaindex%% · Node 20+ · checked %%versions-checked%%
 
 > **Deprecated upstream.** LlamaIndex.TS is no longer maintained. The repository README says *"This project is deprecated and no longer maintained"*, and npm marks `@llamaindex/workflow`, `@llamaindex/workflow-core`, `@llamaindex/core` and the provider packages (`@llamaindex/openai`, ...) as deprecated. `@llamaindex/workflow-core` points users to **LlamaAgents (Python Workflows)** instead. The final releases (`llamaindex` %%version=llamaindex%%, `@llamaindex/workflow` 1.1.25) still install and work, and this guide documents them accurately, but expect no fixes. For new TypeScript projects consider a maintained framework — for example [LangGraph.js](/langgraph-guide/typescript/) or the [OpenAI Agents SDK for TypeScript](/openai-agents-sdk-typescript-guide/) — or run LlamaIndex in Python behind an API.

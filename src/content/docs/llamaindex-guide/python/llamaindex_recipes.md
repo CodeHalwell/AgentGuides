@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex Recipes and Practical Examples
-
 Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems.
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Agents use the workflow-based `FunctionAgent`, whose `run()` is asynchronous — each recipe exposes an `async` entry point and calls it with `asyncio.run(...)`. Model names are examples.

@@ -5,8 +5,6 @@ framework: langgraph
 language: typescript
 ---
 
-# LangGraph Middleware and Guardrails (TypeScript)
-
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%).
 
 LangGraph itself has no middleware layer: a node is a function, so a guardrail is code that runs before or after the work inside that function. There are two common shapes.

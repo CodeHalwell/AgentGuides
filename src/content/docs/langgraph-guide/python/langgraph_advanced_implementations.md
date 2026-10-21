@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph Advanced Implementations
-
 This guide explores advanced, production-grade patterns for building sophisticated multi-agent systems with LangGraph. The examples provided are complete, runnable, and designed for real-world application.
 
 ---

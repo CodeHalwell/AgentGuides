@@ -4,8 +4,6 @@ description: "Language-neutral Semantic Kernel reference — architecture, core 
 framework: semantic-kernel
 ---
 
-# Semantic Kernel: Concepts and Cross-Language Reference
-
 > Current releases: `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. A Java SDK also exists but is not covered here. For complete, verified code see the [Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) and the [.NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/).
 
 This page explains *what* the pieces of Semantic Kernel are and how they fit together, with short Python and C# snippets so you can map one SDK onto the other. It replaces an earlier, much longer edition whose code targeted pre-1.0 APIs and planners that no longer exist.

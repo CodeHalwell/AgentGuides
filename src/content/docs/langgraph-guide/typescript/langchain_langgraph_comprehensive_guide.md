@@ -5,8 +5,6 @@ framework: langgraph
 language: typescript
 ---
 
-# LangChain.js and LangGraph.js Comprehensive Technical Guide
-
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` 1.5 (checked %%versions-checked%%). First written for 1.0.
 
 **Beginner to Expert Level | TypeScript-Native Implementation | Production-Ready Patterns**

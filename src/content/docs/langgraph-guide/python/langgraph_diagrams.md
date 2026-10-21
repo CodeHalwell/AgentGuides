@@ -4,8 +4,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph: Visual Architectures & Diagrams
-
 ## Basic State Machine
 
 ```mermaid

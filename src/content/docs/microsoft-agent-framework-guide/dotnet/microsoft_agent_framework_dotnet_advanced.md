@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework Advanced (.NET)
-
 
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%. The service-agent example below goes through `Microsoft.Agents.AI.AzureAI.Persistent`, which wraps the Azure AI Agents SDK (`Azure.AI.Agents.Persistent`).
 Upstream: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.Agents.Persistent | https://learn.microsoft.com/dotnet/api/overview/azure/ai.agents.persistent-readme

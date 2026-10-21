@@ -4,8 +4,6 @@ description: "This guide covers advanced error handling and recovery patterns fo
 framework: amazon-bedrock-agents
 ---
 
-# Advanced Error Handling and Recovery for Amazon Bedrock Agents (Python)
-
 This guide covers advanced error handling and recovery patterns for building resilient and reliable Bedrock Agents.
 
 > Examples use `boto3` %%version=boto3%% (checked %%versions-checked%%).

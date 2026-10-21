@@ -4,8 +4,6 @@ description: "Architecture, agent loop, permission, session and deployment diagr
 framework: anthropic-claude-agent-sdk
 ---
 
-# Claude Agent SDK - Architecture & Flow Diagrams
-
 > Architecture and flow diagrams. Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).
 
 ---

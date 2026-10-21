@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph: Production Deployment & Best Practices
-
 **Verified against `langgraph` %%version=langgraph%%** (checked %%versions-checked%%). First written for 1.0.3.
 
 This guide covers deployment (containers, Kubernetes), persistence, observability, security, scaling and cost, followed by production patterns for:

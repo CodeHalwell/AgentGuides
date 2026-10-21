@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework - .NET Feature Tour
-
 **First written:** November 2025, for the October 2025 public preview
 **Verified against:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%). Every C# block on this page was compiled against that release.
 **Target audience:** .NET/C# developers

@@ -4,8 +4,6 @@ description: "Language-neutral production guidance for Semantic Kernel — deplo
 framework: semantic-kernel
 ---
 
-# Semantic Kernel: Production Deployment and Operations Guide
-
 > Applies to `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET), checked %%versions-checked%%. Runnable, language-specific versions of these patterns are in the [Python production guide](/semantic-kernel-guide/python/semantic_kernel_production_python/) and the [.NET production guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/).
 
 Semantic Kernel is in long-term support while its successor, [Microsoft Agent Framework](/microsoft-agent-framework-guide/), receives most new features. Everything below applies equally to both, which keeps a later migration cheap.

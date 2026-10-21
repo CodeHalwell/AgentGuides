@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Middleware (Python)
-
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%).
 
 Semantic Kernel's middleware mechanism is **filters**: async functions that wrap a step and call `await next(context)` to continue. There are three kinds:

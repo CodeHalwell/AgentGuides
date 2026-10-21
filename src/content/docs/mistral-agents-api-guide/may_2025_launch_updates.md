@@ -4,8 +4,6 @@ description: "What Mistral launched with the Agents API on 27 May 2025, and how 
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API - May 2025 Launch and What Changed Since
-
 This is a historical page. For current usage see the [comprehensive guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/), which is verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).
 
 ## The launch (27 May 2025)

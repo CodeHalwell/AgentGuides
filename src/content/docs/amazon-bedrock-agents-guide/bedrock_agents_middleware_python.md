@@ -4,8 +4,6 @@ description: "This guide explains how to implement middleware for Amazon Bedrock
 framework: amazon-bedrock-agents
 ---
 
-# Implementing Middleware for Amazon Bedrock Agents (Python)
-
 This guide explains how to implement middleware for Amazon Bedrock Agents to add custom logic for tasks like authentication, logging, and caching.
 
 ## 1. What is Middleware?

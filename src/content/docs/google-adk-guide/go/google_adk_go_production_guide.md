@@ -5,8 +5,6 @@ framework: google-adk
 language: go
 ---
 
-# Google ADK for Go - Production Deployment Guide
-
 **Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). The Go programs on this page compile with `go vet` against that release; the YAML and shell snippets are templates to adapt.
 
 ---

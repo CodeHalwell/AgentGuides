@@ -5,8 +5,6 @@ framework: langgraph
 language: typescript
 ---
 
-# LangGraph Observability and Monitoring (TypeScript)
-
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%). Upstream: https://github.com/langchain-ai/langgraphjs
 

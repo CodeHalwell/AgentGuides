@@ -8,8 +8,6 @@ sidebar:
   order: 35
 ---
 
-# Streaming modes — API reference
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.pregel.main`, `langgraph.config`).
 
 Every compiled graph (both `StateGraph` and `@entrypoint` workflows) exposes:

@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex Streaming Server (FastAPI)
-
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%).
 
 ```bash

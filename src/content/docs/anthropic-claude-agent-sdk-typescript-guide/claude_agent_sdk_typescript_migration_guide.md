@@ -4,8 +4,6 @@ description: "Moving from the SDK in @anthropic-ai/claude-code to @anthropic-ai/
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Migration Guide: Claude Code SDK → Claude Agent SDK (TypeScript)
-
 **Target:** `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).
 
 Two parts:

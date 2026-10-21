@@ -4,8 +4,6 @@ description: "Archived changelog from the March 2025 documentation update to thi
 framework: amazon-bedrock-agents
 ---
 
-# Amazon Bedrock Agents Documentation - March 2025 Updates Summary
-
 > **Archived — historical record only.** This page is the changelog written for the guide's March 2025 update. It is not current and several statements in it were wrong at the time or have since been overtaken. Corrections, as of %%versions-checked%%:
 >
 > - **AgentCore** was not part of the March 2025 release. It was announced in preview at AWS Summit New York in **July 2025** and became generally available in **October 2025**; the "free until 16 September 2025" offer was preview pricing. Its runtime hosts Python and Node.js agents; the old guide's `AgentCore`, `WorkflowOrchestrator` and similar classes never existed.

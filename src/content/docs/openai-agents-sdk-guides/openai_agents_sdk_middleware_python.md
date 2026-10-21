@@ -4,8 +4,6 @@ description: "Add middleware, guardrails, and tracing to Python Agents SDK apps.
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK Middleware & Guardrails (Python)
-
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).
 Upstream: https://github.com/openai/openai-agents-python | https://platform.openai.com/docs

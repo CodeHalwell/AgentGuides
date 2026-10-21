@@ -4,8 +4,6 @@ description: "Ready-to-use implementations and real-world patterns for the OpenA
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK TypeScript: Practical Recipes & Code Examples
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
 
 **Focus:** Ready-to-use implementations, real-world patterns, copy-paste recipes

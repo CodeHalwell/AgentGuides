@@ -4,8 +4,6 @@ description: "A FastAPI server that streams Mistral agent conversations to brows
 framework: mistral-agents-api
 ---
 
-# Mistral Streaming Server (FastAPI)
-
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%).
 
 This server streams a stored agent's replies as Server-Sent Events, forwarding text deltas, tool activity and the conversation ID so the client can continue the conversation.

@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Microsoft Agent Framework Python - Comprehensive Technical Guide
-
 **Framework version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep) — checked %%versions-checked%%. Every code example on this page was re-run through an import-and-signature check against that release; the narrative and the Class & API Reference were first written against 1.14.0, and sections that have since changed carry a dated note.
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`

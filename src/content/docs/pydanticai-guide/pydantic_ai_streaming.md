@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Streaming
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
 
 PydanticAI streams at three levels:

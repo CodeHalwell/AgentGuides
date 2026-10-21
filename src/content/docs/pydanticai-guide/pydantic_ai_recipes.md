@@ -4,8 +4,6 @@ description: "Practical, production-tested code examples for common scenarios â€
 framework: pydanticai
 ---
 
-# Pydantic AI: Recipes & Real-World Examples
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%); first written for 1.107.0 (June 2026) and updated for the V2 API.
 
 **Purpose:** Practical, production-tested code examples for common scenarios

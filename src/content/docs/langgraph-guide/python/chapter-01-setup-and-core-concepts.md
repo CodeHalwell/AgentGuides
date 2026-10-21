@@ -8,8 +8,6 @@ sidebar:
   order: 1
 ---
 
-# Chapter 1 — Setup & Core Concepts
-
 **What you'll learn:** install LangGraph, understand the mental model, and learn the four primitives — **state, nodes, edges, compilation** — that every graph builds on. Also covers `MessagesState`, `REMOVE_ALL_MESSAGES`, `context_schema`, `add_sequence()`, `push_message()`, the `add_messages` `format` parameter, and the `set_node_defaults()` method for graph-wide policy defaults.
 
 **Time:** ~20 minutes.

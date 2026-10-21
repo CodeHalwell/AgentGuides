@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Embeddings
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.embeddings`.
 
 The `Embedder` class provides a high-level, provider-agnostic API for generating vector embeddings. Specify a model name with `provider:model-name` syntax and call `embed_query()` or `embed_documents()` — the same interface works across OpenAI, Cohere, Google, Bedrock, and SentenceTransformers.

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { frameworks, useCaseLabels } from '../data/frameworks';
+import { ElementTile } from './FrameworkGrid';
 
 function withBase(href: string) {
   const base = (import.meta.env.BASE_URL ?? '/').replace(/\/$/, '');
@@ -41,12 +42,8 @@ export default function UseCasePicker() {
               key={u}
               type="button"
               onClick={() => toggle(u)}
-              className={[
-                'rounded-full border px-3 py-1.5 text-xs font-medium transition-all',
-                active
-                  ? 'border-[var(--sl-color-accent)] bg-[var(--sl-color-accent)]/20 text-[var(--sl-color-accent-high)]'
-                  : 'border-[var(--sl-color-gray-5)] bg-[var(--sl-color-gray-6)] text-[var(--sl-color-gray-2)] hover:border-[var(--sl-color-accent)] hover:text-[var(--sl-color-white)]',
-              ].join(' ')}
+              aria-pressed={active}
+              className="ag-chip"
             >
               {useCaseLabels[u] ?? u}
             </button>
@@ -55,28 +52,23 @@ export default function UseCasePicker() {
       </div>
 
       {matches.length === 0 ? (
-        <p className="m-0 text-sm italic text-[var(--sl-color-gray-3)]">
+        <p className="brand-annotation m-0">
           Pick one or more tags above to see recommended frameworks.
         </p>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {matches.map(({ f, hits }) => (
-            <a
-              key={f.id}
-              href={withBase(f.href)}
-              className="ag-card group flex flex-col gap-2 no-underline"
-            >
-              <div className="flex items-start justify-between">
-                <h4 className="m-0 text-sm font-semibold text-[var(--sl-color-white)] group-hover:text-[var(--sl-color-accent-high)]">
-                  {f.name}
-                </h4>
-                <span className="rounded-md bg-[var(--sl-color-accent)]/20 px-2 py-0.5 text-[11px] font-semibold text-[var(--sl-color-accent-high)]">
-                  {hits} match{hits > 1 ? 'es' : ''}
-                </span>
+            <a key={f.id} href={withBase(f.href)} className="ag-card group">
+              <div className="flex items-start gap-3">
+                <ElementTile f={f} n={frameworks.indexOf(f) + 1} />
+                <div className="min-w-0">
+                  <h4 className="m-0 text-base leading-tight">{f.name}</h4>
+                  <div className="brand-annotation mt-1">
+                    {hits} match{hits > 1 ? 'es' : ''}
+                  </div>
+                </div>
               </div>
-              <p className="m-0 text-xs leading-relaxed text-[var(--sl-color-gray-2)]">
-                {f.tagline}
-              </p>
+              <p className="m-0 text-xs leading-relaxed">{f.tagline}</p>
             </a>
           ))}
         </div>

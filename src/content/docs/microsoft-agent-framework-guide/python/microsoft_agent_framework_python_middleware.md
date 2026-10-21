@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Middleware — Python
-
 Middleware is how you intercept agent runs without subclassing `Agent`. Three levels wrap three different call sites:
 
 | Middleware | Wraps | Context class | Use for |

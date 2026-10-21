@@ -4,8 +4,6 @@ description: "Haystack 3 recipes — knowledge-base Q&A, multi-tenant support, d
 framework: haystack
 ---
 
-# Haystack Recipes: Production-Ready Use Cases and Examples
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Each recipe runs as written with `OPENAI_API_KEY` set; to try one offline, replace `OpenAIChatGenerator(...)` with `MockChatGenerator()` from `haystack.components.generators.chat`.
 
 ## Table of Contents

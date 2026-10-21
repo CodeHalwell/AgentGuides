@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Microsoft Agent Framework Python - Production Guide
-
 This guide provides enterprise-level best practices for deploying, managing, and scaling Python applications built with the Microsoft Agent Framework.
 
 **Target Audience:** DevOps Engineers, Infrastructure Architects, Senior Python Developers

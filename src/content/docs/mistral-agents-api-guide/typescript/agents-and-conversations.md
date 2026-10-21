@@ -8,8 +8,6 @@ sidebar:
   order: 1
 ---
 
-# Agents and conversations
-
 **Verified against `@mistralai/mistralai` %%version=@mistralai/mistralai%%** (checked %%versions-checked%%).
 
 The examples share a small module with the client and a helper that extracts the answer text from a response:

@@ -8,8 +8,6 @@ sidebar:
   order: 32
 ---
 
-# Store (long-term memory) — API reference
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.store.base`, `langgraph.store.memory`).
 
 Checkpointers give you **short-term** memory tied to a single `thread_id`. A `Store` gives you **long-term** memory that lives outside any thread — shared across conversations, users, and graph runs. Same backend pattern as checkpointers: one abstract base, multiple implementations.

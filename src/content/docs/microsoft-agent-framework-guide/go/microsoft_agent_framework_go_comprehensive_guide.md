@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: go
 ---
 
-# Comprehensive guide — Go
-
 This page covers the single-agent surface of `github.com/microsoft/agent-framework-go`: building and running agents, sessions, structured output, tools, middleware, providers, MCP, A2A and tracing. Workflows have [their own page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_workflows/), as does [testing](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_testing/).
 
 The SDK is a public preview. Every program below compiles with `go vet` and `go build` against v%%version=github.com/microsoft/agent-framework-go%%; the ones that call a model need credentials to run.

@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Comprehensive Guide (Python)
-
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Imports, constructors and method signatures on this page were checked against an installed copy; the agent, orchestration, filter and vector-store examples were run end to end against a stub chat service.
 
 > **Semantic Kernel and Microsoft Agent Framework.** [Microsoft Agent Framework](/microsoft-agent-framework-guide/) (MAF) is the successor to Semantic Kernel, built by the same team, and reached 1.0 (general availability) in April 2026. Microsoft continues to support Semantic Kernel 1.x — critical bugs, security fixes, and some features taken to GA — for at least a year after MAF's GA, but most new features land in MAF. Start new agent projects on MAF; keep existing SK code running and migrate at your own pace ([section 16](#16-migrating-to-microsoft-agent-framework)).

@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Concurrency Limiting
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.concurrency`.
 
 `ConcurrencyLimiter` caps the number of simultaneous operations without any external dependencies. When the cap is reached, additional callers queue and wait. Optionally set `max_queued` to reject work once the queue depth exceeds a threshold.

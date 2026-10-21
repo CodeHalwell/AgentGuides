@@ -4,8 +4,6 @@ description: "Connecting Pydantic AI agents to the outside world: MCP clients an
 framework: pydanticai
 ---
 
-# Pydantic AI: Integrations — MCP, A2A and UI Protocols
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). The MCP, A2A and web-UI examples were run against that release (fastmcp via the `mcp` extra, fasta2a 2.1).
 
 > **This page was rewritten for V2.** Earlier editions used classes that never existed in Pydantic AI (`MCPClient`, `MultiMCPClient`, `pydantic_ai.a2a.A2AAgent`, `A2AOrchestrator`, `StructuredEventStream`) and V1 provider prefixes such as `grok:` and `google-gla:`. For model providers, see the [model providers guide](/pydanticai-guide/pydantic_ai_model_providers/).

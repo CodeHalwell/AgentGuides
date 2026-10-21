@@ -4,8 +4,6 @@ description: "Moving Swarm-style multi-agent code to the OpenAI Agents SDK for T
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK TypeScript: Complete Migration Guide from Swarm
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). First written in January 2025.
 >
 > Swarm itself was a Python-only educational experiment and is no longer developed; there is no official TypeScript Swarm package. The "Swarm" snippets below are TypeScript-style pseudo-code showing the Swarm pattern (agents, `functions`, manual message lists) that you are replacing.

@@ -4,8 +4,6 @@ description: "Web search, code interpreter, image generation, document libraries
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Connectors and Built-in Tools Guide
-
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Tool shapes on this page were validated against the SDK's request models.
 
 Mistral calls its server-side tools "connectors". They run on Mistral's infrastructure: you declare them on an agent (or a conversation), and the results appear as `tool.execution` entries in the conversation output. Since SDK v3 they are accepted only by the Agents and Conversations APIs, not by `chat.complete()`.

@@ -4,8 +4,6 @@ description: "Agents, runner, handoffs, guardrails, sessions, tools and structur
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK with TypeScript: Comprehensive Technical Guide
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). Node.js 22+ (also Deno, Bun and Cloudflare Workers with `nodejs_compat`), Zod 4, `openai` v7.
 
 ---

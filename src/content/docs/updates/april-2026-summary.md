@@ -3,8 +3,6 @@ title: "Agent Guides Update Report — April 16, 2026"
 description: "Summary: Comprehensive update of all agent framework guides from November 2025 to April 2026. Covers version upgrades, breaking API changes, new features, deprecations, and the add"
 ---
 
-# Agent Guides Update Report — April 16, 2026
-
 **Summary**: Comprehensive update of all agent framework guides from November 2025 to April 2026. Covers version upgrades, breaking API changes, new features, deprecations, and the addition of a new Google ADK TypeScript guide.
 
 ---

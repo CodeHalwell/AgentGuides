@@ -4,8 +4,6 @@ description: "Copy-and-adapt Python recipes for the Claude Agent SDK: summarisat
 framework: anthropic-claude-agent-sdk
 ---
 
-# Claude Agent SDK (Python) — Recipes
-
 Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%). Each recipe is self-contained; install with `pip install claude-agent-sdk==%%version=claude-agent-sdk%%` and set `ANTHROPIC_API_KEY`.
 
 Most recipes reuse this small helper, which runs a query and returns the final `ResultMessage`:

@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph Performance Optimization (Python)
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.cache.memory`).
 
 This guide covers the five levers you have for performance in LangGraph:

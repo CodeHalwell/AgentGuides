@@ -4,7 +4,6 @@ description: "Single-page technical guide to Pydantic AI V2: core concepts, inst
 framework: pydanticai
 ---
 
-# Pydantic AI: Comprehensive Technical Guide
 ## From Beginner to Expert Level
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). Requires Python 3.11+.

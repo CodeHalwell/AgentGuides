@@ -4,8 +4,6 @@ description: "Enterprise patterns for the Microsoft Agent Framework — OpenTele
 framework: microsoft-agent-framework
 ---
 
-# Microsoft Agent Framework - Enterprise Features
-
 **Target audience:** enterprise architects, security teams, compliance officers
 **Verified against:** `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET), checked %%versions-checked%%. First written during the October 2025 public preview.
 

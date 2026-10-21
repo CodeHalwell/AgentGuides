@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph Advanced Error Handling and Recovery (Python)
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`, `langgraph.errors`).
 
 LangGraph provides first-class primitives for every layer of error handling, with no external retry library needed:

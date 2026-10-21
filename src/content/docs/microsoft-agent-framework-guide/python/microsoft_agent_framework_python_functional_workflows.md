@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Functional Workflows — Python
-
 > **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`. The API is stable enough to build on but may change between minor releases.
 
 Functional workflows let you write a workflow as a plain `async` Python function — no executor classes, no graph wiring, no edge objects. Control flow is ordinary Python: `if`/`else`, `for`, `asyncio.gather`. The framework tracks step results, emits events, handles HITL pauses, and persists checkpoints automatically.

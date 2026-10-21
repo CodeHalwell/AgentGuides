@@ -8,8 +8,6 @@ sidebar:
   order: 37
 ---
 
-# Channels — API reference
-
 Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.channels`).
 
 Every key in a `StateGraph` state schema is backed by a **channel**. Channels define how values are stored and how concurrent writes within the same super-step are resolved. Most users interact with channels only through `Annotated[type, reducer]` syntax; this page documents what those annotations actually create, their semantics under parallel execution, and when to choose each one.

@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# 2025 / 2026 Features — Python
-
 > **Errata (April 2026).** An earlier draft of this page documented `from agent_framework.a2a import A2AProtocolAdapter, A2AClient, A2AMessage` and `from agent_framework.graphs import AgentGraph, GraphNode, CheckpointConfig, HITLConfig` — **none of those classes exist**. This page has been rewritten after direct introspection of the installed packages.
 >
 > For the real graph/workflow API and A2A integration, see the dedicated pages:

@@ -4,7 +4,6 @@ description: "Language-neutral recipes for common Microsoft Agent Framework scen
 framework: microsoft-agent-framework
 ---
 
-# Microsoft Agent Framework - Recipes & Code Patterns
 **First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
 
 Every Python recipe on this page was import- and signature-checked, and its agent logic run against a stub chat client; the C# recipes were compiled. More recipes per language: [Python recipes](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/) · [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/).

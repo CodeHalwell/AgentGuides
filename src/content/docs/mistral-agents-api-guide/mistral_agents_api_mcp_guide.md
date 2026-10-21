@@ -4,8 +4,6 @@ description: "Using MCP servers with Mistral agents: registered connectors, clie
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Model Context Protocol (MCP) Guide
-
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%), with `mcp` 2.x as installed by `mistralai[agents]`.
 
 The [Model Context Protocol](https://modelcontextprotocol.io) is an open standard for exposing tools and data to models. Mistral supports it in two places, and choosing between them is the main design decision:

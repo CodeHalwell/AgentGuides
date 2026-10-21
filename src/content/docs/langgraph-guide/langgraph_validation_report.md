@@ -4,8 +4,6 @@ description: "How the LangGraph guides were checked against the installed Python
 framework: langgraph
 ---
 
-# LangGraph Validation Report
-
 **Last validated:** %%versions-checked%%
 **Python:** `langgraph` %%version=langgraph%% (with `langgraph-checkpoint` %%version=langgraph-checkpoint%%, `langgraph-prebuilt` %%version=langgraph-prebuilt%%, `langgraph-checkpoint-sqlite` %%version=langgraph-checkpoint-sqlite%%, `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%%, `langchain` %%version=langchain%%, `langchain-core` %%version=langchain-core%%)
 **TypeScript:** `@langchain/langgraph` %%version=@langchain/langgraph%% (with `@langchain/core` %%version=@langchain/core%%, `langchain` %%version=langchainjs%%, `@langchain/langgraph-checkpoint` %%version=@langchain/langgraph-checkpoint%%)

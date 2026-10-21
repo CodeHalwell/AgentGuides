@@ -4,8 +4,6 @@ description: "Architecture diagrams for Haystack 3 — components, pipeline exec
 framework: haystack
 ---
 
-# Haystack Architecture and Pattern Diagrams
-
 > Reflects `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Component names follow Haystack 3: ChatGenerators only, tools executed by `Agent`, a single `Pipeline` class with `run`, `run_async` and `stream`.
 
 ## Table of Contents

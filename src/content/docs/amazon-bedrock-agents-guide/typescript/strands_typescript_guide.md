@@ -5,8 +5,6 @@ framework: "amazon-bedrock-agents"
 language: "typescript"
 ---
 
-# Strands Agents TypeScript SDK
-
 The TypeScript SDK for Strands Agents (`@strands-agents/sdk`) is the Node.js counterpart to the Python `strands-agents` package: the same model-driven agent loop, with tools defined by Zod schemas and fully typed inputs. It runs on Amazon Bedrock by default and also supports Anthropic, OpenAI, Google and Vercel AI SDK providers.
 
 > **Verified against:** `@strands-agents/sdk` %%version=@strands-agents/sdk%% (checked %%versions-checked%%). Every example on this page compiles under `tsc --strict` against that installed package. Node.js 22 or later is required.

@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: dotnet
 ---
 
-# Semantic Kernel Production Guide (.NET)
-
 **Production deployment, resilience, monitoring and testing for .NET**
 
 > Targets `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% on .NET 8 or .NET 10 (checked %%versions-checked%%). Semantic Kernel is supported but its successor, [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/), is where new agent features land; the hosting, resilience and telemetry patterns here apply to both.

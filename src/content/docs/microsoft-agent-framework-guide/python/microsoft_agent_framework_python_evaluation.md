@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Evaluation — Python
-
 `agent_framework` ships a lightweight evaluation harness built into the core package. It runs a list of queries against an agent (or pre-recorded responses), extracts a normalised `EvalItem` per query, then applies a set of **checks** that produce pass/fail + score results. The same pattern scales to workflows via `evaluate_workflow`.
 
 Everything is in-process by default — no Azure AI Foundry / Microsoft Foundry dependency required. Plug a cloud evaluator in alongside `LocalEvaluator` when you want LLM-judge / risk / groundedness checks.

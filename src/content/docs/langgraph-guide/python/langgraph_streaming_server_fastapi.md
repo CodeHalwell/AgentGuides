@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph Streaming Server (FastAPI)
-
 Verified against **`langgraph==%%version=langgraph%%`**, **`fastapi>=0.111`**, **`uvicorn>=0.29`**.
 
 This guide shows how to expose a LangGraph compiled graph over HTTP using FastAPI and Server-Sent Events (SSE). It covers all five `stream_mode` options, token-level LLM streaming, authentication, background task patterns, and production deployment.

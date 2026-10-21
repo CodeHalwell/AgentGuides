@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Human in the Loop — Python
-
 Agent Framework ships three human-in-the-loop (HITL) patterns:
 
 1. **Workflow-level `request_info`** — any `Executor` can pause and emit a typed request; the caller replies via `workflow.run(responses={...})`.

@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Advanced Multi‑Agent (Python)
-
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Orchestrations are experimental in Semantic Kernel; Microsoft Agent Framework's workflows are their supported successor — see the [comprehensive guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework).
 
 Earlier versions of this page used pre-1.0 APIs (`kernel.add_chat_service`, `ChatCompletionAgent(tools=...)`, `AgentGroupChat(execution_settings=...)`) that no longer exist. Everything below uses the orchestration API.

@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Streaming Server (.NET)
-
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%.
 
 `AIAgent.RunStreamingAsync` returns an `IAsyncEnumerable<AgentResponseUpdate>`; each update carries the text delta in `.Text`. Forward those deltas as server-sent events and you have a streaming chat endpoint.

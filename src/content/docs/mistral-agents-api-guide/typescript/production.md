@@ -8,8 +8,6 @@ sidebar:
   order: 3
 ---
 
-# Production
-
 **Verified against `@mistralai/mistralai` %%version=@mistralai/mistralai%%** (checked %%versions-checked%%). Examples that import from `./common.js` use the module on the [agents and conversations page](/mistral-agents-api-guide/typescript/agents-and-conversations/).
 
 The agent loop, built-in tools and conversation state run on Mistral's side, so a production service is mostly a careful API client. The operational advice in the [Python production guide](/mistral-agents-api-guide/mistral_agents_api_production_guide/) — storing conversation references, rate-limiting your own users, observability, security, CI/CD — applies unchanged; this page covers the TypeScript specifics.

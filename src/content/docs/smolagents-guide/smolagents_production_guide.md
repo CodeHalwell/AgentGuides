@@ -4,8 +4,6 @@ description: "Running smolagents reliably in production — sandboxing, cost and
 framework: smolagents
 ---
 
-# smolagents: Production Deployment Guide
-
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%).
 
 ---

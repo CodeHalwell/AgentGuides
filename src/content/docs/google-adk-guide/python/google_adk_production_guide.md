@@ -5,8 +5,6 @@ framework: google-adk
 language: python
 ---
 
-# Google Agent Development Kit (ADK) - Production Guide
-
 **Focus:** Enterprise deployment, reliability, performance, security. Verified against `google-adk` %%version=google-adk%% (checked %%versions-checked%%).
 
 **A note on the snippets.** ADK agents have no `run()`/`execute()` method of their own; a `Runner` drives them. To keep the operational examples short, several of them call this small helper, which runs one turn and returns the final text:

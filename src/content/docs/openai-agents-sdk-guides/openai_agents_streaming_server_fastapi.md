@@ -4,8 +4,6 @@ description: "Stream model output using FastAPI and OpenAI Python SDK."
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents Streaming Server (FastAPI)
-
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Requires `fastapi`, `uvicorn` and `openai-agents==%%version=openai-agents%%`.
 
 ## Streaming an agent run over SSE

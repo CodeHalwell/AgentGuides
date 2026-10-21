@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex Production Guide
-
 Deploying LlamaIndex applications to production: deployment, performance, observability, security and cost.
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). The web-service scaffolding (FastAPI, Prometheus, Kubernetes) is ordinary Python infrastructure; the LlamaIndex-specific parts are index loading, query/agent calls, instrumentation and token accounting.

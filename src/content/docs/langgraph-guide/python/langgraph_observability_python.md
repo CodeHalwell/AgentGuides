@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph Observability and Monitoring (Python)
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.types`, `langgraph.graph.state`).
 
 LangGraph provides several built-in mechanisms for observing what your graph is doing — without external instrumentation libraries:

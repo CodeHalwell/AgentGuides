@@ -8,8 +8,6 @@ sidebar:
   order: 7
 ---
 
-# Chapter 7 — Human-in-the-Loop
-
 **What you'll learn:** how to pause your graph mid-execution to collect input, approval, or corrections from a human — the `interrupt()` and `Command(resume=...)` primitives, multi-stage approval workflows, multiple interrupts inside one node, and resume-by-id when a node raises several interrupts at once.
 
 Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.types`).

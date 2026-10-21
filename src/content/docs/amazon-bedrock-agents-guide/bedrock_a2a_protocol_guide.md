@@ -4,8 +4,6 @@ description: "The open Agent2Agent (A2A) protocol on AWS: agent cards, JSON-RPC 
 framework: amazon-bedrock-agents
 ---
 
-# Agent-to-Agent (A2A) Protocol: Comprehensive Technical Guide
-
 A2A (Agent2Agent) is an open protocol that lets agents built with different frameworks, by different teams, discover one another and collaborate over HTTP. Google introduced it in April 2025; it is now developed as a Linux Foundation project. On AWS, A2A is supported by **Amazon Bedrock AgentCore Runtime** and by the **Strands Agents** SDK.
 
 > **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore%% and `strands-agents` %%version=strands-agents%% (checked %%versions-checked%%), with the `a2a` extras installed. The wire examples follow A2A protocol version 0.3, which those SDKs use by default.

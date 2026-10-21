@@ -4,8 +4,6 @@ description: "Routing, specialist subagents, guardrails and human-in-the-loop ap
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Claude Agent SDK Advanced Multi-Agent (TypeScript)
-
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).
 
 ## Patterns

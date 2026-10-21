@@ -4,8 +4,6 @@ description: "Production-ready implementations for common use cases and patterns
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK: Practical Recipes and Use Cases
-
 Production-ready implementations for common use cases and patterns with the OpenAI Agents SDK. Copy and adapt these recipes for your specific applications.
 
 > Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%).

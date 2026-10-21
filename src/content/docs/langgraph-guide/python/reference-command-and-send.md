@@ -8,8 +8,6 @@ sidebar:
   order: 34
 ---
 
-# Command, Send & control flow — API reference
-
 Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.types`).
 
 LangGraph's control flow primitives live in `langgraph.types`:

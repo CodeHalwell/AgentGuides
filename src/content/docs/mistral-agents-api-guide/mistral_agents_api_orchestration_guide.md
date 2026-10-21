@@ -4,8 +4,6 @@ description: "Coordinating multiple Mistral agents: code-driven pipelines, paral
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Agent Orchestration Guide
-
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).
 
 There are two ways to coordinate agents on Mistral, and most systems use both:

@@ -4,8 +4,6 @@ description: "From first agent to multi-agent systems with Hugging Face smolagen
 framework: smolagents
 ---
 
-# smolagents: Comprehensive Technical Guide
-
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every example on this page was run against the installed package with a stub model.
 
 smolagents is Hugging Face's small agent library. Its distinctive idea is the **CodeAgent**: instead of emitting one JSON tool call per step, the model writes a short Python snippet that can call several tools, loop, branch and keep intermediate results in variables. A conventional **ToolCallingAgent** is included for cases where JSON tool calls suit better. The library is deliberately compact; the agent logic lives in a single `agents.py` you can read in an afternoon.

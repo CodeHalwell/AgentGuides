@@ -4,8 +4,6 @@ description: "Enterprise-grade patterns for scalability, reliability and operati
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK TypeScript: Production-Ready Patterns & Best Practices Guide
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
 
 **Focus:** Enterprise-grade patterns, scalability, reliability, and operational excellence

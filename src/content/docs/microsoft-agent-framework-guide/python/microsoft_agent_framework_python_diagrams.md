@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Microsoft Agent Framework Python - Architecture Diagrams
-
 This document provides visual references for the architecture, data flow, and deployment topology of Python-based agent systems.
 
 **Target Platform:** Python 3.10+

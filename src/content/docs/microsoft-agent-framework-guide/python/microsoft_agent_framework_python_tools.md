@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Tools — Python
-
 Tools are how agents call back into your code. Agent Framework offers two ways to define them — the `@tool` decorator for the common case and the `FunctionTool` class for advanced construction. Both target the same `FunctionTool` object that the agent sees.
 
 This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).

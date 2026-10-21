@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework - Azure RBAC
-
 ## Roles
 - Azure AI Developer or equivalent for Agents Service
 - Key Vault Secrets User

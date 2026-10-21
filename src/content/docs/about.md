@@ -3,8 +3,6 @@ title: "Agent Guides"
 description: "Comprehensive AI Agent Framework Documentation"
 ---
 
-# 🤖 Agent Guides
-
 **Comprehensive, production-ready documentation for building AI agents across 16+ frameworks.**
 
 Welcome to the Agent Guides collection—your complete resource for mastering AI agent development. Whether you're building your first chatbot or deploying enterprise-scale multi-agent systems, you'll find detailed guides, practical recipes, and production patterns here.

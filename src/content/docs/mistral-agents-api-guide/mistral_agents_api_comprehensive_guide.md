@@ -4,8 +4,6 @@ description: "Reference for Mistral's Agents and Conversations APIs with the mis
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Comprehensive Technical Guide
-
 **Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%). Every method, parameter and tool shape on this page was checked against an installed copy of the SDK. The architecture diagrams that used to open this page now live on the [diagrams page](/mistral-agents-api-guide/mistral_agents_api_diagrams/).
 
 ---

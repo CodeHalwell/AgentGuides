@@ -4,8 +4,6 @@ description: "Real WorkflowBuilder + Edge model in agent-framework-core, and YAM
 framework: microsoft-agent-framework
 ---
 
-# Workflows & Declarative Agents
-
 > **Errata (April 2026).** An earlier draft of this page described an `agent_framework.graphs` module with classes like `AgentGraph`, `GraphNode`, `GraphEdge`, `ConditionalEdge`, `CheckpointConfig`, `HITLConfig`, `TimeTravelConfig`, `ErrorPolicy`, and `ObservabilityConfig`. **None of those classes exist** in the `agent-framework` package. This page was rewritten after direct introspection of `agent-framework-core` 1.1.0 and `agent-framework-declarative` 1.0.0b260421, and re-verified against `agent-framework` %%version=agent-framework%% on %%versions-checked%%.
 
 Two real capabilities ship under this umbrella:

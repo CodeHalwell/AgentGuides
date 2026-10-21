@@ -4,8 +4,6 @@ description: "Reference for building agents with the Python claude-agent-sdk: qu
 framework: anthropic-claude-agent-sdk
 ---
 
-# Claude Agent SDK (Python) — Comprehensive Guide
-
 **Verified against `claude-agent-sdk` %%version=claude-agent-sdk%%** (checked %%versions-checked%%). Every import, class, option and method signature on this page was checked against an installed copy of that release.
 
 The TypeScript package has its own guide: [Claude Agent SDK (TypeScript)](/anthropic-claude-agent-sdk-typescript-guide/).

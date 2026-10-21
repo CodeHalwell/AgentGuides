@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex Observability & Monitoring (Python)
-
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Upstream: [releases](https://github.com/run-llama/llama_index/releases) · [PyPI](https://pypi.org/project/llama-index/)
 
 LlamaIndex has two hook systems:

@@ -4,7 +4,6 @@ description: "Running CrewAI in production — testing, deployment, monitoring, 
 framework: crewai
 ---
 
-# CrewAI Production Guide
 ## Deploying, Testing, Optimising, and Maintaining Multi-Agent Systems
 
 ---

@@ -4,8 +4,6 @@ description: "Copy-and-adapt Python recipes for Mistral's Agents API: web search
 framework: mistral-agents-api
 ---
 
-# Mistral Agents API: Ready-to-Use Recipes
-
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Install with `pip install "mistralai[agents]==%%version=mistralai%%"` and set `MISTRAL_API_KEY`.
 
 Every recipe uses this shared module:

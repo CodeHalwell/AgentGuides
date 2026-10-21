@@ -4,8 +4,6 @@ description: "Hooks, state handlers, structured output, custom async components 
 framework: haystack
 ---
 
-# Haystack Advanced Agent Patterns (Python)
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Upstream: [release notes](https://github.com/deepset-ai/haystack/releases)
 
 This page assumes you have read [Creating Agents](/haystack-guide/haystack_comprehensive_guide/#creating-agents-with-the-agent-class) and [Agent Configuration](/haystack-guide/haystack_comprehensive_guide/#agent-configuration-and-customisation).

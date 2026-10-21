@@ -3,8 +3,6 @@ title: "Quick Start"
 description: "Get started with AI agents in minutes"
 ---
 
-# 🚀 Quick Start Guide
-
 Get up and running with AI agents in just a few minutes.
 
 ---

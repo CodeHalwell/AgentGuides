@@ -4,8 +4,6 @@ description: "Which Haystack pages to read, in what order, depending on what you
 framework: haystack
 ---
 
-# Start Here: Haystack Reading Paths
-
 This section covers Haystack 3 (`haystack-ai` %%version=haystack-ai%%, checked %%versions-checked%%). Each path below lists pages in reading order.
 
 ## I'm new to Haystack

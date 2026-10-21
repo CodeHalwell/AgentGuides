@@ -4,8 +4,6 @@ description: "Technical reference for Strands Agents, the open-source, model-dri
 framework: amazon-bedrock-agents
 ---
 
-# AWS Strands Agents SDK: Comprehensive Technical Guide
-
 > TypeScript version of this: [Strands Agents TypeScript SDK](/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/).
 
 Strands Agents is an open-source (Apache 2.0) SDK from AWS for building agents with a model-driven loop: you give an agent a model, a system prompt and tools, and the model decides which tools to call. It runs on Amazon Bedrock by default but also supports Anthropic, OpenAI, Gemini, Ollama, LiteLLM and others. There are Python and TypeScript SDKs; this guide covers Python.

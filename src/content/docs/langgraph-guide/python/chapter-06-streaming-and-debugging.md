@@ -8,8 +8,6 @@ sidebar:
   order: 6
 ---
 
-# Chapter 6 — Streaming & Debugging
-
 **What you'll learn:** every streaming mode in langgraph 1.2.x, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, the new experimental v3 `stream_events` API with `GraphRunStream` / `SubgraphRunStream` / `LifecyclePayload` / `StreamChannel`, **UI streaming** with `push_ui_message` / `UIMessage` / `delete_ui_message` for live front-end component updates, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.stream`, `langgraph.graph.ui`).

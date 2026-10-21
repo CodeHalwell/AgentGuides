@@ -5,8 +5,6 @@ framework: "amazon-bedrock-agents"
 language: "typescript"
 ---
 
-# Bedrock AgentCore TypeScript SDK
-
 The `bedrock-agentcore` npm package is the TypeScript counterpart of the Python `bedrock-agentcore` SDK. It provides an AgentCore Runtime-compatible HTTP server, a Strands memory store backed by AgentCore Memory, clients and Strands/Vercel AI tool wrappers for Code Interpreter and Browser, and helpers for AgentCore Identity.
 
 > **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore-ts%% with `@strands-agents/sdk` %%version=@strands-agents/sdk%% (checked %%versions-checked%%). Every example compiles under `tsc --strict`; the Runtime server example was also run locally.

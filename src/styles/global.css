@@ -4,63 +4,404 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
-/* Custom theme: Agent Guides brand */
+/*
+ * Brand: Daniel Halwell, "From atoms to agents".
+ * Paper ground, ink type, one oxide accent; verdigris and sulfur for data only.
+ * Flat colour, square corners, hard oxide offset shadows, graph-paper grid.
+ * Newsreader (display) · Hanken Grotesk (body) · JetBrains Mono (code, labels).
+ */
 :root {
-  /* Accent — friendly blue/violet blend */
-  --sl-color-accent-low: #1e1b4b;
-  --sl-color-accent: #6366f1;
-  --sl-color-accent-high: #c7d2fe;
+  --brand-paper: #f4f1ea;
+  --brand-ink: #16181d;
+  --brand-oxide: #c4471c;
+  --brand-verdigris: #2f7f75;
+  --brand-sulfur: #e3b23c;
+  --brand-graph: #dcd6ca;
 
-  /* Neutral greys */
-  --sl-color-white: #ffffff;
-  --sl-color-gray-1: #eceef2;
-  --sl-color-gray-2: #c0c2c7;
-  --sl-color-gray-3: #888b96;
-  --sl-color-gray-4: #545861;
-  --sl-color-gray-5: #353841;
-  --sl-color-gray-6: #24272f;
-  --sl-color-black: #17181c;
-
-  --sl-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --brand-font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --sl-font: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sl-line-height: 1.55;
+  --sl-line-height-headings: 1.15;
+
+  /* Reversed: paper on ink. Starlight's dark scale runs white (text) → black (ground). */
+  --sl-color-white: #f4f1ea;
+  --sl-color-gray-1: #e6e1d6;
+  --sl-color-gray-2: #cfc9bd;
+  --sl-color-gray-3: #9a978f;
+  --sl-color-gray-4: #5d5f63;
+  --sl-color-gray-5: #34373e;
+  --sl-color-gray-6: #1e2026;
+  --sl-color-black: #16181d;
+
+  --sl-color-accent-low: #3a1d12;
+  --sl-color-accent: #c4471c;
+  --sl-color-accent-high: #ee8a63;
+
+  --sl-color-text-invert: #f4f1ea;
+  --sl-color-bg-accent: #c4471c;
+  --sl-color-bg-nav: #16181d;
+  --sl-color-bg-sidebar: #16181d;
+  --sl-color-hairline-light: #34373e;
+  --sl-color-hairline: #2a2d33;
+
+  --brand-rule: #f4f1ea;
+  --brand-grid: #1f2228;
+  --brand-shadow: var(--brand-oxide);
+
+  --sl-shadow-sm: none;
+  --sl-shadow-md: 6px 6px 0 var(--brand-shadow);
+  --sl-shadow-lg: 8px 8px 0 var(--brand-shadow);
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #dde0ff;
-  --sl-color-accent: #4f46e5;
-  --sl-color-accent-high: #1e1b4b;
+  /* Primary: ink on paper. Light scale runs white (text) → black (ground). */
+  --sl-color-white: #16181d;
+  --sl-color-gray-1: #24272e;
+  --sl-color-gray-2: #33363d;
+  --sl-color-gray-3: #5c5f66;
+  --sl-color-gray-4: #8a877f;
+  --sl-color-gray-5: #c9c2b4;
+  --sl-color-gray-6: #e9e4d9;
+  --sl-color-gray-7: #efebe2;
+  --sl-color-black: #f4f1ea;
+
+  --sl-color-accent-low: #f2dcd0;
+  --sl-color-accent: #a8401a; /* oxide, deepened for 5.9:1 text contrast on paper */
+  --sl-color-accent-high: #7d2f12;
+
+  --sl-color-text-invert: #f4f1ea;
+  --sl-color-bg-accent: #c4471c;
+  --sl-color-bg-nav: #f4f1ea;
+  --sl-color-bg-sidebar: #f4f1ea;
+  --sl-color-bg-inline-code: #e9e4d9;
+  --sl-color-hairline-light: #dcd6ca;
+  --sl-color-hairline: #c9c2b4;
+  --sl-color-hairline-shade: #dcd6ca;
+
+  --brand-rule: #16181d;
+  --brand-grid: #e7e2d7;
 }
 
-/* Smooth anchor scroll */
 html {
   scroll-behavior: smooth;
 }
 
-/* Make code blocks feel premium */
-.expressive-code {
-  --ec-frm-edBg: var(--sl-color-gray-6);
-  --ec-frm-edTabBarBg: var(--sl-color-gray-6);
+/* Graph paper: a 24px grid, the default ground for long-form pages. */
+body {
+  background-color: var(--sl-color-bg);
+  background-image:
+    linear-gradient(var(--brand-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--brand-grid) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-/* Homepage hero polish */
-.hero-gradient {
-  background: radial-gradient(
-      1200px circle at 0% 0%,
-      color-mix(in oklab, var(--sl-color-accent) 25%, transparent) 0%,
-      transparent 40%
-    ),
-    radial-gradient(
-      1200px circle at 100% 0%,
-      color-mix(in oklab, #8b5cf6 20%, transparent) 0%,
-      transparent 45%
-    );
+/* Header and sidebars: flat ground with a firm rule, like a notebook margin. */
+header.header {
+  border-bottom: 2px solid var(--brand-rule);
+}
+.sidebar-pane {
+  border-inline-end: 1px solid var(--sl-color-hairline-light);
 }
 
-/* Utility: subtle card ring */
+/* Thinker: Newsreader for titles and headings, regular weight only. */
+h1,
+.sl-markdown-content :is(h1, h2, h3),
+.hero h1,
+.site-title {
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+.sl-markdown-content .sl-heading-wrapper.level-h2,
+.sl-markdown-content > h2 {
+  padding-top: 0.6em;
+  border-top: 2px solid var(--brand-rule);
+}
+.sl-markdown-content :is(h4, h5, h6) {
+  font-weight: 600;
+}
+.sl-markdown-content :is(em, i) {
+  font-family: var(--brand-font-display);
+  font-size: 1.05em;
+}
+.sl-markdown-content strong {
+  font-weight: 600;
+}
+
+/* Instrument: mono, uppercase, tracked, for section labels and metadata. */
+.sidebar-content .group-label,
+.sidebar-content summary .large,
+starlight-toc h2,
+mobile-starlight-toc .toggle,
+.pagination-links .link-title + span,
+.brand-label {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Links: oxide, underlined on hover only. */
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--sl-color-text-accent);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+/* Square everything. */
+.sl-markdown-content :is(img, video, iframe),
+.starlight-aside,
+.sl-link-card,
+.card,
+.sl-badge,
+button,
+input,
+select,
+kbd {
+  border-radius: 0 !important;
+}
+
+/* Starlight cards: one accent, not a rainbow. Icon in a flat oxide square. */
+.card {
+  --sl-card-border: var(--brand-oxide) !important;
+  --sl-card-bg: transparent !important;
+}
+.card .icon {
+  border-radius: 0 !important;
+  border: 0 !important;
+  background: var(--brand-oxide) !important;
+  color: var(--brand-paper) !important;
+}
+
+/* Asides: a hard left rule in the aside's own colour, flat tint behind. */
+.starlight-aside {
+  border-inline-start-width: 3px;
+}
+
+/* Cards: ink rule, oxide offset on hover. The shadow is part of the mark. */
+.sl-link-card,
+.card {
+  border: 2px solid var(--brand-rule) !important;
+  box-shadow: none;
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+.sl-link-card:hover,
+.ag-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 var(--brand-oxide);
+}
+.card .title {
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+}
+
+/* Tables: ink rules, mono header labels, numbers in mono. */
+.sl-markdown-content table {
+  border-collapse: collapse;
+}
+.sl-markdown-content th {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 2px solid var(--brand-rule);
+}
+
+/* Inline code. */
+.sl-markdown-content :not(pre) > code {
+  border-radius: 0;
+  border: 1px solid var(--sl-color-hairline-light);
+}
+
+/* Buttons (hero actions): flat oxide, square, offset ink shadow on hover. */
+.sl-link-button {
+  border-radius: 0 !important;
+  font-weight: 600;
+}
+.sl-link-button.primary {
+  background: var(--brand-oxide) !important;
+  border-color: var(--brand-oxide) !important;
+  color: var(--brand-paper) !important;
+}
+.sl-link-button.secondary {
+  border: 2px solid var(--brand-rule) !important;
+  color: var(--sl-color-white) !important;
+}
+.sl-link-button.primary:hover {
+  box-shadow: 4px 4px 0 var(--brand-rule);
+  transform: translate(-1px, -1px);
+}
+
+/* ---------- Element tile: the mark ---------- */
+.element-tile {
+  --tile-bg: var(--brand-paper);
+  --tile-fg: var(--brand-ink);
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  aspect-ratio: 1;
+  background: var(--tile-bg);
+  color: var(--tile-fg);
+  border: 3px solid var(--brand-ink);
+  box-shadow: 14px 14px 0 var(--brand-oxide);
+  padding: 0.9rem 1rem;
+  font-family: var(--sl-font-mono);
+}
+:root:not([data-theme='light']) .element-tile.reversed-in-dark {
+  --tile-bg: var(--brand-ink);
+  --tile-fg: var(--brand-paper);
+  border-color: var(--brand-paper);
+}
+.element-tile .meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+.element-tile .symbol {
+  align-self: center;
+  justify-self: center;
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  font-size: clamp(5rem, 14vw, 9rem);
+  line-height: 1;
+}
+.element-tile .name {
+  text-align: center;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Hero: the full tile, a plain headline, no gradients. */
+.hero .hero-html {
+  width: min(22rem, 62vw);
+  margin-inline: auto;
+  margin-bottom: 1.5rem;
+}
+.hero h1 {
+  font-size: clamp(2.6rem, 6vw, 4rem);
+}
+.hero .tagline {
+  font-size: 1.15rem;
+  max-width: 34rem;
+}
+
+/* ---------- Framework grid and use-case picker ---------- */
 .ag-card {
-  @apply rounded-xl border border-[var(--sl-color-gray-5)] bg-[var(--sl-color-gray-6)] p-5 transition-all hover:border-[var(--sl-color-accent)] hover:shadow-lg hover:shadow-indigo-500/10;
+  @apply flex flex-col gap-3 p-4 no-underline;
+  border: 2px solid var(--brand-rule);
+  background: var(--sl-color-black);
+  color: var(--sl-color-gray-2);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease;
+}
+.ag-card h3,
+.ag-card h4 {
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  color: var(--sl-color-white);
+}
+
+.ag-tile {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: 4.25rem;
+  height: 4.25rem;
+  flex: none;
+  padding: 0.2rem 0.3rem;
+  border: 2px solid var(--brand-ink);
+  font-family: var(--sl-font-mono);
+  font-size: 0.55rem;
+  line-height: 1.1;
+}
+.ag-tile .sym {
+  align-self: center;
+  justify-self: center;
+  font-family: var(--brand-font-display);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+.ag-tile .lab {
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Series order Ink → Oxide → Verdigris → Sulfur; text pairs per the brand. */
+.ag-tile[data-group='oxide'] { background: var(--brand-oxide); color: var(--brand-paper); }
+.ag-tile[data-group='verdigris'] { background: var(--brand-verdigris); color: var(--brand-paper); }
+.ag-tile[data-group='sulfur'] { background: var(--brand-sulfur); color: var(--brand-ink); }
+.ag-tile[data-group='ink'] { background: var(--brand-ink); color: var(--brand-paper); }
+:root:not([data-theme='light']) .ag-tile[data-group='ink'] {
+  border-color: var(--brand-paper);
 }
 
 .ag-tag {
-  @apply inline-flex items-center gap-1 rounded-full border border-[var(--sl-color-gray-5)] bg-[var(--sl-color-gray-6)] px-2 py-0.5 text-xs font-medium text-[var(--sl-color-gray-2)];
+  @apply inline-flex items-center px-1.5 py-0.5;
+  border: 1px solid var(--sl-color-hairline-light);
+  font-family: var(--sl-font-mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sl-color-gray-3);
+}
+.ag-version {
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  color: var(--sl-color-gray-3);
+}
+
+.ag-input {
+  @apply px-3 py-2 text-sm;
+  border: 2px solid var(--brand-rule);
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+}
+.ag-input:focus {
+  outline: 2px solid var(--brand-oxide);
+  outline-offset: 2px;
+}
+
+.ag-chip {
+  @apply px-2.5 py-1;
+  border: 1px solid var(--brand-rule);
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.ag-chip:hover {
+  border-color: var(--brand-oxide);
+  color: var(--sl-color-white);
+}
+.ag-chip[aria-pressed='true'] {
+  background: var(--brand-rule);
+  color: var(--sl-color-black);
+}
+
+/* Annotation: conditions beside the number, small mono, ink-grey. */
+.brand-annotation {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sl-link-card,
+  .ag-card,
+  .sl-link-button {
+    transition: none;
+  }
 }

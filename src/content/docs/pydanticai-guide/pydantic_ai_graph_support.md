@@ -4,8 +4,6 @@ description: "Typed, multi-step workflows with pydantic_graph: GraphBuilder step
 framework: pydanticai
 ---
 
-# Pydantic AI: Graph Support Guide
-
 Verified against **pydantic-ai %%version=pydantic-ai%%**, which pins the matching `pydantic-graph` release (checked %%versions-checked%%). Every example on this page was run against that release.
 
 > **This page was rewritten for V2.** Earlier editions described a `pydantic_ai.graph` module with `@graph`/`@node` decorators, `StateMachine`, `conditional_edge` and automatic parallel scheduling. None of that existed. Graphs live in the separate **`pydantic_graph`** package, installed with `pydantic-ai`.

@@ -4,8 +4,6 @@ description: "Type-safe agents, human-in-the-loop approvals, tracing, guardrails
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK TypeScript: Features and Updates (2025–2026)
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%). First written in January 2025. TypeScript 5+, Node.js 22+.
 
 ---

@@ -4,8 +4,6 @@ description: "Running Python Claude Agent SDK services in production: resilience
 framework: anthropic-claude-agent-sdk
 ---
 
-# Claude Agent SDK (Python) — Production Guide
-
 Verified against `claude-agent-sdk` %%version=claude-agent-sdk%% (checked %%versions-checked%%).
 
 The Agent SDK runs the Claude Code CLI as a child process for every `query()` call or `ClaudeSDKClient` session. Most production concerns follow from that: each run costs a process, a working directory and some memory; each run can execute tools on the host; and each run has a cost you can measure precisely from its `ResultMessage`.

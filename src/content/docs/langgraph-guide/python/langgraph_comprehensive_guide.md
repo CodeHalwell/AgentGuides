@@ -5,8 +5,6 @@ framework: langgraph
 language: python
 ---
 
-# LangGraph: Comprehensive Technical Guide (Beginner to Expert)
-
 **Verified against**: `langgraph` %%version=langgraph%% (checked %%versions-checked%%)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.

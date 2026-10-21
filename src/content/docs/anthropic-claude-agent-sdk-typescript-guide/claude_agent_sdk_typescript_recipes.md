@@ -4,8 +4,6 @@ description: "Type-checked TypeScript recipes for the Claude Agent SDK: code rev
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Claude Agent SDK (TypeScript) — Recipes
-
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%); every block type-checks with `strict: true`. Install with:
 
 ```bash

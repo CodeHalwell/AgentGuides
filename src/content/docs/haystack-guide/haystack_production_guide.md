@@ -4,8 +4,6 @@ description: "Deploying Haystack 3 in production — readiness checks, serialise
 framework: haystack
 ---
 
-# Haystack Production Deployment and Operations Guide
-
 > Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%).
 
 ## Table of Contents

@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework .NET - Production Guide
-
 This guide provides enterprise-level best practices for deploying, managing, and scaling applications built with the Microsoft Agent Framework for .NET.
 
 **Target Audience:** DevOps Engineers, Infrastructure Architects, Senior .NET Developers  

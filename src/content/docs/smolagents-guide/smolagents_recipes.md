@@ -4,8 +4,6 @@ description: "Working smolagents recipes — data analysis, web research, report
 framework: smolagents
 ---
 
-# smolagents: Practical Recipes & Code Patterns
-
 > Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every recipe constructs and runs against the installed package; network-dependent tools are stubbed where noted.
 
 All recipes assume:

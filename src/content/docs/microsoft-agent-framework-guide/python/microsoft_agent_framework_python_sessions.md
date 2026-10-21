@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Sessions & history — Python
-
 A **session** is one logical conversation with an agent. The framework splits responsibilities cleanly:
 
 | Object | Owns | Lifetime |

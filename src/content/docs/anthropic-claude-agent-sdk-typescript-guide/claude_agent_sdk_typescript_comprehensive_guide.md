@@ -4,8 +4,6 @@ description: "Reference for building agents with @anthropic-ai/claude-agent-sdk:
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Claude Agent SDK (TypeScript) — Comprehensive Guide
-
 **Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%%** (checked %%versions-checked%%). Every code block on this page was type-checked against the installed package with TypeScript and Zod 4.
 
 The Python package has its own guide: [Claude Agent SDK (Python)](/anthropic-claude-agent-sdk-guide/).

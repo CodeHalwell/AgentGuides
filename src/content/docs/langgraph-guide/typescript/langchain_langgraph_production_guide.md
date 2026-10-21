@@ -5,8 +5,6 @@ framework: langgraph
 language: typescript
 ---
 
-# LangChain.js and LangGraph.js Production Guide
-
 **Deployment, Operations, Monitoring, and Best Practices**
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).

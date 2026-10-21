@@ -4,8 +4,6 @@ description: "Monitoring Amazon Bedrock agents: CloudWatch metrics and traces fo
 framework: amazon-bedrock-agents
 ---
 
-# Observability and Monitoring for Amazon Bedrock Agents (Python)
-
 How to monitor and debug agents on Bedrock. There are two stacks, and they are observed differently:
 
 | Stack | What you get | Where it lands |

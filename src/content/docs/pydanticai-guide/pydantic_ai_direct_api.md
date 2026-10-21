@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Direct API — Raw Model Calls
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.direct`.
 
 `pydantic_ai.direct` exposes four functions that talk to a language model with **no Agent overhead**: no tool execution, no output validation, no message-history management, no retry loop. The only abstraction is translating your `ModelMessage` list into the provider's wire format and back. This is the right layer when you're building custom pipelines, comparing model outputs, writing SDK-level unit tests, or calling a model as part of a custom capability.

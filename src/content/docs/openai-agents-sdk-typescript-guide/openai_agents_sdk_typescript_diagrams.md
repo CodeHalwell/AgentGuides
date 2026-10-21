@@ -4,8 +4,6 @@ description: "Architecture patterns, component relationships and flow diagrams f
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK TypeScript: Architecture Diagrams & Visual Guides
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
 
 **Focus:** Architecture patterns, component relationships, flow diagrams

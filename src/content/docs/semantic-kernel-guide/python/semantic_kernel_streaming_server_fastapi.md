@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Streaming Server (FastAPI, Python)
-
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%).
 
 ```bash

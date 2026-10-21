@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: dotnet
 ---
 
-# Semantic Kernel Recipes (.NET)
-
 > Targets `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (checked %%versions-checked%%). Agents need `Microsoft.SemanticKernel.Agents.Core`; orchestrations need the preview packages `Microsoft.SemanticKernel.Agents.Orchestration` and `.Agents.Runtime.InProcess` and `<NoWarn>$(NoWarn);SKEXP0110</NoWarn>`. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/), Semantic Kernel's successor.
 
 **See also:** [language-agnostic recipes](/semantic-kernel-guide/semantic_kernel_recipes/) · [comprehensive .NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/)

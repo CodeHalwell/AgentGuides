@@ -4,8 +4,6 @@ description: "Visual representations and architecture diagrams for the OpenAI Ag
 framework: openai-agents-sdk
 ---
 
-# OpenAI Agents SDK: Diagrams and Architecture Guide
-
 Visual representations and architecture diagrams for the OpenAI Agents SDK, including agent lifecycle, multi-agent patterns, deployment topologies, and system flows.
 
 ## Table of Contents

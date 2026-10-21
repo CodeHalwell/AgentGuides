@@ -4,7 +4,6 @@ description: "Architecture and flow diagrams for CrewAI — agent lifecycle, pro
 framework: crewai
 ---
 
-# CrewAI Architecture and Workflow Diagrams
 ## Visual Guide to Multi-Agent Systems
 
 ---

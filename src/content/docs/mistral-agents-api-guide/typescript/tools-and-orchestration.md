@@ -8,8 +8,6 @@ sidebar:
   order: 2
 ---
 
-# Tools and orchestration
-
 **Verified against `@mistralai/mistralai` %%version=@mistralai/mistralai%%** (checked %%versions-checked%%). The examples import `client` and `textOf()` from the `common.ts` module on the [agents and conversations page](/mistral-agents-api-guide/typescript/agents-and-conversations/).
 
 ---

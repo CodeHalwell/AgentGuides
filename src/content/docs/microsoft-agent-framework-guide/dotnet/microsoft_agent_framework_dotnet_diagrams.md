@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework .NET - Architecture & Workflow Diagrams
-
 This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET.
 
 ---

@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Diagrams (Python)
-
 **Visual architecture and flow diagrams for the Python SDK** (`semantic-kernel` %%version=semantic-kernel%%)
 
 ---

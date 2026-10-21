@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# Multi-Agent Orchestration — Python
-
 Five built-in orchestration patterns ship in `agent-framework-orchestrations`. Each is a fluent builder that produces a `Workflow` — the same object type returned by `WorkflowBuilder`. Once you have a workflow, run it with `workflow.run(...)` or stream events with `workflow.run(..., stream=True)`.
 
 All signatures below are verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.11.0).

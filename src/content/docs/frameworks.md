@@ -3,8 +3,6 @@ title: "Framework Comparison"
 description: "Compare AI agent frameworks"
 ---
 
-# 🔄 Framework Comparison
-
 Detailed comparison of all supported agent frameworks to help you choose the right one.
 
 ---

@@ -4,8 +4,6 @@ description: "Running @anthropic-ai/claude-agent-sdk services in production: err
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Claude Agent SDK (TypeScript) — Production Guide
-
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).
 
 Each `query()` starts a Claude Code process. Plan capacity in processes, give every run its own working directory, and treat every run as code execution on your host.

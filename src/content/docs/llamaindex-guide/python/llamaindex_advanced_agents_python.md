@@ -5,8 +5,6 @@ framework: llamaindex
 language: python
 ---
 
-# LlamaIndex Advanced Agents (Python)
-
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Basics — `FunctionAgent`, tools, `Context` — are covered in the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/#4-agent-classes-and-types).
 
 All examples assume:

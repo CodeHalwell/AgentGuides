@@ -8,8 +8,6 @@ sidebar:
   order: 42
 ---
 
-# BaseCache & InMemoryCache — cache backends
-
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
 
 LangGraph node caching is a two-part system:

@@ -4,8 +4,6 @@ description: "Least-privilege IAM policies for Bedrock Agents, agent service rol
 framework: amazon-bedrock-agents
 ---
 
-# Amazon Bedrock Agents - IAM Examples
-
 Least-privilege starting points. Replace `REGION`, `ACCOUNT`, IDs and names with your own, and prefer specific ARNs over wildcards. More policies appear in the [comprehensive guide](/amazon-bedrock-agents-guide/bedrock_agents_comprehensive_guide/#aws-bedrock-setup-and-iam-permissions) and the [AgentCore guide](/amazon-bedrock-agents-guide/bedrock_agentcore_comprehensive_guide/#security-and-compliance).
 
 ## Application: invoke one agent alias (Bedrock Agents Classic)

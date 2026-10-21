@@ -8,8 +8,6 @@ sidebar:
   order: 3
 ---
 
-# Chapter 3 — Multi-Agent Systems
-
 **What you'll learn:** four canonical multi-agent topologies — a Command-based supervisor routing to specialists, parallel workers with fan-out/fan-in, direct hand-off between agents using `Command`, and subgraph composition for nested teams.
 
 **Time:** ~30 minutes.

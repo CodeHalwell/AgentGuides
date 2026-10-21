@@ -3,6 +3,8 @@ import versions from './versions.json';
 export type Framework = {
   id: string;
   name: string;
+  /** Two-letter element symbol for the periodic-table tile. */
+  symbol: string;
   tagline: string;
   href: string;
   languages: Array<'Python' | 'TypeScript' | '.NET' | 'Go'>;
@@ -24,6 +26,7 @@ const v = (pkg: keyof typeof versions.packages): string => `v${versions.packages
 export const frameworks: Framework[] = [
   {
     id: 'smolagents',
+    symbol: 'Sa',
     name: 'SmolAgents',
     tagline: 'Minimalist, code-centric agents in ~1,000 lines.',
     href: '/smolagents-guide/',
@@ -35,6 +38,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'pydanticai',
+    symbol: 'Pa',
     name: 'PydanticAI',
     tagline: 'Type-safe agents with validated outputs and graphs.',
     href: '/pydanticai-guide/',
@@ -46,6 +50,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'openai-agents',
+    symbol: 'Oa',
     name: 'OpenAI Agents SDK',
     tagline: 'Production Swarm replacement — handoffs, guardrails, sessions.',
     href: '/openai-agents-sdk-guides/',
@@ -57,6 +62,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'openai-agents-ts',
+    symbol: 'Ot',
     name: 'OpenAI Agents SDK (TypeScript)',
     tagline: 'The TS port with HITL approvals and browser support.',
     href: '/openai-agents-sdk-typescript-guide/',
@@ -68,6 +74,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'crewai',
+    symbol: 'Cr',
     name: 'CrewAI',
     tagline: 'Role-based agent teams with Flows and checkpoints.',
     href: '/crewai-guide/',
@@ -79,6 +86,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'autogen',
+    symbol: 'Au',
     name: 'AutoGen / AG2',
     tagline: 'Research-grade multi-agent with GroupChat and A2A.',
     href: '/autogen-guide/',
@@ -90,6 +98,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'langgraph-py',
+    symbol: 'Lg',
     name: 'LangGraph (Python)',
     tagline: 'Graph-based state machines with type-safe v2 API.',
     href: '/langgraph-guide/python/',
@@ -101,6 +110,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'langgraph-ts',
+    symbol: 'Lt',
     name: 'LangGraph (TypeScript)',
     tagline: 'Type-safe streaming workflows for the TS stack.',
     href: '/langgraph-guide/typescript/',
@@ -112,6 +122,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'llamaindex-py',
+    symbol: 'Li',
     name: 'LlamaIndex (Python)',
     tagline: 'RAG + AgentWorkflow 1.0. The knowledge-retrieval default.',
     href: '/llamaindex-guide/python/',
@@ -123,6 +134,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'llamaindex-ts',
+    symbol: 'Lj',
     name: 'LlamaIndex (TypeScript)',
     tagline: 'Deprecated upstream; final release 0.12.1. Kept for existing projects.',
     href: '/llamaindex-guide/typescript/',
@@ -134,6 +146,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'haystack',
+    symbol: 'Hs',
     name: 'Haystack',
     tagline: 'Production search + multi-agent pipelines, Deepset Studio.',
     href: '/haystack-guide/',
@@ -145,6 +158,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'bedrock',
+    symbol: 'Br',
     name: 'Amazon Bedrock Agents',
     tagline: 'Multi-agent collaboration GA, AgentCore, AWS-native.',
     href: '/amazon-bedrock-agents-guide/',
@@ -156,6 +170,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'ms-agent-fx',
+    symbol: 'Mf',
     name: 'Microsoft Agent Framework',
     tagline: 'Unifies Semantic Kernel + AutoGen. A2A, graphs, declarative.',
     href: '/microsoft-agent-framework-guide/',
@@ -167,6 +182,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'google-adk',
+    symbol: 'Gk',
     name: 'Google ADK',
     tagline: 'Gemini-first agents with multi-language SDKs.',
     href: '/google-adk-guide/',
@@ -178,6 +194,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'claude-sdk',
+    symbol: 'Cl',
     name: 'Anthropic Claude Agent SDK',
     tagline: 'Subagents, hooks, checkpointing and session rewind.',
     href: '/anthropic-claude-agent-sdk-guide/',
@@ -189,6 +206,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'claude-sdk-ts',
+    symbol: 'Ct',
     name: 'Anthropic Claude SDK (TypeScript)',
     tagline: 'The TS counterpart with the same primitives.',
     href: '/anthropic-claude-agent-sdk-typescript-guide/',
@@ -200,6 +218,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'mistral',
+    symbol: 'Mi',
     name: 'Mistral Agents API',
     tagline: 'Mistral-native agents with 5 built-in connectors.',
     href: '/mistral-agents-api-guide/',
@@ -211,6 +230,7 @@ export const frameworks: Framework[] = [
   },
   {
     id: 'semantic-kernel',
+    symbol: 'Sk',
     name: 'Semantic Kernel',
     tagline: 'Microsoft plugin architecture — MCP and A2A native.',
     href: '/semantic-kernel-guide/',

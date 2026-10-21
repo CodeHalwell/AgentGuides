@@ -5,8 +5,6 @@ framework: langgraph
 language: typescript
 ---
 
-# LangGraph Streaming Server (Express)
-
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
 
 `graph.stream()` returns a promise of an async iterable, so `await` it and use `for await`. Stop the run when the client disconnects by passing an `AbortSignal`.

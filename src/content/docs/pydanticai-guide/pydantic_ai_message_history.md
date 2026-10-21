@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# Message History & Multi-Turn Conversations
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
 
 Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that list (or the serialised form) back into the next run to keep a multi-turn conversation. Message history is what makes chat applications possible on top of PydanticAI's otherwise stateless `Agent`.

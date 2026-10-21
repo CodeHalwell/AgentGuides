@@ -5,8 +5,6 @@ framework: llamaindex
 language: typescript
 ---
 
-# LlamaIndex TypeScript Recipes
-
 **Practical patterns for `@llamaindex/workflow` 1.1.25** (the final release; umbrella package `llamaindex` %%version=llamaindex%%, checked %%versions-checked%%). All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.
 
 > **Deprecated upstream.** LlamaIndex.TS is no longer maintained and its npm packages are marked deprecated. These recipes still work with the final releases; see the [overview](/llamaindex-guide/typescript/) before starting a new project on it.

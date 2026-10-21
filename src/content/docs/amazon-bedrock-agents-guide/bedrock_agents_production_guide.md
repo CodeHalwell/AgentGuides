@@ -4,8 +4,6 @@ description: "A comprehensive guide for deploying, operating, monitoring, and op
 framework: amazon-bedrock-agents
 ---
 
-# Amazon Bedrock Agents: Production Deployment Guide
-
 A comprehensive guide for deploying, operating, monitoring, and optimising Amazon Bedrock Agents in production environments at enterprise scale.
 
 > **Verified against:** `boto3` %%version=boto3%% (checked %%versions-checked%%).

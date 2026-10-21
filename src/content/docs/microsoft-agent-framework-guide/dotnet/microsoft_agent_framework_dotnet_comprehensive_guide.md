@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework .NET - Comprehensive Technical Guide
-
 **Framework version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%; first written for the October 2025 preview). Every C# block on this page was compiled against that release.
 **Target platform:** .NET 8.0+ (the core packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
 

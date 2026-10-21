@@ -1,0 +1,40 @@
+---
+// Header mark: the compact element tile (symbol only; metadata drops below 64px).
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="site-title sl-flex">
+  <span class="mini-tile" aria-hidden="true">Ag</span>
+  <span class="title-text" translate="no">{siteTitle}</span>
+</a>
+
+<style>
+  .site-title {
+    align-items: center;
+    gap: 0.75rem;
+    font-size: var(--sl-text-h4);
+    color: var(--sl-color-white);
+    text-decoration: none;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .mini-tile {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex: none;
+    background: var(--brand-paper);
+    color: var(--brand-ink);
+    border: 2px solid var(--brand-ink);
+    box-shadow: 3px 3px 0 var(--brand-oxide);
+    font-family: var(--brand-font-display);
+    font-size: 1.05rem;
+    line-height: 1;
+  }
+  .title-text {
+    overflow: hidden;
+    font-family: var(--brand-font-display);
+    font-weight: 400;
+  }
+</style>

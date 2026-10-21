@@ -3,8 +3,6 @@ title: "All Guides"
 description: "Complete list of all agent framework guides, with the package version each one targets"
 ---
 
-# All Framework Guides
-
 **Complete Directory of All AI Agent Framework Documentation**
 
 **Versions checked:** %%versions-checked%%

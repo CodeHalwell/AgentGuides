@@ -8,8 +8,6 @@ sidebar:
   order: 5
 ---
 
-# Chapter 5 — Memory & Persistence
-
 **What you'll learn:** LangGraph's two memory tiers. **Checkpointers** save graph state at each step so you can resume after a failure. **Stores** provide durable key/value storage (and optional semantic search) that survives across threads and users. You'll also see the **cross-thread memory** pattern that lets one conversation learn from another.
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).

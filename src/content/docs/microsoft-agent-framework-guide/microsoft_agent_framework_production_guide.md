@@ -4,7 +4,6 @@ description: "Deploying Microsoft Agent Framework services — containers, Azure
 framework: microsoft-agent-framework
 ---
 
-# Microsoft Agent Framework - Production & Deployment Guide
 **Target Audience:** DevOps, Infrastructure, and Senior Engineers  
 **First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
 **Focus:** Enterprise-grade deployment, scaling, monitoring, and security

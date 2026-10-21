@@ -4,8 +4,6 @@ description: "Stream Claude Agent SDK runs to browsers over Server-Sent Events w
 framework: anthropic-claude-agent-sdk-typescript
 ---
 
-# Claude Streaming Server (Express)
-
 Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%).
 
 This server runs an agent per request and forwards text deltas, tool activity and the final result to the browser as Server-Sent Events. If you only need raw token streaming from a single model call, the plain `@anthropic-ai/sdk` client's `messages.stream()` is lighter; the point of the Agent SDK here is that the agent can use tools while it streams.

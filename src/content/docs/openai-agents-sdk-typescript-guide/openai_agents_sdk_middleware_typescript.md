@@ -4,8 +4,6 @@ description: "Implement middleware, guardrails, and tracing with the OpenAI Agen
 framework: openai-agents-sdk-typescript
 ---
 
-# OpenAI Agents SDK Middleware and Guardrails (TypeScript)
-
 > Verified against `@openai/agents` %%version=@openai/agents%% (checked %%versions-checked%%).
 
 ## Goals

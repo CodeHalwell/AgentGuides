@@ -5,8 +5,6 @@ framework: semantic-kernel
 language: python
 ---
 
-# Semantic Kernel Recipes (Python)
-
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Each recipe uses only APIs checked against an installed copy. Model names are examples. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/), Semantic Kernel's successor.
 
 **See also:** [language-agnostic recipes](/semantic-kernel-guide/semantic_kernel_recipes/) · [comprehensive Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/)

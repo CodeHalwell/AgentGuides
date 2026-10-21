@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: python
 ---
 
-# MCP Integration — Python
-
 Model Context Protocol (MCP) servers are first-class tool sources in `agent-framework`. Three transports ship in `agent_framework`:
 
 | Class | Transport | Typical use |

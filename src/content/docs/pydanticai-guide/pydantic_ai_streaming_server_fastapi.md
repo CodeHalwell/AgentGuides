@@ -5,8 +5,6 @@ framework: pydanticai
 language: python
 ---
 
-# PydanticAI Streaming Server (FastAPI)
-
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.agent`, `pydantic_ai.result`, `pydantic_ai.messages`, `pydantic_ai.ui.ag_ui`.
 
 PydanticAI's `agent.run_stream()` and `agent.run_stream_events()` (both async context managers) produce async iterators that map directly onto Server-Sent Events (SSE). This guide shows three production patterns: plain text streaming, structured output streaming, and raw event streaming.

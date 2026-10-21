@@ -4,8 +4,6 @@ description: "Hierarchical, dynamic and supervisor-based multi-agent patterns on
 framework: amazon-bedrock-agents
 ---
 
-# Advanced Multi-Agent Patterns for Amazon Bedrock Agents (Python)
-
 Patterns for building multi-agent systems on Amazon Bedrock, with two implementation routes:
 
 - **Bedrock Agents multi-agent collaboration** (GA March 2025) — a managed supervisor with collaborator agents. Bedrock Agents (Agents Classic) closed to new customers on 30 July 2026 and is in maintenance mode, so this route is for existing accounts.

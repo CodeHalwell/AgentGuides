@@ -5,8 +5,6 @@ framework: microsoft-agent-framework
 language: go
 ---
 
-# Workflows — Go
-
 The `workflow` package is a graph-execution engine. You build a graph of **executors** joined by **edges**, then run it with an execution environment from `workflow/inproc`. Execution proceeds in *supersteps*: each message delivered along an edge triggers its target executor, and the run streams events (`ExecutorCompletedEvent`, `OutputEvent`, `RequestInfoEvent` and others) as it goes.
 
 `workflow/agentworkflow` adds agents to that graph and provides the prebuilt multi-agent patterns.

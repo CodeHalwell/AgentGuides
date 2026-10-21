@@ -5,8 +5,6 @@ framework: langgraph
 language: typescript
 ---
 
-# LangChain.js and LangGraph.js Diagrams and Visualisations
-
 Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications.
 
 ---
