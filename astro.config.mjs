@@ -63,6 +63,7 @@ export default defineConfig({
               items: [
                 { label: 'Overview', link: '/autogen-guide/' },
                 { label: 'Microsoft AutoGen (Python)', link: '/autogen-guide/python/' },
+                { label: 'Microsoft AutoGen (.NET, archived)', link: '/autogen-guide/dotnet/' },
                 { label: 'AG2', link: '/ag2-guide/' },
               ],
             },
