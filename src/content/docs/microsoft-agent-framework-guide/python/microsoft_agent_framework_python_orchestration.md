@@ -72,7 +72,7 @@ from agent_framework_orchestrations import SequentialBuilder
 workflow = SequentialBuilder(participants=[researcher, analyst, writer]).build()
 
 result = await workflow.run("Quantum computing in 2026")
-print(result.get_outputs()[-1])  # final conversation
+print(result.get_outputs()[-1].text)  # the last agent's AgentResponse
 ```
 
 Optional knobs:

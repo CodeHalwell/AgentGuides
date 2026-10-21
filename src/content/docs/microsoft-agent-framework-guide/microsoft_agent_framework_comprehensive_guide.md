@@ -444,7 +444,7 @@ def code_reviewer(client: SupportsChatGetResponse) -> Agent:
 
 The seam for unit tests is the chat client: substitute one that returns canned responses, and test your instructions wiring, tools, middleware and parsing without calling a model.
 
-**Python** — a minimal stub client:
+**Python** — a minimal stub client (tests use `pytest` with `pytest-asyncio`):
 
 ```python
 import pytest
@@ -575,8 +575,8 @@ workflow = SequentialBuilder(participants=[researcher, analyst, writer]).build()
 
 async def orchestrate(topic: str) -> str:
     result = await workflow.run(topic)
-    conversation = result.get_outputs()[-1]      # the full conversation, ending with the writer
-    return conversation[-1].text
+    final = result.get_outputs()[-1]             # an AgentResponse: the writer's turn
+    return final.text
 ```
 
 **.NET**
