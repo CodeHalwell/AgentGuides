@@ -1,6 +1,6 @@
 ---
 title: "Chapter 8 — Middleware & Hooks"
-description: "Intercept model and tool calls in LangGraph using pre_model_hook, post_model_hook, per-node error handlers, retry policies, and set_node_defaults — all verified against langgraph==1.2.11."
+description: "Intercept model and tool calls in LangGraph using pre_model_hook, post_model_hook, per-node error handlers, retry policies, and set_node_defaults — all verified against langgraph==1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -10,9 +10,9 @@ sidebar:
 
 # Chapter 8 — Middleware & Hooks
 
-**What you'll learn:** how to intercept, transform, and guard model and tool calls without rewriting node business logic. LangGraph 1.2.11 provides four complementary mechanisms: `pre_model_hook` / `post_model_hook` on `create_react_agent`, per-node `error_handler` and `retry_policy` on `add_node`, `set_node_defaults` for graph-wide policy, and `ToolNode`'s `handle_tool_errors` for tool-specific error handling.
+**What you'll learn:** how to intercept, transform, and guard model and tool calls without rewriting node business logic. LangGraph 1.2.12 provides four complementary mechanisms: `pre_model_hook` / `post_model_hook` on `create_react_agent`, per-node `error_handler` and `retry_policy` on `add_node`, `set_node_defaults` for graph-wide policy, and `ToolNode`'s `handle_tool_errors` for tool-specific error handling.
 
-Verified against **`langgraph==1.2.11`** (modules: `langgraph.prebuilt`, `langgraph.graph`, `langgraph.types`).
+Verified against **`langgraph==1.2.12`** (modules: `langgraph.prebuilt`, `langgraph.graph`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 

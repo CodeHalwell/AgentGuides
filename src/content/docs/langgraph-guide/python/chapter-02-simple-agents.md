@@ -1,6 +1,6 @@
 ---
 title: "Chapter 2 — Your First Agent"
-description: "Build linear pipelines, conditional routers, looping agents, ReAct tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads. Verified against langgraph==1.2.11."
+description: "Build linear pipelines, conditional routers, looping agents, ReAct tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads. Verified against langgraph==1.2.12."
 framework: langgraph
 language: python
 sidebar:
@@ -12,7 +12,7 @@ sidebar:
 
 **What you'll learn:** six concrete agent patterns you can copy-paste and adapt — a linear chat pipeline, conditional routing, looping with a safeguard counter, a ReAct tool-calling agent with `create_react_agent`, `tools_condition` for routing, and streaming execution.
 
-Verified against **`langgraph==1.2.11`**.
+Verified against **`langgraph==1.2.12`**.
 
 **Time:** ~25 minutes.
 

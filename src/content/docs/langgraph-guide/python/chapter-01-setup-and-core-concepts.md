@@ -10,7 +10,7 @@ sidebar:
 
 # Chapter 1 — Setup & Core Concepts
 
-**What you'll learn:** install LangGraph, understand the mental model, and learn the four primitives — **state, nodes, edges, compilation** — that every graph builds on. Also covers `MessagesState`, `REMOVE_ALL_MESSAGES`, `context_schema`, `add_sequence()`, `push_message()`, the `add_messages` `format` parameter, and the new `set_node_defaults()` method for graph-wide policy defaults (1.2.11).
+**What you'll learn:** install LangGraph, understand the mental model, and learn the four primitives — **state, nodes, edges, compilation** — that every graph builds on. Also covers `MessagesState`, `REMOVE_ALL_MESSAGES`, `context_schema`, `add_sequence()`, `push_message()`, the `add_messages` `format` parameter, and the `set_node_defaults()` method for graph-wide policy defaults.
 
 **Time:** ~20 minutes.
 
@@ -48,11 +48,11 @@ Each node is a Python function. State flows through edges. Conditions route base
 
 ### Basic Installation
 
-LangGraph 1.2.11 is the current release. Install the core package alongside `langchain-core`:
+LangGraph 1.2.12 is the current release. Install the core package alongside `langchain-core`:
 
 ```bash
-# Core LangGraph (1.2.11)
-pip install "langgraph>=1.2.11" langchain-core
+# Core LangGraph (1.2.12)
+pip install "langgraph>=1.2.12" langchain-core
 
 # Async support
 pip install aiosqlite
@@ -269,9 +269,9 @@ async for event in graph.astream(...):
 
 ---
 
-## What's New in LangGraph 1.2.1
+## What's New in LangGraph 1.2.x
 
-The sections below document additions and changes introduced in LangGraph 1.2.1. All features are available when you install `langgraph>=1.2.1`.
+The sections below document additions and changes introduced across LangGraph 1.2.x. All features are available when you install `langgraph>=1.2.12`.
 
 ---
 
@@ -711,7 +711,127 @@ for chunk in graph.stream(
 
 ---
 
-## Quick Reference: LangGraph 1.2.1 New Imports
+### `set_node_defaults()` — Graph-Wide Node Policies
+
+`set_node_defaults()` sets fallback policies (retry, cache, timeout, error handler) that apply to **every node** in the graph. Per-node values passed to `add_node(..., retry_policy=...)` always take precedence.
+
+This avoids repeating the same `retry_policy=` / `timeout=` on every `add_node` call — set sensible defaults once, override only where needed.
+
+**Source:** `langgraph.graph.state.StateGraph.set_node_defaults`
+
+```python
+import asyncio
+from datetime import timedelta
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.cache.memory import InMemoryCache
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+
+class PipelineState(TypedDict):
+    text: str
+    step1_out: str
+    step2_out: str
+    step3_out: str
+
+async def step1(state: PipelineState) -> dict:
+    print("step1 running")
+    return {"step1_out": state["text"].upper()}
+
+async def step2(state: PipelineState) -> dict:
+    print("step2 running")
+    return {"step2_out": f"processed:{state['step1_out']}"}
+
+async def step3(state: PipelineState) -> dict:
+    print("step3 running")
+    # This node overrides retry to 5 attempts
+    return {"step3_out": f"final:{state['step2_out']}"}
+
+
+cache = InMemoryCache()
+
+graph = (
+    StateGraph(PipelineState)
+    # Apply defaults to ALL nodes — no per-node repetition needed
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.5),
+        cache_policy=CachePolicy(ttl=300),            # cache results for 5 min
+        timeout=TimeoutPolicy(run_timeout=30.0),      # 30-second hard cap
+    )
+    .add_node("step1", step1)
+    .add_node("step2", step2)
+    .add_node(
+        "step3",
+        step3,
+        retry_policy=RetryPolicy(max_attempts=5),    # overrides the default
+        cache_policy=CachePolicy(ttl=600),            # overrides the default
+    )
+    .add_edge(START, "step1")
+    .add_edge("step1", "step2")
+    .add_edge("step2", "step3")
+    .add_edge("step3", END)
+    .compile(checkpointer=InMemorySaver(), cache=cache)
+)
+
+result = asyncio.run(graph.ainvoke(
+    {"text": "hello", "step1_out": "", "step2_out": "", "step3_out": ""},
+    config={"configurable": {"thread_id": "t1"}},
+))
+print(result["step3_out"])  # final:processed:HELLO
+```
+
+**Graph-wide error handler** — a default error handler receives any exception from a regular node that has no explicit `error_handler`:
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.types import RetryPolicy
+from langgraph.errors import NodeError
+
+class State(TypedDict):
+    value: str
+    error: str
+
+def fallible_node(state: State) -> dict:
+    if state["value"] == "bad":
+        raise ValueError("bad input")
+    return {"value": state["value"].upper()}
+
+def global_error_handler(state: State, error: NodeError) -> dict:
+    """Runs instead of crashing when fallible_node raises and exhausts retries."""
+    return {"error": f"recovered: {state.get('value', 'unknown')}"}
+
+graph = (
+    StateGraph(State)
+    .set_node_defaults(
+        retry_policy=RetryPolicy(max_attempts=2),
+        error_handler=global_error_handler,
+    )
+    .add_node("work", fallible_node)
+    .add_edge(START, "work")
+    .add_edge("work", END)
+    .compile()
+)
+
+result = graph.invoke({"value": "bad", "error": ""})
+print(result["error"])  # recovered: bad
+```
+
+**Key rules:**
+
+| Rule | Detail |
+|---|---|
+| Per-node values override defaults | `add_node(..., retry_policy=x)` beats `set_node_defaults(retry_policy=y)` |
+| Defaults apply at `compile()` time | Set them before calling `.compile()` |
+| No subgraph inheritance | Defaults set here do **not** propagate into subgraphs added as nodes |
+| `error_handler` default skips handlers | The default handler never applies to other error-handler nodes |
+| `cache_policy` default skips handlers | Caching error-handler output is unsafe — defaults skip them |
+
+> **When to use this:** large graphs where every LLM call needs the same retry policy, or pipelines where all nodes should have a common timeout. Set the baseline with `set_node_defaults`, then tune individual nodes.
+
+---
+
+## Quick Reference: LangGraph 1.2.x New Imports
 
 ```python
 # Built-in messages shorthand
@@ -739,6 +859,15 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 # SQLite checkpointer (requires: pip install langgraph-checkpoint-sqlite)
 from langgraph.checkpoint.sqlite import SqliteSaver
+
+# Node policies — pass to add_node(...) or set_node_defaults(...)
+from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy
+
+# In-memory cache backend (pass to compile(cache=...))
+from langgraph.cache.memory import InMemoryCache
+
+# set_node_defaults is a method on StateGraph — no separate import needed
+# builder.set_node_defaults(retry_policy=..., cache_policy=..., timeout=..., error_handler=...)
 ```
 
 ---

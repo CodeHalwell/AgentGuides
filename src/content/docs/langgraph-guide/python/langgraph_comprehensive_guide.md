@@ -1,20 +1,20 @@
 ---
 title: "LangGraph: Comprehensive Technical Guide (Beginner to Expert)"
-description: "Latest Version: LangGraph 1.2.11 (August 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
+description: "Latest Version: LangGraph 1.2.12 (September 2026) Focus: Python Examples with practical, production-ready patterns Author Note: This guide progresses from fundamentals through advanced"
 framework: langgraph
 language: python
 ---
 
-Latest: langgraph 1.2.11 | Updated: August 17, 2026
+Latest: langgraph 1.2.12 | Updated: September 28, 2026
 # LangGraph: Comprehensive Technical Guide (Beginner to Expert)
 
-**Latest Version**: LangGraph 1.2.11 (August 2026)
+**Latest Version**: LangGraph 1.2.12 (September 2026)
 **Focus**: Python examples with practical, production-ready patterns
 **Author Note**: This guide progresses from fundamentals through advanced multi-agent architectures with real-world workflows.
 
 > **Errata (April 2026).** An earlier draft of this page documented fabricated APIs (`langgraph.llm_hooks.pre_model_hook`, `langgraph.cache.cache_node`, `langgraph.graph.deferred`, `langgraph.prebuilt.command_tool`, `@tool(updates_state=True)`, `langgraph template` CLI subcommand). They are not in the installed package. See the [Errata section](#errata-removed-fabricated-sections) below for the real replacements. For middleware, read the dedicated [Chapter 8 — Middleware](/langgraph-guide/python/chapter-08-middleware-hooks/) page.
 
-**What's real in v1.2.11 (verified August 2026):**
+**What's real in v1.2.12 (verified September 2026):**
 - `ToolRuntime` dataclass (`langgraph.prebuilt`) — injected into tools at execution time
 - `ToolCallTransformer` abstract class (`langgraph.prebuilt`) — intercepts and transforms tool call arguments
 - `InjectedState` / `InjectedStore` (`langgraph.prebuilt`) — inject graph state or the store into tools, invisible to the LLM
@@ -35,7 +35,7 @@ Latest: langgraph 1.2.11 | Updated: August 17, 2026
 - Cross-thread memory via `Store` + `InjectedStore`
 - Fixed time-travel replays with interrupts and subgraphs
 
-**Deprecated in v1.2.11:**
+**Deprecated in v1.2.12:**
 - `langgraph.prebuilt.HumanInterrupt` → `langchain.agents.interrupt.HumanInterrupt`
 - `langgraph.prebuilt.HumanInterruptConfig` → `langchain.agents.interrupt.HumanInterruptConfig`
 - `langgraph.prebuilt.ActionRequest` → `langchain.agents.interrupt.ActionRequest`
@@ -2766,7 +2766,7 @@ Good luck with your AI engineering journey! LangGraph gives you the low-level co
 
 Source-verified reference for the classes, functions, and types developers actually
 touch — consolidated from LangGraph's full class-by-class audit and re-verified
-against the installed `langgraph==1.2.11` (`langgraph-checkpoint==4.2.0`,
+against the installed `langgraph==1.2.12` (`langgraph-checkpoint==4.2.0`,
 `langgraph-prebuilt==1.1.0`, `langchain-core==1.6.0`). Each entry gives the module
 path, the verified signature, why it matters, and a runnable example. Deeply
 private, underscore-prefixed implementation details (`langgraph.pregel._algo`,
@@ -2785,7 +2785,7 @@ from `langgraph.prebuilt.tool_validator`. The deprecation notices target
 `langchain.agents` as migration destination (requires the separate `langchain`
 package). `create_react_agent` is **deprecated** per official LangGraph v1
 migration docs in favour of `langchain.agents.create_agent`; the installed
-`langgraph==1.2.11` source does not carry a runtime `@deprecated` decorator but
+`langgraph==1.2.12` source does not carry a runtime `@deprecated` decorator but
 migration guidance is clear. The `HumanInterrupt`/`HumanInterruptConfig`/`ActionRequest` family moved to
 `langchain.agents.interrupt` (requires the `langchain` package). `langchain.agents.create_agent` and
 `langchain.agents.middleware` exist in the separate `langchain` package.
@@ -3443,7 +3443,7 @@ Pregel(*, nodes: dict[str, PregelNode | NodeBuilder], channels: dict[str, BaseCh
        checkpointer=None, store=None, cache=None, context_schema=None,
        interrupt_before_nodes=(), interrupt_after_nodes=(), name: str = "LangGraph", ...)
 
-# NodeBuilder (verified 1.2.11 — note the real method names differ from some older docs)
+# NodeBuilder (verified 1.2.12 — note the real method names differ from some older docs)
 nb = NodeBuilder()
 nb.subscribe_only("channel")            # or .subscribe_to("ch1", "ch2", read=True)
 nb.do(my_function)                      # set the node action
@@ -4751,7 +4751,7 @@ async with graph.astream({"messages": []}, stream_mode="tools", version="v2") as
 `create_react_agent` compiles a `"agent"` + `"tools"` ReAct loop. It is
 **deprecated** per official LangGraph v1 migration docs in favour of
 `langchain.agents.create_agent` (from the separate `langchain` package; install
-with `pip install langchain`). The installed `langgraph==1.2.11` source does not
+with `pip install langchain`). The installed `langgraph==1.2.12` source does not
 carry a runtime `@deprecated` decorator, but official migration guidance is clear.
 `pre_model_hook`/`post_model_hook` hooks remain available on `create_react_agent`
 for users working with `langgraph` standalone.
@@ -4807,7 +4807,7 @@ def create_react_agent(
 
 **Correction vs. some older write-ups:** `from langgraph.prebuilt import
 AgentState` does **not** merely warn — it raises `ImportError` in the installed
-1.2.11 (`AgentState` isn't re-exported from the `langgraph.prebuilt` package
+1.2.12 (`AgentState` isn't re-exported from the `langgraph.prebuilt` package
 `__init__` at all). Import it from `langgraph.prebuilt.chat_agent_executor`
 instead.
 
@@ -6031,7 +6031,7 @@ machinery underneath every `invoke()`/`stream()` call.
 
 A short list of symbols and signatures that differ from what circulates in older
 blog posts, outdated docs, or earlier drafts of this reference — the installed
-`langgraph==1.2.11` source is the tiebreaker throughout this section:
+`langgraph==1.2.12` source is the tiebreaker throughout this section:
 
 - **`ToolOutputMixin` at `langgraph.prebuilt.tool_node`** — never actually lived there;
   it's `langchain_core.messages.tool.ToolOutputMixin`, re-exported (unofficially) via
@@ -6046,7 +6046,7 @@ blog posts, outdated docs, or earlier drafts of this reference — the installed
   value is the function `_default_handle_tool_errors`, not the literal `True`
   (see Tools & Tool Calling above).
 - **`from langgraph.prebuilt import AgentState`** — raises `ImportError` in
-  1.2.11; it was never re-exported from the `langgraph.prebuilt` package
+  1.2.12; it was never re-exported from the `langgraph.prebuilt` package
   `__init__`. Import from `langgraph.prebuilt.chat_agent_executor` instead.
 - **`SqliteSaver.from_conn_string(...)` / `PostgresSaver.from_conn_string(...)`**
   — these are **context managers** (`with ... as saver:`), not factories that
