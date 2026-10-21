@@ -203,7 +203,7 @@ export const frameworks: Framework[] = [
     name: 'Mistral Agents API',
     tagline: 'Mistral-native agents with 5 built-in connectors.',
     href: '/mistral-agents-api-guide/',
-    languages: ['Python'],
+    languages: ['Python', 'TypeScript'],
     category: 'Model-Specific',
     difficulty: 'Intermediate',
     useCases: ['mistral', 'connectors', 'eu-hosted'],

@@ -61,6 +61,17 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="May 2025 launch and since" href="./may_2025_launch_updates/" description="Historical: what launched and what changed." />
 </CardGrid>
 
+## TypeScript
+
+The same API from Node.js, Bun, Deno or the browser with `@mistralai/mistralai` %%version=@mistralai/mistralai%% (versioned separately from the Python package). It has no `RunContext` or client-side MCP helpers; the pages show the hand-written equivalents.
+
+<CardGrid>
+  <LinkCard title="TypeScript overview" href="/mistral-agents-api-guide/typescript/" description="Install, minimal example, differences from Python." />
+  <LinkCard title="Agents and conversations" href="/mistral-agents-api-guide/typescript/agents-and-conversations/" description="Agents, versions, conversations, streaming, structured output." />
+  <LinkCard title="Tools and orchestration" href="/mistral-agents-api-guide/typescript/tools-and-orchestration/" description="Built-in tools, function calling, handoffs, MCP connectors." />
+  <LinkCard title="Production" href="/mistral-agents-api-guide/typescript/production/" description="Errors, retries, hooks, concurrency, SSE server." />
+</CardGrid>
+
 ## Minimal example
 
 ```python

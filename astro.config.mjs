@@ -188,7 +188,14 @@ export default defineConfig({
           items: [
             { label: 'Anthropic Claude SDK (Python)', link: '/anthropic-claude-agent-sdk-guide/' },
             { label: 'Anthropic Claude SDK (TypeScript)', link: '/anthropic-claude-agent-sdk-typescript-guide/' },
-            { label: 'Mistral Agents API', link: '/mistral-agents-api-guide/' },
+            {
+              label: 'Mistral Agents API',
+              collapsed: true,
+              items: [
+                { label: 'Overview (Python)', link: '/mistral-agents-api-guide/' },
+                { label: 'TypeScript', link: '/mistral-agents-api-guide/typescript/' },
+              ],
+            },
           ],
         },
         {

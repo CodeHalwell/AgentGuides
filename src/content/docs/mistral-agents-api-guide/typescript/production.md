@@ -141,7 +141,7 @@ try {
 | `SDKValidationError` | A request failed the SDK's Zod validation; nothing was sent |
 | `ConnectionError`, `RequestTimeoutError`, `RequestAbortedError` | Network failure, timeout, or your `AbortSignal` |
 
-A failure during a stream arrives as a `conversation.response.error` event rather than an exception, so handle it in the event loop too.
+Once a stream is open, errors the platform reports arrive as `conversation.response.error` events rather than exceptions, so handle them in the event loop too; network failures and aborts still throw.
 
 ### Errors as values
 
