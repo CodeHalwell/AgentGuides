@@ -15,7 +15,7 @@ Astro + Starlight documentation site. Guides live in `src/content/docs/<framewor
 
 - Improve existing pages. Material from studying a class or API goes into the guide section where a reader would look for it (comprehensive guide, topic page, recipes). Do not create "deep dive", "class reference", "Vol. N" or per-release pages.
 - Every code example must work against the current release. Install the package and check imports and signatures (run with a mock/test model where possible). Never invent APIs; if a framework lacks a feature, say so.
-- Use root-absolute internal links (`/langgraph-guide/python/...`); `src/plugins/remark-base-path.mjs` adds the `/AgentGuides` base. Check with `node scripts/check-links.mjs`.
+- Use root-absolute internal links (`/langgraph-guide/python/...`); `src/plugins/remark-base-path.mjs` adds the `/AgentGuides` base. Relative links (`./sibling/`) are resolved against the source file's folder at build time. Check with `npm run check:links` after `npm run build` (it checks the sources and the built HTML).
 - Don't start a page body with a `# Heading`: Starlight renders the frontmatter `title` as the page's H1. Use `##` and below.
 - British English, plain and understated. No hype.
 - In `.mdx` files, keep `{` and `<` inside code.
@@ -23,4 +23,4 @@ Astro + Starlight documentation site. Guides live in `src/content/docs/<framewor
 ## Workflow
 
 - Branch from `main`. Don't branch from or stack on other open PRs.
-- Before a PR: `npm run check:versions`, `node scripts/check-links.mjs`, and `npm run build` if you changed config, components or MDX.
+- Before a PR: `npm run check:versions`, `npm run build`, then `npm run check:links`.
