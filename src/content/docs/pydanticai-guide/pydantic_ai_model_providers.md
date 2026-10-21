@@ -94,18 +94,107 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 
 ## `ModelSettings` — provider-agnostic knobs
 
-`pydantic_ai.settings.ModelSettings` is a `TypedDict`. Common fields verified in `settings.py`:
+`pydantic_ai.settings.ModelSettings` is a `TypedDict`; every key is optional and a provider silently ignores keys it does not support. Settings merge in order agent → run → capability, later wins.
 
-`max_tokens`, `temperature`, `top_p`, `timeout`, `parallel_tool_calls`, `seed`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `stop_sequences`, `extra_headers`, `extra_body`, `thinking` (`True` / `False` / `'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`).
+| Key | Notes |
+|---|---|
+| `max_tokens`, `temperature`, `top_p`, `top_k`, `seed`, `stop_sequences`, `presence_penalty`, `frequency_penalty`, `logit_bias` | The usual sampling controls. |
+| `thinking` | `ThinkingLevel = bool \| Literal['minimal', 'low', 'medium', 'high', 'xhigh']`. `True` = provider default effort; `False` disables thinking where the model allows it (always-on reasoning models ignore it); unmapped levels round to the nearest the provider has. |
+| `service_tier` | `ServiceTier = Literal['auto', 'default', 'flex', 'priority']`. Provider-specific keys (`openai_service_tier`, …) take precedence. |
+| `cache` | Library-managed prompt caching: `True`, `False`, a retention (`'5m'`, `'30m'`, `'1h'`) or `CacheConfig(retention=..., messages=False)`. Provider-specific cache keys win if set. See also `CachePoint` in the [message history guide](/pydanticai-guide/pydantic_ai_message_history/). |
+| `tool_choice` | `None`/`'auto'`, `'none'`, `'required'`, a list of tool names, or `ToolOrOutput(function_tools=[...])`. |
+| `parallel_tool_calls` | `False` asks the model for one tool call per response. |
+| `timeout` | Per-attempt timeout applied by the provider client. |
+| `request_timeout` | One deadline, enforced by Pydantic AI, covering every SDK retry and the whole streamed response. |
+| `max_retries` | Override the provider SDK's retry count for one request (`0` = single attempt). |
+| `extra_headers`, `extra_body` | Escape hatches for provider features without a first-class key. |
 
 ```python
+from pydantic_ai import Agent, ModelSettings
+
 agent = Agent(
-    'openai:gpt-5.2',
-    model_settings=ModelSettings(temperature=0.1, max_tokens=1024),
+    'anthropic:claude-opus-4-8',
+    model_settings=ModelSettings(temperature=0.1, max_tokens=4096, thinking='high', service_tier='priority'),
 )
 ```
 
-Provider-specific extensions (`OpenAIChatModelSettings`, `OpenAIResponsesModelSettings`, `AnthropicModelSettings`, `GoogleModelSettings`) subclass it and add provider keys (e.g. `openai_reasoning_effort`, `anthropic_thinking`). V1's `OpenAIModelSettings` is now `OpenAIChatModelSettings`.
+Provider-specific extensions (`OpenAIChatModelSettings`, `OpenAIResponsesModelSettings`, `AnthropicModelSettings`, `GoogleModelSettings`, …) subclass it and add prefixed keys (e.g. `openai_reasoning_effort`, `anthropic_thinking`). V1's `OpenAIModelSettings` is now `OpenAIChatModelSettings`.
+
+### `tool_choice` and `ToolOrOutput`
+
+A static `tool_choice=['search']` would also hide the output tools, so the run could never finish (Pydantic AI raises `UserError` for that, and for a static `'required'`). `ToolOrOutput` restricts the *function* tools while keeping output available:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.settings import ToolOrOutput
+
+agent = Agent('openai:gpt-5.2')
+
+
+@agent.tool_plain
+def search_web(query: str) -> str:
+    """Search the web."""
+    return f'Results for {query!r}'
+
+
+@agent.tool_plain
+def delete_cache() -> str:
+    """Clear the cache."""
+    return 'cleared'
+
+
+result = agent.run_sync(
+    'What is the population of France?',
+    model_settings={'tool_choice': ToolOrOutput(function_tools=['search_web'])},  # delete_cache hidden
+)
+```
+
+To force a particular tool on one step only (say, the first), return the setting from a capability's `get_model_settings` callable rather than setting it statically.
+
+## Model-level capabilities
+
+These capabilities change *which* model is used or *how* it is called, without touching your agent code.
+
+| Capability | What it does |
+|---|---|
+| `Thinking(effort=True)` | Sets `thinking` portably; provider-specific thinking settings still win. |
+| `Caching(retention=True, messages=True)` | Sets `cache` (library-managed prompt caching). |
+| `SelectModel(selector)` | Picks the model before each model-request step from a `ModelSelectionContext` (`deps`, `prompt`, `messages`, `usage`, `run_step`, the lower-precedence `model`). |
+| `ResolveModelId(resolver)` | Turns a model-ID string into a `Model` (custom names, per-tenant credentials); return `None` to fall through to the normal lookup. Replaces Temporal's old `provider_factory=`. |
+| `RaiseContentFilterError()` | Raises `ContentFilterError` (an `UnexpectedModelBehavior`) when a response finishes with `finish_reason='content_filter'`, instead of returning an empty or partial output. |
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Caching, RaiseContentFilterError, ResolveModelId, SelectModel, Thinking
+from pydantic_ai.models import ModelResolutionContext, ModelSelectionContext
+from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
+
+
+def route(ctx: ModelSelectionContext) -> str:
+    # cheap model for the first step, stronger one once tools have produced results
+    return 'anthropic:claude-haiku-4-5' if ctx.run_step == 1 else 'anthropic:claude-sonnet-4-6'
+
+
+def resolve(ctx: ModelResolutionContext, model_id: str):
+    if model_id == 'tenant-default':
+        return AnthropicModel('claude-sonnet-4-6', provider=AnthropicProvider(api_key='per-tenant-key'))
+    return None  # fall through to the standard 'provider:model' lookup
+
+
+agent = Agent(
+    'tenant-default',
+    capabilities=[
+        ResolveModelId(resolve),
+        SelectModel(route),
+        Thinking(effort='low'),
+        Caching('1h'),
+        RaiseContentFilterError(),
+    ],
+)
+```
+
+Capabilities can also be passed per run (`agent.run(..., capabilities=[Thinking(effort='xhigh')])`) for a one-off change.
 
 ## `FallbackModel` — wrap primaries with backups
 

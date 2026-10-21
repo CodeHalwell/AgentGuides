@@ -7,7 +7,7 @@ framework: microsoft-agent-framework
 # Microsoft Agent Framework - Recipes & Code Patterns
 **First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
 
-> These recipes date from the preview and were updated only where an API was renamed (sessions instead of threads, `AsAIAgent` instead of `CreateAIAgent`, plain chat-client construction instead of `async with`). For recipes whose code is checked against the current release, use the [Python recipes](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/) and [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/).
+Every Python recipe on this page was import- and signature-checked, and its agent logic run against a stub chat client; the C# recipes were compiled. More recipes per language: [Python recipes](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/) · [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/).
 
 **Purpose:** Practical code recipes for common agent scenarios  
 **Format:** Copy-paste ready, production-grade code patterns
@@ -191,8 +191,13 @@ import asyncio
 import logging
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from agent_framework.exceptions import (
+    ChatClientContentFilterException,
+    ChatClientException,
+    ChatClientInvalidAuthException,
+    ChatClientInvalidRequestException,
+)
 from azure.identity.aio import AzureCliCredential
-from azure.core.exceptions import AzureError
 
 # Setup logging
 logging.basicConfig(
@@ -216,21 +221,19 @@ class AgentWithErrorHandling:
             try:
                 logger.info(f"Attempt {attempt + 1}/{self.max_retries}: {query}")
                 response = await agent.run(query)
-                logger.info(f"Success: Got response of {len(response.text)} chars")
+                logger.info(f"Success: got a response of {len(response.text)} chars")
                 return response
-                
-            except AzureError as e:
-                logger.warning(f"Azure error on attempt {attempt + 1}: {e}")
-                
+
+            except (ChatClientInvalidAuthException, ChatClientInvalidRequestException, ChatClientContentFilterException):
+                raise                                  # retrying won't help: fix credentials, request or input
+
+            except ChatClientException as e:           # transient service errors, timeouts, throttling
+                logger.warning(f"Model call failed on attempt {attempt + 1}: {e}")
                 if attempt < self.max_retries - 1:
-                    await asyncio.sleep(self.retry_delay)
+                    await asyncio.sleep(self.retry_delay * 2**attempt)   # exponential back-off
                 else:
                     logger.error(f"Failed after {self.max_retries} attempts")
                     raise
-                    
-            except Exception as e:
-                logger.error(f"Unexpected error: {e}", exc_info=True)
-                raise
     
     async def execute_safely(self, query: str):
         """Execute with error handling"""
@@ -246,8 +249,11 @@ class AgentWithErrorHandling:
                 response = await self.run_with_retry(agent, query)
                 return response.text
                     
-        except AzureError as e:
-            logger.error(f"Azure service error: {e}")
+        except ChatClientContentFilterException:
+            return "I can't help with that request."
+
+        except ChatClientException as e:
+            logger.error(f"Model service error: {e}")
             return "I'm sorry, I'm temporarily unavailable. Please try again later."
             
         except Exception as e:
@@ -282,7 +288,8 @@ Demonstrates agent orchestration for complex tasks
 
 import asyncio
 from dataclasses import dataclass
-from enum import Enum
+from datetime import datetime, timezone
+
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
@@ -350,7 +357,7 @@ class DocumentAnalysisWorkflow:
             research=extraction.text,
             analysis=analysis.text,
             recommendations=recommendations.text,
-            timestamp=datetime.utcnow().isoformat()
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
 
@@ -389,9 +396,10 @@ async def run_workflow():
 
 
 if __name__ == "__main__":
-    from datetime import datetime
     asyncio.run(run_workflow())
 ```
+
+Hand-chaining `agent.run()` calls like this is transparent and fine for three fixed steps. For the same pipeline with checkpointing, streaming events and human review hooks, use `SequentialBuilder(participants=[extraction, analysis, summary]).build()` from `agent_framework.orchestrations` — see the [Python orchestration page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/).
 
 ### Recipe 5: Agent with Multiple Tools - Python
 
@@ -491,142 +499,56 @@ if __name__ == "__main__":
 
 ### Recipe 6: Agent with Memory Persistence - Python
 
-**Scenario:** Agents with persistent conversation history
+**Scenario:** Conversation history that survives restarts, stored in Azure Cosmos DB
+
+The framework ships a Cosmos DB history provider (`agent-framework-azure-cosmos`, included in `agent-framework`). Attach it as a context provider and key each conversation with a session ID; the provider loads earlier messages before each run and stores new ones afterwards.
 
 ```python
 """
 Persistent Memory Recipe
-Demonstrates long-term context maintenance using Azure Cosmos DB
+Conversation history in Azure Cosmos DB via CosmosHistoryProvider
 """
 
 import asyncio
-import json
-from datetime import datetime
-from azure.cosmos.aio import CosmosClient
+
 from agent_framework import Agent
+from agent_framework.azure import CosmosHistoryProvider
 from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import AzureCliCredential
 
 
-class PersistentMemoryAgent:
-    """Agent with Cosmos DB-backed memory"""
-    
-    def __init__(self, cosmos_connection: str):
-        self.cosmos_client = CosmosClient.from_connection_string(cosmos_connection)
-        self.database = None
-        self.container = None
-    
-    async def initialize(self):
-        """Initialize Cosmos DB"""
-        self.database = self.cosmos_client.get_database_client("agent_memory")
-        self.container = self.database.get_container_client("conversations")
-    
-    async def save_conversation_turn(self, user_id: str, query: str, response: str):
-        """Save conversation turn to persistent storage"""
-        
-        item = {
-            "id": f"{user_id}-{datetime.utcnow().timestamp()}",
-            "user_id": user_id,
-            "query": query,
-            "response": response,
-            "timestamp": datetime.utcnow().isoformat(),
-            "ttl": 7776000  # 90 days
-        }
-        
-        await self.container.create_item(body=item)
-    
-    async def load_conversation_history(self, user_id: str, limit: int = 10) -> str:
-        """Load recent conversation history"""
-        
-        query = "SELECT * FROM c WHERE c.user_id = @user_id ORDER BY c.timestamp DESC OFFSET 0 LIMIT @limit"
-        
-        items = []
-        async for item in self.container.query_items(
-            query=query,
-            parameters=[
-                {"name": "@user_id", "value": user_id},
-                {"name": "@limit", "value": limit}
-            ]
-        ):
-            items.append(item)
-        
-        # Format history for context
-        history = []
-        for item in reversed(items):  # Reverse to chronological order
-            history.append(f"User: {item['query']}")
-            history.append(f"Agent: {item['response']}")
-        
-        return "\n".join(history)
-    
-    async def execute_with_context(self, user_id: str, query: str, agent: Agent) -> str:
-        """Execute agent query with historical context"""
-        
-        # Load history
-        history = await self.load_conversation_history(user_id)
-        
-        # Prepare context
-        full_query = f"Previous conversation:\n{history}\n\nNew query: {query}"
-        
-        # Execute
-        response = await agent.run(full_query)
-        
-        # Save turn
-        await self.save_conversation_turn(user_id, query, response.text)
-        
-        return response.text
-    
-    async def close(self):
-        """Cleanup"""
-        await self.cosmos_client.close()
+async def run_persistent_agent() -> None:
+    async with AzureCliCredential() as credential:
+        history = CosmosHistoryProvider(
+            endpoint="https://your-account.documents.azure.com:443/",
+            database_name="agent_memory",
+            container_name="conversations",
+            credential=credential,
+        )
+        agent = Agent(
+            client=FoundryChatClient(credential=credential),
+            instructions="You are a helpful personal assistant who remembers previous conversations.",
+            context_providers=[history],
+        )
 
+        user_id = "user-123"
 
-async def run_persistent_agent():
-    """Run agent with persistent memory"""
-    
-    cosmos_connection = "DefaultEndpointsProtocol=https://..."  # Your connection string
-    
-    agent_store = PersistentMemoryAgent(cosmos_connection)
-    await agent_store.initialize()
-    
-    try:
-        async with AzureCliCredential() as credential:
-            client = FoundryChatClient(credential=credential)
-            agent = Agent(
-                client=client,
-                instructions="You are a helpful personal assistant who remembers previous conversations."
-            )
+        # Session 1
+        session = agent.create_session(session_id=user_id)
+        response1 = await agent.run("My name is Alice and I like Python programming", session=session)
+        print(f"Agent: {response1.text}\n")
 
-            # Simulate multi-session conversation
-            user_id = "user-123"
-
-            print("=== Persistent Memory Agent ===\n")
-
-            # Session 1
-            print("Session 1:")
-            response1 = await agent_store.execute_with_context(
-                user_id, 
-                "My name is Alice and I like Python programming",
-                agent
-            )
-            print(f"Alice: {response1}\n")
-
-            # Later session - agent remembers
-            print("Session 2 (later):")
-            response2 = await agent_store.execute_with_context(
-                user_id,
-                "What did I tell you about my interests?",
-                agent
-            )
-            print(f"Alice: {response2}")
-                
-    finally:
-        await agent_store.close()
+        # Later — even after a restart — a new session object with the same ID sees the history.
+        later = agent.create_session(session_id=user_id)
+        response2 = await agent.run("What did I tell you about my interests?", session=later)
+        print(f"Agent: {response2.text}")
 
 
 if __name__ == "__main__":
-    # asyncio.run(run_persistent_agent())  # Requires Cosmos DB setup
-    print("Run with valid Cosmos DB connection string")
+    asyncio.run(run_persistent_agent())   # requires a Cosmos DB account and data-plane RBAC
 ```
+
+Set a TTL on the container to expire old conversations, and partition by user (the provider's default partition key is the session ID) so deleting a user's data is a single-partition operation.
 
 ### Recipe 7: Agent with RAG (Retrieval-Augmented Generation) - Python
 
@@ -640,7 +562,6 @@ Demonstrates retrieval-augmented generation using Azure AI Search
 
 import asyncio
 from azure.search.documents.aio import SearchClient
-from azure.search.documents.models import Vector
 from azure.identity.aio import DefaultAzureCredential
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
@@ -655,11 +576,9 @@ class RAGAgent:
         self.search_client = None
         self.agent = None
     
-    async def initialize(self, ai_client: FoundryChatClient):
+    async def initialize(self, ai_client: FoundryChatClient, credential: DefaultAzureCredential):
         """Initialize RAG components"""
-        
-        credential = DefaultAzureCredential()
-        
+
         # Create search client
         self.search_client = SearchClient(
             endpoint=self.search_endpoint,
@@ -723,7 +642,7 @@ async def run_rag_agent():
         ai_client = FoundryChatClient(credential=credential)
 
         rag_agent = RAGAgent(search_endpoint, search_index)
-        await rag_agent.initialize(ai_client)
+        await rag_agent.initialize(ai_client, credential)
 
         print("=== RAG Agent ===\n")
 
@@ -741,8 +660,29 @@ async def run_rag_agent():
 
 
 if __name__ == "__main__":
-    # asyncio.run(run_rag_agent())  # Requires Azure AI Search setup
-    print("Run with valid Azure AI Search configuration")
+    asyncio.run(run_rag_agent())   # requires an Azure AI Search index with "content" and "source" fields
+```
+
+Doing retrieval by hand keeps every step visible. The framework also ships it as a context provider, which runs the search before each model call without changing your prompts:
+
+```python
+from agent_framework import Agent
+from agent_framework.azure import AzureAISearchContextProvider
+from agent_framework.foundry import FoundryChatClient
+from azure.identity.aio import DefaultAzureCredential
+
+credential = DefaultAzureCredential()
+search = AzureAISearchContextProvider(
+    endpoint="https://your-search.search.windows.net",
+    index_name="documents",
+    credential=credential,
+    top_k=3,
+)
+agent = Agent(
+    client=FoundryChatClient(credential=credential),
+    instructions="Answer from the provided context. Say so if it doesn't cover the question.",
+    context_providers=[search],
+)
 ```
 
 ---
