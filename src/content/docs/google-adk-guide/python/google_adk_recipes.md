@@ -3,6 +3,9 @@ title: "Google ADK - Practical Recipes and Examples"
 description: "Practical, runnable Google ADK recipes: multi-agent support desks, research pipelines, tools, sessions, evaluation and cost control."
 framework: "google-adk"
 language: "python"
+sidebar:
+  label: "Recipes"
+  order: 95
 ---
 
 **Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%); first written for 2.2.0.  
@@ -129,13 +132,12 @@ async def chat_loop():
 
 An agent that conducts comprehensive web research on topics.
 
-> **Note:** `SequentialAgent` and `ParallelAgent` are deprecated since google-adk 2.0.0.
-> For new projects, prefer the `Workflow` API (see [Resilient Tool Pipeline](#resilient-tool-pipeline)).
-> These agents remain functional but the `instruction` field belongs only on `LlmAgent`, not on
-> `SequentialAgent`/`ParallelAgent`.
+The three agents run in order as a `Workflow` chain; each one receives the previous agent's output.
 
 ```python
-from google.adk.agents import SequentialAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, Workflow
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import google_search, url_context
@@ -180,19 +182,17 @@ analyst = LlmAgent(
 )
 
 # Create workflow
-# NOTE: SequentialAgent does NOT accept an instruction= argument
-research_pipeline = SequentialAgent(
+research_pipeline = Workflow(
     name="research_pipeline",
     description="Comprehensive research workflow",
-    sub_agents=[researcher, summariser, analyst],
+    edges=[(START, researcher, summariser, analyst)],
 )
 
 async def conduct_research(topic: str) -> dict:
     """Conduct research on a topic."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="research_app",
-        agent=research_pipeline,
+        app=App(name="research_app", root_agent=research_pipeline),
         session_service=session_service,
     )
 
@@ -448,11 +448,12 @@ async def handle_support_request(customer_issue: str, customer_id: str) -> dict:
 
 A sophisticated content generation system.
 
-> **Note:** `SequentialAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The stages run in order as a `Workflow` chain; each one receives the previous stage's output.
 
 ```python
-from google.adk.agents import SequentialAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, Workflow
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import google_search
@@ -534,19 +535,17 @@ seo_optimizer = LlmAgent(
     5. Ensure readability for search engines""",
 )
 
-# NOTE: SequentialAgent does NOT accept an instruction= argument
-content_pipeline = SequentialAgent(
+content_pipeline = Workflow(
     name="content_generation_pipeline",
     description="Complete content generation workflow",
-    sub_agents=[researcher, outliner, writer, editor, seo_optimizer],
+    edges=[(START, researcher, outliner, writer, editor, seo_optimizer)],
 )
 
 async def generate_content(request: ContentRequest) -> dict:
     """Generate content through the pipeline."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="content_gen_app",
-        agent=content_pipeline,
+        app=App(name="content_gen_app", root_agent=content_pipeline),
         session_service=session_service,
     )
 
@@ -592,11 +591,12 @@ async def generate_content(request: ContentRequest) -> dict:
 
 An intelligent code review system.
 
-> **Note:** `ParallelAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The reviewers run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines the results.
 
 ````python
-from google.adk.agents import ParallelAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, JoinNode, Workflow, node
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -649,19 +649,23 @@ performance_reviewer = LlmAgent(
     5. Resource usage""",
 )
 
-# NOTE: ParallelAgent does NOT accept an instruction= argument
-code_reviewer = ParallelAgent(
+@node
+def combine_code_reviewer(node_input: dict) -> str:
+    """JoinNode output is {branch_name: output}; format it as one report."""
+    return "\n\n".join(f"## {name}\n{text}" for name, text in node_input.items())
+
+
+code_reviewer = Workflow(
     name="comprehensive_code_reviewer",
     description="Reviews code from multiple perspectives",
-    sub_agents=[quality_reviewer, security_reviewer, performance_reviewer],
+    edges=[(START, (quality_reviewer, security_reviewer, performance_reviewer), JoinNode(name="join_code_reviewer"), combine_code_reviewer)],
 )
 
 async def review_code(request: CodeReviewRequest) -> dict:
     """Review code comprehensively."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="code_review_app",
-        agent=code_reviewer,
+        app=App(name="code_review_app", root_agent=code_reviewer),
         session_service=session_service,
     )
 
@@ -693,8 +697,8 @@ Provide detailed, constructive feedback."""
         session_id="session_1",
         new_message=message,
     ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response = "".join(p.text or "" for p in event.content.parts)
+        if isinstance(event.output, str):   # the combine node's report
+            response = event.output
 
     return {
         "language": request.language,
@@ -788,11 +792,12 @@ async def schedule_meeting(request: MeetingRequest) -> dict:
 
 An agent that processes and extracts information from documents.
 
-> **Note:** `SequentialAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The stages run in order as a `Workflow` chain; each one receives the previous stage's output.
 
 ```python
-from google.adk.agents import SequentialAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, Workflow
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -842,19 +847,17 @@ validator = LlmAgent(
     4. Provide quality assessment""",
 )
 
-# NOTE: SequentialAgent does NOT accept an instruction= argument
-document_processor = SequentialAgent(
+document_processor = Workflow(
     name="document_processor",
     description="Complete document processing workflow",
-    sub_agents=[parser, extractor, validator],
+    edges=[(START, parser, extractor, validator)],
 )
 
 async def process_document(request: DocumentProcessRequest) -> dict:
     """Process a document and extract structured information."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="doc_processor_app",
-        agent=document_processor,
+        app=App(name="doc_processor_app", root_agent=document_processor),
         session_service=session_service,
     )
 
@@ -978,11 +981,12 @@ Provide:
 
 An agent that monitors system health.
 
-> **Note:** `ParallelAgent` is deprecated since google-adk 2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The reviewers run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines the results.
 
 ```python
-from google.adk.agents import ParallelAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, JoinNode, Workflow, node
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -1021,19 +1025,23 @@ security_monitor = LlmAgent(
     4. Security patch status""",
 )
 
-# NOTE: ParallelAgent does NOT accept an instruction= argument
-health_monitor = ParallelAgent(
+@node
+def combine_health_monitor(node_input: dict) -> str:
+    """JoinNode output is {branch_name: output}; format it as one report."""
+    return "\n\n".join(f"## {name}\n{text}" for name, text in node_input.items())
+
+
+health_monitor = Workflow(
     name="system_health_monitor",
     description="Comprehensive system monitoring",
-    sub_agents=[performance_monitor, error_monitor, security_monitor],
+    edges=[(START, (performance_monitor, error_monitor, security_monitor), JoinNode(name="join_health_monitor"), combine_health_monitor)],
 )
 
 async def monitor_system_health(metrics: Dict) -> dict:
     """Monitor system health."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="monitoring_app",
-        agent=health_monitor,
+        app=App(name="monitoring_app", root_agent=health_monitor),
         session_service=session_service,
     )
 
@@ -1065,8 +1073,8 @@ Provide:
         session_id="session_1",
         new_message=message,
     ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response = "".join(p.text or "" for p in event.content.parts)
+        if isinstance(event.output, str):   # the combine node's report
+            response = event.output
 
     return {
         "health_assessment": response,

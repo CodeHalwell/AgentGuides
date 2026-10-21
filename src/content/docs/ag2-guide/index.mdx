@@ -1,6 +1,6 @@
 ---
-title: "AG2 (formerly AutoGen)"
-description: "AG2 1.x — the async, protocol-driven agent framework from the AutoGen community fork: Agent, tools, structured output, the Network hub, MCP and A2A. Plus where AG2 Classic went."
+title: "AG2"
+description: "AG2 1.x, the async agent framework from the community fork of AutoGen 0.2: Agent, tools, structured output, the Network hub, MCP and A2A. Plus the AG2 Classic (import autogen) API in maintenance mode."
 framework: "ag2"
 language: "python"
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**AG2 is the community continuation of AutoGen** (the fork led by AutoGen's original authors in late 2024). With **AG2 1.0 (July 2026)** the project replaced its AutoGen-era API: `pip install ag2` now gives you an async, protocol-driven framework imported as `ag2`, built around `Agent`, `@tool`, typed events and a multi-agent **Network**. The old `autogen.*` API lives on as **AG2 Classic**.
+**AG2 is a community fork of AutoGen 0.2**, started in November 2024 by AutoGen's original authors and developed independently of Microsoft's AutoGen. With **AG2 1.0 (July 2026)** the project replaced its AutoGen-era API: `pip install ag2` now gives you an async, protocol-driven framework imported as `ag2`, built around `Agent`, `@tool`, typed events and a multi-agent **Network**. The old `autogen.*` API lives on as **AG2 Classic**.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
@@ -27,7 +27,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="caution" title="ag2 1.x is not a drop-in upgrade from 0.x">
-  If your code says `import autogen` or `from autogen import ConversableAgent, GroupChat`, you are on **AG2 Classic**. Upgrading to `ag2>=1.0` removes that namespace entirely. Either stay on Classic — published on PyPI as `autogen` (or pin `ag2<1.0`), in maintenance mode with security and critical fixes only, documented at [classic.docs.ag2.ai](https://classic.docs.ag2.ai) — or port to the new API. See [AG2 Classic and migration](./ag2_comprehensive_guide/#ag2-classic-and-migrating-from-0x).
+  If your code says `import autogen` or `from autogen import ConversableAgent, GroupChat`, you are on **AG2 Classic**. Upgrading to `ag2>=1.0` removes that namespace entirely. Either stay on Classic — published on PyPI as `autogen` (or pin `ag2<1.0`), in maintenance mode with security and critical fixes only, covered in the [AG2 Classic section](/ag2-guide/classic/) — or port to the new API with the [migration guide](/ag2-guide/classic/ag2_classic_migration_guide/). (`pip install ag2-classic`, mentioned upstream, is not a PyPI package; install `autogen`.)
 </Aside>
 
 <Aside type="note" title="AG2 is not Microsoft AutoGen">
@@ -45,8 +45,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="6 · Human in the loop" href="./ag2_comprehensive_guide/#human-in-the-loop" description="context.input and hitl_hook · 10 min" />
   <LinkCard title="7 · Events & streams" href="./ag2_comprehensive_guide/#observing-a-turn-with-memorystream" description="MemoryStream subscriptions · 10 min" />
   <LinkCard title="8 · Multi-agent Network" href="./ag2_comprehensive_guide/#multi-agent-the-network" description="Hub, channels, TransitionGraph · 25 min" />
-  <LinkCard title="9 · MCP and A2A" href="./ag2_comprehensive_guide/#mcp-servers" description="MCPToolkit, A2AServer, A2AConfig · 15 min" />
-  <LinkCard title="10 · Production" href="./ag2_production_guide/" description="Testing, deployment, observability · 20 min" />
+  <LinkCard title="9 · Middleware, knowledge, DI" href="./ag2_comprehensive_guide/#middleware-and-observers" description="Retry, limits, observers, compaction, Inject/Variable · 15 min" />
+  <LinkCard title="10 · MCP and A2A" href="./ag2_comprehensive_guide/#mcp-servers" description="MCPToolkit, A2AServer, A2AConfig · 15 min" />
+  <LinkCard title="11 · Production" href="./ag2_production_guide/" description="Testing, deployment, observability · 20 min" />
 </CardGrid>
 
 ## Reference
@@ -58,12 +59,19 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./ag2_production_guide/" />
 </CardGrid>
 
+## AG2 Classic (`import autogen`)
+
+<CardGrid>
+  <LinkCard title="AG2 Classic overview" href="/ag2-guide/classic/" description="The ConversableAgent / GroupChat API, published as autogen, in maintenance mode." />
+  <LinkCard title="Migration guide" href="/ag2-guide/classic/ag2_classic_migration_guide/" description="AutoGen 0.2 → Classic, Classic → 1.x, Microsoft AutoGen → Agent Framework or AG2." />
+</CardGrid>
+
 ## Release timeline
 
 - **1.2.x (October 2026)** — current line. Additive: A2A servers on several replicas, push-notification URL validation and input media-type checks, `reasoning` option on `OpenAIResponsesConfig`, Firecrawl and Keenable search toolkits, Mistral live/speech configs, plus provider and knowledge-store fixes. No changes needed to 1.1 code on this site.
 - **1.1.x (September–October 2026)** — patch releases on top of 1.0.
 - **1.0.0 (27 July 2026)** — the protocol-driven framework (previously previewed as `autogen.beta` in 0.11–0.14) becomes the top-level `ag2` package. Classic agent classes, `GroupChat`, swarms and the `autogen` import name are removed from `ag2`; Classic continues in the [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic) repository.
-- **0.14.0 (June 2026)** — last `ag2` release with the Classic `autogen.*` API.
+- **0.14.0 (June 2026)** — last `ag2` release with the Classic `autogen.*` API; the swarm API (`autogen.agentchat.contrib.swarm_agent`) was removed.
 - **0.11–0.13 (spring 2026)** — `autogen.beta` event-driven preview; swarm functions moved under `autogen.agentchat.contrib.swarm_agent` in 0.13.0.
 
 ## Install, minimal example
@@ -97,6 +105,7 @@ Ready? **[Start with what changed in 1.0 →](./ag2_comprehensive_guide/#what-ch
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-10-21 | 1.2.1 | Retitled "AG2" (it is a fork, not a rename). AG2 Classic pages moved here from the AutoGen guide into `/ag2-guide/classic/`, with a single migration page. Added sections on dependency injection, code execution (local sandbox vs provider-hosted tools), multimodal input, middleware and observers, knowledge and compaction, sub-tasks and eval, and an OpenTelemetry/usage example in production. |
 | 2026-10-21 | 1.2.1 | Guide rewritten for the ag2 1.x API (`import ag2`); every example run offline with `ag2.testing.TestConfig` against 1.1.2 and re-run against 1.2.1 (1.1.2 → 1.2.1 changelog reviewed: additive only). Removed examples that never matched a released API (`ag2 init`/`ag2 ui` CLI, `QuickResearchTool`, `autogen.interop.A2AServer`, `Agent(system_message=...)` from `autogen`). Classic material condensed into a Classic/migration section verified against `autogen` 0.14.1. | Claude |
 | 2026-06-07 | 0.13.3 | Patch release; core Classic symbols verified. | Claude routine |
 | 2026-05-20 | 0.13.0 | Swarm API moved to `autogen.agentchat.contrib.swarm_agent`. | Claude routine |

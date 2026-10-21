@@ -108,7 +108,7 @@ def hello(name: str) -> str:
 
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",  # Bedrock cross-Region inference profile ID
+    model="us.anthropic.%%model=anthropic%%",  # Bedrock cross-Region inference profile ID
     tools=[hello],
 )
 
@@ -118,7 +118,7 @@ print(result)  # AgentResult; str() gives the final text
 
 If you omit `model`, Strands uses its default Bedrock model. Pin the model explicitly in anything you deploy so behaviour doesn't change when that default moves.
 
-**Bedrock model IDs.** Current Claude models on Bedrock use IDs such as `anthropic.claude-sonnet-5-5`, `anthropic.claude-opus-5-5` and `anthropic.claude-haiku-5-5`; add a geography prefix such as `us.`, `eu.` or `global.` to use a cross-Region inference profile. Which prefixes exist varies by model, so check the [Bedrock model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for the profiles available in your Region.
+**Bedrock model IDs.** Claude models on Bedrock use IDs such as `anthropic.%%model=anthropic%%`, `anthropic.%%model=anthropic-flagship%%` and `anthropic.%%model=anthropic-small%%`; add a geography prefix such as `us.`, `eu.` or `global.` to use a cross-Region inference profile. Which prefixes exist varies by model, so check the [Bedrock model cards](https://docs.aws.amazon.com/bedrock/latest/userguide/model-cards.html) for the profiles available in your Region.
 
 ---
 
@@ -134,7 +134,7 @@ from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import BedrockModel, CacheConfig
 
 model = BedrockModel(
-    model_id="us.anthropic.claude-sonnet-5-5",
+    model_id="us.anthropic.%%model=anthropic%%",
     region_name="us-west-2",
     max_tokens=4096,
     cache_config=CacheConfig(strategy="auto"),  # Bedrock prompt caching
@@ -213,7 +213,7 @@ def account_status(tool_context: ToolContext) -> str:
     return f"Customer {customer_id} ({tier}) is ACTIVE"
 
 
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[account_status], state={"tier": "premium"})
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[account_status], state={"tier": "premium"})
 agent("Check my account status", invocation_state={"customer_id": "C-456"})
 ```
 
@@ -396,8 +396,8 @@ A supervisor agent calls specialist agents as if they were tools.
 ```python
 from strands import Agent, tool
 
-SONNET = "us.anthropic.claude-sonnet-5-5"
-HAIKU = "us.anthropic.claude-haiku-5-5"
+SONNET = "us.anthropic.%%model=anthropic%%"
+HAIKU = "us.anthropic.%%model=anthropic-small%%"
 
 
 @tool
@@ -458,7 +458,7 @@ print(supervisor("Invoice INV-77 looks wrong, and what does the enterprise plan 
 ```python
 tier1 = Agent(model=HAIKU, name="tier1_support", description="Basic how-to questions.")
 tier2 = Agent(model=SONNET, name="tier2_support", description="Configuration and integration issues.")
-tier3 = Agent(model="us.anthropic.claude-opus-5-5", name="tier3_support", description="Complex incidents and root-cause analysis.")
+tier3 = Agent(model="us.anthropic.%%model=anthropic-flagship%%", name="tier3_support", description="Complex incidents and root-cause analysis.")
 
 support_lead = Agent(
     model=SONNET,
@@ -501,7 +501,7 @@ A `Swarm` is a team of agents that hand work to one another. Each member automat
 from strands import Agent
 from strands.multiagent import Swarm
 
-SONNET = "us.anthropic.claude-sonnet-5-5"
+SONNET = "us.anthropic.%%model=anthropic%%"
 
 financial = Agent(
     model=SONNET,
@@ -552,7 +552,7 @@ from collections import Counter
 from strands import Agent
 
 classifiers = [
-    Agent(model="us.anthropic.claude-haiku-5-5",
+    Agent(model="us.anthropic.%%model=anthropic-small%%",
           system_prompt="Classify the request as BILLING, SALES or SUPPORT. Reply with one word.",
           callback_handler=None)          # silence console streaming
     for _ in range(5)
@@ -591,8 +591,8 @@ from strands import Agent
 from strands.multiagent import GraphBuilder
 from strands.multiagent.graph import GraphState
 
-HAIKU = "us.anthropic.claude-haiku-5-5"
-SONNET = "us.anthropic.claude-sonnet-5-5"
+HAIKU = "us.anthropic.%%model=anthropic-small%%"
+SONNET = "us.anthropic.%%model=anthropic%%"
 
 collector = Agent(model=HAIKU, name="collector",
                   system_prompt="Collect and structure the raw data described in the task.")
@@ -675,7 +675,7 @@ For a fixed pipeline you know in advance, a graph without conditional edges is u
 from strands import Agent
 from strands_tools import workflow
 
-coordinator = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[workflow])
+coordinator = Agent(model="us.anthropic.%%model=anthropic%%", tools=[workflow])
 
 coordinator.tool.workflow(
     action="create",
@@ -691,7 +691,7 @@ coordinator.tool.workflow(
             "description": "Classify the document as invoice, contract, report or other.",
             "dependencies": ["extract"],
             "model_provider": "bedrock",
-            "model_settings": {"model_id": "us.anthropic.claude-haiku-5-5"},
+            "model_settings": {"model_id": "us.anthropic.%%model=anthropic-small%%"},
         },
         {
             "task_id": "validate",
@@ -770,7 +770,7 @@ docs_server = MCPClient(lambda: stdio_client(
     StdioServerParameters(command="uvx", args=["awslabs.aws-documentation-mcp-server@latest"])
 ))
 
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[docs_server])  # client is managed by the agent
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[docs_server])  # client is managed by the agent
 agent("How do I configure VPC networking for AgentCore Runtime?")
 ```
 
@@ -830,7 +830,7 @@ from strands.session import S3SessionManager
 session = S3SessionManager(session_id="session-123", bucket="agent-sessions", prefix="support/")
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     session_manager=session,
 )
 
@@ -859,7 +859,7 @@ config = AgentCoreMemoryConfig(
 )
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     session_manager=AgentCoreMemorySessionManager(config, region_name="us-west-2"),
 )
 ```
@@ -872,7 +872,7 @@ Turns are written to AgentCore Memory as events; long-term records extracted by 
 
 ```python
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     state={"onboarding_step": 1},
     session_manager=S3SessionManager(session_id="onboard-john", bucket="agent-sessions"),
 )
@@ -887,7 +887,7 @@ step = agent.state.get("onboarding_step")
 from strands.agent.conversation_manager import SummarizingConversationManager
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     conversation_manager=SummarizingConversationManager(
         summary_ratio=0.3,             # summarise the oldest 30% when the context fills
         preserve_recent_messages=10,
@@ -923,7 +923,7 @@ def read_s3_text(bucket: str, key: str, max_bytes: int = 200_000) -> str:
     return body.read().decode("utf-8", errors="replace")
 
 
-analyst = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[read_s3_text])
+analyst = Agent(model="us.anthropic.%%model=anthropic%%", tools=[read_s3_text])
 analyst("Summarise s3://documents/report.txt")
 ```
 
@@ -935,7 +935,7 @@ analyst("Summarise s3://documents/report.txt")
 from strands.models import BedrockModel
 
 model = BedrockModel(
-    model_id="us.anthropic.claude-sonnet-5-5",
+    model_id="us.anthropic.%%model=anthropic%%",
     guardrail_id="gr-abc123",
     guardrail_version="1",
     guardrail_trace="enabled",
@@ -956,7 +956,7 @@ To run an agent from EventBridge or S3 events, host it in Lambda (short tasks) o
 ```python
 # Good: focused agent, few well-described tools
 product_specialist = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     name="product_specialist",
     system_prompt="You are an expert on our product line. Only discuss features, pricing and comparisons.",
     tools=[get_plan_details],
@@ -994,10 +994,10 @@ Strands already retries throttled model calls (configurable with `retry_strategy
 from strands import Agent
 from strands.models import BedrockModel, CacheConfig
 
-router = Agent(model=BedrockModel(model_id="us.anthropic.claude-haiku-5-5", max_tokens=256),
+router = Agent(model=BedrockModel(model_id="us.anthropic.%%model=anthropic-small%%", max_tokens=256),
                system_prompt="Reply SIMPLE or COMPLEX only.", callback_handler=None)
-simple = Agent(model="us.anthropic.claude-haiku-5-5")
-complex_ = Agent(model=BedrockModel(model_id="us.anthropic.claude-sonnet-5-5",
+simple = Agent(model="us.anthropic.%%model=anthropic-small%%")
+complex_ = Agent(model=BedrockModel(model_id="us.anthropic.%%model=anthropic%%",
                                     cache_config=CacheConfig(strategy="auto")))
 
 
@@ -1022,7 +1022,7 @@ class ToolAudit(HookProvider):
         print("tool:", event.tool_use["name"], event.tool_use["input"])
 
 
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", hooks=[ToolAudit()])
+agent = Agent(model="us.anthropic.%%model=anthropic%%", hooks=[ToolAudit()])
 ```
 
 ---
@@ -1038,7 +1038,7 @@ from bedrock_agentcore import BedrockAgentCoreApp
 from strands import Agent
 
 app = BedrockAgentCoreApp()
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[get_plan_details])
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[get_plan_details])
 
 
 @app.entrypoint
@@ -1061,7 +1061,7 @@ For short, stateless requests, a Lambda handler is enough (keep the function tim
 ```python
 from strands import Agent
 
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", callback_handler=None)
+agent = Agent(model="us.anthropic.%%model=anthropic%%", callback_handler=None)
 
 
 def handler(event, context):

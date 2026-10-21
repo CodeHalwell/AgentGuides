@@ -1,11 +1,11 @@
 ---
 title: "LlamaIndex Recipes and Practical Examples"
-description: "Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems."
+description: "Worked LlamaIndex examples, from a basic RAG chatbot to document comparison, SQL, extraction and multi-step agents."
+sidebar:
+  label: "Recipes"
 framework: "llamaindex"
 language: "python"
 ---
-
-Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems.
 
 > Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Agents use the workflow-based `FunctionAgent`, whose `run()` is asynchronous — each recipe exposes an `async` entry point and calls it with `asyncio.run(...)`. Model names are examples.
 
@@ -14,10 +14,10 @@ Real-world recipes for building LlamaIndex applications: from simple RAG chatbot
 ## Table of Contents
 
 1. [Basic RAG Chatbot](#basic-rag-chatbot)
-2. [Research Paper Analyzer](#research-paper-analyzer)
+2. [Research paper analyser](#research-paper-analyser)
 3. [Code Documentation Assistant](#code-documentation-assistant)
 4. [Multi-Document Comparison Engine](#multi-document-comparison-engine)
-5. [Real-time News Analysis Agent](#real-time-news-analysis-agent)
+5. [Real-time news analysis agent](#real-time-news-analysis-agent)
 6. [Data Extraction Pipeline](#data-extraction-pipeline)
 7. [Conversational SQL Agent](#conversational-sql-agent)
 8. [Knowledge Graph Builder](#knowledge-graph-builder)
@@ -127,7 +127,7 @@ services:
 
 ---
 
-## Research Paper Analyzer
+## Research paper analyser
 
 ### Analysing Academic Papers
 
@@ -359,6 +359,7 @@ from llama_index.core import (
 from llama_index.core.query_engine import (
     SubQuestionQueryEngine,
 )
+from llama_index.core.question_gen import LLMQuestionGenerator
 from llama_index.core.tools import QueryEngineTool
 from llama_index.llms.openai import OpenAI
 
@@ -402,6 +403,9 @@ class MultiDocumentComparison:
         
         self.comparison_engine = SubQuestionQueryEngine.from_defaults(
             query_engine_tools=tools,
+            # explicit: the default generator needs llama-index-question-gen-openai,
+            # which cannot be installed alongside current releases
+            question_gen=LLMQuestionGenerator.from_defaults(llm=self.llm),
             llm=self.llm,
         )
     
@@ -445,9 +449,9 @@ if __name__ == "__main__":
 
 ---
 
-## Real-time News Analysis Agent
+## Real-time news analysis agent
 
-### Analyzing News with External Tools
+### Analysing news with external tools
 
 ```python
 """
@@ -714,7 +718,7 @@ Translate this question to SQL:
 
 Return only the SQL query."""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip()
     
     def create_agent(self):
@@ -878,7 +882,7 @@ if __name__ == "__main__":
     builder.save_graph("knowledge_graph.dot")
 ```
 
-To query the graph rather than just draw it, use `PropertyGraphIndex.from_documents(docs)`, which runs similar extraction during ingestion and supports graph-aware retrieval.
+To query the graph rather than just draw it, use `PropertyGraphIndex`, which runs similar extraction during ingestion and supports graph-aware retrieval; see [property graphs](/llamaindex-guide/python/llamaindex_comprehensive_guide/#39-property-graphs).
 
 
 ---
@@ -1027,42 +1031,42 @@ class SupportTriageAgent:
     def __init__(self):
         self.llm = OpenAI(model="%%model=openai-small%%")
     
-    def assess_urgency(self, ticket: str) -> str:
+    async def assess_urgency(self, ticket: str) -> str:
         """Assess urgency of ticket."""
         prompt = f"""Assess the urgency of this support ticket:
 {ticket}
 
 Return: LOW, MEDIUM, HIGH, or CRITICAL"""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip().upper()
     
-    def categorize_issue(self, ticket: str) -> str:
+    async def categorize_issue(self, ticket: str) -> str:
         """Categorize issue type."""
         prompt = f"""Categorize this support issue:
 {ticket}
 
 Return one of: BILLING, TECHNICAL, SALES, GENERAL"""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip().upper()
     
-    def draft_response(self, ticket: str) -> str:
+    async def draft_response(self, ticket: str) -> str:
         """Draft initial response to customer."""
         prompt = f"""Write a professional initial response to this support ticket:
 {ticket}
 
 Keep it brief (2-3 sentences) and empathetic."""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip()
     
     async def triage(self, ticket_id: str, ticket_text: str) -> TriagedTicket:
         """Triage a support ticket: classify urgency and department, then draft a reply."""
         urgency, category, suggestion = await asyncio.gather(
-            asyncio.to_thread(self.assess_urgency, ticket_text),
-            asyncio.to_thread(self.categorize_issue, ticket_text),
-            asyncio.to_thread(self.draft_response, ticket_text),
+            self.assess_urgency(ticket_text),
+            self.categorize_issue(ticket_text),
+            self.draft_response(ticket_text),
         )
         
         return TriagedTicket(

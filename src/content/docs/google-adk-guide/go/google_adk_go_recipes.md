@@ -3,6 +3,9 @@ title: "Google ADK for Go - Recipes"
 description: "Task-shaped, compile-checked ADK for Go programs: tools, structured output, multi-agent patterns, persistent sessions, streaming, HTTP serving, workers and Cloud Storage artifacts."
 framework: "google-adk"
 language: "go"
+sidebar:
+  label: "Recipes"
+  order: 20
 ---
 
 **Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). Each recipe is a complete program that compiles with `go vet` against that release. Recipes that only build an agent take the model as a `model.LLM` parameter; create one with `gemini.NewModel` as in [Hello World](#hello-world).
@@ -19,10 +22,9 @@ Concepts are explained in the [comprehensive guide](/google-adk-guide/go/google_
 4. [Multi-Agent Systems](#multi-agent-systems)
 5. [Sessions and State](#sessions-and-state)
 6. [Streaming](#streaming)
-7. [MCP Integration](#mcp-integration)
-8. [A2A Protocol](#a2a-protocol)
-9. [Production Patterns](#production-patterns)
-10. [Cloud Integration](#cloud-integration)
+7. [MCP and A2A](#mcp-and-a2a)
+8. [Production Patterns](#production-patterns)
+9. [Cloud Integration](#cloud-integration)
 
 ---
 
@@ -455,8 +457,6 @@ Expose narrow, parameterised queries rather than a "run any SQL" tool, and use a
 
 ## Multi-Agent Systems
 
-### Sequential Workflow and Parallel Analysis
-
 Sequential pipelines and parallel fan-out are in the comprehensive guide under [Agent Orchestration](/google-adk-guide/go/google_adk_go_comprehensive_guide/#agent-orchestration).
 
 ### Supervisor-Worker Pattern
@@ -740,23 +740,11 @@ If you do not need a custom protocol, the ADK REST API (next section) already of
 
 ---
 
-## MCP Integration
+## MCP and A2A
 
-### Using MCP Tools
-
-See [Model Context Protocol](/google-adk-guide/go/google_adk_go_comprehensive_guide/#model-context-protocol-mcp) for a stdio and a Streamable HTTP `mcptoolset` example. The ADK repository's `examples/mcp` also shows an in-process MCP server built with `mcp.NewInMemoryTransports()`, which is handy in tests.
-
----
-
-## A2A Protocol
-
-### Expose Agent via A2A
-
-Either run `go run . web a2a` with the `full` launcher, or mount the A2A handlers yourself as shown in [Exposing Agent via A2A](/google-adk-guide/go/google_adk_go_comprehensive_guide/#exposing-agent-via-a2a).
-
-### Consume Remote A2A Agent
-
-See [Consuming Remote A2A Agent](/google-adk-guide/go/google_adk_go_comprehensive_guide/#consuming-remote-a2a-agent): `remoteagent.NewA2A` from `agent/remoteagent/v2` returns an ordinary `agent.Agent`.
+- **MCP tools:** see [Model Context Protocol](/google-adk-guide/go/google_adk_go_comprehensive_guide/#model-context-protocol-mcp) for a stdio and a Streamable HTTP `mcptoolset` example. The ADK repository's `examples/mcp` also shows an in-process MCP server built with `mcp.NewInMemoryTransports()`, which is handy in tests.
+- **Expose an agent over A2A:** run `go run . web a2a` with the `full` launcher, or mount the A2A handlers yourself as shown in [Exposing Agent via A2A](/google-adk-guide/go/google_adk_go_comprehensive_guide/#exposing-agent-via-a2a).
+- **Call a remote A2A agent:** `remoteagent.NewA2A` from `agent/remoteagent/v2` returns an ordinary `agent.Agent`; see [Consuming Remote A2A Agent](/google-adk-guide/go/google_adk_go_comprehensive_guide/#consuming-remote-a2a-agent).
 
 ---
 

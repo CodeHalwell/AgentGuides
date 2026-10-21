@@ -4,7 +4,8 @@ description: "Compose agents and functions into a DAG with conditional routing, 
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 25
+  label: "Workflows"
+  order: 30
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/workflow/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted; the human-in-the-loop helpers changed after 2.10 (see that section).

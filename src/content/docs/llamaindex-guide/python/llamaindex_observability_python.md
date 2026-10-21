@@ -80,7 +80,7 @@ from llama_index.core import Settings
 from llama_index.core.callbacks import CallbackManager, TokenCountingHandler
 
 token_counter = TokenCountingHandler(
-    tokenizer=tiktoken.encoding_for_model("%%model=openai%%").encode   # pick the tokenizer that matches your model family
+    tokenizer=tiktoken.get_encoding("o200k_base").encode   # the encoding used by current OpenAI models
 )
 Settings.callback_manager = CallbackManager([token_counter])
 
@@ -105,7 +105,7 @@ The counts are estimates from the tokenizer; for billing-grade numbers read the 
 | Agent iterations per request | histogram | agent name |
 | Cache hit rate (ingestion, semantic cache) | gauge | cache |
 
-The [production guide](/llamaindex-guide/python/llamaindex_production_guide/#monitoring-and-observability) shows these wired into Prometheus.
+The [production guide](/llamaindex-guide/python/llamaindex_production_guide/#5-observability-and-cost) shows OpenTelemetry and token-based cost tracking in a deployed service.
 
 ## 6. Logs
 

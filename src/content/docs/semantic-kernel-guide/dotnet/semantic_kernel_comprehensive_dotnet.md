@@ -28,7 +28,7 @@ sidebar:
 10. [A2A](#10-a2a)
 11. [Structured output](#11-structured-output)
 12. [Filters](#12-filters)
-13. [ASP.NET Core, resilience and telemetry](#13-aspnet-core-resilience-and-telemetry)
+13. [ASP.NET Core hosting](#13-aspnet-core-hosting)
 14. [Migrating to Microsoft Agent Framework](#14-migrating-to-microsoft-agent-framework)
 15. [Removed and renamed APIs](#15-removed-and-renamed-apis)
 
@@ -343,7 +343,7 @@ await foreach (var chunk in agent.InvokeStreamingAsync("Weather in Rome?", threa
 using Microsoft.SemanticKernel.Agents.OpenAI;
 using OpenAI;
 
-OpenAIResponseAgent responsesAgent = new(new OpenAIClient(apiKey).GetResponsesClient())
+OpenAIResponseAgent responsesAgent = new(new OpenAIClient(apiKey).GetResponsesClient(), "%%model=openai-small%%")
 {
     Name = "Assistant",
     Instructions = "Answer briefly.",
@@ -359,7 +359,7 @@ await foreach (var item in responsesAgent.InvokeAsync("What's the weather in Par
 }
 ```
 
-The model ID comes from the configured client (`OpenAI:Model`-style configuration, or the overload of `GetResponsesClient` that takes one).
+For Azure OpenAI, pass the `ResponsesClient` from an `AzureOpenAIClient` and the deployment name instead.
 
 **Azure AI Foundry agent** (`Microsoft.SemanticKernel.Agents.AzureAI`, preview). The agent definition and threads live in a Foundry project.
 
@@ -608,7 +608,7 @@ builder.Services.AddSingleton<IAutoFunctionInvocationFilter, ApprovalFilter>();
 
 ---
 
-## 13. ASP.NET Core, resilience and telemetry
+## 13. ASP.NET Core hosting
 
 ```csharp
 var builder = WebApplication.CreateBuilder(args);
@@ -632,29 +632,9 @@ app.Run();
 public sealed record AskRequest(string Question);
 ```
 
-**Resilience.** The OpenAI SDK retries transient errors itself. For more control, add the standard handler to the `HttpClient` the connector uses (`Microsoft.Extensions.Http.Resilience`):
+Services are singletons; the `Kernel` is transient, so plugins and filters added while handling one request never reach another.
 
-```csharp
-builder.Services.ConfigureHttpClientDefaults(http => http.AddStandardResilienceHandler());
-```
-
-**Telemetry.** Semantic Kernel emits OpenTelemetry traces, metrics and logs under the `Microsoft.SemanticKernel*` sources:
-
-```csharp
-// dotnet add package OpenTelemetry.Extensions.Hosting
-// dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Trace;
-
-AppContext.SetSwitch("Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnostics", true);
-// AppContext.SetSwitch("...EnableOTelDiagnosticsSensitive", true);  // includes prompts — dev only
-
-builder.Services.AddOpenTelemetry()
-    .WithTracing(t => t.AddSource("Microsoft.SemanticKernel*").AddOtlpExporter())
-    .WithMetrics(m => m.AddMeter("Microsoft.SemanticKernel*").AddOtlpExporter());
-```
-
-Azure Monitor / Application Insights consumes the same data via `Azure.Monitor.OpenTelemetry.AspNetCore` (`builder.Services.AddOpenTelemetry().UseAzureMonitor()`).
+Resilience (the standard HTTP resilience handler, a Polly pipeline around kernel calls), OpenTelemetry set-up and an offline xUnit test are in the [.NET production guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/).
 
 ---
 

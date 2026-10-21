@@ -3,6 +3,8 @@ title: "AG2 Architecture Diagrams"
 description: "How an AG2 1.x turn, tool loop, human-input pause and Network workflow channel fit together."
 framework: "ag2"
 language: "python"
+sidebar:
+  label: "Diagrams"
 ---
 
 > Diagrams describe the `ag2` %%version=ag2%% (1.x) architecture. Classic (`autogen`) group chats are shown only for comparison.

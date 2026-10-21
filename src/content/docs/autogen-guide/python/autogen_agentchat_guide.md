@@ -11,7 +11,7 @@ sidebar:
 
 > **Status: archived.** Microsoft put AutoGen into maintenance mode in October 2025, when it announced [Microsoft Agent Framework](/microsoft-agent-framework-guide/) as the successor, and in October 2026 marked the repository archived and no longer maintained — no bug fixes, security fixes or new features. The last release is 0.7.5 (30 September 2025). Use this page to understand and maintain existing AutoGen 0.4–0.7 code; for new work, Microsoft points to Agent Framework and its [AutoGen migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-autogen/).
 
-This page is about **Microsoft AutoGen** (`autogen_agentchat`, `autogen_core`, `autogen_ext`) — the actor-model rewrite Microsoft shipped as 0.4 in January 2025. It is **not** AG2: the other pages in this section describe AG2 Classic, the community fork's `import autogen` API (see [the section overview](/autogen-guide/) for how the two diverged).
+This page is about **Microsoft AutoGen** (`autogen_agentchat`, `autogen_core`, `autogen_ext`) — the actor-model rewrite Microsoft shipped as 0.4 in January 2025. It is **not** AG2. The community fork's `import autogen` API (AG2 Classic) is covered in the [AG2 guide](/ag2-guide/classic/); see [the AutoGen overview](/autogen-guide/) for how the two diverged.
 
 ## Packages
 

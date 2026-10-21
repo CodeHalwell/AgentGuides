@@ -18,7 +18,7 @@ Practical recipes for common Bedrock agent scenarios.
 
 - `bedrock-agent` is the build-time client (agents, action groups, knowledge bases); `bedrock-agent-runtime` invokes agents; `bedrock` manages guardrails.
 - `AGENT_ROLE_ARN` is a service role trusted by `bedrock.amazonaws.com` with `bedrock:InvokeModel*` on the chosen model; each action-group Lambda needs a resource policy allowing `bedrock.amazonaws.com` to invoke it.
-- Models are referenced through cross-Region inference profiles such as `us.anthropic.claude-sonnet-5-5`.
+- Models are referenced through cross-Region inference profiles such as `us.anthropic.%%model=anthropic%%`.
 - New agents must be **prepared** and given an **alias** before applications can invoke them; the helper below does that.
 
 ```python
@@ -27,9 +27,9 @@ import time
 import boto3
 
 AGENT_ROLE_ARN = "arn:aws:iam::111122223333:role/BedrockAgentRole"
-SONNET = "us.anthropic.claude-sonnet-5-5"
-HAIKU = "us.anthropic.claude-haiku-5-5"
-OPUS = "us.anthropic.claude-opus-5-5"
+SONNET = "us.anthropic.%%model=anthropic%%"
+HAIKU = "us.anthropic.%%model=anthropic-small%%"
+OPUS = "us.anthropic.%%model=anthropic-flagship%%"
 
 
 def wait_for_agent(client, agent_id: str) -> str:
@@ -254,7 +254,7 @@ Always:
         return {"agent_response": text, "traces": traces}
 ```
 
-Knowledge bases (and their vector store and S3 data source) are usually created once, separately from the agent; see the [comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/#knowledge-bases-contextual-information-integration) for `create_knowledge_base` and `create_data_source`.
+Knowledge bases (and their vector store and S3 data source) are usually created once, separately from the agent; see the [comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/#knowledge-bases) for `create_knowledge_base` and `create_data_source`.
 
 **Action-group Lambda (OpenAPI schema).** Bedrock sends `apiPath`, `httpMethod`, `parameters` and `requestBody`, and expects a specific response envelope:
 
@@ -401,7 +401,7 @@ from strands import Agent
 from strands.multiagent.a2a import StrandsA2AExecutor
 
 researcher = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     name="researcher",
     description="Researches a topic and returns sourced bullet points.",
     system_prompt="You are a meticulous researcher. Return concise, sourced bullet points.",
@@ -423,7 +423,7 @@ remote_researcher = A2AAgent(
 )
 
 writer = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     system_prompt="You write clear briefings. Ask the researcher for facts before writing.",
     tools=[remote_researcher],
 )

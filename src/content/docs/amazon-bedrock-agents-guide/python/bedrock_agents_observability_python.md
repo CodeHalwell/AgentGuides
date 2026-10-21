@@ -3,6 +3,9 @@ title: "Observability and Monitoring for Amazon Bedrock Agents (Python)"
 description: "Monitoring Amazon Bedrock agents: CloudWatch metrics and traces for Bedrock Agents (Classic), and OpenTelemetry-based AgentCore Observability for code-defined agents."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "Observability"
+  order: 5
 ---
 
 How to monitor and debug agents on Bedrock. There are two stacks, and they are observed differently:
@@ -37,7 +40,7 @@ Strands emits spans for each agent invocation, event-loop cycle, model call and 
 from strands import Agent
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     trace_attributes={"tenant.id": "acme", "app.version": "2.3.1"},
 )
 ```

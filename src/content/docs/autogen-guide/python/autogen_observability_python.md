@@ -3,6 +3,9 @@ title: "AutoGen Observability & Recovery (Python)"
 description: "Logging, OpenTelemetry tracing, token accounting, cancellation and state checkpoints for Microsoft AutoGen 0.7 teams."
 framework: "autogen"
 language: "python"
+sidebar:
+  label: "Observability & recovery"
+  order: 3
 ---
 
 > **Microsoft AutoGen** (`autogen-agentchat` %%version=autogen-agentchat%%, checked %%versions-checked%%) — not AG2. The project is archived; prefer [Microsoft Agent Framework](/microsoft-agent-framework-guide/) for new deployments.

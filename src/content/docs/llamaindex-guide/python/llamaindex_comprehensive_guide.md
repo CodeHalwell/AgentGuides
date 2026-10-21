@@ -20,7 +20,7 @@ If you learnt LlamaIndex before mid-2025, note that the older agent stack (`Open
 
 1. [Installation and setup](#1-installation-and-setup)
 2. [Architecture overview](#2-architecture-overview)
-3. [Core concepts deep dive](#3-core-concepts-deep-dive)
+3. [Core concepts](#3-core-concepts)
 4. [Agent classes and types](#4-agent-classes-and-types)
 5. [LLM and embedding configuration](#5-llm-and-embedding-configuration)
 6. [Creating basic agents](#6-creating-basic-agents)
@@ -31,7 +31,7 @@ If you learnt LlamaIndex before mid-2025, note that the older agent stack (`Open
 11. [Streaming responses](#11-streaming-responses)
 12. [Multi-agent systems with AgentWorkflow](#12-multi-agent-systems-with-agentworkflow)
 13. [Custom workflows](#13-custom-workflows)
-14. [Deploying workflows (LlamaAgents)](#14-deploying-workflows-llamaagents)
+14. [Serving and deploying workflows (LlamaAgents)](#14-serving-and-deploying-workflows-llamaagents)
 15. [Human-in-the-loop](#15-human-in-the-loop)
 16. [FunctionTool in detail](#16-functiontool-in-detail)
 17. [LlamaHub tools and MCP](#17-llamahub-tools-and-mcp)
@@ -148,7 +148,7 @@ Set `OPENAI_API_KEY` in the environment (or pass `api_key=` to the LLM and embed
 
 ---
 
-## 3. Core concepts deep dive
+## 3. Core concepts
 
 ### 3.1 Documents
 
@@ -226,7 +226,7 @@ summary_index = SummaryIndex.from_documents(documents)
 # vector_index = VectorStoreIndex(nodes)
 ```
 
-`ListIndex` was the old name for `SummaryIndex`; use `SummaryIndex`. `TreeIndex` and `KeywordTableIndex` still exist but are rarely the right choice today. For graph-shaped data use `PropertyGraphIndex`.
+`ListIndex` was the old name for `SummaryIndex`; use `SummaryIndex`. `TreeIndex` and `KeywordTableIndex` still exist but are rarely the right choice today. For graph-shaped data use `PropertyGraphIndex` ([section 3.9](#39-property-graphs)); for images alongside text, `MultiModalVectorStoreIndex` ([section 3.10](#310-multimodal-documents-and-queries)).
 
 ### 3.5 Persistence
 
@@ -309,6 +309,71 @@ print(chat_engine.chat("And how does it relate to RAG?"))
 chat_engine.reset()
 ```
 
+### 3.9 Property graphs
+
+`PropertyGraphIndex` extracts entities and relations from each chunk with "knowledge graph extractors", stores them as a labelled property graph next to the text, and retrieves by following graph paths as well as by vector similarity. Use it when questions are about relationships ("who worked with whom", "which systems depend on this service"), not only about passages.
+
+```python
+from llama_index.core import PropertyGraphIndex
+from llama_index.core.indices.property_graph import ImplicitPathExtractor, SimpleLLMPathExtractor
+from llama_index.llms.openai import OpenAI
+
+llm = OpenAI(model="%%model=openai-small%%")
+graph_index = PropertyGraphIndex.from_documents(
+    documents,
+    llm=llm,                          # used by the LLM-based extractor
+    kg_extractors=[
+        SimpleLLMPathExtractor(llm=llm, max_paths_per_chunk=10),   # (subject, relation, object) triples
+        ImplicitPathExtractor(),                                   # links from node relationships, no LLM
+    ],
+)
+
+retriever = graph_index.as_retriever(include_text=True)   # matched triples plus their source text
+for hit in retriever.retrieve("Who did Ada Lovelace work with?"):
+    print(hit.text[:80])
+
+graph_engine = graph_index.as_query_engine(include_text=True)
+graph_index.storage_context.persist(persist_dir="./graph_storage")   # reload with load_index_from_storage
+```
+
+`SchemaLLMPathExtractor` restricts extraction to entity and relation types you list, which gives a cleaner graph than free-form triples. The default store is in-memory (`SimplePropertyGraphStore`); for real data use a graph database integration such as `Neo4jPropertyGraphStore` (`llama-index-graph-stores-neo4j`), passed as `property_graph_store=`. Extraction makes one LLM call per chunk, so building the index costs far more than a vector index over the same documents.
+
+### 3.10 Multimodal documents and queries
+
+Since 0.14.23 the standard query engines can synthesise answers from images as well as text: pass `multimodal=True` and an LLM that accepts image content. `MultiModalVectorStoreIndex` embeds images with a separate image embedding model and stores them beside the text.
+
+```python
+# pip install llama-index-readers-file llama-index-embeddings-clip git+https://github.com/openai/CLIP.git
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core.indices import MultiModalVectorStoreIndex
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.embeddings.clip import ClipEmbedding
+
+documents = SimpleDirectoryReader("./report").load_data()   # .png/.jpg files become ImageDocuments
+mm_index = MultiModalVectorStoreIndex.from_documents(documents, image_embed_model=ClipEmbedding())
+
+engine = RetrieverQueryEngine.from_args(
+    retriever=mm_index.as_retriever(similarity_top_k=3, image_similarity_top_k=2),
+    llm=OpenAI(model="%%model=openai%%"),                    # must accept image input
+    multimodal=True,
+)
+print(engine.query("What does the revenue chart show?"))
+```
+
+Calling `mm_index.as_query_engine()` instead returns `SimpleMultiModalQueryEngine`, which is deprecated in favour of this form. Any `MultiModalEmbedding` works as `image_embed_model`; CLIP runs locally and needs PyTorch. To send an image to an LLM directly, put it in a message as a content block:
+
+```python
+from llama_index.core.llms import ChatMessage, ImageBlock, TextBlock
+
+msg = ChatMessage(
+    role="user",
+    blocks=[ImageBlock(path="./report/chart.png"), TextBlock(text="Describe this chart.")],
+)
+print(llm.chat([msg]).message.content)
+```
+
+For PDFs and slides where the images are embedded in pages, parsing with LlamaParse ([section 18.2](#182-llamaparse-and-llamacloud)) usually works better than extracting the images yourself.
+
 ---
 
 ## 4. Agent classes and types
@@ -352,7 +417,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Model names in this guide (`gpt-5-mini`, `text-embedding-3-small`) are examples; use whatever your provider currently offers.
+Model names in this guide (`%%model=openai-small%%`, `text-embedding-3-small`) are examples; use whatever your provider currently offers.
 
 ### 4.2 ReActAgent
 
@@ -535,7 +600,7 @@ async def chat():
 ```python
 response = await agent.run(user_msg="...", max_iterations=10)
 
-agent = FunctionAgent(tools=[...], llm=llm, timeout=120)   # workflow timeout in seconds
+agent = FunctionAgent(tools=[multiply, add], llm=llm, timeout=120)   # workflow timeout in seconds
 ```
 
 `early_stopping_method="generate"` asks the LLM for a final answer when the limit is reached instead of raising.
@@ -1022,13 +1087,18 @@ class FanOut(Workflow):
 class Progress(Event):
     msg: str
 
-@step
-async def work(self, ctx: Context, ev: StartEvent) -> StopEvent:
-    ctx.write_event_to_stream(Progress(msg="halfway"))
-    return StopEvent(result="done")
+class ProgressFlow(Workflow):
+    @step
+    async def work(self, ctx: Context, ev: StartEvent) -> StopEvent:
+        ctx.write_event_to_stream(Progress(msg="halfway"))
+        return StopEvent(result="done")
 
-# caller:
-# handler = wf.run(); async for ev in handler.stream_events(): ...
+async def main():
+    handler = ProgressFlow().run()
+    async for ev in handler.stream_events():
+        if isinstance(ev, Progress):
+            print(ev.msg)
+    print(await handler)
 ```
 
 ### 13.3 Retries
@@ -1053,19 +1123,50 @@ draw_all_possible_flows(RAGWorkflow, filename="rag_workflow.html")
 
 ---
 
-## 14. Deploying workflows (LlamaAgents)
+## 14. Serving and deploying workflows (LlamaAgents)
 
-For running workflows as services, LlamaIndex now offers **LlamaAgents**: the open-source Agent Workflows runtime above plus the `llamactl` CLI, which scaffolds a project from templates, serves workflows locally over HTTP, and deploys them to LlamaCloud or exports them for self-hosting. A `WorkflowClient` calls deployed workflows over REST.
+A workflow or agent is an ordinary async object, so you can call it from any web framework (the [FastAPI streaming page](/llamaindex-guide/python/llamaindex_streaming_server_fastapi/) does that). LlamaIndex also ships its own serving layer, **LlamaAgents**:
 
-```bash
-pip install llamactl      # or: uv tool install llamactl
-llamactl init             # pick a starter template
-llamactl serve            # run the workflows locally
+- **`WorkflowServer`** (`pip install llama-agents-server`, `from llama_agents.server import WorkflowServer`) wraps registered workflows in a REST API: start runs, stream their events, send events in (for example a human approval), fetch results, cancel. With a durable workflow store, unfinished runs resume after a restart.
+- **`WorkflowClient`** (`pip install llama-agents-client`, `from llama_agents.client import WorkflowClient`) calls that API from Python.
+- **`llamactl`** scaffolds a project from templates, serves its `WorkflowServer` locally with reload, packages it as a container, and deploys it to LlamaCloud.
+
+The older import paths `workflows.server` and `workflows.client` (the `[server]` and `[client]` extras of `llama-index-workflows`) still work but emit a deprecation warning pointing to the packages above.
+
+```python
+from llama_agents.server import WorkflowServer
+
+server = WorkflowServer()                    # in-memory store; see the production guide for SQLite
+server.add_workflow("calculator", agent)     # any Workflow, including FunctionAgent / AgentWorkflow
+server.add_workflow("rag", RAGWorkflow(index=vector_index, timeout=60))
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(server.serve(host="0.0.0.0", port=8080))
 ```
 
-You do not need any of that to put a workflow behind your own API: a workflow is just an async object. The [FastAPI streaming page](/llamaindex-guide/python/llamaindex_streaming_server_fastapi/) shows an agent served over Server-Sent Events, and the [production guide](/llamaindex-guide/python/llamaindex_production_guide/) covers containers and scaling.
+```bash
+curl -X POST localhost:8080/workflows/calculator/run \
+  -H 'Content-Type: application/json' \
+  -d '{"start_event": {"user_msg": "What is 7 * 8?", "chat_history": [], "max_iterations": 20}}'
+```
 
-What survives from the old `llama-agents` architecture is the idea, not the API: if you need agents in separate processes, run each as its own service (or its own `llamactl` deployment) and call it from a tool.
+For agents, send `chat_history` and `max_iterations` as well as `user_msg`; with `user_msg` alone the agent's start event cannot be serialised and the run does not complete.
+
+With `llamactl`:
+
+```bash
+uv tool install llamactl
+llamactl init                     # choose a template; creates a new project directory
+cd my-app                         # the directory you named during init
+llamactl serve                    # serves the project's workflows locally, with reload
+llamactl auth login               # once, before deploying to LlamaCloud
+llamactl deployments create
+```
+
+A project tells `llamactl` which server to run in `pyproject.toml`, under `[tool.llamaagents]`, for example `app = "my_app.server:server"`. Durable stores, authentication, the serializer setting agents need, and containers are covered in the [production guide](/llamaindex-guide/python/llamaindex_production_guide/#4-serving-agents-and-workflows-with-workflowserver).
+
+What survives from the old `llama-agents` architecture is the idea, not the API: if you need agents in separate processes, run each as its own service and call it from a tool.
 
 ---
 
@@ -1217,9 +1318,36 @@ reader = SimpleDirectoryReader(
 documents = reader.load_data()          # or: await reader.aload_data()
 ```
 
-`SimpleDirectoryReader` picks a reader per extension; plain-text formats work out of the box, while PDF, DOCX and other formats need `llama-index-readers-file`. For difficult PDFs (tables, scans), LlamaParse (`llama-cloud-services`) or the open-source LiteParse parser give much better results.
+`SimpleDirectoryReader` picks a reader per extension; plain-text formats work out of the box, while PDF, DOCX, images and other formats need `llama-index-readers-file` (it is not part of the `llama-index` bundle). For difficult PDFs (tables, scans, slides), a layout-aware parser gives much better chunks; see the next section, or the open-source LiteParse parser (`liteparse`) if documents must not leave your infrastructure.
 
-### 18.2 Other sources
+### 18.2 LlamaParse and LlamaCloud
+
+LlamaParse is LlamaIndex's hosted document parser, part of LlamaCloud (which also offers extraction, classification and managed indexes). Use the `llama-cloud` SDK; the older `llama-cloud-services` package is deprecated and was maintained only until May 2026.
+
+```python
+# pip install llama-cloud        (reads LLAMA_CLOUD_API_KEY from the environment)
+from llama_cloud import LlamaCloud
+from llama_index.core import Document
+
+client = LlamaCloud()
+with open("annual_report.pdf", "rb") as f:
+    result = client.parsing.parse(
+        tier="agentic",            # also "fast", "cost_effective", "agentic_plus"
+        version="latest",
+        upload_file=f,
+        expand=["markdown"],
+    )
+
+documents = [
+    Document(text=page.markdown, metadata={"file_name": "annual_report.pdf", "page": page.page_number})
+    for page in result.markdown.pages
+    if page.success
+]
+```
+
+`parse()` uploads the file, polls until the job finishes and returns the result; `AsyncLlamaCloud` has the same methods for async code. The page-level Markdown keeps tables as Markdown tables, which `MarkdownNodeParser` or `SentenceSplitter` then chunk as usual. See the [LlamaParse documentation](https://developers.llamaindex.ai/) for tiers and options.
+
+### 18.3 Other sources
 
 Readers for databases, SaaS tools and the web are separate packages, for example:
 
@@ -1240,7 +1368,7 @@ from llama_index.readers.web import SimpleWebPageReader
 pages = SimpleWebPageReader(html_to_text=True).load_data(["https://example.com"])
 ```
 
-### 18.3 Writing a reader
+### 18.4 Writing a reader
 
 ```python
 from llama_index.core import Document
@@ -1343,8 +1471,12 @@ print(router.query("Give me an overview of the whole corpus."))
 
 ```python
 from llama_index.core.query_engine import SubQuestionQueryEngine
+from llama_index.core.question_gen import LLMQuestionGenerator
 
+llm = OpenAI(model="%%model=openai-small%%")
 engine = SubQuestionQueryEngine.from_defaults(
+    question_gen=LLMQuestionGenerator.from_defaults(llm=llm),
+    llm=llm,
     query_engine_tools=[
         QueryEngineTool.from_defaults(query_engine=tesla_index.as_query_engine(), name="tesla_10k",
                                       description="Tesla annual report"),
@@ -1354,6 +1486,8 @@ engine = SubQuestionQueryEngine.from_defaults(
 )
 print(engine.query("Compare Tesla's and Ford's revenue growth."))
 ```
+
+Pass `question_gen` explicitly. Without it, `from_defaults` tries to import the OpenAI function-calling question generator from `llama-index-question-gen-openai`, which is not part of the `llama-index` bundle and cannot be installed alongside current releases (it pins an old `llama-index-llms-openai`). `LLMQuestionGenerator` works with any LLM.
 
 ### 19.5 Custom query engine
 
@@ -1414,6 +1548,8 @@ Agents take a `system_prompt`; the ReAct prompt itself can be replaced with `rea
 
 ## 21. Evaluation
 
+### 21.1 Evaluating responses
+
 ```python
 from llama_index.core.evaluation import FaithfulnessEvaluator, RelevancyEvaluator
 
@@ -1429,7 +1565,50 @@ r = relevancy.evaluate_response(query=query, response=response)
 print(f.passing, r.passing, r.feedback)
 ```
 
-Also available: `CorrectnessEvaluator` (against a reference answer), `AnswerRelevancyEvaluator`, `ContextRelevancyEvaluator`, `SemanticSimilarityEvaluator`, retrieval metrics via `RetrieverEvaluator` (hit rate, MRR), and `BatchEvalRunner` to run many evaluators concurrently.
+Also available: `CorrectnessEvaluator` (against a reference answer), `AnswerRelevancyEvaluator`, `ContextRelevancyEvaluator`, `SemanticSimilarityEvaluator`, and `BatchEvalRunner` to run many evaluators over many questions concurrently. Each of these calls the judge LLM per question.
+
+### 21.2 Evaluation datasets
+
+An evaluation set built from your own documents is worth more than any generic benchmark. The cheapest useful one is a retrieval set: for each chunk, ask an LLM for questions that the chunk answers, and record that chunk as the expected hit. `DatasetGenerator` generates the questions; `RetrieverEvaluator` scores a retriever against them.
+
+```python
+import json
+
+from llama_index.core import VectorStoreIndex
+from llama_index.core.evaluation import DatasetGenerator, RetrieverEvaluator
+from llama_index.core.node_parser import SentenceSplitter
+
+nodes = SentenceSplitter(chunk_size=512).get_nodes_from_documents(documents)
+index = VectorStoreIndex(nodes)
+
+async def build_retrieval_set(nodes, llm, per_node=2):
+    """Generate questions per chunk; the chunk that produced a question is the expected hit."""
+    pairs = []
+    for node in nodes:
+        gen = DatasetGenerator([node], llm=llm, num_questions_per_chunk=per_node)
+        for question in await gen.agenerate_questions_from_nodes():
+            pairs.append({"query": question, "expected_ids": [node.node_id]})
+    return pairs
+
+async def main():
+    pairs = await build_retrieval_set(nodes, llm)
+    with open("retrieval_eval.json", "w") as f:
+        json.dump(pairs, f, indent=2)          # review by hand, then commit it
+
+    evaluator = RetrieverEvaluator.from_metric_names(
+        ["hit_rate", "mrr"], retriever=index.as_retriever(similarity_top_k=3)
+    )
+    results = [await evaluator.aevaluate(**p) for p in pairs]
+    hit_rate = sum(r.metric_vals_dict["hit_rate"] for r in results) / len(results)
+    mrr = sum(r.metric_vals_dict["mrr"] for r in results) / len(results)
+    print(f"hit rate {hit_rate:.2f}  MRR {mrr:.2f}  ({len(results)} questions)")
+```
+
+Notes:
+
+- The expected IDs are node IDs, so they must stay stable when you re-ingest. Give the node parser a deterministic `id_func`, as the [production guide](/llamaindex-guide/python/llamaindex_production_guide/#1-ingestion-is-a-job-not-a-request) does.
+- Generated questions are often too easy (they reuse the chunk's wording). Read through the set, delete weak questions and add real user questions from your logs.
+- For a question-and-reference-answer set, `DatasetGenerator(nodes, llm=llm).agenerate_dataset_from_nodes()` returns a `QueryResponseDataset` (`save_json` / `from_json`) to use with `CorrectnessEvaluator`. It emits a deprecation warning that points to `LabelledRagDataset`, but the `llama_dataset` module (`LabelledRagDataset`, `RagDatasetGenerator`) is not included in `llama-index-core` %%version=llama-index%%, so `DatasetGenerator` is what the current release offers. Its `from_documents()` constructor needs spaCy installed; building it from nodes, as above, does not.
 
 ---
 
@@ -1458,6 +1637,7 @@ Also available: `CorrectnessEvaluator` (against a reference answer), `AnswerRele
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | 0.14.25 | Added property graphs (3.9), multimodal (3.10), `WorkflowServer`/`WorkflowClient`/`llamactl` serving (14), LlamaParse via the `llama-cloud` SDK (18.2) and evaluation datasets (21.2). `SubQuestionQueryEngine` example now passes `question_gen` (the default needs a package that cannot be installed with current releases). |
 | 2026-10-21 | 0.14.25 | Rewritten. Previous edition used APIs that do not exist (`AgentWorkflow.from_tools`, `from llama_index.core.workflow import AgentWorkflow`, `llama_index.core.tools.Tool`, `BM25Retriever` in core, `llama_agents`) and wrongly stated that `ReActAgent` raises `ImportError`. All examples now use the workflow-based agents and were checked against an installed `llama-index-core`. Version banner now tracks the site's version registry. |
 | 2026-05-19 | 0.14.22 | Patch-version bump. |
 | 2026-04-03 | 0.14.20 | Agent sections moved off the removed legacy classes (incompletely). |

@@ -4,6 +4,7 @@ description: "Planners (BuiltInPlanner, PlanReActPlanner), custom BaseTool / Bas
 framework: "google-adk"
 language: "python"
 sidebar:
+  label: "Advanced"
   order: 80
 ---
 

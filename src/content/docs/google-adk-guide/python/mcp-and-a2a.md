@@ -4,7 +4,8 @@ description: "Consume MCP tools, expose agents as A2A servers, and call remote A
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 70
+  label: "MCP and A2A"
+  order: 75
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted; `to_mcp_server` needs 2.5.0+. MCP and A2A are optional extras: `pip install "google-adk[mcp,a2a]"`.

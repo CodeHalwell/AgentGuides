@@ -3,6 +3,9 @@ title: "Amazon Bedrock AgentCore: Comprehensive Technical Guide"
 description: "Technical reference for Amazon Bedrock AgentCore: Runtime, Memory, Gateway, Identity, Code Interpreter, Browser and Observability, with examples in the bedrock-agentcore Python SDK and boto3."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "AgentCore"
+  order: 2
 ---
 
 > TypeScript version of this: [Bedrock AgentCore TypeScript SDK](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/).
@@ -145,7 +148,7 @@ from strands import Agent
 app = BedrockAgentCoreApp()
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",  # Bedrock cross-Region inference profile
+    model="us.anthropic.%%model=anthropic%%",  # Bedrock cross-Region inference profile
     system_prompt="You are a concise data analysis assistant.",
 )
 
@@ -442,7 +445,7 @@ def total_revenue(region: str) -> float:
     return {"EMEA": 1_250_000.0, "AMER": 2_100_000.0}.get(region, 0.0)
 
 
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[total_revenue])
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[total_revenue])
 
 
 @app.entrypoint
@@ -465,7 +468,7 @@ from langchain_aws import ChatBedrockConverse
 
 app = BedrockAgentCoreApp()
 
-llm = ChatBedrockConverse(model="us.anthropic.claude-sonnet-5-5")
+llm = ChatBedrockConverse(model="us.anthropic.%%model=anthropic%%")
 graph = create_agent(llm, tools=[])  # a compiled LangGraph graph; add your tools here
 
 
@@ -491,7 +494,7 @@ researcher = Agent(
     role="Researcher",
     goal="Find relevant market data",
     backstory="Expert market analyst",
-    llm="bedrock/us.anthropic.claude-sonnet-5-5",
+    llm="bedrock/us.anthropic.%%model=anthropic%%",
 )
 research_task = Task(
     description="Research trends for: {topic}",
@@ -520,7 +523,7 @@ from bedrock_agentcore.runtime import serve_a2a
 from strands import Agent
 from strands.multiagent.a2a import StrandsA2AExecutor
 
-agent = Agent(model="us.anthropic.claude-sonnet-5-5", system_prompt="You are a helpful assistant.")
+agent = Agent(model="us.anthropic.%%model=anthropic%%", system_prompt="You are a helpful assistant.")
 serve_a2a(StrandsA2AExecutor(agent))
 ```
 
@@ -569,7 +572,7 @@ def run_python(code: str) -> str:
     return str(ci.execute_code(code))
 
 
-analyst = Agent(model="us.anthropic.claude-sonnet-5-5", tools=[run_python])
+analyst = Agent(model="us.anthropic.%%model=anthropic%%", tools=[run_python])
 analyst("Load sales.csv and report month-on-month growth.")
 ci.stop()
 ```
@@ -957,7 +960,7 @@ async def list_calendar_events(*, access_token: str):
 
 ## Best Practices
 
-### 1. Code Organization
+### 1. Code organisation
 
 ```
 my-agentcore-project/

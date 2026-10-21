@@ -32,7 +32,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## Minimal example
 
-A Strands agent on Claude Sonnet 5.5, served with the AgentCore Runtime HTTP contract (`GET /ping`, `POST /invocations` on port 8080):
+A Strands agent on Claude, served with the AgentCore Runtime HTTP contract (`GET /ping`, `POST /invocations` on port 8080):
 
 ```typescript
 import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
@@ -47,7 +47,7 @@ const getWeather = tool({
 })
 
 const agent = new Agent({
-  model: new BedrockModel({ modelId: 'us.anthropic.claude-sonnet-5-5', region: 'us-west-2' }),
+  model: new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic%%', region: 'us-west-2' }),
   systemPrompt: 'You are a concise assistant.',
   tools: [getWeather],
   printer: false,
@@ -80,7 +80,7 @@ Deploy it with the AgentCore CLI (`agentcore create --name MyAgent --language Ty
 
 - **Agent** (`@strands-agents/sdk`): model + system prompt + tools; `invoke()` returns an `AgentResult`, `stream()` yields typed events.
 - **Tools**: `tool()` with a Zod schema gives typed, validated inputs. Agents, MCP clients and vended tools all go in the same `tools` array.
-- **BedrockModel**: Bedrock Converse API with any Bedrock model or inference profile, such as `us.anthropic.claude-sonnet-5-5`; guardrails and prompt caching are options on the model.
+- **BedrockModel**: Bedrock Converse API with any Bedrock model or inference profile, such as `us.anthropic.%%model=anthropic%%`; guardrails and prompt caching are options on the model.
 - **BedrockAgentCoreApp** (`bedrock-agentcore/runtime`): the Runtime server; a Zod `requestSchema` types the payload, and an async generator handler streams Server-Sent Events.
 - **AgentCore Memory**: plugged into Strands as a `MemoryStore` via `createAgentCoreMemoryStores()`.
 - **Code Interpreter and Browser**: managed sandboxes exposed as Strands tools (`CodeInterpreterTools`, `BrowserTools`) or used through their clients.

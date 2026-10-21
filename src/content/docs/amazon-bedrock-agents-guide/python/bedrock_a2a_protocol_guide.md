@@ -3,6 +3,9 @@ title: "Agent-to-Agent (A2A) Protocol: Comprehensive Technical Guide"
 description: "The open Agent2Agent (A2A) protocol on AWS: agent cards, JSON-RPC methods, tasks and messages, Strands A2A servers and clients, and hosting A2A agents on Amazon Bedrock AgentCore Runtime."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "A2A protocol"
+  order: 3
 ---
 
 A2A (Agent2Agent) is an open protocol that lets agents built with different frameworks, by different teams, discover one another and collaborate over HTTP. Google introduced it in April 2025; it is now developed as a Linux Foundation project. On AWS, A2A is supported by **Amazon Bedrock AgentCore Runtime** and by the **Strands Agents** SDK.
@@ -221,7 +224,7 @@ def add_numbers(a: int, b: int) -> int:
 
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     name="Calculator Agent",
     description="Performs arithmetic.",
     tools=[add_numbers],
@@ -260,7 +263,7 @@ from strands import Agent
 from strands.multiagent.a2a import StrandsA2AExecutor
 
 agent = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     name="Research Agent",
     description="Researches a topic and returns sourced bullet points.",
 )
@@ -273,7 +276,7 @@ Deploy with the AgentCore CLI:
 
 ```bash
 agentcore create --project-name A2AProject --name ResearchAgent \
-  --language Python --framework Strands --model-provider Bedrock --protocol A2A
+  --language Python --framework Strands --model-provider Bedrock --memory none --protocol A2A
 cd A2AProject
 agentcore dev      # local test with the agent inspector
 agentcore deploy
@@ -317,7 +320,7 @@ researcher = A2AAgent(
 )
 
 writer = Agent(
-    model="us.anthropic.claude-sonnet-5-5",
+    model="us.anthropic.%%model=anthropic%%",
     system_prompt="Write clear briefings. Ask the researcher for facts first.",
     tools=[researcher],
 )

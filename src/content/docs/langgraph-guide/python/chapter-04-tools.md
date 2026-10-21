@@ -82,12 +82,13 @@ print(result["messages"][-1].content)
 
 | Value | Behaviour |
 |---|---|
-| `True` *(default)* | Catch all exceptions; return a built-in error template as a `ToolMessage` |
+| *(default)* | Catch only argument-validation errors (`ToolInvocationError`: the model sent arguments that don't match the schema) and return them to the model. **Any exception the tool itself raises propagates** and fails the run. |
+| `True` | Catch all exceptions; return a built-in error template as a `ToolMessage` |
 | `False` | Disable error handling; exceptions propagate and crash the graph |
 | `"<message>"` *(str)* | Catch all exceptions; return the fixed string as the error message |
 | `ValueError` *(single type)* | Catch only `ValueError`; all other exceptions propagate |
 | `(ValueError, ConnectionError)` *(tuple of types)* | Catch exactly those exception types |
-| `Callable[..., str]` | Catch all exceptions; call the function with the exception to build the message |
+| `Callable[..., str]` | Catch the exception types in the function's first-parameter annotation (all exceptions if it has none); the function's return value is the message |
 
 ```python
 from langgraph.prebuilt import ToolNode
@@ -102,9 +103,13 @@ def risky_lookup(item_id: str) -> str:
     return f"Item {item_id}: found"
 
 
-# ── Variant 1: True (default) ──────────────────────────────────────────────
-# Catches all exceptions, returns the built-in error template.
-node_default = ToolNode([risky_lookup])                          # handle_tool_errors=True
+# ── Variant 1: the default ─────────────────────────────────────────────────
+# Only bad arguments are reported back to the model; the ValueError raised
+# inside risky_lookup propagates out of the graph.
+node_default = ToolNode([risky_lookup])
+
+# Catch everything and return the built-in error template:
+node_catch_all = ToolNode([risky_lookup], handle_tool_errors=True)
 
 
 # ── Variant 2: fixed string ────────────────────────────────────────────────
@@ -336,7 +341,7 @@ graph = builder.compile(store=memory_store)
 
 Verified against the installed source (`langgraph-prebuilt==%%version=langgraph-prebuilt%%`):
 
-```python
+```text
 @dataclass
 class ToolRuntime(Generic[ContextT, StateT]):
     state: StateT | None                       # full graph state dict
@@ -540,7 +545,7 @@ print(result["assigned_to"])  # "billing"
 
 `wrap_tool_call` (and its async twin `awrap_tool_call`) lets you intercept every tool call before and after execution. Receive a `ToolCallRequest` (with `.tool_call`, `.tool`, `.state`, `.runtime`) and a callable `execute` — add logging, auth checks, or argument transformations without modifying the tools themselves.
 
-**`ToolCallRequest.override()`** (new in 1.2.4) returns a new `ToolCallRequest` with specific fields replaced. Setting attributes directly on the instance is deprecated — always use `override()` for the immutable update pattern.
+**`ToolCallRequest.override()`** (in `langgraph-prebuilt` since 1.0.2) returns a new `ToolCallRequest` with specific fields replaced. Setting attributes directly on the instance is deprecated — always use `override()` for the immutable update pattern.
 
 ```python
 from typing import Callable
@@ -639,7 +644,7 @@ When `ToolNode` receives a tool call from an LLM but Pydantic validation of the 
 - `.source` — the underlying `pydantic.ValidationError`
 - `.filtered_errors` — validation errors with injected-parameter entries removed (so the LLM only sees errors about the arguments it controls)
 
-By default `ToolNode(handle_tool_errors=True)` catches `ToolInvocationError` and returns a `ToolMessage` with the formatted error message. You can differentiate handling with a callable:
+By default `ToolNode` catches only `ToolInvocationError` (invalid arguments) and returns it as a `ToolMessage`; `handle_tool_errors=True` catches every exception. You can differentiate handling with a callable:
 
 ```python
 from langgraph.prebuilt import ToolNode

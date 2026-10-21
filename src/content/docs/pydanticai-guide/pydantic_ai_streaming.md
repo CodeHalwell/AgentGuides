@@ -149,6 +149,10 @@ result = await agent.run('hi', event_stream_handler=tap)
 `agent.run_stream_sync(...)` returns a `StreamedRunResultSync` (`result.py`). All stream methods yield **sync** iterators — handy for CLI tools.
 
 ```python
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%')
+
 with agent.run_stream_sync('hi') as stream:
     for chunk in stream.stream_text(delta=True):
         print(chunk, end='')

@@ -3,6 +3,9 @@ title: "Google ADK for Go - Comprehensive Technical Guide"
 description: "Building agents with ADK for Go: LLM agents, workflow agents, function tools, MCP, A2A, sessions, plugins, telemetry and testing."
 framework: "google-adk"
 language: "go"
+sidebar:
+  label: "Comprehensive guide"
+  order: 10
 ---
 
 **Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). Every complete program on this page was compiled with `go vet` against that release, and the testing example was run with `go test`. ADK for Go reached v1.0.0 in March 2026 and has kept its public API source-compatible since; see [What's new since v1.0.0](#whats-new-since-v100).

@@ -3,6 +3,9 @@ title: "Semantic Kernel Recipes (.NET)"
 description: "Ready-to-use C# patterns for Semantic Kernel — ASP.NET Core endpoints, agents with dependency injection, orchestrations, RAG and streaming."
 framework: "semantic-kernel"
 language: "dotnet"
+sidebar:
+  label: "Recipes"
+  order: 2
 ---
 
 > Targets `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (checked %%versions-checked%%). Agents need `Microsoft.SemanticKernel.Agents.Core`; orchestrations need the preview packages `Microsoft.SemanticKernel.Agents.Orchestration` and `.Agents.Runtime.InProcess` and `<NoWarn>$(NoWarn);SKEXP0110</NoWarn>`. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/), Semantic Kernel's successor.
@@ -162,7 +165,7 @@ public sealed class ResearchWritingOrchestrator(Kernel kernel, ILogger<ResearchW
 // builder.Services.AddScoped<IAgentOrchestrator, ResearchWritingOrchestrator>();
 ```
 
-Earlier versions of this recipe used `AgentGroupChat` and stopped when a message contained "DONE"; the orchestrations give a defined end point instead of relying on the model to say a magic word.
+A sequential orchestration has a defined end point (the last agent's answer), so there is no need to rely on the model saying a stop word.
 
 ---
 
@@ -214,5 +217,13 @@ Register the embedding generator with `builder.AddOpenAIEmbeddingGenerator("text
 ---
 
 For more, see the [comprehensive guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/), the [production guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/) and the [general recipes](/semantic-kernel-guide/semantic_kernel_recipes/).
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 1.81.0 | Rewritten on current APIs (orchestrations, `CommunityToolkit.VectorData`); all blocks compile against 1.81.0. |
 
 **[Back to .NET overview](/semantic-kernel-guide/dotnet/)**

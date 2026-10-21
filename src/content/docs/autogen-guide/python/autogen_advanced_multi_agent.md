@@ -3,6 +3,9 @@ title: "AutoGen Advanced Multi‑Agent (Python)"
 description: "Microsoft AutoGen 0.7 team patterns — custom speaker selection, Swarm handoffs with a human, GraphFlow review loops, and nesting teams as tools."
 framework: "autogen"
 language: "python"
+sidebar:
+  label: "Advanced multi-agent"
+  order: 2
 ---
 
 > **Microsoft AutoGen** (`autogen-agentchat` %%version=autogen-agentchat%%, checked %%versions-checked%%) — not AG2. The project is archived; see the [AgentChat & Core reference](/autogen-guide/python/autogen_agentchat_guide/) for status and basics. Examples were run offline with `ReplayChatCompletionClient`.

@@ -3240,7 +3240,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.prebuilt import ToolCallTransformer
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -3309,7 +3309,7 @@ with graph.stream_events(
             print(f"  ERROR: {tc_stream.error}")
         else:
             # output is the ToolMessage produced by the tool call
-            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output.content}")
+            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output}")
 
 # To also see state-update events, stream separately with "updates" mode:
 for update in graph.stream(
@@ -3340,7 +3340,7 @@ async def main():
             if tc_stream.error:
                 print(f"  ERROR: {tc_stream.error}")
             else:
-                print(f"  Final output: {tc_stream.output.content}")
+                print(f"  Final output: {tc_stream.output}")
 
 
 asyncio.run(main())
@@ -3350,7 +3350,7 @@ asyncio.run(main())
 - `run.tool_calls` exists only on the `GraphRunStream` returned by `stream_events(..., version="v3")` (async: `await graph.astream_events(..., version="v3")`), and only when `ToolCallTransformer` is registered — via `compile(transformers=[...])` or `stream_events(..., transformers=[...])`. The v3 protocol is marked experimental in 1.2.11.
 - Plain `graph.stream(..., stream_mode="tools")` (alone or in a list such as `["updates", "tools"]`) always yields raw event dicts (`{"event": "tool-started" | "tool-output-delta" | "tool-finished" | "tool-error", ...}`), whether or not a transformer is registered.
 - `ToolCallStream` `__iter__` / `__aiter__` (or `.output_deltas`) iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
-- `ToolCallStream.output` is the `ToolMessage` returned by the tool call (use `.content` for the text); it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
+- `ToolCallStream.output` is the value the tool returned; it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
 
 ---
 

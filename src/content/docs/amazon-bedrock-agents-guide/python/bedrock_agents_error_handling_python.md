@@ -1,11 +1,12 @@
 ---
 title: "Advanced Error Handling and Recovery for Amazon Bedrock Agents (Python)"
-description: "This guide covers advanced error handling and recovery patterns for building resilient and reliable Bedrock Agents."
+description: "Error handling for Amazon Bedrock agents in Python: which errors to retry, reading event-stream errors, action-group error envelopes, failed-request queues and fallbacks."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "Error handling"
+  order: 6
 ---
-
-This guide covers advanced error handling and recovery patterns for building resilient and reliable Bedrock Agents.
 
 > Examples use `boto3` %%version=boto3%% (checked %%versions-checked%%).
 
@@ -15,14 +16,16 @@ This guide covers advanced error handling and recovery patterns for building res
 *   **AccessDeniedException:** Insufficient IAM permissions.
 *   **ResourceNotFoundException:** The specified agent, knowledge base, or action group does not exist.
 *   **ThrottlingException:** The request rate exceeds the limit.
-*   **ServiceUnavailableException / InternalServerException:** A transient service-side error occurred.
+*   **ServiceQuotaExceededException:** A quota (for example concurrent sessions) is exhausted.
+*   **ModelNotReadyException:** The model is not ready to serve requests yet; retry after a short wait.
+*   **InternalServerException / BadGatewayException:** A transient service-side error occurred.
 *   **DependencyFailedException:** An error occurred in a downstream service, such as a Lambda function or a knowledge base.
 
 ## 2. Error Handling Patterns
 
 ### a. Retry with Exponential Backoff
 
-Implement a retry mechanism with exponential backoff to handle transient errors like `ThrottlingException` and `ServiceUnavailableException`.
+Implement a retry mechanism with exponential backoff to handle transient errors like `ThrottlingException` and `InternalServerException`.
 
 ```python
 import time
@@ -37,7 +40,13 @@ agent_runtime = boto3.client(
     config=Config(retries={"max_attempts": 5, "mode": "adaptive"}, read_timeout=300),
 )
 
-RETRYABLE = {"ThrottlingException", "ServiceUnavailableException", "InternalServerException"}
+RETRYABLE = {
+    "ThrottlingException",
+    "ServiceQuotaExceededException",
+    "ModelNotReadyException",
+    "BadGatewayException",
+    "InternalServerException",
+}
 
 
 def invoke_agent_with_retry(agent_id, alias_id, session_id, input_text, max_retries=3):
@@ -61,9 +70,34 @@ def invoke_agent_with_retry(agent_id, alias_id, session_id, input_text, max_retr
                 raise
 ```
 
-### b. Dead-Letter Queues (DLQs)
+### b. Queue requests that still fail
 
-Use a Dead-Letter Queue (DLQ) to capture and analyze failed agent invocations. You can configure a DLQ on your Lambda functions or use an Amazon SQS queue.
+When retries are exhausted, keep the request for later replay or review instead of dropping it. A small SQS hand-off:
+
+```python
+import json
+import os
+
+import boto3
+
+sqs = boto3.client("sqs")
+
+
+def invoke_or_park(agent_id, alias_id, session_id, input_text):
+    try:
+        return invoke_agent_with_retry(agent_id, alias_id, session_id, input_text)
+    except (ClientError, EventStreamError) as e:
+        sqs.send_message(
+            QueueUrl=os.environ["FAILED_REQUESTS_QUEUE_URL"],
+            MessageBody=json.dumps({
+                "agentId": agent_id, "aliasId": alias_id, "sessionId": session_id,
+                "inputText": input_text, "error": e.response["Error"]["Code"],
+            }),
+        )
+        raise
+```
+
+For asynchronous Lambda invocations (for example from EventBridge), configure an on-failure destination or a dead-letter queue on the function instead.
 
 ### c. Custom Error Handling in Action Groups
 

@@ -63,7 +63,7 @@ The multi-agent orchestrations (section 9) use an in-process runtime that import
 ```bash
 # OpenAI
 OPENAI_API_KEY=sk-...
-OPENAI_CHAT_MODEL_ID=gpt-5-mini
+OPENAI_CHAT_MODEL_ID=%%model=openai-small%%
 OPENAI_EMBEDDING_MODEL_ID=text-embedding-3-small
 
 # Azure OpenAI

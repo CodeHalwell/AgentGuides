@@ -3,6 +3,9 @@ title: "Strands Agents TypeScript SDK"
 description: "Strands Agents for TypeScript on Amazon Bedrock: agents, Zod-typed tools, model providers, structured output, streaming, hooks, sessions, multi-agent graphs and swarms, and MCP."
 framework: "amazon-bedrock-agents"
 language: "typescript"
+sidebar:
+  label: "Strands Agents SDK"
+  order: 1
 ---
 
 The TypeScript SDK for Strands Agents (`@strands-agents/sdk`) is the Node.js counterpart to the Python `strands-agents` package: the same model-driven agent loop, with tools defined by Zod schemas and fully typed inputs. It runs on Amazon Bedrock by default and also supports Anthropic, OpenAI, Google and Vercel AI SDK providers.
@@ -62,7 +65,7 @@ import { Agent, BedrockModel } from '@strands-agents/sdk'
 
 const agent = new Agent({
   model: new BedrockModel({
-    modelId: 'us.anthropic.claude-sonnet-5-5', // cross-Region inference profile
+    modelId: 'us.anthropic.%%model=anthropic%%', // cross-Region inference profile
     region: 'us-east-1',
     maxTokens: 4096,
   }),
@@ -88,7 +91,7 @@ Points worth knowing:
 import { Agent } from '@strands-agents/sdk'
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-haiku-5-5',
+  model: 'us.anthropic.%%model=anthropic-small%%',
   appState: { tenantId: 'acme' },
   printer: false,
 })
@@ -112,13 +115,13 @@ console.log(agent.appState.get('tenantId')) // 'acme'
 
 ### Amazon Bedrock
 
-`BedrockModel` wraps the Bedrock Runtime Converse API. Model IDs are Bedrock model IDs or inference profile IDs; the Claude 5.5 family is normally called through a cross-Region profile such as `us.anthropic.claude-sonnet-5-5` (or the `global.` prefix where available).
+`BedrockModel` wraps the Bedrock Runtime Converse API. Model IDs are Bedrock model IDs or inference profile IDs; Claude models are normally called through a cross-Region profile such as `us.anthropic.%%model=anthropic%%` (or the `global.` prefix where available).
 
 ```typescript
 import { Agent, BedrockModel } from '@strands-agents/sdk'
 
 const model = new BedrockModel({
-  modelId: 'us.anthropic.claude-sonnet-5-5',
+  modelId: 'us.anthropic.%%model=anthropic%%',
   region: 'us-west-2',
   maxTokens: 8192,
   temperature: 0.2,
@@ -149,7 +152,7 @@ import { OpenAIModel } from '@strands-agents/sdk/models/openai'
 
 const claude = new AnthropicModel({
   apiKey: process.env.ANTHROPIC_API_KEY,
-  modelId: 'claude-sonnet-5-5',
+  modelId: '%%model=anthropic%%',
   maxTokens: 4096,
 })
 
@@ -191,7 +194,7 @@ const getOrderStatus = tool({
 })
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   tools: [getOrderStatus],
   printer: false,
 })
@@ -227,7 +230,7 @@ const listInvoices = tool({
 })
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   appState: { tenantId: 'acme' },
   tools: [listInvoices],
   printer: false,
@@ -280,7 +283,7 @@ import { httpRequest } from '@strands-agents/sdk/vended-tools/http-request'
 import { notebook } from '@strands-agents/sdk/vended-tools/notebook'
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   tools: [httpRequest, notebook],
   printer: false,
 })
@@ -302,7 +305,7 @@ const Ticket = z.object({
   summary: z.string().max(200),
 })
 
-const agent = new Agent({ model: 'us.anthropic.claude-haiku-5-5', printer: false })
+const agent = new Agent({ model: 'us.anthropic.%%model=anthropic-small%%', printer: false })
 
 try {
   const result = await agent.invoke(
@@ -337,7 +340,7 @@ const getTime = tool({
   callback: () => new Date().toISOString(),
 })
 
-const agent = new Agent({ model: 'us.anthropic.claude-sonnet-5-5', tools: [getTime], printer: false })
+const agent = new Agent({ model: 'us.anthropic.%%model=anthropic%%', tools: [getTime], printer: false })
 
 const stream = agent.stream('What time is it in UTC? Then write a haiku about it.')
 let next = await stream.next()
@@ -384,7 +387,7 @@ const deleteBucket = tool({
   callback: ({ bucket }) => `deleted ${bucket}`,
 })
 
-const agent = new Agent({ model: 'us.anthropic.claude-sonnet-5-5', tools: [deleteBucket], printer: false })
+const agent = new Agent({ model: 'us.anthropic.%%model=anthropic%%', tools: [deleteBucket], printer: false })
 
 // Guardrail: block destructive tools for read-only callers
 agent.addHook(BeforeToolCallEvent, (event) => {
@@ -424,7 +427,7 @@ class ModelCallCounter implements Plugin {
 }
 
 const counter = new ModelCallCounter()
-const agent = new Agent({ model: 'us.anthropic.claude-haiku-5-5', plugins: [counter], printer: false })
+const agent = new Agent({ model: 'us.anthropic.%%model=anthropic-small%%', plugins: [counter], printer: false })
 await agent.invoke('Hi')
 console.log(`model calls: ${counter.count}`)
 ```
@@ -441,7 +444,7 @@ By default the agent keeps a sliding window of history and trims it when the mod
 import { Agent, SlidingWindowConversationManager } from '@strands-agents/sdk'
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   conversationManager: new SlidingWindowConversationManager({ windowSize: 40 }),
   printer: false,
 })
@@ -465,7 +468,7 @@ const session = new SessionManager({
 })
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   sessionManager: session,
   printer: false,
 })
@@ -489,7 +492,7 @@ import { Agent } from '@strands-agents/sdk'
 const researcher = new Agent({
   name: 'researcher',
   description: 'Finds and summarises factual information on a topic.',
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   systemPrompt: 'You research topics and report concise, sourced facts.',
   printer: false,
 })
@@ -497,13 +500,13 @@ const researcher = new Agent({
 const editor = new Agent({
   name: 'editor',
   description: 'Rewrites draft text for clarity and tone.',
-  model: 'us.anthropic.claude-haiku-5-5',
+  model: 'us.anthropic.%%model=anthropic-small%%',
   systemPrompt: 'You edit text to be clear and concise.',
   printer: false,
 })
 
 const orchestrator = new Agent({
-  model: 'us.anthropic.claude-opus-5-5',
+  model: 'us.anthropic.%%model=anthropic-flagship%%',
   systemPrompt: 'Use the researcher for facts and the editor to polish the final answer.',
   tools: [researcher, editor.asTool({ name: 'polish_text', preserveContext: true })],
   printer: false,
@@ -519,7 +522,7 @@ console.log((await orchestrator.invoke('Write a short brief on AWS Graviton for 
 ```typescript
 import { Agent, Graph } from '@strands-agents/sdk'
 
-const model = 'us.anthropic.claude-sonnet-5-5'
+const model = 'us.anthropic.%%model=anthropic%%'
 
 const researcher = new Agent({ id: 'researcher', model, systemPrompt: 'Gather key facts.', printer: false })
 const analyst = new Agent({ id: 'analyst', model, systemPrompt: 'Analyse the facts for risks.', printer: false })
@@ -548,7 +551,7 @@ In a `Swarm` the agents decide the routing: each node can hand off to another no
 ```typescript
 import { Agent, Swarm } from '@strands-agents/sdk'
 
-const model = 'us.anthropic.claude-sonnet-5-5'
+const model = 'us.anthropic.%%model=anthropic%%'
 
 const triage = new Agent({
   id: 'triage',
@@ -606,7 +609,7 @@ const internal = new McpClient({
 })
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   tools: [awsDocs, internal],
   printer: false,
 })

@@ -4,7 +4,8 @@ description: "Test agents programmatically with AgentEvaluator, EvalCase, EvalSe
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 75
+  label: "Evaluation"
+  order: 78
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/evaluation/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted.

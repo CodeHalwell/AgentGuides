@@ -3,6 +3,9 @@ title: "Deploying TypeScript Agents to AgentCore Runtime"
 description: "Deploy a Node.js Strands agent to Amazon Bedrock AgentCore Runtime with the AgentCore CLI, as a container image or as a NODE_22 code bundle, and invoke it from TypeScript."
 framework: "amazon-bedrock-agents"
 language: "typescript"
+sidebar:
+  label: "Deploying to Runtime"
+  order: 3
 ---
 
 AgentCore Runtime runs Node.js agents in the same session-isolated microVMs as Python ones. There are two ways to ship one: the **AgentCore CLI** (`@aws/agentcore`), which scaffolds the project, builds it and deploys it with CDK; or **by hand** with the AWS SDK for JavaScript control-plane client, as either a container image in ECR or a zipped code bundle on the managed `NODE_22` runtime.
@@ -92,7 +95,7 @@ The runtime entry in `agentcore/agentcore.json` records how the agent is built:
 
 Two things to change in the generated code before you ship it:
 
-1. **Pin the model.** The template's `model/load.ts` sets an older Claude model ID. Set the one you want, for example `new BedrockModel({ modelId: 'us.anthropic.claude-sonnet-5-5' })`.
+1. **Pin the model.** The template's `model/load.ts` sets an older Claude model ID. Set the one you want, for example `new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic%%' })`.
 2. **Check the dependency ranges.** The template's `package.json` uses caret ranges with low minimums (for example `bedrock-agentcore` `^0.3.0`, which does not admit 0.4.x). Set them to the versions you tested, such as `bedrock-agentcore@%%version=bedrock-agentcore-ts%%` and `@strands-agents/sdk@%%version=@strands-agents/sdk%%`, and commit the lock file.
 
 Resources are added to the project and deployed together. For example, `agentcore add memory` declares an AgentCore Memory resource; on deploy the CLI grants the runtime access and injects the memory ID as `MEMORY_<NAME>_ID`. `agentcore add credential` and `agentcore add gateway` work the same way. After any `add` or `remove`, run `agentcore deploy` again. `agentcore logs`, `agentcore traces list` and `agentcore status` cover day-two operations.
@@ -263,7 +266,7 @@ Callers need `bedrock-agentcore:InvokeAgentRuntime` on the runtime (and its endp
 ## Production checklist
 
 - **Pin versions.** Both SDKs are moving quickly, and `bedrock-agentcore` is pre-1.0; pin exact versions and commit `package-lock.json`.
-- **Set the model ID explicitly.** The Strands default model may change between releases; use a Claude 5.5 inference profile such as `us.anthropic.claude-sonnet-5-5` and make sure model access is enabled in the deployment Region.
+- **Set the model ID explicitly.** The Strands default model may change between releases; use a current Claude inference profile such as `us.anthropic.%%model=anthropic%%` and make sure model access is enabled in the deployment Region.
 - **Validate input.** Give `BedrockAgentCoreApp` a Zod `requestSchema` and pass only the prompt text to the agent.
 - **One agent per session.** Runtime gives each session its own microVM; keep one `Agent` per `sessionId` and never share an agent between concurrent requests.
 - **Flush memory writes.** With AgentCore Memory, `await agent.memoryManager?.flush()` at the end of each invocation so writes are not lost when an idle session is reclaimed.

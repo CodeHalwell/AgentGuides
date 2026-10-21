@@ -4,6 +4,7 @@ description: "All agent primitives shipped by google-adk: LlmAgent, LangGraphAge
 framework: "google-adk"
 language: "python"
 sidebar:
+  label: "Agents"
   order: 20
 ---
 

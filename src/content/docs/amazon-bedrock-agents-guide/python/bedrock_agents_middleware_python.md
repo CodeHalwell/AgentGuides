@@ -1,11 +1,12 @@
 ---
 title: "Implementing Middleware for Amazon Bedrock Agents (Python)"
-description: "This guide explains how to implement middleware for Amazon Bedrock Agents to add custom logic for tasks like authentication, logging, and caching."
+description: "Middleware in front of Amazon Bedrock agents: authentication, logging and per-user caching in an API Gateway + Lambda layer, and the equivalent hooks for Strands agents on AgentCore."
 framework: "amazon-bedrock-agents"
 language: "python"
+sidebar:
+  label: "Middleware"
+  order: 7
 ---
-
-This guide explains how to implement middleware for Amazon Bedrock Agents to add custom logic for tasks like authentication, logging, and caching.
 
 ## 1. What is Middleware?
 
@@ -40,11 +41,11 @@ You can implement middleware using Amazon API Gateway and AWS Lambda.
 
 1.  **Create a Lambda function** that contains your middleware logic.
 2.  **Create an API Gateway** that triggers the Lambda function.
-3.  **Configure the API Gateway** to forward requests to the Bedrock Agent.
+3.  **Have the Lambda function call the agent** with `invoke_agent` and return the result to API Gateway.
 
 **Example Lambda Middleware (Python):**
 
-An API Gateway (REST, Lambda proxy integration) handler that authenticates via a Cognito authorizer, logs, caches in DynamoDB and calls the agent through `bedrock-agent-runtime`:
+An API Gateway (REST, Lambda proxy integration) handler that authenticates with a Cognito authorizer, logs, caches in DynamoDB and calls the agent through `bedrock-agent-runtime`. The cache key includes the user, because the agent receives the user's ID and its answers can be account-specific. A key on the question alone would serve one user's answer to another.
 
 ```python
 import hashlib
@@ -79,8 +80,8 @@ def middleware_handler(event, context):
     # 2. Logging (never log tokens or full PII)
     logger.info(json.dumps({"event": "request", "user": user_id, "session": session_id}))
 
-    # 3. Caching: only for stateless, repeatable questions
-    key = hashlib.sha256(question.strip().lower().encode()).hexdigest()
+    # 3. Caching, scoped to the user: answers can depend on the user's account
+    key = hashlib.sha256(f"{user_id}\n{question.strip().lower()}".encode()).hexdigest()
     cached = cache.get_item(Key={"pk": key}).get("Item")
     if cached and cached["expires_at"] > time.time():
         return {"statusCode": 200, "body": json.dumps({"answer": cached["answer"], "cached": True})}
@@ -105,6 +106,6 @@ def middleware_handler(event, context):
     return {"statusCode": 200, "body": json.dumps({"answer": answer, "cached": False})}
 ```
 
-`invoke_agent` returns an event stream, so the response must be read before it can be serialised. Session attributes reach action-group Lambdas in `event["sessionAttributes"]`, which is the safe way to pass identity to tools.
+Only cache when a repeated question really should get the same answer for that user. Don't cache when the agent's tools read live data (order status, balances). `invoke_agent` returns an event stream, so the response must be read before it can be serialised. Session attributes reach action-group Lambdas in `event["sessionAttributes"]`, which is the safe way to pass identity to tools.
 
 For code-defined agents (Strands on AgentCore Runtime), the same concerns are handled with **Strands hooks** (for example `BeforeToolCallEvent` / `AfterInvocationEvent`) inside the agent and **AgentCore Identity** JWT authorisation in front of it — see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#best-practices) and [AgentCore security](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#security-and-compliance).

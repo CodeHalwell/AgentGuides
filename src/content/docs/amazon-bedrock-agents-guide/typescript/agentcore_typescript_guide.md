@@ -3,6 +3,9 @@ title: "Bedrock AgentCore TypeScript SDK"
 description: "The bedrock-agentcore npm package: BedrockAgentCoreApp for AgentCore Runtime, AgentCore Memory for Strands, Code Interpreter and Browser tools, and Identity credential wrappers."
 framework: "amazon-bedrock-agents"
 language: "typescript"
+sidebar:
+  label: "AgentCore SDK"
+  order: 2
 ---
 
 The `bedrock-agentcore` npm package is the TypeScript counterpart of the Python `bedrock-agentcore` SDK. It provides an AgentCore Runtime-compatible HTTP server, a Strands memory store backed by AgentCore Memory, clients and Strands/Vercel AI tool wrappers for Code Interpreter and Browser, and helpers for AgentCore Identity.
@@ -80,7 +83,7 @@ function agentFor(sessionId: string): Agent {
   let agent = agents.get(sessionId)
   if (!agent) {
     agent = new Agent({
-      model: new BedrockModel({ modelId: 'us.anthropic.claude-sonnet-5-5', region: 'us-west-2' }),
+      model: new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic%%', region: 'us-west-2' }),
       systemPrompt: 'You are a helpful order-support assistant.',
       tools: [lookupOrder],
       printer: false,
@@ -136,7 +139,7 @@ import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
 import { Agent } from '@strands-agents/sdk'
 import { z } from 'zod'
 
-const agent = new Agent({ model: 'us.anthropic.claude-haiku-5-5', printer: false })
+const agent = new Agent({ model: 'us.anthropic.%%model=anthropic-small%%', printer: false })
 
 const app = new BedrockAgentCoreApp({
   invocationHandler: {
@@ -228,7 +231,7 @@ function agentFor(actorId: string, sessionId: string): Agent {
       region: 'us-west-2',
     })
     agent = new Agent({
-      model: 'us.anthropic.claude-sonnet-5-5',
+      model: 'us.anthropic.%%model=anthropic%%',
       memoryManager: new MemoryManager({ stores }),
       printer: false,
     })
@@ -281,7 +284,7 @@ import { Agent } from '@strands-agents/sdk'
 const codeInterpreter = new CodeInterpreterTools({ region: 'us-west-2' })
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   systemPrompt: 'Use the code tools to compute answers rather than estimating.',
   tools: codeInterpreter.tools,
   printer: false,
@@ -330,7 +333,7 @@ import { Agent } from '@strands-agents/sdk'
 const browser = new BrowserTools({ region: 'us-west-2' })
 
 const agent = new Agent({
-  model: 'us.anthropic.claude-sonnet-5-5',
+  model: 'us.anthropic.%%model=anthropic%%',
   systemPrompt: 'Use the browser tools to read web pages. Quote what you find.',
   tools: browser.tools,
   printer: false,

@@ -125,7 +125,7 @@ older blog post or docs page, the source wins.
   `langgraph-prebuilt==%%version=langgraph-prebuilt%%`, `langgraph-checkpoint-sqlite==%%version=langgraph-checkpoint-sqlite%%`,
   `langgraph-checkpoint-postgres==%%version=langgraph-checkpoint-postgres%%` and `langchain==%%version=langchain%%` (checked %%versions-checked%%). The full class/API
   surface — every symbol below and many more — is consolidated in the
-  [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference)
+  [Class & API Reference](/langgraph-guide/python/langgraph_comprehensive_guide/#class--api-reference)
   section of the single-page guide.
 
   Known corrections vs older drafts / third-party guides:
@@ -133,7 +133,7 @@ older blog post or docs page, the source wins.
   - `langgraph.llm_hooks` and `langgraph.cache.cache_node` **do not exist**.
     Within `langgraph` itself, model hooks are the `pre_model_hook`/`post_model_hook`
     kwargs on the deprecated `langgraph.prebuilt.create_react_agent`; for new agents use
-    middleware on `langchain.agents.create_agent`. See [Chapter 8](./chapter-08-middleware-hooks/).
+    middleware on `langchain.agents.create_agent`. See [Chapter 8](/langgraph-guide/python/chapter-08-middleware-hooks/).
   - `langchain.agents.create_agent(middleware=[...])` and `AgentMiddleware` exist in
     the separate **`langchain`** package (install with `pip install langchain`), which
     is not bundled with `langgraph`. `create_react_agent` is **deprecated** per
@@ -150,7 +150,7 @@ older blog post or docs page, the source wins.
   - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)`
     are **context managers** (`with ... as saver:`), not factories that return
     a saver directly. Some earlier examples omitted the `with`; see the
-    [Checkpointers reference](./reference-checkpointers/).
+    [Checkpointers reference](/langgraph-guide/python/reference-checkpointers/).
   - `Interrupt.ns`, `Interrupt.when`, `Interrupt.resumable` were removed in v0.6;
     only `Interrupt.value` and `Interrupt.id` remain.
   - `checkpoint_during=False` on `invoke`/`stream` is deprecated — use
@@ -210,7 +210,7 @@ distinct versions only, oldest to newest.
 | 2026-07-09 | 1.2.8 | Encrypted checkpoint serde (`EncryptedSerializer`), serde audit hooks documented. |
 | 2026-07-20 | 1.2.9 | `RunControl`/cooperative draining, `RemainingSteps`, `ToolRuntime` execution metadata, `TimeoutPolicy` refinements. |
 | 2026-08-01 | 1.2.10 | Patch release; all core symbols re-verified against the installed source. |
-| 2026-08-17 | 1.2.11 | **Consolidated the 46 per-class example volumes into one source-verified [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph 1.2.11`. |
+| 2026-08-17 | 1.2.11 | **Consolidated the 46 per-class example volumes into one source-verified [Class & API Reference](/langgraph-guide/python/langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph 1.2.11`. |
 | 2026-09-28 | 1.2.12 | Version bump to 1.2.12; added `set_node_defaults()` section to ch1 and Pattern 15 to ch9; Functional API section expanded with async tasks, `context_schema`/`Runtime` injection, `entrypoint.final` accumulator, named `@task` with `CachePolicy`; fixed `ToolRuntime` canonical import; Recipes 22–23 added (`set_node_defaults` + `ToolRuntime` all-in-one injection). |
 | 2026-10-05 | 1.2.12 | More runnable examples for `Send`, `Command`, `StateSnapshot`, `Interrupt`, `TracePolicy`, `InMemoryStore`, `InjectedState`, `InjectedStore`, `RetryPolicy` and `CachePolicy`. |
 | 2026-10-12 | 1.2.14 | Version bump to 1.2.14; all reference pages updated. More runnable examples for `DeltaChannel`, `EncryptedSerializer`, `TimeoutPolicy`, `NamedBarrierValueAfterFinish`, `GraphOutput`, `Durability`, the task/checkpoint stream payloads, `ToolCallTransformer`/`ToolCallStream` and `StateUpdate`. `langgraph-checkpoint` bumped to 4.2.0. |

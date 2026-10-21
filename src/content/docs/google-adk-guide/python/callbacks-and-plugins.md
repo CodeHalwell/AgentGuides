@@ -4,7 +4,8 @@ description: "Intercept agent, model, and tool execution — per-agent callbacks
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 40
+  label: "Callbacks and plugins"
+  order: 60
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.

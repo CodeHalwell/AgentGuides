@@ -4,7 +4,8 @@ description: "FunctionTool, AgentTool, Google built-ins, long-running tools, and
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 30
+  label: "Tools"
+  order: 40
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.

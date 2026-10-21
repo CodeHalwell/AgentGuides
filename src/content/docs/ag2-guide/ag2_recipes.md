@@ -3,9 +3,11 @@ title: "AG2 Recipes"
 description: "Copy-pasteable AG2 1.x recipes — chatbot loop, tool use, structured extraction, sub-agents, a reviewed pipeline on the Network, and MCP tools."
 framework: "ag2"
 language: "python"
+sidebar:
+  label: "Recipes"
 ---
 
-> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). These recipes use the 1.x API (`import ag2`). For AG2 Classic (`import autogen`) recipes, see [classic.docs.ag2.ai](https://classic.docs.ag2.ai).
+> **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%). These recipes use the 1.x API (`import ag2`). For AG2 Classic (`import autogen`) recipes, see [AG2 Classic recipes](/ag2-guide/classic/ag2_classic_recipes/).
 
 All recipes assume `pip install "ag2[openai]"` and `OPENAI_API_KEY` in the environment. Swap `OpenAIConfig` for any other provider config.
 

@@ -3,6 +3,9 @@ title: "Google ADK for Go - Production Deployment Guide"
 description: "Deploying ADK for Go agents: containers, Cloud Run, GKE, authentication, rate limiting, telemetry, caching and CI/CD."
 framework: "google-adk"
 language: "go"
+sidebar:
+  label: "Production"
+  order: 30
 ---
 
 **Verified against:** `google.golang.org/adk` v%%version=google.golang.org/adk%% (checked %%versions-checked%%). The Go programs on this page compile with `go vet` against that release; the YAML and shell snippets are templates to adapt.
@@ -17,7 +20,7 @@ language: "go"
 4. [Kubernetes Deployment](#kubernetes-deployment)
 5. [Security](#security)
 6. [Monitoring and Observability](#monitoring-and-observability)
-7. [Performance Optimization](#performance-optimization)
+7. [Performance Optimisation](#performance-optimisation)
 8. [CI/CD Pipeline](#cicd-pipeline)
 
 Horizontal scaling is covered under [Kubernetes Deployment](#kubernetes-deployment). ADK for Go can also run on Vertex AI Agent Engine (`cmd/launcher/agentengine`, `server/agentengine`); the ADK repository's `examples/agentengine` shows the entry point.
@@ -139,7 +142,7 @@ gcloud run deploy agent-service \
   --concurrency 40 \
   --timeout 300 \
   --min-instances 1 --max-instances 20 \
-  --set-env-vars "MODEL=gemini-2.5-flash,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=europe-west2" \
+  --set-env-vars "MODEL=%%model=gemini%%,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GOOGLE_CLOUD_LOCATION=europe-west2" \
   --set-secrets "DATABASE_URL=agent-db-url:latest" \
   --add-cloudsql-instances "$PROJECT_ID:europe-west2:agents"
 ```
@@ -172,7 +175,7 @@ spec:
         - containerPort: 8080
         env:
         - name: MODEL
-          value: gemini-2.5-flash
+          value: %%model=gemini%%
         - name: GOOGLE_CLOUD_PROJECT
           value: your-gcp-project
         - name: GOOGLE_CLOUD_LOCATION
@@ -451,7 +454,7 @@ metadata:
   name: agent-config
   namespace: production
 data:
-  MODEL: gemini-2.5-flash
+  MODEL: %%model=gemini%%
   GOOGLE_CLOUD_PROJECT: your-gcp-project
   GOOGLE_CLOUD_LOCATION: europe-west2
 ```
@@ -649,7 +652,7 @@ Register it with `runner.Config{PluginConfig: runner.PluginConfig{Plugins: ...}}
 
 ---
 
-## Performance Optimization
+## Performance Optimisation
 
 ### Context Caching
 

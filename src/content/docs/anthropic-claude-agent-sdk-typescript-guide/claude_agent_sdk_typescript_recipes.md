@@ -351,8 +351,9 @@ test('destructive commands are refused', async () => {
   const decision = await canUseTool('Bash', { command: 'rm -rf /' }, {
     signal: new AbortController().signal,
     toolUseID: 'toolu_test',
+    requestId: 'req_test',
   });
-  assert.equal(decision.behavior, 'deny');
+  assert.equal(decision?.behavior, 'deny');
 });
 
 test('tool handlers can be called directly', async () => {

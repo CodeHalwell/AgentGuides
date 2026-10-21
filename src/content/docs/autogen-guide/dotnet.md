@@ -26,10 +26,11 @@ There is no .NET equivalent of Python's `autogen-agentchat` 0.7.x. The .NET and 
 
 ## Recognising AutoGen.Net 0.2 code
 
-If you inherit a project, it will look like the upstream README's quick start:
+If you inherit a project, it will look like the upstream README's quick start. The README omits `using AutoGen.Core;`, without which `RegisterPrintMessage()` does not compile (CS1061); it is added here:
 
 ```csharp
 using AutoGen;
+using AutoGen.Core;
 using AutoGen.OpenAI;
 
 var openAIKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY")

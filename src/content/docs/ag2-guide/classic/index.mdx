@@ -1,0 +1,65 @@
+---
+title: "AG2 Classic"
+description: "The AG2 Classic import autogen API (ConversableAgent, GroupChat, initiate_chat), published as autogen and in maintenance mode: what it is, how to install it and which pages cover it."
+framework: "ag2"
+language: "python"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**AG2 Classic** is the `import autogen` API (`ConversableAgent`, `GroupChat`, `initiate_chat`) that AG2 inherited from AutoGen 0.2 and shipped in the `ag2` package up to 0.14.0. Since AG2 1.0 (July 2026) it has been maintained separately in [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic) and published on PyPI as `autogen`.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install "autogen[openai]"
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **autogen v%%version=autogen%%** · checked %%versions-checked%% · Python 3.10+ · **maintenance mode**
+  </Card>
+  <Card title="Successor" icon="puzzle">
+    [AG2 1.x](/ag2-guide/) (`import ag2`) for new work.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="Three packages, three code bases">
+  `autogen` (and `ag2<1.0`) installs **AG2 Classic**. `ag2>=1.0` installs the new AG2 framework, which has no `autogen` module. `pyautogen` now installs **Microsoft AutoGen** (`autogen-agentchat`), a separate, archived project covered in the [AutoGen guide](/autogen-guide/). Pin explicitly.
+</Aside>
+
+Classic receives security and critical fixes only. Upstream documentation is at [classic.docs.ag2.ai](https://classic.docs.ag2.ai).
+
+## Pages
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="/ag2-guide/classic/ag2_classic_comprehensive_guide/" description="LLMConfig, ConversableAgent, tools, code execution, structured output, GroupChat, patterns and handoffs, nested and sequential chats." />
+  <LinkCard title="Recipes" href="/ag2-guide/classic/ag2_classic_recipes/" description="Self-contained examples: support triage, review teams, pipelines, tool use." />
+  <LinkCard title="Production guide" href="/ag2-guide/classic/ag2_classic_production_guide/" description="TestAgent, Docker execution, caching, cost, runtime logging, OpenTelemetry, A2A." />
+  <LinkCard title="Diagrams" href="/ag2-guide/classic/ag2_classic_diagrams/" />
+  <LinkCard title="Migration guide" href="/ag2-guide/classic/ag2_classic_migration_guide/" description="AutoGen 0.2 → Classic, Classic → AG2 1.x, Microsoft AutoGen → Agent Framework or AG2." />
+</CardGrid>
+
+## Minimal example
+
+```python
+from autogen import ConversableAgent, LLMConfig
+
+llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"})   # reads OPENAI_API_KEY
+
+assistant = ConversableAgent("assistant", system_message="You are a helpful assistant.", llm_config=llm_config)
+user = ConversableAgent("user", human_input_mode="NEVER", llm_config=False)
+
+result = user.initiate_chat(assistant, message="What is 2 + 2?", max_turns=1)
+print(result.summary)
+```
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | autogen 0.14.1 | Section created. The Classic pages moved here from `/autogen-guide/python/`, so that the AutoGen guide covers only Microsoft AutoGen. |

@@ -3,23 +3,20 @@ title: "Semantic Kernel Production Guide (.NET)"
 description: "Production deployment, resilience, monitoring and testing for Semantic Kernel .NET applications."
 framework: "semantic-kernel"
 language: "dotnet"
+sidebar:
+  label: "Production"
+  order: 3
 ---
-
-**Production deployment, resilience, monitoring and testing for .NET**
 
 > Targets `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% on .NET 8 or .NET 10 (checked %%versions-checked%%). Semantic Kernel is supported but its successor, [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/), is where new agent features land; the hosting, resilience and telemetry patterns here apply to both.
 
 ---
 
-## Overview
-
-Production deployment of Semantic Kernel .NET applications including Docker/Kubernetes deployment, monitoring, security, performance optimization.
-
-**See also:** [general production guide](/semantic-kernel-guide/semantic_kernel_production_guide/) for language-agnostic patterns.
+This page is the .NET code for the [production guide](/semantic-kernel-guide/semantic_kernel_production_guide/), which covers deployment shape, security, scaling, cost and the release checklist. The hosting pattern itself (singleton services, transient `Kernel`) is in [recipe 1](/semantic-kernel-guide/dotnet/semantic_kernel_recipes_dotnet/#1-aspnet-core-minimal-api-with-a-transient-kernel).
 
 ---
 
-## Docker Containerization
+## Container
 
 ### Dockerfile
 
@@ -121,15 +118,18 @@ builder.Services.AddOpenTelemetry()
     .WithMetrics(m => m.AddMeter("Microsoft.SemanticKernel*"));
 ```
 
-Useful signals: token usage per function (`semantic_kernel.function.invocation.token_usage.*` metrics), function duration, model latency, and failed function calls. Alert on sudden token-usage growth — it is the usual first sign of a prompt or loop regression.
+Useful signals: token usage per function (`semantic_kernel.function.invocation.token_usage.prompt` / `.completion`, tagged with function name and model ID; the Python SDK does not emit these), function duration (`semantic_kernel.function.invocation.duration`), model latency, and failed function calls. Alert on sudden token-usage growth — it is the usual first sign of a prompt or loop regression.
 
 ---
 
 ## Testing with xUnit
 
 ```csharp
-using Xunit;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.SemanticKernel;
+using Microsoft.SemanticKernel.ChatCompletion;
 using Moq;
+using Xunit;
 
 public class KernelServiceTests
 {
@@ -166,7 +166,20 @@ Mocking `IChatCompletionService` keeps unit tests offline. For agent tests, the 
 
 ---
 
-For language-agnostic production patterns (scaling, caching, cost control), see the [general production guide](/semantic-kernel-guide/semantic_kernel_production_guide/).
+## Security settings worth checking
+
+- **Template encoding stays on.** Do not set `AllowDangerouslySetContent` on templates or variables that carry user input, documents or tool output ([details](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/#43-input-encoding)).
+- **Advertise only the tools a call needs**: `FunctionChoiceBehavior.Auto(functions: [kernel.Plugins.GetFunction("orders", "Status")])`.
+- **Gate destructive tools** with an `IAutoFunctionInvocationFilter` that returns a refusal instead of calling `next` ([example](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/#12-filters)).
+- **Sensitive diagnostics off**: leave `Microsoft.SemanticKernel.Experimental.GenAI.EnableOTelDiagnosticsSensitive` unset outside development.
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 1.81.0 | Overlap with the language-neutral production guide removed; test usings completed; security settings added. All blocks compile and the test passes against 1.81.0. |
 
 **[Back to .NET overview](/semantic-kernel-guide/dotnet/)**
 

@@ -1,6 +1,6 @@
 ---
-title: "AutoGen"
-description: "Microsoft AutoGen (autogen-agentchat / autogen-core, archived) and the AG2 Classic API from the community fork — what each is, which pages cover which, and where to go next."
+title: "Microsoft AutoGen"
+description: "Microsoft AutoGen (autogen-agentchat / autogen-core, archived): status, how it relates to the AG2 fork, and where to go next."
 framework: "autogen"
 sidebar:
   label: "Overview"
@@ -9,19 +9,19 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-"AutoGen" now names two different code bases. This section covers both, and labels every page with the one it describes.
+"AutoGen" now names two different code bases. This section covers **Microsoft AutoGen**. The AG2 community fork, including its `import autogen` API (AG2 Classic), has its own [AG2 guide](/ag2-guide/).
 
 <CardGrid>
   <Card title="Microsoft AutoGen" icon="information">
     `autogen-agentchat` / `autogen-core` / `autogen-ext` **v%%version=autogen-agentchat%%** (checked %%versions-checked%%). Actor-model rewrite released as 0.4 in January 2025. **Archived** — no further fixes.
   </Card>
   <Card title="AG2 Classic" icon="puzzle">
-    The `import autogen` API (`ConversableAgent`, `GroupChat`) maintained by the AG2 community fork. Published as the `autogen` package (and `ag2` up to 0.14). Maintenance mode; replaced by AG2 1.x.
+    The `import autogen` API (`ConversableAgent`, `GroupChat`) maintained by the AG2 community fork. Published as the `autogen` package (and `ag2` up to 0.14). Maintenance mode; replaced by AG2 1.x. Covered in the [AG2 guide](/ag2-guide/classic/).
   </Card>
 </CardGrid>
 
 <Aside type="caution" title="Maintenance status">
-  Microsoft moved AutoGen to maintenance mode in October 2025 alongside the launch of **Microsoft Agent Framework**, its successor, and in October 2026 marked the repository archived and no longer maintained (no bug or security fixes). The last release is 0.7.5 (September 2025). For new projects use the [Microsoft Agent Framework guide](/microsoft-agent-framework-guide/) or the [AG2 guide](/ag2-guide/).
+  Microsoft moved AutoGen to maintenance mode in October 2025 alongside the launch of **Microsoft Agent Framework**, its successor, and in October 2026 marked the repository archived and no longer maintained (no bug or security fixes), as the [upstream README](https://github.com/microsoft/autogen) states. The last release is 0.7.5 (September 2025). For new projects use the [Microsoft Agent Framework guide](/microsoft-agent-framework-guide/) or the [AG2 guide](/ag2-guide/).
 </Aside>
 
 ## How the two diverged
@@ -39,9 +39,10 @@ The `pyautogen` name on PyPI now installs Microsoft's `autogen-agentchat`; the `
 
 <CardGrid>
   <LinkCard title="Microsoft AutoGen 0.7 (AgentChat & Core)" href="/autogen-guide/python/autogen_agentchat_guide/" description="Current Microsoft API: AssistantAgent, teams, GraphFlow, MCP, Core runtime, migration pointers." />
-  <LinkCard title="Python section overview" href="/autogen-guide/python/" description="Every page in this section and which code base it covers." />
+  <LinkCard title="Python section overview" href="/autogen-guide/python/" description="Install, a minimal example and every Microsoft AutoGen Python page." />
   <LinkCard title="Microsoft AutoGen for .NET (archived)" href="/autogen-guide/dotnet/" description="The AutoGen.* 0.2 port and Microsoft.AutoGen.* previews, and how to move to Agent Framework for .NET." />
   <LinkCard title="AG2 guide (1.x)" href="/ag2-guide/" description="AG2's current protocol-driven framework (import ag2)." />
+  <LinkCard title="AG2 Classic" href="/ag2-guide/classic/" description="The import autogen API from the AG2 fork, and the migration guide." />
   <LinkCard title="Microsoft Agent Framework" href="/microsoft-agent-framework-guide/" description="Microsoft's supported successor to AutoGen." />
 </CardGrid>
 
@@ -51,5 +52,6 @@ The `pyautogen` name on PyPI now installs Microsoft's `autogen-agentchat`; the `
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | autogen-agentchat 0.7.5 | AG2 Classic pages moved to the AG2 guide (`/ag2-guide/classic/`); this guide now covers Microsoft AutoGen only. |
 | 2026-10-21 | autogen-agentchat 0.7.5 | Added a .NET page. Rewritten to separate Microsoft AutoGen from AG2 (the earlier text wrongly said Microsoft AutoGen had been rebranded as AG2). Added maintenance/archived status and a timeline; new Microsoft AutoGen reference page verified against 0.7.5. |
 | 2026-04-21 | AG2 | Parent index redesigned as language/flavour selector. |

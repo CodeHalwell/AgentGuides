@@ -778,7 +778,7 @@ for event in graph.stream(
 Add it at compile time:
 
 ```python
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.prebuilt import ToolCallTransformer
 
 graph = builder.compile(transformers=[ToolCallTransformer])
 ```
@@ -797,7 +797,7 @@ with graph.stream_events(
         # Iterate output deltas in real time
         for delta in tool_call_stream.output_deltas:
             print(f"  delta: {delta}")
-        print(f"Final output: {tool_call_stream.output.content}")  # output is a ToolMessage
+        print(f"Final output: {tool_call_stream.output}")
 ```
 
 ### `ToolCallStream` fields
@@ -816,7 +816,7 @@ with graph.stream_events(
 
 ```python
 import asyncio
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.prebuilt import ToolCallTransformer
 
 graph = builder.compile(transformers=[ToolCallTransformer])
 
@@ -833,7 +833,7 @@ async def stream_tools():
             if tool_call_stream.error:
                 print(f"  ERROR: {tool_call_stream.error}")
             else:
-                print(f"  output: {tool_call_stream.output.content}")
+                print(f"  output: {tool_call_stream.output}")
 
 asyncio.run(stream_tools())
 ```

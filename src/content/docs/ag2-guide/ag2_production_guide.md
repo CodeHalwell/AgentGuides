@@ -3,6 +3,8 @@ title: "AG2 Production Guide"
 description: "Running AG2 1.x in production — pinning, testing with TestConfig, durable hubs, serving over A2A, observability, security and scaling."
 framework: "ag2"
 language: "python"
+sidebar:
+  label: "Production"
 ---
 
 > **Verified against `ag2` %%version=ag2%%** (checked %%versions-checked%%).
@@ -19,7 +21,7 @@ ag2[openai,mcp]>=%%version=ag2%%,<2
 # autogen[openai]
 ```
 
-Never leave `ag2` unpinned in a Classic codebase: a fresh install would pull 1.x and every `import autogen` would fail.
+Never leave `ag2` unpinned in a Classic codebase: a fresh install would pull 1.x and every `import autogen` would fail. Running Classic in production is covered in the [AG2 Classic production guide](/ag2-guide/classic/ag2_classic_production_guide/).
 
 ## Test without a model
 
@@ -48,31 +50,64 @@ CMD ["python", "-m", "app"]
 
 - A Network `Hub` persists its registry and write-ahead log through a `KnowledgeStore`. `MemoryKnowledgeStore` is for tests; use `DiskKnowledgeStore`, `SqliteKnowledgeStore` or `RedisKnowledgeStore` (extra `redis`) in production so channels can be restored with `Hub.hydrate()` after a restart.
 - `TransitionGraph`s are plain data (`to_dict()`), so workflow channels survive restarts without re-registering Python callables.
-- For long single-agent sessions, attach `knowledge=KnowledgeConfig(...)` with a compaction strategy (`ag2.compact.SummarizeCompact`) to cap history growth.
+- For long single-agent sessions, attach `knowledge=KnowledgeConfig(...)` with a compaction strategy (`TailWindowCompact` or `SummarizeCompact` from `ag2.compact`) to cap history growth. See [Knowledge, memory and compaction](/ag2-guide/ag2_comprehensive_guide/#knowledge-memory-and-compaction).
 
 ## Resilience
 
 - Provider configs accept `timeout=` and `max_retries=` (OpenAI-family) — set both explicitly.
 - Tool exceptions propagate to the `ask()` call; catch them at the boundary, or convert expected failures into returned error strings so the model can recover.
 - Bound multi-agent runs: `TransitionGraph(..., max_turns=N)` for workflows, and an explicit `close()` plus a timeout for `conversation` and `discussion` channels, which never end on their own.
-- A2A clients reconnect on dropped streams (`max_reconnects`, `reconnect_backoff` on `A2AConfig`) and raise `A2AReconnectError` when the budget is spent.
+- A2A clients reconnect on dropped streams (`max_reconnects`, `reconnect_backoff` on `A2AConfig`) and raise `ag2.a2a.errors.A2AReconnectError` when the budget is spent.
 
 ## Security
 
-- **Code execution** — prefer `SandboxCodeTool` / container environments over `LocalEnvironment` and `ShellTool` for anything model-generated.
+- **Code execution**: run model-written code through `SandboxCodeTool` / `SandboxShellTool` with a `DockerEnvironment` or `DaytonaEnvironment`. `LocalEnvironment` is a plain subprocess with no isolation, so keep it for trusted code. `CodeExecutionTool` and `ShellTool` run in the model provider's sandbox, not on your infrastructure; check that this is acceptable for your data. See [Code execution](/ag2-guide/ag2_comprehensive_guide/#code-execution).
 - **MCP** — restrict exposed tools with `allowed_tools=` / `blocked_tools=`; prefer `MCPToolkit` (client-side) when credentials must stay inside your infrastructure.
 - **A2A push notifications** — if you enable them (`push_config_store=`), pass `push_url_validator=` (for example `a2a.utils.push_url_validator.validate_push_notification_url`, which allows only public http(s) hosts) so client-supplied webhook URLs cannot reach internal addresses (SSRF); available since 1.2.0. `validate_input_modes=True` rejects message parts whose media type the card does not declare. Sign agent cards with `card_signer=` where clients need to verify them; clients check with `card_signature_verifier=` on `A2AConfig`.
 - **Keys** — config classes read provider keys from the environment; keep them in a secrets manager, not in code.
 
 ## Observability
 
+`TelemetryMiddleware` (extra `tracing`) emits OpenTelemetry spans for agent turns, LLM calls, tool executions and human input, following the GenAI semantic conventions. Each reply carries a usage report:
+
+```python
+import asyncio
+
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.middleware import TelemetryMiddleware
+
+provider = TracerProvider(resource=Resource.create({"service.name": "support-bot"}))
+provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))   # use an OTLP exporter in production
+
+agent = Agent(
+    "support",
+    prompt="You answer support questions.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),
+    middleware=[TelemetryMiddleware(tracer_provider=provider, capture_content=False)],
+)
+
+
+async def main() -> None:
+    reply = await agent.ask("How do I reset my password?")
+    report = await reply.usage()          # ag2.usage.UsageReport for the whole run
+    print(report.total, dict(report.by_model))
+
+
+asyncio.run(main())
+```
+
+- `capture_content=False` keeps prompts, completions and tool arguments out of spans. The default (`True`) records them.
 - Subscribe to typed events on a `MemoryStream` (tool calls, model responses, human-input requests, compaction) for audit logs and UIs.
-- `observers=` and `middleware=` on `Agent` attach cross-cutting behaviour — metrics, policies, redaction — without touching agent code.
-- Install the `tracing` extra for OpenTelemetry spans and `metrics` for metrics export.
+- `observers=[TokenMonitor(...), LoopDetector(...)]` alert on runaway token use and repeated tool calls. `MetricsMiddleware` (extra `metrics`) exports metrics. See [Middleware and observers](/ag2-guide/ag2_comprehensive_guide/#middleware-and-observers).
 - The Hub's audit trail records agent registration, channel lifecycle and expectation violations.
 
 ## Scaling
 
 - Agents are cheap async objects; run many concurrent `ask()` calls in one process before reaching for more processes.
 - For horizontal scale, put stateless agent services behind a load balancer and keep conversation state in the hub's store or your own database.
-- Watch token usage per turn (`ag2.usage`) and set provider-side budgets.
+- Watch token usage per run (`await reply.usage()`) and set provider-side budgets.

@@ -4,7 +4,8 @@ description: "Least-privilege IAM roles, service account setup, AuthenticatedFun
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 80
+  label: "IAM, auth and credentials"
+  order: 85
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.

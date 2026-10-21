@@ -27,36 +27,37 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Upgrading from 0.2.x or the Claude Code SDK?">
-  0.3.142 removed the `unstable_v2_*` session API and changed MCP start-up. The SDK previously shipped inside `@anthropic-ai/claude-code`. See the [migration guide](./claude_agent_sdk_typescript_migration_guide/).
+  0.3.142 removed the `unstable_v2_*` session API and changed MCP start-up. The SDK previously shipped inside `@anthropic-ai/claude-code`. See the [migration guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_migration_guide/).
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Core fundamentals" href="./claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals" description="Install, auth, first agent, models · 15 min" />
-  <LinkCard title="2 · Messages" href="./claude_agent_sdk_typescript_comprehensive_guide/#messages" description="The SDKMessage union and result subtypes · 10 min" />
-  <LinkCard title="3 · Simple agents" href="./claude_agent_sdk_typescript_comprehensive_guide/#simple-agents" description="System prompts, streaming, cost · 20 min" />
-  <LinkCard title="4 · Multi-turn conversations" href="./claude_agent_sdk_typescript_comprehensive_guide/#multi-turn-conversations" description="Streaming input and resume · 15 min" />
-  <LinkCard title="5 · Tools integration" href="./claude_agent_sdk_typescript_comprehensive_guide/#tools-integration" description="Built-in tools, tool() and createSdkMcpServer() · 20 min" />
-  <LinkCard title="6 · Permissions and hooks" href="./claude_agent_sdk_typescript_comprehensive_guide/#permissions" description="Modes, canUseTool, sandbox, hooks · 25 min" />
-  <LinkCard title="7 · Multi-agent systems" href="./claude_agent_sdk_typescript_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
-  <LinkCard title="8 · Advanced multi-agent" href="./claude_agent_sdk_typescript_advanced_multi_agent/" description="Routing, guardrails, human approval · 25 min" />
-  <LinkCard title="9 · Middleware" href="./claude_agent_sdk_typescript_middleware/" description="Policy, redaction and audit with hooks · 20 min" />
-  <LinkCard title="10 · Streaming (Express)" href="./claude_streaming_server_express/" description="Agent runs over SSE · 20 min" />
-  <LinkCard title="11 · Production" href="./claude_agent_sdk_typescript_production_guide/" description="Errors, cost, logging, deployment · 30 min" />
+  <LinkCard title="1 · Core fundamentals" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals" description="Install, auth, first agent, models · 15 min" />
+  <LinkCard title="2 · Messages" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#messages" description="The SDKMessage union and result subtypes · 10 min" />
+  <LinkCard title="3 · Simple agents" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#simple-agents" description="System prompts, streaming, cost · 20 min" />
+  <LinkCard title="4 · Multi-turn conversations" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#multi-turn-conversations" description="Streaming input and resume · 15 min" />
+  <LinkCard title="5 · Tools integration" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#tools-integration" description="Built-in tools, tool() and createSdkMcpServer() · 20 min" />
+  <LinkCard title="6 · Permissions and hooks" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#permissions" description="Modes, canUseTool, sandbox, hooks · 25 min" />
+  <LinkCard title="7 · User input and approvals" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#user-input-and-approvals" description="AskUserQuestion, always-allow rules · 10 min" />
+  <LinkCard title="8 · Multi-agent systems" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
+  <LinkCard title="9 · Advanced multi-agent" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_advanced_multi_agent/" description="Routing, guardrails, human approval · 25 min" />
+  <LinkCard title="10 · Middleware" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/" description="Policy, redaction and audit with hooks · 20 min" />
+  <LinkCard title="11 · Streaming (Express)" href="/anthropic-claude-agent-sdk-typescript-guide/claude_streaming_server_express/" description="Agent runs over SSE · 20 min" />
+  <LinkCard title="12 · Production" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/" description="Errors, cost, logging, deployment · 30 min" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./claude_agent_sdk_typescript_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Recipes" href="./claude_agent_sdk_typescript_recipes/" description="Seven type-checked examples." />
-  <LinkCard title="Production guide" href="./claude_agent_sdk_typescript_production_guide/" />
-  <LinkCard title="Migration guide" href="./claude_agent_sdk_typescript_migration_guide/" description="Claude Code SDK → Agent SDK; 0.2 → 0.3." />
-  <LinkCard title="Diagrams" href="./claude_agent_sdk_typescript_diagrams/" />
-  <LinkCard title="Middleware" href="./claude_agent_sdk_typescript_middleware/" />
-  <LinkCard title="Advanced multi-agent" href="./claude_agent_sdk_typescript_advanced_multi_agent/" />
-  <LinkCard title="Streaming server (Express)" href="./claude_streaming_server_express/" />
+  <LinkCard title="Comprehensive guide" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_recipes/" description="Eight type-checked examples, including testing with a stub executable." />
+  <LinkCard title="Production guide" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/" description="Errors and retries, cost, logging, deployment." />
+  <LinkCard title="Migration guide" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_migration_guide/" description="Claude Code SDK → Agent SDK; 0.2 → 0.3." />
+  <LinkCard title="Diagrams" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_diagrams/" description="Process model, control protocol, permission order, failures." />
+  <LinkCard title="Middleware" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/" />
+  <LinkCard title="Advanced multi-agent" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_advanced_multi_agent/" />
+  <LinkCard title="Streaming server (Express)" href="/anthropic-claude-agent-sdk-typescript-guide/claude_streaming_server_express/" />
 </CardGrid>
 
 ## Notable changes
@@ -83,7 +84,7 @@ import { query } from '@anthropic-ai/claude-agent-sdk';
 for await (const message of query({
   prompt: 'What is 15 + 27?',
   options: {
-    model: 'claude-opus-5-5',
+    model: '%%model=anthropic-flagship%%',
     systemPrompt: 'You are a helpful assistant.',
   },
 })) {
@@ -93,7 +94,7 @@ for await (const message of query({
 }
 ```
 
-Ready? **[Start Zero → Hero step 1 →](./claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals)**
+Ready? **[Start Zero → Hero step 1 →](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals)**
 
 ---
 
@@ -101,7 +102,8 @@ Ready? **[Start Zero → Hero step 1 →](./claude_agent_sdk_typescript_comprehe
 
 | Date | Version | Summary |
 |------|---------|---------|
-| 2026-10-21 | %%version=@anthropic-ai/claude-agent-sdk%% | Guide rewritten and every code block type-checked (strict mode) against the installed package: fixed `message.message.content`, removed invented options (`workingDirectory`, `temperature`, `maxTokens`, `apiKey`) and message types (`tool_call`, `tool_result`, `error`), rewrote the middleware, multi-agent and Express pages around the Agent SDK instead of the base API client, added 0.3.142 migration notes, updated models to the Claude 5 family. |
+| 2026-10-21 | %%version=@anthropic-ai/claude-agent-sdk%% | Failure handling corrected: the iterator throws after yielding an error `result`, so `run()`, `runResilient()` and the router now capture the result and decide from `is_error`, `subtype` and `api_error_status` (tested against a stub executable). Fixed `usage` vs `modelUsage`, `updatedToolOutput` redaction in the middleware page and the Dockerfiles' missing build stage. Added user input and approvals, image prompts, a SQLite `SessionStore`, a testing recipe and hosting patterns; rewrote the diagrams page. |
+| 2026-10-21 | 0.3.306 | Guide rewritten and every code block type-checked (strict mode) against the installed package: fixed `message.message.content`, removed invented options (`workingDirectory`, `temperature`, `maxTokens`, `apiKey`) and message types (`tool_call`, `tool_result`, `error`), rewrote the middleware, multi-agent and Express pages around the Agent SDK instead of the base API client, added 0.3.142 migration notes, updated models to the Claude 5 family. |
 | 2026-05-19 | 0.3.144 | 0.2.x → 0.3.x series (breaking changes in 0.3.142). |
 | 2026-04-21 | 0.2.116 | Removed a fictional `new Agent(...)` constructor from the overview. |
 | 2025 | 0.1.0 | Renamed from the SDK in `@anthropic-ai/claude-code` to `@anthropic-ai/claude-agent-sdk`. |

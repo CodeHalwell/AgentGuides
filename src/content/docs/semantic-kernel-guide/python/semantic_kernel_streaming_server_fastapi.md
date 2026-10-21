@@ -76,7 +76,7 @@ async def stream_chat(session: str, q: str, kernel: Annotated[Kernel, Depends(ge
 
 ## Running it in production
 
-- With more than one replica, keep conversations in a shared store or use sticky sessions. A `ChatHistory` round-trips through `history.serialize()` and `ChatHistory.restore_chat_history(json)`; resume with `ChatHistoryAgentThread(chat_history=restored)`; the `threads` dict above is per process.
+- With more than one replica, keep conversations in a shared store or use sticky sessions. A `ChatHistory` round-trips through `history.serialize()` and `ChatHistory.restore_chat_history(json)`; resume with `ChatHistoryAgentThread(chat_history=restored)`. The `threads` dict above is per process.
 - Disable proxy buffering for the streaming routes (nginx: `proxy_buffering off;`) and set idle timeouts above your longest expected response.
 - Authenticate clients and rate-limit per user; a stream holds a worker and a model call open for its whole duration.
 

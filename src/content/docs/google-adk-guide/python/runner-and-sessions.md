@@ -4,6 +4,7 @@ description: "Runner / InMemoryRunner, the App container, session services, RunC
 framework: "google-adk"
 language: "python"
 sidebar:
+  label: "Runner, App and sessions"
   order: 50
 ---
 

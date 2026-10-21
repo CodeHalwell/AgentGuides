@@ -82,8 +82,8 @@ Three separate sets of permissions are involved. Don't merge them into one role:
       "Effect": "Allow",
       "Action": ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream", "bedrock:GetInferenceProfile"],
       "Resource": [
-        "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-sonnet-5-5",
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-5-5"
+        "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.%%model=anthropic%%",
+        "arn:aws:bedrock:*::foundation-model/anthropic.%%model=anthropic%%"
       ]
     },
     {
@@ -119,7 +119,7 @@ agents = boto3.client("bedrock-agent", region_name="us-east-1")
 
 agent = agents.create_agent(
     agentName="SupportAgent",
-    foundationModel="us.anthropic.claude-sonnet-5-5",
+    foundationModel="us.anthropic.%%model=anthropic%%",
     agentResourceRoleArn="arn:aws:iam::111122223333:role/BedrockAgentServiceRole",
     instruction="You are a support agent for Example Corp. Look up orders before answering questions about them.",
     idleSessionTTLInSeconds=900,
@@ -417,7 +417,7 @@ answer = runtime.retrieve_and_generate(
         "type": "KNOWLEDGE_BASE",
         "knowledgeBaseConfiguration": {
             "knowledgeBaseId": kb["knowledgeBaseId"],
-            "modelArn": "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.claude-sonnet-5-5",
+            "modelArn": "arn:aws:bedrock:us-east-1:111122223333:inference-profile/us.anthropic.%%model=anthropic%%",
         },
     },
 )
@@ -526,7 +526,7 @@ runtime.delete_agent_memory(agentId=agent_id, agentAliasId=alias_id, memoryId="c
 
 ## Prompt overrides
 
-Each orchestration stage (`PRE_PROCESSING`, `ORCHESTRATION`, `KNOWLEDGE_BASE_RESPONSE_GENERATION`, `POST_PROCESSING`, `MEMORY_SUMMARIZATION`) uses a base prompt template you can override or switch on and off. Start from the defaults that `get_agent` returns for the agent, edit them, and set `promptCreationMode="OVERRIDDEN"`:
+Each orchestration stage (`PRE_PROCESSING`, `ORCHESTRATION`, `KNOWLEDGE_BASE_RESPONSE_GENERATION`, `POST_PROCESSING`, `MEMORY_SUMMARIZATION`) uses a base prompt template you can override or switch on and off. Start from the default template for the stage (the console's advanced prompts view shows it), edit it, and set `promptCreationMode="OVERRIDDEN"`:
 
 ```python
 POST_PROCESSING_TEMPLATE = open("post_processing_prompt.txt").read()  # your edited copy of the default
@@ -534,7 +534,7 @@ POST_PROCESSING_TEMPLATE = open("post_processing_prompt.txt").read()  # your edi
 agents.update_agent(
     agentId=agent_id,
     agentName="SupportAgent",
-    foundationModel="us.anthropic.claude-sonnet-5-5",
+    foundationModel="us.anthropic.%%model=anthropic%%",
     agentResourceRoleArn="arn:aws:iam::111122223333:role/BedrockAgentServiceRole",
     instruction="You are a support agent for Example Corp.",
     promptOverrideConfiguration={
@@ -566,7 +566,7 @@ agents.update_agent(
 ```python
 response = runtime.invoke_inline_agent(
     sessionId="inline-session-1",
-    foundationModel="us.anthropic.claude-sonnet-5-5",
+    foundationModel="us.anthropic.%%model=anthropic%%",
     instruction="You are a travel assistant for Example Corp employees. Use the policy tool before booking.",
     actionGroups=[
         {
@@ -614,7 +614,7 @@ flow = agents.create_flow(
                     "prompt": {
                         "sourceConfiguration": {
                             "inline": {
-                                "modelId": "us.anthropic.claude-haiku-5-5",
+                                "modelId": "us.anthropic.%%model=anthropic-small%%",
                                 "templateType": "TEXT",
                                 "inferenceConfiguration": {"text": {"temperature": 0.0, "maxTokens": 300}},
                                 "templateConfiguration": {
@@ -693,10 +693,10 @@ Parameters:
     Default: SupportAgent
   InferenceProfileId:
     Type: String
-    Default: us.anthropic.claude-sonnet-5-5
+    Default: us.anthropic.%%model=anthropic%%
   FoundationModelId:
     Type: String
-    Default: anthropic.claude-sonnet-5-5
+    Default: anthropic.%%model=anthropic%%
 
 Resources:
   AgentRole:
@@ -809,7 +809,7 @@ The AWS provider has `aws_bedrockagent_agent`, `aws_bedrockagent_agent_action_gr
 resource "aws_bedrockagent_agent" "support" {
   agent_name              = "SupportAgent"
   agent_resource_role_arn = aws_iam_role.agent.arn   # trust and model policy as in the IAM section
-  foundation_model        = "us.anthropic.claude-sonnet-5-5"
+  foundation_model        = "us.anthropic.%%model=anthropic%%"
   idle_session_ttl_in_seconds = 900
   instruction             = "You are a support agent for Example Corp. Look up orders before answering questions about them."
 }

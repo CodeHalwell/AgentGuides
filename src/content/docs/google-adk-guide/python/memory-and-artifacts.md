@@ -4,7 +4,8 @@ description: "Long-term memory (InMemory, Vertex Memory Bank, Vertex RAG) and ar
 framework: "google-adk"
 language: "python"
 sidebar:
-  order: 60
+  label: "Memory and artifacts"
+  order: 70
 ---
 
 Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
