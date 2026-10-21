@@ -1,289 +1,158 @@
 ---
-title: "Microsoft Agent Framework Python - Production Guide"
-description: "This guide provides enterprise-level best practices for deploying, managing, and scaling Python applications built with the Microsoft Agent Framework."
+title: "Microsoft Agent Framework (Python) — Production Guide"
+description: "Hosting Python agents in production (Foundry hosted agents, Azure Functions durable agents, your own service), observability, prompt-injection defence, evaluation in CI and framework-specific operational patterns."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Production guide"
 ---
 
-This guide provides enterprise-level best practices for deploying, managing, and scaling Python applications built with the Microsoft Agent Framework.
+This page is about the parts of running an agent in production that are specific to Agent Framework. General container, networking and CI/CD setup is not repeated here; Microsoft's [Azure Container Apps documentation](https://learn.microsoft.com/azure/container-apps/) covers it.
 
-**Target Audience:** DevOps Engineers, Infrastructure Architects, Senior Python Developers
-**Platform:** Python 3.10+
+## 1. Choosing a host
 
----
+| Host | Package | What you get |
+|---|---|---|
+| Microsoft Foundry hosted agent | `agent-framework-foundry-hosting` (beta) | `ResponsesHostServer` serves your agent with the OpenAI Responses contract inside Foundry's agent runtime: managed conversation history, background responses, HITL tool approval, Foundry identity and tracing. |
+| Azure Functions durable agent | `agent-framework-azurefunctions` (beta) | `AgentFunctionApp` turns agents or workflows into durable entities and orchestrations: history survives restarts and scale-in, HTTP endpoints are generated, and workflows can wait days for a human. |
+| Durable Task Scheduler without Functions | `agent-framework-durabletask` (beta) | The same durable agents hosted in any process, with `DurableAIAgentWorker` / `DurableAIAgentClient`. |
+| Your own web service | `agent-framework-core` | Full control: FastAPI or similar on Container Apps, App Service or AKS. You own history storage, scaling and auth. |
 
-## 1. Production Deployment
-
-### Recommended Host: Azure Container Apps
-
-For most scenarios, **Azure Container Apps (ACA)** provides the best balance of scalability, ease of use, and power for hosting agent applications. It offers serverless containers, built-in Dapr integration for microservices, and KEDA-based scaling.
-
-### Strategy 1: Docker & Azure Container Apps
-
-**Step 1: Dockerize Your Application**
-
-Create a `Dockerfile` in your project root. We recommend using a lightweight base image.
-
-```dockerfile
-# Use an official lightweight Python image.
-# https://hub.docker.com/_/python
-FROM python:3.11-slim
-
-# Set environment variables
-# PYTHONDONTWRITEBYTECODE: Prevents Python from writing pyc files to disc
-# PYTHONUNBUFFERED: Prevents Python from buffering stdout and stderr
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-
-WORKDIR /app
-
-# Install system dependencies if needed (e.g., build tools)
-# RUN apt-get update && apt-get install -y build-essential
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy project code
-COPY . .
-
-# Create a non-root user for security
-RUN useradd -m appuser && chown -R appuser /app
-USER appuser
-
-# Expose the port
-EXPOSE 8000
-
-# Run with Gunicorn/Uvicorn for production performance
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "main:app", "--bind", "0.0.0.0:8000"]
-```
-
-**Step 2: Build and Push to Azure Container Registry (ACR)**
-
-```bash
-# Log in to Azure
-az login
-
-# Create an Azure Container Registry
-az acr create --resource-group MyResourceGroup --name myagentregistry --sku Basic
-
-# Build and push the image
-az acr build --registry myagentregistry --image my-python-agent:v1 .
-```
-
-**Step 3: Deploy to Azure Container Apps**
-
-Use the Azure CLI or Bicep.
-
-```bash
-az containerapp create \
-  --name my-agent-service \
-  --resource-group MyResourceGroup \
-  --environment my-aca-env \
-  --image myagentregistry.azurecr.io/my-python-agent:v1 \
-  --target-port 8000 \
-  --ingress 'external' \
-  --registry-server myagentregistry.azurecr.io \
-  --min-replicas 1 \
-  --max-replicas 10 \
-  --cpu 1.0 --memory 2.0Gi
-```
-
-### Strategy 2: CI/CD with GitHub Actions
-
-Automate your deployment process.
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy Python Agent to ACA
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: 'Az CLI login'
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-    - name: 'Build and push image'
-      run: |
-        az acr build --registry myagentregistry --image my-python-agent:${{ github.sha }} .
-
-    - name: 'Deploy to Azure Container Apps'
-      uses: azure/container-apps-deploy-action@v1
-      with:
-        imageToDeploy: myagentregistry.azurecr.io/my-python-agent:${{ github.sha }}
-        containerAppName: my-agent-service
-        resourceGroup: MyResourceGroup
-```
-
----
-
-## 2. Scaling Strategies
-
-### Horizontal Scaling (Scale Out)
-
--   **Stateless Agents:** Design your agents to be stateless. Persist conversation history to Cosmos DB or Redis.
--   **KEDA-Based Autoscaling:** Use KEDA scalers in ACA.
-    -   **HTTP Scaler:** Scale based on incoming request rate.
-    -   **Azure Queue Storage Scaler:** Scale based on the number of messages in a queue (for async background workers).
-
-### Caching Strategies
-
--   **LLM Response Caching:** Cache identical prompts to save costs.
--   **Redis:** Use `redis-py` for high-performance caching.
+### Foundry hosted agents
 
 ```python
-# caching.py
-import redis.asyncio as redis
-import json
-
-r = redis.Redis(host='localhost', port=6379, db=0)
-
-async def get_cached_response(prompt_hash: str):
-    val = await r.get(prompt_hash)
-    return json.loads(val) if val else None
-
-async def cache_response(prompt_hash: str, response: dict):
-    await r.set(prompt_hash, json.dumps(response), ex=3600) # Expire in 1 hour
-```
-
----
-
-## 3. Monitoring & Observability
-
-### OpenTelemetry Integration
-
-The Microsoft Agent Framework for Python has native support for OpenTelemetry.
-
-**1. Install Packages:**
-
-```bash
-pip install opentelemetry-api opentelemetry-sdk \
-    opentelemetry-exporter-azure-monitor \
-    opentelemetry-instrumentation-aiohttp
-```
-
-**2. Configure Tracing:**
-
-```python
-# telemetry.py
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter
 import os
 
-def configure_telemetry():
-    trace.set_tracer_provider(TracerProvider())
-    tracer = trace.get_tracer(__name__)
-    
-    # Export to Azure Monitor (Application Insights)
-    connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
-    exporter = AzureMonitorTraceExporter(connection_string=connection_string)
-    span_processor = BatchSpanProcessor(exporter)
-    trace.get_tracer_provider().add_span_processor(span_processor)
-    
-    return tracer
-```
-
-### Structured Logging
-
-Use the standard `logging` module, but configure it to output JSON or integrate with Azure Monitor.
-
-```python
-import logging
-from opencensus.ext.azure.log_exporter import AzureLogHandler
-
-logger = logging.getLogger(__name__)
-logger.addHandler(AzureLogHandler(connection_string='InstrumentationKey=...'))
-logger.setLevel(logging.INFO)
-
-logger.info("Processing request", extra={"custom_dimension": "value"})
-```
-
----
-
-## 4. Security Best Practices
-
-### Secrets Management
-
-Use **Azure Key Vault** to store API keys and connection strings.
-
-```python
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient, ResponsesHostServer
 from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+
+agent = Agent(
+    client=FoundryChatClient(
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ["FOUNDRY_MODEL"],
+        credential=DefaultAzureCredential(),
+    ),
+    instructions="You are a friendly assistant. Keep your answers brief.",
+    default_options={"store": False},     # the host keeps the conversation, not the model service
+)
+
+if __name__ == "__main__":
+    ResponsesHostServer(agent).run()      # POST /responses
+```
+
+`ResponsesHostServer` also accepts a workflow (`workflow=`), and options for where history lives (`history_source="agent_server" | "agent" | "service"`), session and checkpoint stores, and the origins allowed for OAuth consent prompts from hosted MCP tools (`allowed_oauth_consent_origins=`). Package and deploy the container with the Azure Developer CLI as described in [Microsoft's hosted-agent guide](https://learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent).
+
+### Durable agents on Azure Functions
+
+```python
 import os
 
-key_vault_url = os.getenv("KEY_VAULT_URL")
-credential = DefaultAzureCredential()
-client = SecretClient(vault_url=key_vault_url, credential=credential)
+from agent_framework import Agent
+from agent_framework.azure import AgentFunctionApp
+from agent_framework.foundry import FoundryChatClient
+from azure.identity import DefaultAzureCredential
 
-secret = client.get_secret("OpenAIKey")
-openai_key = secret.value
+writer = Agent(
+    client=FoundryChatClient(
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ["FOUNDRY_MODEL"],
+        credential=DefaultAzureCredential(),
+    ),
+    name="DocumentPublisher",
+    instructions="You write well-structured documents on a given topic.",
+)
+
+app = AgentFunctionApp(agents=[writer])   # the Functions entry point (function_app.py)
 ```
 
-### Authentication
+Each agent becomes a durable entity whose conversation state is stored by Durable Functions, so a session continues after a restart or on another instance. Pass `workflow=` (or `workflows=`) to host a graph workflow as a durable orchestration: agent nodes become entities, other executors become activities, and `request_info` pauses can last as long as you need. Other options: `http_auth_level=`, `enable_http_endpoints=`, `enable_health_check=` and `enable_mcp_tool_trigger=` (expose each agent as an MCP tool). See Microsoft's [durable agents documentation](https://learn.microsoft.com/azure/durable-task/sdks/durable-agents-microsoft-agent-framework).
 
--   **Managed Identity:** Always use `DefaultAzureCredential` in production. It automatically handles authentication for Azure services without hardcoded credentials.
--   **Network Security:** Deploy ACA in a VNet to isolate traffic.
+### Your own service
 
----
+Build one agent per process at start-up, keep a session per conversation in a shared history provider (Redis or Cosmos DB when you run more than one replica), and close the chat client at shutdown. Section 10 below has the FastAPI pattern, per-tenant scoping, timeouts, concurrency limits and health checks.
 
-## 5. High Availability & Disaster Recovery
-
--   **Multi-Region:** Deploy to paired regions (e.g., East US 2 and Central US).
--   **Traffic Manager:** Use Azure Front Door to route traffic.
--   **Resiliency:** Use libraries like `tenacity` for retries.
+## 2. Observability
 
 ```python
-from tenacity import retry, stop_after_attempt, wait_exponential
+from agent_framework.observability import configure_otel_providers
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=4, max=10))
-async def call_openai_with_retry():
-    # Make LLM call
-    pass
+configure_otel_providers(service_name="support-agent")   # reads OTEL_EXPORTER_OTLP_* from the environment
 ```
 
----
+Agent runs, model calls, tool calls and workflow supersteps then emit OpenTelemetry spans and metrics with the GenAI semantic conventions. Message contents are excluded unless you pass `enable_sensitive_data=True`. If your application already configures OpenTelemetry (for example with `azure-monitor-opentelemetry`), call `enable_instrumentation()` instead. Azure Monitor setup and the span reference are on the [observability page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/).
 
-## 6. Cost Optimization
+## 3. Identity and secrets
 
--   **Model Selection:** Use `gpt-4o-mini` for routing and simple tasks.
--   **Token Monitoring:** Log token usage metadata from responses.
--   **Budget Alerts:** Set up Azure Cost Management alerts.
+- Use `DefaultAzureCredential` (managed identity in Azure) for Azure OpenAI and Foundry, and grant the identity the narrowest role on the resource. The roles are listed on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/).
+- Keep any remaining API keys in Key Vault or your platform's secret store, load them with `load_settings` into `SecretString` fields, and unwrap them only at the SDK boundary.
+- Pass per-user tokens to tools and MCP servers through `function_invocation_kwargs`, not instructions, so they never reach the model.
 
----
+## 4. Prompt-injection defence
 
-## 7. Performance Tuning
+Treat tool output, retrieved documents and MCP results as untrusted. Agent Framework gives you three layers:
 
--   **AsyncIO:** Python's `asyncio` is critical for I/O-bound agent workloads. Avoid blocking calls (`time.sleep`, synchronous requests) in the main event loop.
--   **Gunicorn Configuration:** Adjust the number of workers based on CPU cores (`2 * cores + 1`).
--   **Connection Pooling:** Reuse `aiohttp.ClientSession` instances instead of creating a new one for every request.
+1. **Approval for consequential tools.** `@tool(approval_mode="always_require")` (or `approval_mode=` on MCP tools) stops the run until a person approves the call. See [Human in the loop](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/).
+2. **Information-flow control (FIDES, experimental).** `SecureAgentConfig` labels tool results as trusted or untrusted, hides untrusted content behind variable references, and blocks privileged tools (or asks for approval) once untrusted data is in context:
+
+   ```python
+   from agent_framework import Agent
+   from agent_framework.foundry import FoundryChatClient
+   from agent_framework.security import SecureAgentConfig
+
+   agent = Agent(
+       client=FoundryChatClient(),
+       instructions="You triage inbound email.",
+       tools=[read_inbox, send_reply],
+       context_providers=[
+           SecureAgentConfig(allow_untrusted_tools={"read_inbox"}, approval_on_violation=True),
+       ],
+   )
+   ```
+
+   Constructor options and the MCP proxy are in the [comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides).
+3. **Content filtering.** Azure AI Content Safety Prompt Shields and Microsoft Purview policies run as middleware; both are shown on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/).
+
+## 5. Evaluation in CI
+
+Run a small, deterministic evaluation on every pull request and a larger model-judged one on a schedule. `LocalEvaluator` checks are plain functions, so the PR gate costs only the agent's own calls:
 
 ```python
-# Efficient session management
-import aiohttp
+# tests/test_agent_quality.py
+import pytest
+from agent_framework import LocalEvaluator, evaluate_agent, keyword_check, tool_called_check
 
-session = None
+from app.agents import build_support_agent   # your factory
 
-async def get_session():
-    global session
-    if session is None:
-        session = aiohttp.ClientSession()
-    return session
+
+@pytest.mark.asyncio
+async def test_refund_questions_use_the_refund_tool() -> None:
+    agent = build_support_agent()
+    results = await evaluate_agent(
+        agent=agent,
+        queries=["I want a refund for order 1042", "How do I return a damaged item?"],
+        evaluators=LocalEvaluator(keyword_check("refund"), tool_called_check("lookup_order")),
+    )
+    for result in results:
+        result.assert_no_failed_items()
 ```
+
+Evaluation is experimental (`ExperimentalFeature.EVALS`). Model-graded evaluators, Foundry evaluators, `evaluate_workflow` and repetition for flaky prompts are on the [evaluation page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/).
+
+## 6. Cost control
+
+- Use the small tier (`%%model=openai-small%%`) for routing, classification and summarisation, and override per call with `options={"model": ...}`.
+- Read `response.usage_details` (or the `gen_ai.usage.*` span attributes) and alert on per-tenant spend.
+- Add a [compaction](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/) strategy to long-lived sessions so prompt size stays flat.
+- Cap tool loops with `FunctionInvocationConfiguration` (`max_iterations`, `max_function_calls`) and workflows with `max_iterations` / Magentic's `max_round_count`.
+
+## 7. Resilience
+
+Retries belong in middleware, so they apply to every model or tool call. The [middleware page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) has retry and per-tool circuit-breaker examples, and section 10 below has a model-level circuit breaker. For multi-step work that must not be lost, prefer a durable host (section 1) or [checkpointing](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/) over in-process retries.
 
 ---
 
-## 8. Local Interactive Testing Before Deploying
+## 8. Local testing with DevUI
 
 Before pushing to ACA, smoke-test the agent against a real model using `agent-framework-devui`. It's a built-in FastAPI/Uvicorn server (re-exported as `agent_framework.devui`) that exposes any agent or workflow over an OpenAI-compatible HTTP API plus a web UI.
 
@@ -321,7 +190,7 @@ For directory-style discovery (one folder per agent), use `serve(entities_dir=".
 
 ---
 
-## 9. Choosing the Right Chat Client for Production
+## 9. Choosing a chat client
 
 Three first-party clients dominate Azure deployments:
 
@@ -398,18 +267,19 @@ Per-request state (conversation history, user context) lives in the `AgentSessio
 
 ### Per-tenant scoping
 
-For SaaS deployments, scope per-tenant data via `additional_properties` on the run call rather than per-tenant agent instances:
+For SaaS deployments, keep one agent and scope each request instead of building per-tenant agents. Put tenant data that context providers need in `session.state`, and data tools need in `function_invocation_kwargs`:
 
 ```python
+session = agent.create_session(session_id=conversation_id)
+session.state["tenant_id"] = tenant_id                       # read by context providers
 await agent.run(
     user_message,
     session=session,
-    additional_properties={"tenant_id": tenant_id, "gen_ai.conversation.id": correlation_id},
-    function_invocation_kwargs={"tenant_id": tenant_id},   # forwarded to tools that opt in via **kwargs
+    function_invocation_kwargs={"tenant_id": tenant_id},     # passed to tools that accept **kwargs
 )
 ```
 
-Tools and context providers that declare `**kwargs` see the runtime data; `additional_properties` propagate to telemetry spans for trace correlation. One agent instance, N tenants — no extra memory footprint.
+Neither reaches the model. One agent instance serves every tenant.
 
 ### Graceful timeouts on workflows
 

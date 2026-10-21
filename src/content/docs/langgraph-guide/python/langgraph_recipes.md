@@ -1227,171 +1227,102 @@ print(result2["final_report"])  # same content, returned from cache
 
 ---
 
-## Recipe 8: Smart Shopping Assistant with Pre/Post Model Hooks
+## Recipe 8: Smart Shopping Assistant with agent middleware
 
-**Uses:** `create_react_agent` with `pre_model_hook` / `post_model_hook`, `Command`-returning tools, custom state schema
+**Uses:** `create_agent` with a custom state schema, `@dynamic_prompt` and `@after_model` middleware, tools that read state through `ToolRuntime` and update it with `Command`.
 
 ```python
-# Imports verified against langgraph==%%version=langgraph%% / langgraph-prebuilt==%%version=langgraph-prebuilt%%
-import operator
-from typing import Annotated, Any
-from typing_extensions import TypedDict
-from langchain_core.messages import AnyMessage, SystemMessage
-from langchain_core.tools import tool
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import create_react_agent, InjectedState
+from typing import Any
+from typing_extensions import NotRequired
+
+from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import after_model, dynamic_prompt, ModelRequest
+from langchain.messages import ToolMessage
+from langchain.tools import tool, ToolRuntime
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 
-# ---------------------------------------------------------------------------
-# State schema — extends the default MessagesState with shopping fields
-# ---------------------------------------------------------------------------
-
-class ShoppingState(TypedDict):
-    messages:    Annotated[list[AnyMessage], add_messages]
-    user_id:     str
-    cart:        list[dict]
-    total:       float
-    tokens_used: int
-
-
-# ---------------------------------------------------------------------------
-# Tools — use InjectedState to read the graph state directly
-#         Return Command to update state alongside the tool message
-# ---------------------------------------------------------------------------
-
-@tool
-def add_to_cart(
-    product_id: str,
-    product_name: str,
-    price: float,
-    quantity: int,
-    state: Annotated[ShoppingState, InjectedState],
-) -> Command:
-    """Add a product to the shopping cart and update the total."""
-    item = {"product_id": product_id, "name": product_name, "price": price, "qty": quantity}
-    new_cart = state.get("cart", []) + [item]
-    new_total = state.get("total", 0.0) + price * quantity
-    return Command(
-        update={
-            "cart": new_cart,
-            "total": new_total,
-        },
-        goto="agent",  # return control to the agent node
-    )
+class ShoppingState(AgentState):
+    user_id: NotRequired[str]
+    cart: NotRequired[list[dict]]
+    total: NotRequired[float]
+    tokens_used: NotRequired[int]
 
 
 @tool
-def view_cart(state: Annotated[ShoppingState, InjectedState]) -> str:
-    """Return a human-readable summary of the current cart."""
-    cart = state.get("cart", [])
+def add_to_cart(product_name: str, price: float, quantity: int, runtime: ToolRuntime) -> Command:
+    """Add a product to the shopping cart."""
+    state = runtime.state
+    item = {"name": product_name, "price": price, "qty": quantity}
+    return Command(update={
+        "cart": [*state.get("cart", []), item],
+        "total": state.get("total", 0.0) + price * quantity,
+        # A tool that returns a Command must include the ToolMessage itself
+        "messages": [ToolMessage(f"Added {quantity} x {product_name}", tool_call_id=runtime.tool_call_id)],
+    })
+
+
+@tool
+def view_cart(runtime: ToolRuntime) -> str:
+    """Show the current cart."""
+    cart = runtime.state.get("cart", [])
     if not cart:
         return "Your cart is empty."
-    lines = [f"- {item['name']} x{item['qty']}  ${item['price'] * item['qty']:.2f}" for item in cart]
-    total = state.get("total", 0.0)
-    return "Cart:\n" + "\n".join(lines) + f"\n\nTotal: ${total:.2f}"
+    lines = [f"- {i['name']} x{i['qty']}  ${i['price'] * i['qty']:.2f}" for i in cart]
+    return "\n".join(lines) + f"\nTotal: ${runtime.state.get('total', 0.0):.2f}"
 
 
 @tool
 def search_products(category: str) -> list[dict]:
-    """Search available products in a category (stub)."""
+    """Search products in a category."""
     catalogue = {
-        "laptop": [
-            {"id": "mbp-16",  "name": "MacBook Pro 16",   "price": 2499.0},
-            {"id": "xps-15",  "name": "Dell XPS 15",       "price": 1799.0},
-        ],
-        "monitor": [
-            {"id": "lg-27",   "name": "LG 27\" 4K",        "price": 499.0},
-        ],
+        "laptop": [{"name": "MacBook Pro 16", "price": 2499.0}, {"name": "Dell XPS 15", "price": 1799.0}],
+        "monitor": [{"name": "LG 27in 4K", "price": 499.0}],
     }
     return catalogue.get(category.lower(), [])
 
 
-# ---------------------------------------------------------------------------
-# Pre-model hook — inject cart context as a system message before every LLM call
-# ---------------------------------------------------------------------------
-
-def shopping_context_hook(state: ShoppingState) -> dict:
-    """Prepend a system message summarising the current cart state.
-
-    pre_model_hook receives the full state and returns a dict to merge
-    into state before the LLM call.  We prepend a SystemMessage to
-    'messages' — add_messages will handle the merge correctly.
-    """
-    cart = state.get("cart", [])
-    total = state.get("total", 0.0)
-    summary = (
-        f"User {state.get('user_id', 'unknown')} | "
-        f"Cart: {len(cart)} item(s), total ${total:.2f}. "
-        "Help them find and add the best products for their needs."
-    )
-    return {"messages": [SystemMessage(content=summary)]}
+@dynamic_prompt
+def cart_context(request: ModelRequest) -> str:
+    """Put the cart summary in the system prompt for every model call."""
+    s = request.state
+    return (f"You are a shopping assistant for user {s.get('user_id', 'unknown')}. "
+            f"Cart: {len(s.get('cart', []))} item(s), total ${s.get('total', 0.0):.2f}.")
 
 
-# ---------------------------------------------------------------------------
-# Post-model hook — accumulate token usage after every LLM call
-# ---------------------------------------------------------------------------
-
-def track_tokens(state: ShoppingState) -> dict:
-    """After the LLM responds, read usage_metadata from the latest AI message
-    and accumulate the token count.
-
-    post_model_hook receives the state (already updated with the new AI
-    message) and returns a dict to merge into state.
-    """
-    last = state["messages"][-1]
-    usage = getattr(last, "usage_metadata", None) or {}
-    new_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-    return {"tokens_used": state.get("tokens_used", 0) + new_tokens}
+@after_model(state_schema=ShoppingState)
+def track_tokens(state: ShoppingState, runtime: Runtime) -> dict[str, Any]:
+    usage = getattr(state["messages"][-1], "usage_metadata", None) or {}
+    return {"tokens_used": state.get("tokens_used", 0) + usage.get("total_tokens", 0)}
 
 
-# ---------------------------------------------------------------------------
-# Build the agent
-# ---------------------------------------------------------------------------
-
-tools = [add_to_cart, view_cart, search_products]
-
-# Replace with a real LLM in production:
-# from langchain_anthropic import ChatAnthropic
-# llm = ChatAnthropic(model="claude-sonnet-5-5")
-from unittest.mock import MagicMock
-from langchain_core.messages import AIMessage
-llm = MagicMock()
-llm.bind_tools.return_value = llm
-llm.invoke.return_value = AIMessage(content="Here are some laptop options for you.", tool_calls=[])
-
-shopping_agent = create_react_agent(
-    model=llm,
-    tools=tools,
+shopping_agent = create_agent(
+    "anthropic:%%model=anthropic%%",
+    tools=[add_to_cart, view_cart, search_products],
     state_schema=ShoppingState,
-    pre_model_hook=shopping_context_hook,   # inject cart context
-    post_model_hook=track_tokens,           # record token usage
+    middleware=[cart_context, track_tokens],
     checkpointer=InMemorySaver(),
 )
 
-# ---------------------------------------------------------------------------
-# Usage
-# ---------------------------------------------------------------------------
-
-cfg = {"configurable": {"thread_id": "shopper-123"}}
-
+cfg = {"configurable": {"thread_id": "shopper-123"}, "recursion_limit": 25}
 result = shopping_agent.invoke(
-    {
-        "messages": [("user", "I need a good laptop for programming. Show me options and add the best one.")],
-        "user_id": "shopper-123",
-        "cart": [],
-        "total": 0.0,
-        "tokens_used": 0,
-    },
+    {"messages": [{"role": "user", "content": "Find me a laptop for programming and add the best one."}],
+     "user_id": "shopper-123"},
     cfg,
 )
-
-print(f"Cart: {result['cart']}")
-print(f"Total: ${result['total']:.2f}")
-print(f"Tokens used: {result['tokens_used']}")
-print(f"Last reply: {result['messages'][-1].content}")
+print("Cart:", result.get("cart", []))
+print(f"Total: ${result.get('total', 0.0):.2f}")
+print("Tokens used:", result.get("tokens_used", 0))
+print("Reply:", result["messages"][-1].content)
 ```
+
+Notes:
+
+- The state schema subclasses `langchain.agents.AgentState`, which already has `messages`. (The older `create_react_agent` needed a `remaining_steps` key in a custom schema; `create_agent` does not.)
+- A tool that returns a `Command` must include a `ToolMessage` for its own call in `update["messages"]`; otherwise the model sees a tool call with no result.
+- `@dynamic_prompt` rebuilds the system prompt on every model call, so it always reflects the current cart without adding messages to the history.
 
 ---
 
