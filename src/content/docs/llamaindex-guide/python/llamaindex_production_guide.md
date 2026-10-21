@@ -7,7 +7,7 @@ sidebar:
   label: "Production"
 ---
 
-> Verified against `llama-index-core` %%version=llama-index%%, `llama-agents-server` 0.8.0 and `llamactl` 0.10.4 (checked %%versions-checked%%). Every Python block on this page was run, with mock models standing in for OpenAI; the tests shown pass.
+> Verified against `llama-index-core` %%version=llama-index%% and the `llama-agents-server`, `llama-agents-client` and `llamactl` releases current on %%versions-checked%%. Every Python block on this page was run, with mock models standing in for OpenAI; the tests shown pass.
 
 This page is about the parts of a production deployment that are specific to LlamaIndex: keeping ingestion out of the request path, where the index lives, how to serve agents and workflows, and how to observe, evaluate and test them. Generic web-service concerns (TLS, autoscaling, secrets management, load balancers) are the same as for any Python service and are left to your platform's documentation.
 

@@ -1316,6 +1316,8 @@ def build_agent(page: Page) -> Agent:
 
 Computer use needs a model that supports the computer tool; check the OpenAI model list before choosing one.
 
+Two more tools act on a machine you control: `ShellTool(executor=...)` runs the model's shell commands through an executor you provide (or `environment=` selects a hosted container), and `ApplyPatchTool(editor=...)` applies model-written diffs through an `ApplyPatchEditor` you implement. Both take `needs_approval`, which pauses the run for a person in the same way as [function-tool approvals](/openai-agents-sdk-guides/openai_agents_sdk_middleware_python/#human-in-the-loop-approvals).
+
 **Image Generation Tool:**
 
 ```python

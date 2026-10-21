@@ -155,7 +155,7 @@ print(response)
 **Next Steps**:
 1. Read [LlamaIndex README](/llamaindex-guide/)
 2. Try more [LlamaIndex Recipes](/llamaindex-guide/python/llamaindex_recipes/)
-3. Deep dive: [LlamaIndex Comprehensive Guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/)
+3. Full reference: [LlamaIndex Comprehensive Guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/)
 
 ---
 
