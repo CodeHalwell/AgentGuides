@@ -56,7 +56,7 @@ from pydantic_ai.models.test import TestModel
 agent = Agent('openai:gpt-5.2')
 
 @agent.tool
-def lookup(ctx: RunContext[None], sku: str) -> dict:
+def lookup(ctx: RunContext[object], sku: str) -> dict:
     return {'sku': sku, 'price': 9.99}
 
 def test_model_calls_lookup():
@@ -199,7 +199,6 @@ async def streaming_tool_call(
 
 agent = Agent(
     FunctionModel(spy_function, stream_function=streaming_tool_call),
-    deps_type=None,
 )
 
 @agent.tool_plain

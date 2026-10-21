@@ -251,13 +251,13 @@ weather_tools = FunctionToolset()
 
 
 @weather_tools.tool
-def get_temperature(ctx: RunContext[None], city: str) -> str:
+def get_temperature(ctx: RunContext[object], city: str) -> str:
     """Return the current temperature for a city."""
     return f'22°C in {city}'
 
 
 @weather_tools.tool
-def get_humidity(ctx: RunContext[None], city: str) -> str:
+def get_humidity(ctx: RunContext[object], city: str) -> str:
     """Return the current humidity for a city."""
     return f'65% humidity in {city}'
 
@@ -285,7 +285,7 @@ db_tools = FunctionToolset(
 
 
 @db_tools.tool
-def query_users(ctx: RunContext[None], name: str) -> list[dict]:
+def query_users(ctx: RunContext[object], name: str) -> list[dict]:
     """Query the users table by name."""
     return [{'id': 1, 'name': name, 'email': f'{name.lower()}@example.com'}]
 
@@ -313,14 +313,14 @@ serial_tools = FunctionToolset(sequential=True)
 
 
 @serial_tools.tool
-def increment(ctx: RunContext[None], amount: int) -> int:
+def increment(ctx: RunContext[object], amount: int) -> int:
     """Add amount to the shared counter and return the new value."""
     counter_state['value'] += amount
     return counter_state['value']
 
 
 @serial_tools.tool
-def reset(ctx: RunContext[None]) -> int:
+def reset(ctx: RunContext[object]) -> int:
     """Reset the shared counter to zero."""
     counter_state['value'] = 0
     return counter_state['value']
@@ -343,7 +343,7 @@ sensitive_tools = FunctionToolset(requires_approval=True)
 
 
 @sensitive_tools.tool
-def send_email(ctx: RunContext[None], to: str, body: str) -> str:
+def send_email(ctx: RunContext[object], to: str, body: str) -> str:
     """Send an email to a recipient."""
     return f'Email sent to {to}: {body}'
 
@@ -374,7 +374,7 @@ hidden_tools = FunctionToolset(defer_loading=True, id='hidden-ops')
 
 
 @hidden_tools.tool
-def secret_lookup(ctx: RunContext[None], query: str) -> str:
+def secret_lookup(ctx: RunContext[object], query: str) -> str:
     """Look up internal records (only available after tool discovery)."""
     return f'Internal result for {query}'
 
@@ -934,7 +934,7 @@ custom = FunctionToolset()
 
 
 @custom.tool
-def get_current_user(ctx: RunContext[None]) -> str:
+def get_current_user(ctx: RunContext[object]) -> str:
     """Return the current authenticated user."""
     return 'alice@example.com'
 
@@ -983,13 +983,13 @@ api_tools = FunctionToolset()
 
 
 @db_tools.tool
-def search(ctx: RunContext[None], query: str) -> list[str]:
+def search(ctx: RunContext[object], query: str) -> list[str]:
     """Search the database."""
     return [f'db:{query}:result1', f'db:{query}:result2']
 
 
 @api_tools.tool
-def search(ctx: RunContext[None], query: str) -> list[str]:
+def search(ctx: RunContext[object], query: str) -> list[str]:
     """Search the external API."""
     return [f'api:{query}:result1']
 
@@ -1019,13 +1019,13 @@ write_tools = FunctionToolset()
 
 
 @read_tools.tool
-def read_document(ctx: RunContext[None], doc_id: str) -> str:
+def read_document(ctx: RunContext[object], doc_id: str) -> str:
     """Read a document by ID."""
     return f'Content of {doc_id}'
 
 
 @write_tools.tool
-def create_document(ctx: RunContext[None], title: str, body: str) -> str:
+def create_document(ctx: RunContext[object], title: str, body: str) -> str:
     """Create a new document."""
     return f'Created: {title}'
 
@@ -1061,13 +1061,13 @@ dynamic_tools = FunctionToolset()
 
 
 @static_tools.tool
-def static_helper(ctx: RunContext[None]) -> str:
+def static_helper(ctx: RunContext[object]) -> str:
     """Always available."""
     return 'static result'
 
 
 @dynamic_tools.tool
-def step_counter(ctx: RunContext[None]) -> str:
+def step_counter(ctx: RunContext[object]) -> str:
     """Track how many model steps have occurred."""
     return f'Currently on run step {ctx.run_step}'
 
@@ -1241,13 +1241,13 @@ tools = FunctionToolset()
 
 
 @tools.tool
-def step_a(ctx: RunContext[None]) -> str:
+def step_a(ctx: RunContext[object]) -> str:
     """First step."""
     return 'A done'
 
 
 @tools.tool
-def step_b(ctx: RunContext[None]) -> str:
+def step_b(ctx: RunContext[object]) -> str:
     """Second step (model decides call order; one-at-a-time fan-out)."""
     return 'B done'
 

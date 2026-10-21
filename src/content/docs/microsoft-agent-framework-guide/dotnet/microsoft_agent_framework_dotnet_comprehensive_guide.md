@@ -1,16 +1,16 @@
 ---
 title: "Microsoft Agent Framework .NET - Comprehensive Technical Guide"
-description: "Comprehensive .NET reference for Microsoft.Agents.AI 1.1.0 — ChatClientAgent, multi-agent orchestration, tools, MCP and Azure integration."
+description: "Comprehensive .NET reference for Microsoft.Agents.AI — ChatClientAgent, multi-agent orchestration, tools, MCP and Azure integration."
 framework: microsoft-agent-framework
 language: dotnet
 ---
 
-Latest: Microsoft.Agents.AI 1.1.0 | Updated: April 2026
 # Microsoft Agent Framework .NET - Comprehensive Technical Guide
 
-**Release:** October 2025  
-**Framework Version:** Microsoft.Agents.AI 1.1.0  
-**Target Platform:** .NET 8.0+
+**Framework Version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%; first written for the October 2025 preview)  
+**Target Platform:** .NET 8.0+ (packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
+
+> **Accuracy note.** The session API, `ChatClientAgent` constructor and `AsAIAgent` extension on this page were checked against the published %%version=Microsoft.Agents.AI%% assemblies. Snippets that register agents through `AddAgentFactory`, `UseAzureOpenAI`, `AddCosmosDBState`, `AddAzureAISearchMemory`, `IAgentMemory` or `MapAgents`, or that build workflows with `AddConditionalEdge`, are architecture sketches — those APIs are not in the packages.
 
 ---
 
@@ -88,15 +88,17 @@ To get started, you need the .NET 8.0 SDK and the core NuGet package.
 dotnet new console -n MyAgentApp
 cd MyAgentApp
 
-# Add the core Agent Framework package
-dotnet add package Microsoft.Agents.AI --prerelease
+# Add the core Agent Framework package (stable since GA — no --prerelease needed)
+dotnet add package Microsoft.Agents.AI --version %%version=Microsoft.Agents.AI%%
 
-# Add a specific LLM provider (e.g., Azure OpenAI)
+# Add a specific LLM provider (e.g., Azure OpenAI) plus the AsAIAgent() bridge
+dotnet add package Microsoft.Agents.AI.OpenAI
 dotnet add package Azure.AI.OpenAI
 dotnet add package Azure.Identity
 
-# For full Azure integration features
-dotnet add package Microsoft.Agents.AI.Azure --prerelease
+# Optional: Microsoft Foundry agents and workflows
+dotnet add package Microsoft.Agents.AI.Foundry --prerelease   # still preview
+dotnet add package Microsoft.Agents.AI.Workflows
 ```
 
 ### Authentication and Configuration

@@ -1,13 +1,13 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 6 (1.19.0)"
-description: "Source-verified deep dives for Agent, RawAgent, AgentSession, AgentResponse, FunctionTool, WorkflowAgent, WorkflowContext, CompactionProvider, VectorCollectionContextProvider, and TodoItem/TodoStore/TodoFileStore — all verified against agent-framework 1.19.0 source."
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 6"
+description: "Source-verified deep dives for Agent, RawAgent, AgentSession, AgentResponse, FunctionTool, WorkflowAgent, WorkflowContext, CompactionProvider, VectorCollectionContextProvider, and TodoItem/TodoStore/TodoFileStore — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-API Deep Dives Vol. 6
 
-**Verified against:** `agent-framework==1.19.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.19.0)
 **Python requirement:** 3.10+
 
 This volume covers the core building blocks every agent application depends on: the two concrete agent classes, the multi-turn session container, the response object, low-level tool construction, embedding a workflow as an agent, the executor communication context, conversation-history lifecycle management, a vector-collection context provider for RAG, and the session-scoped task-tracking trio. Each section includes the verified constructor signature, every meaningful method or property, and self-contained runnable examples.
@@ -1132,7 +1132,7 @@ asyncio.run(main())
 
 **Module:** `agent_framework._harness._todo` (re-exported via `agent_framework`)
 
-> **Experimental** — all three classes emit `ExperimentalWarning` on import.
+> **Stability** — `TodoItem` and `TodoStore` are stable; `TodoFileStore` is still `ExperimentalFeature.HARNESS` and emits an `ExperimentalWarning` on first use.
 
 The todo trio provides session-scoped task tracking for agents. `TodoItem` is the immutable data record. `TodoStore` is the abstract persistence backend. `TodoFileStore` is the file-backed implementation (for use with `TodoProvider`, covered in [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/)).
 
@@ -1273,4 +1273,4 @@ asyncio.run(list_todos("project-42"))
 | `WorkflowContext[OutT, W_OutT]` | `agent_framework._workflows._workflow_context` | ✓ stable | Route messages, yield outputs, state, HITL inside executors. |
 | `CompactionProvider` | `agent_framework._compaction` | ✓ stable | Attach before/after compaction strategies to an agent. |
 | `VectorCollectionContextProvider` | `agent_framework._vectors` | ⚗ experimental | Expose a caller-owned collection as agent CRUD/search tools. |
-| `TodoItem` / `TodoStore` / `TodoFileStore` | `agent_framework._harness._todo` | ⚗ experimental | Session-scoped task tracking with durable file persistence. |
+| `TodoItem` / `TodoStore` / `TodoFileStore` | `agent_framework._harness._todo` | stable / stable / ⚗ experimental | Session-scoped task tracking with durable file persistence. |

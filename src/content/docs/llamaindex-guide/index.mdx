@@ -11,18 +11,20 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 **The data framework for LLM apps.** Turn unstructured data into agent-queryable knowledge — document loaders, vector indices, query engines, tools, and multi-agent orchestration.
 
+Current release: **`llama-index` %%version=llama-index%%** (Python) · `llamaindex` %%version=llamaindex%% (TypeScript, final release — the TypeScript project is deprecated upstream) · checked %%versions-checked%%.
+
 ## Choose your language
 
 <CardGrid>
   <LinkCard
     title="🐍 Python"
     href="/llamaindex-guide/python/"
-    description="llama-index-core v0.14.22 · 100+ data connectors, ReAct agents, llama-agents package."
+    description="Workflow-based agents (FunctionAgent, ReActAgent, AgentWorkflow), 100+ data connectors, query engines."
   />
   <LinkCard
     title="📘 TypeScript"
     href="/llamaindex-guide/typescript/"
-    description="@llamaindex/workflow 1.1.25 · event-driven workflows for Node and browser."
+    description="Deprecated upstream — final releases documented for existing projects."
   />
 </CardGrid>
 
@@ -39,10 +41,10 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
     RAG, subquestion, multi-step, router engines.
   </Card>
   <Card title="Agents" icon="rocket">
-    ReAct agents, function-calling agents, tool use.
+    FunctionAgent, ReActAgent, CodeActAgent, tool use.
   </Card>
   <Card title="Multi-agent" icon="random">
-    `llama-agents` (Python) / workflow orchestration (TypeScript).
+    `AgentWorkflow` hand-off (Python) / `multiAgent` (TypeScript).
   </Card>
   <Card title="Production" icon="setting">
     Observability, caching, scaling strategies.
@@ -55,6 +57,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-10-21 | Py 0.14.25 / TS 0.12.1 | Versions now read from the site's version registry. Python agent examples moved to the workflow-based agents (the legacy `ReActAgent.from_tools` API and `llama-agents` were removed upstream); TypeScript marked as deprecated upstream. |
 | 2026-09-08 | llama-index-core 0.14.22 | Consistency sweep. Python card corrected 0.14.21 → 0.14.22; observability and streaming pages moved off a stale 0.14.20; the production requirements block no longer pins an impossible `llama-index-core==0.2.1`. No package installation or symbol verification performed. |
 | 2026-05-04 | Py 0.14.21 / TS 1.1.25 | TS bumped 1.1.24 → 1.1.25; Python card corrected from 0.14.20 to 0.14.21 (stale reference). | Claude routine |
 | 2026-04-21 | Py 0.14.21 / TS 1.1.24 | Versions corrected against installed packages; TS minimal example rewritten to real functional API (`createWorkflow`/`workflowEvent`). |

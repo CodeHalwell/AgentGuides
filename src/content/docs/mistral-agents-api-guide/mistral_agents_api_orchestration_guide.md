@@ -1,1319 +1,376 @@
 ---
 title: "Mistral Agents API: Agent Orchestration Guide"
-description: "Version: 2.0 (May 2025 Launch Edition) Last Updated: May 27, 2025"
+description: "Coordinating multiple Mistral agents: code-driven pipelines, parallel fan-out, handoff graphs, manager-worker delegation and state across agents."
 framework: mistral-agents-api
 ---
 
 # Mistral Agents API: Agent Orchestration Guide
 
-**Version**: 2.0 (May 2025 Launch Edition)
-**Last Updated**: May 27, 2025
+**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).
 
-## Overview
+There are two ways to coordinate agents on Mistral, and most systems use both:
 
-The May 27, 2025 Agents API launch introduced **built-in multi-agent orchestration** capabilities, enabling sophisticated agent collaboration without external frameworks. This guide covers sequential pipelines, parallel execution, hierarchical structures, and complex problem-solving workflows.
+- **Code-driven orchestration.** Your Python decides which agent runs next and what it receives. Each agent has its own conversation; you pass results between them. Predictable, testable, and easy to run in parallel.
+- **Handoffs.** An agent's `handoffs` list names the agents it may pass the conversation to, and the model decides when. The conversation, with its full history, moves to the next agent on Mistral's side.
 
-## Table of Contents
+One thing that does not exist: `conversations.append()` has no `agent_id`. A conversation continues with its agent (or with whichever agent a handoff moved it to); to involve another agent, use a handoff or start a separate conversation.
 
-1. [Orchestration Fundamentals](#orchestration-fundamentals)
-2. [Sequential Agent Pipelines](#sequential-agent-pipelines)
-3. [Parallel Agent Execution](#parallel-agent-execution)
-4. [Hierarchical Agent Structures](#hierarchical-agent-structures)
-5. [Agent Handoff Mechanisms](#agent-handoff-mechanisms)
-6. [State Management Across Agents](#state-management-across-agents)
-7. [Complex Workflow Patterns](#complex-workflow-patterns)
-8. [Production Patterns](#production-patterns)
-
----
-
-## Orchestration Fundamentals
-
-### What is Agent Orchestration?
-
-Agent orchestration is the coordination of multiple specialized agents to solve complex problems that exceed the capabilities of a single agent. The Mistral Agents API provides native orchestration through:
-
-- **Conversation-based coordination**: Agents communicate via shared conversation context
-- **Agent handoff mechanisms**: Transfer control between agents with full context
-- **Persistent state**: Server-side conversation memory maintains state across agent transitions
-- **No external frameworks**: Everything runs within Mistral platform
-
-### Key Concepts
-
-#### 1. Specialized Agents
-
-```python
-# Each agent has a specific role and expertise
-
-research_agent = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="Research Specialist",
-    instructions="You are a research specialist. Search for information and cite sources.",
-    tools=[{"type": "web_search"}]
-)
-
-analysis_agent = client.beta.agents.create(
-    model="mistral-large-latest",
-    name="Data Analyst",
-    instructions="You are a data analyst. Analyze data and create visualizations.",
-    tools=[{"type": "code_interpreter"}]
-)
-
-writer_agent = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="Report Writer",
-    instructions="You are a report writer. Create clear, professional reports.",
-    tools=[{"type": "image_generation"}]
-)
-```
-
-#### 2. Conversation as Coordination Medium
-
-```python
-# All agents share the same conversation for context continuity
-
-# Agent 1 starts
-conversation = client.beta.conversations.start(
-    agent_id=research_agent.id,
-    inputs="Research renewable energy trends"
-)
-
-# Agent 2 continues with full history
-conversation = client.beta.conversations.append(
-    conversation_id=conversation.id,
-    agent_id=analysis_agent.id,
-    inputs="Analyze the research findings"
-)
-
-# Agent 3 completes with full context
-conversation = client.beta.conversations.append(
-    conversation_id=conversation.id,
-    agent_id=writer_agent.id,
-    inputs="Write executive summary"
-)
-```
-
-#### 3. State Persistence
-
-```python
-# Conversation history maintains all state automatically
-history = client.beta.conversations.get_history(
-    conversation_id=conversation.id
-)
-
-# Shows all agent interactions, tool executions, and results
-for entry in history.entries:
-    print(f"{entry.role} ({entry.agent_id}): {entry.type}")
-```
-
----
-
-## Sequential Agent Pipelines
-
-Sequential orchestration chains agents where each agent's output feeds the next agent's input.
-
-### Pattern: Linear Pipeline
+All examples use this setup:
 
 ```python
 import os
 from mistralai.client import Mistral
+from mistralai.client.models import ConversationResponse, MessageOutputEntry, TextChunk
 
-def create_data_pipeline():
-    """Create a sequential data processing pipeline"""
+client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+def text_of(response: ConversationResponse) -> str:
+    for entry in reversed(response.outputs):
+        if isinstance(entry, MessageOutputEntry):
+            if isinstance(entry.content, str):
+                return entry.content
+            return "".join(c.text for c in entry.content if isinstance(c, TextChunk))
+    return ""
 
-    # Agent 1: Data Collector
-    collector = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Data Collector",
-        description="Collects raw data from various sources",
-        instructions="""
-        You collect data from web sources.
-        Search for requested information and compile raw data.
-        Format output as structured data (JSON or tables).
-        Pass complete raw dataset to next agent.
-        """,
-        tools=[{"type": "web_search"}]
-    )
-
-    # Agent 2: Data Cleaner
-    cleaner = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Data Cleaner",
-        description="Cleans and normalizes data",
-        instructions="""
-        You clean and normalize data.
-        Remove duplicates, handle missing values, standardize formats.
-        Use Python for data cleaning operations.
-        Output clean dataset for analysis.
-        """,
-        tools=[{"type": "code_interpreter"}]
-    )
-
-    # Agent 3: Data Analyst
-    analyst = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Data Analyst",
-        description="Analyzes cleaned data",
-        instructions="""
-        You analyze cleaned data.
-        Calculate statistics, identify trends, find insights.
-        Create visualizations to illustrate findings.
-        Provide detailed analysis for report writer.
-        """,
-        tools=[{"type": "code_interpreter"}]
-    )
-
-    # Agent 4: Report Writer
-    writer = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Report Writer",
-        description="Creates final reports",
-        instructions="""
-        You write professional reports.
-        Synthesize analysis into clear narrative.
-        Include visualizations and key findings.
-        Create executive summary.
-        """,
-        tools=[{"type": "image_generation"}]
-    )
-
-    return collector, cleaner, analyst, writer, client
-
-
-def run_pipeline(user_request):
-    """Execute the sequential pipeline"""
-
-    collector, cleaner, analyst, writer, client = create_data_pipeline()
-
-    print("🔄 Starting sequential pipeline...")
-
-    # Step 1: Collect Data
-    print("\n📊 Step 1: Collecting data...")
-    conversation = client.beta.conversations.start(
-        agent_id=collector.id,
-        inputs=user_request
-    )
-    conversation_id = conversation.id
-    print(f"✅ Data collected")
-
-    # Step 2: Clean Data
-    print("\n🧹 Step 2: Cleaning data...")
-    conversation = client.beta.conversations.append(
-        conversation_id=conversation_id,
-        agent_id=cleaner.id,
-        inputs="Clean and normalize the collected data. Handle any inconsistencies."
-    )
-    print(f"✅ Data cleaned")
-
-    # Step 3: Analyze Data
-    print("\n🔍 Step 3: Analyzing data...")
-    conversation = client.beta.conversations.append(
-        conversation_id=conversation_id,
-        agent_id=analyst.id,
-        inputs="Analyze the cleaned data. Find trends, calculate statistics, create visualizations."
-    )
-    print(f"✅ Analysis complete")
-
-    # Step 4: Write Report
-    print("\n📝 Step 4: Writing report...")
-    conversation = client.beta.conversations.append(
-        conversation_id=conversation_id,
-        agent_id=writer.id,
-        inputs="Create a comprehensive report based on the analysis. Include executive summary."
-    )
-    print(f"✅ Report complete")
-
-    print("\n" + "="*50)
-    print("FINAL REPORT")
-    print("="*50)
-    print(conversation.outputs[-1].content)
-
-    return conversation_id
-
-
-# Usage
-if __name__ == "__main__":
-    run_pipeline("Analyze global electric vehicle adoption rates in 2025")
-```
-
-### Pattern: Conditional Pipeline
-
-```python
-def create_conditional_pipeline():
-    """Pipeline with conditional branching based on intermediate results"""
-
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    # Classifier Agent
-    classifier = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Request Classifier",
-        instructions="""
-        Classify requests into categories:
-        - TECHNICAL: Requires technical analysis
-        - RESEARCH: Requires web research
-        - CREATIVE: Requires creative content
-        - DATA: Requires data analysis
-
-        Output: Single word classification
-        """
-    )
-
-    # Specialized agents for each category
-    technical_agent = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Technical Specialist",
-        instructions="Handle technical queries with code execution",
-        tools=[{"type": "code_interpreter"}]
-    )
-
-    research_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Research Specialist",
-        instructions="Handle research queries with web search",
-        tools=[{"type": "web_search"}]
-    )
-
-    creative_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Creative Specialist",
-        instructions="Handle creative requests with image generation",
-        tools=[{"type": "image_generation"}]
-    )
-
-    data_agent = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Data Specialist",
-        instructions="Handle data analysis with code execution",
-        tools=[{"type": "code_interpreter"}]
-    )
-
-    return {
-        "classifier": classifier,
-        "TECHNICAL": technical_agent,
-        "RESEARCH": research_agent,
-        "CREATIVE": creative_agent,
-        "DATA": data_agent,
-        "client": client
-    }
-
-
-def run_conditional_pipeline(user_request, agents):
-    """Route request based on classification"""
-
-    client = agents["client"]
-    classifier = agents["classifier"]
-
-    # Step 1: Classify
-    conversation = client.beta.conversations.start(
-        agent_id=classifier.id,
-        inputs=f"Classify this request: {user_request}"
-    )
-
-    classification = conversation.outputs[-1].content.strip().upper()
-    print(f"📋 Classification: {classification}")
-
-    # Step 2: Route to appropriate agent
-    specialist_agent = agents.get(classification)
-
-    if specialist_agent:
-        conversation = client.beta.conversations.append(
-            conversation_id=conversation.id,
-            agent_id=specialist_agent.id,
-            inputs=user_request
-        )
-        print(f"✅ Processed by {classification} specialist")
-    else:
-        print(f"❌ Unknown classification: {classification}")
-
-    return conversation
-
-
-# Usage
-agents = create_conditional_pipeline()
-run_conditional_pipeline("What are the latest AI trends?", agents)  # → RESEARCH
-run_conditional_pipeline("Calculate Fibonacci sequence", agents)     # → TECHNICAL
-run_conditional_pipeline("Create a sunset landscape", agents)        # → CREATIVE
+def ask(agent_id: str, prompt: str) -> str:
+    return text_of(client.beta.conversations.start(agent_id=agent_id, inputs=prompt))
 ```
 
 ---
 
-## Parallel Agent Execution
+## 1. Specialised agents
 
-Parallel orchestration runs multiple agents simultaneously, then synthesizes results.
-
-### Pattern: Fan-Out/Fan-In
+Small agents with one job each are easier to prompt, test and price than one agent with every tool.
 
 ```python
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
+researcher = client.beta.agents.create(
+    model="mistral-medium-latest",
+    name="researcher",
+    description="Finds current information on the web and cites sources.",
+    instructions="Search the web. Return findings as bullet points, each with a source URL.",
+    tools=[{"type": "web_search"}],
+)
 
-def create_parallel_research_team():
-    """Create team of parallel research agents"""
+analyst = client.beta.agents.create(
+    model="mistral-medium-latest",
+    name="analyst",
+    description="Analyses data with Python and produces charts.",
+    instructions="Use the code interpreter for every number. Show the code you ran.",
+    tools=[{"type": "code_interpreter"}],
+)
 
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    # Multiple specialist researchers
-    tech_researcher = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Tech Researcher",
-        instructions="Research technology trends. Focus on technical details.",
-        tools=[{"type": "web_search"}]
-    )
-
-    market_researcher = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Market Researcher",
-        instructions="Research market trends. Focus on business and economics.",
-        tools=[{"type": "web_search"}]
-    )
-
-    academic_researcher = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Academic Researcher",
-        instructions="Research academic publications. Focus on peer-reviewed sources.",
-        tools=[{"type": "web_search"}]
-    )
-
-    # Synthesizer agent
-    synthesizer = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Research Synthesizer",
-        instructions="""
-        You synthesize research from multiple sources.
-        Identify common themes, conflicts, and gaps.
-        Create comprehensive unified report.
-        Cite all sources from parallel researchers.
-        """
-    )
-
-    return {
-        "researchers": [tech_researcher, market_researcher, academic_researcher],
-        "synthesizer": synthesizer,
-        "client": client
-    }
-
-
-def run_parallel_research(topic):
-    """Execute parallel research and synthesize"""
-
-    team = create_parallel_research_team()
-    client = team["client"]
-
-    print(f"🔄 Starting parallel research on: {topic}")
-
-    # Fan-out: Run researchers in parallel
-    conversations = []
-
-    def research_task(agent):
-        """Execute single research task"""
-        conv = client.beta.conversations.start(
-            agent_id=agent.id,
-            inputs=f"Research {topic} from your specialized perspective"
-        )
-        return conv
-
-    # Execute in parallel using ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = [executor.submit(research_task, agent)
-                   for agent in team["researchers"]]
-        conversations = [future.result() for future in futures]
-
-    print(f"✅ Parallel research complete ({len(conversations)} researchers)")
-
-    # Fan-in: Synthesize results
-    print("\n🔄 Synthesizing results...")
-
-    # Combine all research into single context
-    combined_research = "\n\n".join([
-        f"RESEARCHER {i+1} FINDINGS:\n{conv.outputs[-1].content}"
-        for i, conv in enumerate(conversations)
-    ])
-
-    # Create new conversation for synthesis
-    synthesis_conv = client.beta.conversations.start(
-        agent_id=team["synthesizer"].id,
-        inputs=f"""
-        Synthesize these parallel research findings:
-
-        {combined_research}
-
-        Create a comprehensive unified report.
-        """
-    )
-
-    print("✅ Synthesis complete")
-    print("\n" + "="*50)
-    print("SYNTHESIZED REPORT")
-    print("="*50)
-    print(synthesis_conv.outputs[-1].content)
-
-    return synthesis_conv
-
-
-# Usage
-if __name__ == "__main__":
-    run_parallel_research("Artificial Intelligence in Healthcare")
+writer = client.beta.agents.create(
+    model="mistral-small-latest",
+    name="writer",
+    description="Turns notes into a short, clear report.",
+    instructions="Write in plain British English. Lead with the conclusion. No more than 400 words.",
+)
 ```
 
-### Pattern: Competitive Evaluation
-
-```python
-def create_competitive_team():
-    """Create team with different approaches to same problem"""
-
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    # Multiple agents with different strategies
-    conservative_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Conservative Analyst",
-        instructions="""
-        You take a conservative, risk-averse approach.
-        Emphasize safety, proven methods, and gradual change.
-        Highlight potential risks and downsides.
-        """,
-        completion_args={"temperature": 0.2}
-    )
-
-    aggressive_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Aggressive Analyst",
-        instructions="""
-        You take an aggressive, innovative approach.
-        Emphasize opportunities, disruption, and rapid change.
-        Highlight potential benefits and upsides.
-        """,
-        completion_args={"temperature": 0.8}
-    )
-
-    balanced_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Balanced Analyst",
-        instructions="""
-        You take a balanced, pragmatic approach.
-        Weigh pros and cons equally.
-        Seek middle-ground solutions.
-        """,
-        completion_args={"temperature": 0.5}
-    )
-
-    evaluator = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Strategy Evaluator",
-        instructions="""
-        You evaluate competing strategies.
-        Compare approaches on multiple dimensions.
-        Recommend best approach or hybrid solution.
-        Provide clear rationale for recommendation.
-        """
-    )
-
-    return {
-        "analysts": [conservative_agent, aggressive_agent, balanced_agent],
-        "evaluator": evaluator,
-        "client": client
-    }
-
-
-def run_competitive_analysis(decision):
-    """Get multiple perspectives and evaluate"""
-
-    team = create_competitive_team()
-    client = team["client"]
-
-    print(f"🔄 Competitive analysis for: {decision}")
-
-    # Get perspectives in parallel
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = [executor.submit(
-            lambda a: client.beta.conversations.start(
-                agent_id=a.id,
-                inputs=f"Analyze this decision: {decision}"
-            ), agent
-        ) for agent in team["analysts"]]
-
-        perspectives = [future.result() for future in futures]
-
-    # Combine perspectives
-    combined = "\n\n".join([
-        f"PERSPECTIVE {i+1} ({['CONSERVATIVE', 'AGGRESSIVE', 'BALANCED'][i]}):\n{p.outputs[-1].content}"
-        for i, p in enumerate(perspectives)
-    ])
-
-    # Evaluate
-    evaluation = client.beta.conversations.start(
-        agent_id=team["evaluator"].id,
-        inputs=f"""
-        Evaluate these competing perspectives:
-
-        {combined}
-
-        Provide recommendation with rationale.
-        """
-    )
-
-    print("\n" + "="*50)
-    print("EVALUATION & RECOMMENDATION")
-    print("="*50)
-    print(evaluation.outputs[-1].content)
-
-    return evaluation
-
-
-# Usage
-run_competitive_analysis("Should we migrate to microservices architecture?")
-```
+The `description` matters: it is what other agents see when deciding whether to hand off.
 
 ---
 
-## Hierarchical Agent Structures
+## 2. Sequential pipeline
 
-Hierarchical orchestration uses manager agents that delegate to specialist agents.
-
-### Pattern: Manager-Worker
+Each step gets the previous step's output explicitly. Because every step is a separate conversation, you can log, validate or retry steps independently.
 
 ```python
-def create_manager_worker_system():
-    """Create hierarchical system with manager and workers"""
+def research_report(topic: str) -> dict[str, str]:
+    findings = ask(researcher.id, f"Research: {topic}")
+    analysis = ask(analyst.id, f"Analyse these findings and quantify the trends:\n\n{findings}")
+    report = ask(writer.id, f"Write a report from this research and analysis.\n\nResearch:\n{findings}\n\nAnalysis:\n{analysis}")
+    return {"findings": findings, "analysis": analysis, "report": report}
 
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    # Worker agents
-    code_worker = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Code Worker",
-        instructions="Execute code tasks assigned by manager. Report results clearly.",
-        tools=[{"type": "code_interpreter"}]
-    )
-
-    search_worker = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Search Worker",
-        instructions="Execute search tasks assigned by manager. Provide concise findings.",
-        tools=[{"type": "web_search"}]
-    )
-
-    doc_worker = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Doc Worker",
-        instructions="Retrieve document information assigned by manager. Quote sources.",
-        tools=[{"type": "document_retrieval", "config": {"library_id": "lib_xxx"}}]
-    )
-
-    # Manager agent
-    manager = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Task Manager",
-        instructions="""
-        You are a task manager coordinating worker agents.
-
-        Available workers:
-        - Code Worker: Executes code, performs calculations
-        - Search Worker: Searches web for information
-        - Doc Worker: Retrieves company documents
-
-        For each user request:
-        1. Break down into subtasks
-        2. Assign each subtask to appropriate worker
-        3. Collect results from workers
-        4. Synthesize final response
-
-        Delegate efficiently. Track progress. Provide comprehensive answers.
-        """
-    )
-
-    return {
-        "manager": manager,
-        "workers": {
-            "code": code_worker,
-            "search": search_worker,
-            "doc": doc_worker
-        },
-        "client": client
-    }
-
-
-def run_manager_worker(user_request):
-    """Execute task through manager-worker hierarchy"""
-
-    system = create_manager_worker_system()
-    client = system["client"]
-    manager = system["manager"]
-    workers = system["workers"]
-
-    print(f"🔄 Manager processing: {user_request}")
-
-    # Manager creates plan
-    manager_conv = client.beta.conversations.start(
-        agent_id=manager.id,
-        inputs=f"""
-        User request: {user_request}
-
-        Create execution plan:
-        1. List subtasks
-        2. Assign each to worker (code/search/doc)
-        3. Output plan in structured format
-        """
-    )
-
-    plan = manager_conv.outputs[-1].content
-    print(f"\n📋 Manager Plan:\n{plan}")
-
-    # Simulate worker execution
-    # In production, parse plan and execute workers
-    print("\n🔄 Executing workers...")
-
-    # For demo, continue conversation with manager
-    result = client.beta.conversations.append(
-        conversation_id=manager_conv.id,
-        inputs="""
-        Workers have completed their tasks. Synthesize results into final response.
-        (In this demo, simulate worker completions)
-        """
-    )
-
-    print("\n" + "="*50)
-    print("MANAGER FINAL RESPONSE")
-    print("="*50)
-    print(result.outputs[-1].content)
-
-    return result
-
-
-# Usage
-run_manager_worker("""
-Analyze our company's Q4 performance:
-1. Retrieve Q4 financial report from docs
-2. Search for industry benchmarks
-3. Calculate performance metrics
-4. Compare to industry
-""")
+result = research_report("electric vehicle adoption in the EU, 2024-2026")
+print(result["report"])
 ```
 
-### Pattern: Recursive Decomposition
+### Conditional routing
 
-```python
-def create_recursive_system():
-    """Create system that recursively decomposes complex tasks"""
-
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    # Decomposer agent
-    decomposer = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Task Decomposer",
-        instructions="""
-        You decompose complex tasks into simpler subtasks.
-
-        For each task:
-        1. Assess complexity
-        2. If simple: mark as EXECUTABLE
-        3. If complex: break into subtasks and mark as DECOMPOSE
-
-        Output format:
-        TASK: [description]
-        COMPLEXITY: [SIMPLE/COMPLEX]
-        ACTION: [EXECUTE/DECOMPOSE]
-        SUBTASKS: [if decompose, list subtasks]
-        """
-    )
-
-    # Executor agent
-    executor = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Task Executor",
-        instructions="Execute simple, well-defined tasks. Provide clear results.",
-        tools=[
-            {"type": "code_interpreter"},
-            {"type": "web_search"}
-        ]
-    )
-
-    return {"decomposer": decomposer, "executor": executor, "client": client}
-
-
-def recursive_execute(task, system, depth=0, max_depth=3):
-    """Recursively decompose and execute task"""
-
-    if depth >= max_depth:
-        print(f"{'  '*depth}⚠️  Max depth reached")
-        return None
-
-    client = system["client"]
-    decomposer = system["decomposer"]
-    executor = system["executor"]
-
-    print(f"{'  '*depth}🔄 Processing: {task[:50]}...")
-
-    # Decompose
-    decomp_conv = client.beta.conversations.start(
-        agent_id=decomposer.id,
-        inputs=f"Analyze this task: {task}"
-    )
-
-    response = decomp_conv.outputs[-1].content
-
-    # Check if executable
-    if "ACTION: EXECUTE" in response or "COMPLEXITY: SIMPLE" in response:
-        print(f"{'  '*depth}▶️  Executing...")
-        exec_conv = client.beta.conversations.start(
-            agent_id=executor.id,
-            inputs=task
-        )
-        result = exec_conv.outputs[-1].content
-        print(f"{'  '*depth}✅ Completed")
-        return result
-
-    # Otherwise, decompose further
-    elif "ACTION: DECOMPOSE" in response or "COMPLEXITY: COMPLEX" in response:
-        print(f"{'  '*depth}📋 Decomposing...")
-        # In production, parse subtasks from response
-        # For demo, simulate subtasks
-        subtasks = [
-            f"Subtask 1 of: {task[:30]}",
-            f"Subtask 2 of: {task[:30]}"
-        ]
-
-        results = []
-        for i, subtask in enumerate(subtasks):
-            print(f"{'  '*depth}├─ Subtask {i+1}:")
-            result = recursive_execute(subtask, system, depth+1, max_depth)
-            results.append(result)
-
-        print(f"{'  '*depth}🔄 Synthesizing subtask results...")
-        return results
-
-    return None
-
-
-# Usage
-system = create_recursive_system()
-recursive_execute(
-    "Build a comprehensive AI strategy including technology assessment, talent planning, and implementation roadmap",
-    system
-)
-```
-
----
-
-## Agent Handoff Mechanisms
-
-Agent handoffs transfer control between agents with full context preservation.
-
-### Pattern: Explicit Handoff
-
-```python
-def create_handoff_system():
-    """Create system with explicit agent handoffs"""
-
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    # Customer service agent
-    cs_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Customer Service",
-        instructions="""
-        You handle general customer inquiries.
-
-        If customer needs technical support, say: HANDOFF: TECHNICAL
-        If customer needs billing support, say: HANDOFF: BILLING
-        If customer needs sales info, say: HANDOFF: SALES
-
-        Otherwise, handle the inquiry directly.
-        """,
-        completion_args={"temperature": 0.3}
-    )
-
-    # Specialist agents
-    technical_agent = client.beta.agents.create(
-        model="mistral-large-latest",
-        name="Technical Support",
-        instructions="You provide technical support. Access documentation and solve technical issues.",
-        tools=[
-            {"type": "document_retrieval", "config": {"library_id": "lib_tech_docs"}},
-            {"type": "code_interpreter"}
-        ]
-    )
-
-    billing_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Billing Support",
-        instructions="You handle billing inquiries. Access billing records and explain charges.",
-        tools=[{"type": "document_retrieval", "config": {"library_id": "lib_billing"}}]
-    )
-
-    sales_agent = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Sales",
-        instructions="You provide sales information. Explain features, pricing, and help with purchases.",
-        tools=[{"type": "web_search"}]
-    )
-
-    return {
-        "cs": cs_agent,
-        "technical": technical_agent,
-        "billing": billing_agent,
-        "sales": sales_agent,
-        "client": client
-    }
-
-
-def run_with_handoffs(user_message):
-    """Execute with automatic handoffs"""
-
-    system = create_handoff_system()
-    client = system["client"]
-
-    print(f"👤 User: {user_message}")
-
-    # Start with CS agent
-    current_agent = system["cs"]
-    conversation = client.beta.conversations.start(
-        agent_id=current_agent.id,
-        inputs=user_message
-    )
-
-    response = conversation.outputs[-1].content
-    print(f"🤖 CS Agent: {response}")
-
-    # Check for handoff
-    if "HANDOFF: TECHNICAL" in response:
-        print("\n🔄 Handing off to Technical Support...")
-        current_agent = system["technical"]
-        conversation = client.beta.conversations.append(
-            conversation_id=conversation.id,
-            agent_id=current_agent.id,
-            inputs="Customer needs technical support. Please assist."
-        )
-        print(f"🔧 Technical: {conversation.outputs[-1].content}")
-
-    elif "HANDOFF: BILLING" in response:
-        print("\n🔄 Handing off to Billing...")
-        current_agent = system["billing"]
-        conversation = client.beta.conversations.append(
-            conversation_id=conversation.id,
-            agent_id=current_agent.id,
-            inputs="Customer needs billing support. Please assist."
-        )
-        print(f"💰 Billing: {conversation.outputs[-1].content}")
-
-    elif "HANDOFF: SALES" in response:
-        print("\n🔄 Handing off to Sales...")
-        current_agent = system["sales"]
-        conversation = client.beta.conversations.append(
-            conversation_id=conversation.id,
-            agent_id=current_agent.id,
-            inputs="Customer needs sales information. Please assist."
-        )
-        print(f"💼 Sales: {conversation.outputs[-1].content}")
-
-    return conversation
-
-
-# Usage
-run_with_handoffs("My API returns 500 errors")        # → Technical
-run_with_handoffs("Why was I charged twice?")         # → Billing
-run_with_handoffs("What features are in Pro plan?")   # → Sales
-run_with_handoffs("What's your return policy?")       # → CS handles directly
-```
-
----
-
-## State Management Across Agents
-
-Managing state as agents collaborate is critical for coherent orchestration.
-
-### Pattern: Shared Conversation Context
-
-```python
-# All agents access same conversation history automatically
-conversation = client.beta.conversations.start(
-    agent_id=agent1.id,
-    inputs="Initial request"
-)
-
-# Agent 2 sees Agent 1's work
-conversation = client.beta.conversations.append(
-    conversation_id=conversation.id,
-    agent_id=agent2.id,
-    inputs="Continue from where Agent 1 left off"
-)
-
-# Retrieve full history anytime
-history = client.beta.conversations.get_history(
-    conversation_id=conversation.id
-)
-```
-
-### Pattern: Explicit State Passing
-
-```python
-def create_stateful_pipeline():
-    """Pipeline with explicit state tracking"""
-
-    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-    agent1 = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Agent 1",
-        instructions="""
-        Process request and output state:
-        STATE: {key: value, ...}
-        RESULT: [your result]
-        """
-    )
-
-    agent2 = client.beta.agents.create(
-        model="mistral-medium-latest",
-        name="Agent 2",
-        instructions="""
-        You receive state from previous agent.
-        Process using provided state.
-        Update state and pass forward:
-        STATE: {updated state}
-        RESULT: [your result]
-        """
-    )
-
-    return agent1, agent2, client
-
-
-# Usage
-agent1, agent2, client = create_stateful_pipeline()
-
-# Agent 1 creates state
-conv = client.beta.conversations.start(
-    agent_id=agent1.id,
-    inputs="Process this data: [1,2,3,4,5]"
-)
-
-response1 = conv.outputs[-1].content
-# Parse STATE from response1
-
-# Agent 2 receives state
-conv = client.beta.conversations.append(
-    conversation_id=conv.id,
-    agent_id=agent2.id,
-    inputs=f"Previous state: {response1}\n\nContinue processing"
-)
-```
-
-### Pattern: External State Store
+Route with a cheap classifier agent and structured output, then dispatch in code:
 
 ```python
 import json
-from typing import Dict, Any
+from pydantic import BaseModel
+from mistralai.extra import response_format_from_pydantic_model
 
-class OrchestrationState:
-    """External state management for complex orchestrations"""
+class Route(BaseModel):
+    route: str        # "research", "analysis" or "writing"
+    reason: str
 
-    def __init__(self):
-        self.state: Dict[str, Any] = {}
-
-    def update(self, key: str, value: Any):
-        """Update state"""
-        self.state[key] = value
-
-    def get(self, key: str, default=None):
-        """Get state value"""
-        return self.state.get(key, default)
-
-    def serialize(self) -> str:
-        """Serialize state for passing to agents"""
-        return json.dumps(self.state, indent=2)
-
-    def inject_into_prompt(self, base_prompt: str) -> str:
-        """Inject state into agent prompt"""
-        return f"""{base_prompt}
-
-CURRENT STATE:
-{self.serialize()}
-
-Use this state information to inform your processing.
-"""
-
-
-# Usage
-state = OrchestrationState()
-
-# Agent 1 updates state
-conv1 = client.beta.conversations.start(
-    agent_id=agent1.id,
-    inputs="Collect data"
-)
-state.update("data_collected", True)
-state.update("data_count", 100)
-
-# Agent 2 receives state
-conv2 = client.beta.conversations.start(
-    agent_id=agent2.id,
-    inputs=state.inject_into_prompt("Analyze the collected data")
+router = client.beta.agents.create(
+    model="mistral-small-latest",
+    name="router",
+    description="Classifies requests.",
+    instructions=(
+        "Classify the request. route must be one of: research (needs current facts), "
+        "analysis (needs calculation), writing (needs drafting only)."
+    ),
+    completion_args={"response_format": response_format_from_pydantic_model(Route), "temperature": 0},
 )
 
-# Agent 3 receives updated state
-state.update("analysis_complete", True)
-conv3 = client.beta.conversations.start(
-    agent_id=agent3.id,
-    inputs=state.inject_into_prompt("Create report from analysis")
-)
+SPECIALISTS = {"research": researcher.id, "analysis": analyst.id, "writing": writer.id}
+
+def handle(request: str) -> str:
+    route = Route.model_validate_json(ask(router.id, request))
+    agent_id = SPECIALISTS.get(route.route, writer.id)
+    return ask(agent_id, request)
 ```
 
 ---
 
-## Complex Workflow Patterns
+## 3. Parallel fan-out and fan-in
 
-### Pattern: Event-Driven Orchestration
+Independent work runs concurrently with the async client:
 
 ```python
-class EventDrivenOrchestrator:
-    """Orchestrator that responds to events"""
+import asyncio
 
-    def __init__(self, client):
-        self.client = client
-        self.event_handlers = {}
-        self.conversation_id = None
+async def ask_async(agent_id: str, prompt: str) -> str:
+    response = await client.beta.conversations.start_async(agent_id=agent_id, inputs=prompt)
+    return text_of(response)
 
-    def register_handler(self, event_type: str, agent):
-        """Register agent as handler for event type"""
-        self.event_handlers[event_type] = agent
+async def market_scan(company: str) -> str:
+    angles = [
+        f"Latest financial results and guidance for {company}",
+        f"Main competitors of {company} and their recent moves",
+        f"Regulatory issues affecting {company} in the EU",
+    ]
+    results = await asyncio.gather(*(ask_async(researcher.id, a) for a in angles))
+    combined = "\n\n".join(f"## {a}\n{r}" for a, r in zip(angles, results))
+    return await ask_async(writer.id, f"Synthesise into one briefing:\n\n{combined}")
 
-    def emit_event(self, event_type: str, data: str):
-        """Emit event and trigger appropriate handler"""
-        print(f"📢 Event: {event_type}")
+print(asyncio.run(market_scan("ASML")))
+```
 
-        handler = self.event_handlers.get(event_type)
-        if not handler:
-            print(f"⚠️  No handler for {event_type}")
-            return None
+Bound concurrency with an `asyncio.Semaphore` for large fan-outs; rate limits apply per workspace.
 
-        # Execute handler agent
-        if self.conversation_id:
-            conv = self.client.beta.conversations.append(
-                conversation_id=self.conversation_id,
-                agent_id=handler.id,
-                inputs=f"Event: {event_type}\nData: {data}"
-            )
-        else:
-            conv = self.client.beta.conversations.start(
-                agent_id=handler.id,
-                inputs=f"Event: {event_type}\nData: {data}"
-            )
-            self.conversation_id = conv.id
+### Competitive evaluation
 
-        print(f"✅ Handler executed: {handler.name}")
-        return conv.outputs[-1].content
+Ask several agents (or models) for an answer and have a judge pick:
 
-
-# Usage
-client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-
-orchestrator = EventDrivenOrchestrator(client)
-
-# Register handlers
-data_handler = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="Data Handler",
-    instructions="Process data received events"
-)
-
-error_handler = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="Error Handler",
-    instructions="Handle and recover from errors"
-)
-
-orchestrator.register_handler("data.received", data_handler)
-orchestrator.register_handler("error.occurred", error_handler)
-
-# Emit events
-orchestrator.emit_event("data.received", "New data batch: 1000 records")
-orchestrator.emit_event("error.occurred", "Validation failed on record 523")
+```python
+async def best_of(question: str, candidates: list[str], judge_id: str) -> str:
+    answers = await asyncio.gather(*(ask_async(a, question) for a in candidates))
+    ballot = "\n\n".join(f"Answer {i + 1}:\n{a}" for i, a in enumerate(answers))
+    verdict = await ask_async(judge_id, f"Question: {question}\n\n{ballot}\n\nReply with the number of the best answer and why.")
+    return verdict
 ```
 
 ---
 
-## Production Patterns
+## 4. Handoff graphs
 
-### Complete Production Example
+Handoffs let the model route mid-conversation. Configure who may hand off to whom with `handoffs`:
 
 ```python
-import os
-import logging
-from typing import List, Dict, Any
-from mistralai.client import Mistral
+billing = client.beta.agents.create(
+    model="mistral-small-latest", name="billing",
+    description="Invoices, refunds, payment methods.",
+    instructions="Resolve billing questions. Ask for the invoice number if needed.",
+)
+technical = client.beta.agents.create(
+    model="mistral-medium-latest", name="technical",
+    description="Bugs, errors, configuration and integration problems.",
+    instructions="Troubleshoot step by step. Search the web for error messages you do not recognise.",
+    tools=[{"type": "web_search"}],
+)
+frontdesk = client.beta.agents.create(
+    model="mistral-small-latest", name="frontdesk",
+    description="First point of contact for customers.",
+    instructions="Greet briefly, work out what the customer needs, and hand off to billing or technical.",
+    handoffs=[billing.id, technical.id],
+)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Specialists may hand back if the question changes
+for specialist in (billing, technical):
+    client.beta.agents.update(agent_id=specialist.id, handoffs=[frontdesk.id])
+```
 
+### Server-side execution
 
-class ProductionOrchestrator:
-    """Production-grade agent orchestration system"""
+```python
+response = client.beta.conversations.start(
+    agent_id=frontdesk.id,
+    inputs="Since yesterday's update the export button returns a 500 error.",
+    handoff_execution="server",
+)
+for entry in response.outputs:
+    if entry.type == "agent.handoff":
+        print(f"{entry.previous_agent_name} -> {entry.next_agent_name}")
+print(text_of(response))
 
-    def __init__(self):
-        self.client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-        self.agents = {}
-        self._initialize_agents()
+# The conversation stays with whoever is now handling it
+follow_up = client.beta.conversations.append(
+    conversation_id=response.conversation_id,
+    inputs="It happens with CSV only, not with XLSX.",
+)
+```
 
-    def _initialize_agents(self):
-        """Initialize all agents"""
-        logger.info("Initializing agent team...")
+### Client-side execution
 
-        # Research agent
-        self.agents["researcher"] = self.client.beta.agents.create(
-            model="mistral-medium-latest",
-            name="Research Agent",
-            instructions="Conduct thorough research. Cite sources. Be comprehensive.",
-            tools=[{"type": "web_search", "config": {"enable_premium_sources": True}}]
-        )
+With `handoff_execution="client"` the response stops at the handoff and returns it to you, so your code can check, log or block it before another agent acts:
 
-        # Analysis agent
-        self.agents["analyst"] = self.client.beta.agents.create(
-            model="mistral-large-latest",
-            name="Analysis Agent",
-            instructions="Analyze data with statistical rigor. Create visualizations.",
-            tools=[{"type": "code_interpreter"}]
-        )
+```python
+from mistralai.client.models import AgentHandoffEntry
 
-        # Report agent
-        self.agents["reporter"] = self.client.beta.agents.create(
-            model="mistral-medium-latest",
-            name="Report Agent",
-            instructions="Create professional, clear reports. Include executive summaries.",
-            tools=[{"type": "image_generation"}]
-        )
+response = client.beta.conversations.start(
+    agent_id=frontdesk.id,
+    inputs="Please refund invoice INV-2207.",
+    handoff_execution="client",
+)
 
-        logger.info(f"Initialized {len(self.agents)} agents")
-
-    def execute_workflow(self, workflow_type: str, inputs: str) -> Dict[str, Any]:
-        """Execute predefined workflow"""
-        logger.info(f"Executing workflow: {workflow_type}")
-
-        try:
-            if workflow_type == "research_report":
-                return self._research_report_workflow(inputs)
-            elif workflow_type == "data_analysis":
-                return self._data_analysis_workflow(inputs)
-            else:
-                raise ValueError(f"Unknown workflow: {workflow_type}")
-
-        except Exception as e:
-            logger.error(f"Workflow failed: {e}")
-            return {"success": False, "error": str(e)}
-
-    def _research_report_workflow(self, topic: str) -> Dict[str, Any]:
-        """Research → Analysis → Report pipeline"""
-
-        results = {}
-
-        # Step 1: Research
-        logger.info("Step 1: Research")
-        research_conv = self.client.beta.conversations.start(
-            agent_id=self.agents["researcher"].id,
-            inputs=f"Research: {topic}"
-        )
-        results["research"] = research_conv.outputs[-1].content
-        conversation_id = research_conv.id
-
-        # Step 2: Analysis
-        logger.info("Step 2: Analysis")
-        analysis_conv = self.client.beta.conversations.append(
-            conversation_id=conversation_id,
-            agent_id=self.agents["analyst"].id,
-            inputs="Analyze the research findings. Identify key trends and insights."
-        )
-        results["analysis"] = analysis_conv.outputs[-1].content
-
-        # Step 3: Report
-        logger.info("Step 3: Report")
-        report_conv = self.client.beta.conversations.append(
-            conversation_id=conversation_id,
-            agent_id=self.agents["reporter"].id,
-            inputs="Create comprehensive report with executive summary."
-        )
-        results["report"] = report_conv.outputs[-1].content
-
-        logger.info("Workflow complete")
-        return {
-            "success": True,
-            "conversation_id": conversation_id,
-            "results": results
-        }
-
-    def _data_analysis_workflow(self, data: str) -> Dict[str, Any]:
-        """Analysis → Report pipeline"""
-
-        results = {}
-
-        # Step 1: Analysis
-        logger.info("Step 1: Analysis")
-        analysis_conv = self.client.beta.conversations.start(
-            agent_id=self.agents["analyst"].id,
-            inputs=f"Analyze this data: {data}"
-        )
-        results["analysis"] = analysis_conv.outputs[-1].content
-        conversation_id = analysis_conv.id
-
-        # Step 2: Report
-        logger.info("Step 2: Report")
-        report_conv = self.client.beta.conversations.append(
-            conversation_id=conversation_id,
-            agent_id=self.agents["reporter"].id,
-            inputs="Create report from analysis."
-        )
-        results["report"] = report_conv.outputs[-1].content
-
-        logger.info("Workflow complete")
-        return {
-            "success": True,
-            "conversation_id": conversation_id,
-            "results": results
-        }
-
-
-# Usage
-if __name__ == "__main__":
-    orchestrator = ProductionOrchestrator()
-
-    # Execute workflow
-    result = orchestrator.execute_workflow(
-        workflow_type="research_report",
-        inputs="Quantum Computing Applications in 2025"
-    )
-
-    if result["success"]:
-        print("\n" + "="*50)
-        print("FINAL REPORT")
-        print("="*50)
-        print(result["results"]["report"])
-        print(f"\nConversation ID: {result['conversation_id']}")
+last = response.outputs[-1]
+if isinstance(last, AgentHandoffEntry):
+    print("model wants to route to", last.next_agent_name)
+    if last.next_agent_name == "billing" and not user_is_verified():   # your own check
+        print("ask the customer to verify before billing acts")
     else:
-        print(f"Error: {result['error']}")
+        # Run the chosen specialist yourself, giving it the context it needs
+        answer = ask(last.next_agent_id, "Customer request: Please refund invoice INV-2207.")
+        print(answer)
+```
+
+Mistral's documentation describes `client` mode only as returning the handoff to the caller; it does not document resuming the same conversation afterwards. Running the target agent yourself, as above, or using `server` mode where you do not need the checkpoint, are the dependable options.
+
+### Handoffs with function tools
+
+When an agent in the graph has a function tool, the run pauses with a `function.call` entry whichever agent made it; reply with a `FunctionResultEntry` as in the [function calling section](../mistral_agents_api_comprehensive_guide/#8-function-calling), and the conversation resumes with that agent.
+
+---
+
+## 5. Manager-worker delegation
+
+For open-ended tasks, give a manager agent function tools that run worker agents. Your code executes each delegation, so you keep control over cost and what the workers see:
+
+```python
+import json
+from mistralai.client.models import FunctionCallEntry, FunctionResultEntry
+
+WORKERS = {"researcher": researcher.id, "analyst": analyst.id, "writer": writer.id}
+
+manager = client.beta.agents.create(
+    model="mistral-medium-latest",
+    name="manager",
+    description="Plans work and delegates to specialists.",
+    instructions=(
+        "Break the task into steps. Use delegate() for each step, choosing the right worker. "
+        "When all steps are done, give the final answer."
+    ),
+    tools=[{
+        "type": "function",
+        "function": {
+            "name": "delegate",
+            "description": "Give a self-contained task to a worker and get its result.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "worker": {"type": "string", "enum": list(WORKERS)},
+                    "task": {"type": "string", "description": "Complete instructions, including any context needed."},
+                },
+                "required": ["worker", "task"],
+            },
+        },
+    }],
+)
+
+def run_manager(goal: str, max_delegations: int = 8) -> str:
+    response = client.beta.conversations.start(agent_id=manager.id, inputs=goal)
+    for _ in range(max_delegations):
+        calls = [e for e in response.outputs if isinstance(e, FunctionCallEntry)]
+        if not calls or response.outputs[-1].type != "function.call":
+            break
+        results = []
+        for call in calls:
+            args = json.loads(call.arguments) if isinstance(call.arguments, str) else call.arguments
+            output = ask(WORKERS[args["worker"]], args["task"])
+            results.append(FunctionResultEntry(tool_call_id=call.tool_call_id, result=output))
+        response = client.beta.conversations.append(conversation_id=response.conversation_id, inputs=results)
+    return text_of(response)
+
+print(run_manager("Prepare a one-page brief on heat-pump subsidies in France, Germany and Italy."))
+```
+
+The `max_delegations` cap is the important line: it bounds cost if the manager keeps delegating.
+
+---
+
+## 6. State across agents
+
+| Need | Approach |
+|---|---|
+| One agent's full history | the conversation itself (`get_history`) |
+| Hand the whole conversation to another agent | handoffs |
+| Give another agent only what it needs | pass text or structured output explicitly (pipelines, delegation) |
+| State that outlives conversations | your own store (database, cache), keyed by user or task |
+
+Explicit state passing with a typed object:
+
+```python
+from pydantic import BaseModel
+
+class CaseState(BaseModel):
+    customer_id: str
+    summary: str = ""
+    findings: list[str] = []
+    conversation_ids: dict[str, str] = {}
+
+def step(state: CaseState, role: str, agent_id: str, prompt: str) -> CaseState:
+    context = f"Customer {state.customer_id}. Summary so far: {state.summary or 'none'}."
+    response = client.beta.conversations.start(agent_id=agent_id, inputs=f"{context}\n\n{prompt}")
+    state.conversation_ids[role] = response.conversation_id
+    state.findings.append(text_of(response))
+    return state
+```
+
+Persist `CaseState` (for example as JSON in PostgreSQL or Redis) between steps so a crashed run can resume, and store the conversation IDs so each step can be inspected or continued later with `append()`.
+
+Reading the history of a handoff conversation shows which agent produced each entry:
+
+```python
+history = client.beta.conversations.get_history(conversation_id=response.conversation_id)
+for entry in history.entries:
+    print(entry.type, getattr(entry, "agent_id", None))
 ```
 
 ---
 
-## Conclusion
+## 7. Event-driven orchestration
 
-The May 2025 Agents API launch brings native multi-agent orchestration capabilities:
+For long-running or bursty workloads, put agent steps behind a queue and let workers pick them up:
 
-1. **Sequential Pipelines** - Chain agents for data processing workflows
-2. **Parallel Execution** - Run agents concurrently for faster results
-3. **Hierarchical Structures** - Manager-worker patterns for complex delegation
-4. **Agent Handoffs** - Transfer control between specialized agents
-5. **State Management** - Built-in conversation persistence for context continuity
+```python
+import asyncio
 
-No external frameworks needed—everything runs on Mistral's platform with enterprise reliability.
+queue: asyncio.Queue[tuple[str, str, asyncio.Future]] = asyncio.Queue()
 
-**Next Steps:**
-- Review [Connectors Guide](./mistral_agents_api_connectors_guide/) for agent capabilities
-- Explore [MCP Integration](./mistral_agents_api_mcp_guide/) for third-party tools
-- Study [Production Guide](./mistral_agents_api_production_guide/) for deployment
+async def worker(name: str, limit: asyncio.Semaphore) -> None:
+    while True:
+        agent_id, prompt, future = await queue.get()
+        try:
+            async with limit:
+                future.set_result(await ask_async(agent_id, prompt))
+        except Exception as exc:          # deliver failures to the caller
+            future.set_exception(exc)
+        finally:
+            queue.task_done()
+
+async def submit(agent_id: str, prompt: str) -> str:
+    future: asyncio.Future = asyncio.get_running_loop().create_future()
+    await queue.put((agent_id, prompt, future))
+    return await future
+```
+
+In production the queue is usually external (Redis, SQS, Pub/Sub), so work survives restarts and scales across processes.
 
 ---
 
-**Documentation Version**: 2.0 (May 2025 Launch Edition)
-**Last Updated**: May 27, 2025
-**Mistral AI - Orchestrate Intelligence**
+## 8. Production checklist
 
+- **Pin models and agent versions.** Use dated model names and `agent_version` (or version aliases) so a change to one agent does not silently change a pipeline.
+- **Cap loops.** Limit delegations, handoff round-trips and retries.
+- **Log every hop.** Record conversation IDs, agent names, handoff entries and token usage per step.
+- **Validate between steps.** Structured output plus Pydantic validation catches a bad step before it pollutes the next.
+- **Fail soft.** If a specialist fails, return a partial result rather than failing the whole request.
+- **Measure.** Track tokens (`response.usage`) and latency per agent, not just per request; one chatty agent usually dominates cost.

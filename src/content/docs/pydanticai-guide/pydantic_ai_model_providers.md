@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Model Providers, FallbackModel & InstrumentationSettings"
-description: "Every supported provider, provider prefixes, FallbackModel with exception and response handlers, FallbackExceptionGroup, InstrumentedModel, InstrumentationSettings versions 1-5, OTel token/cost histograms, gateway routing, and local models."
+description: "Every supported provider, provider prefixes, FallbackModel with exception and response handlers, FallbackExceptionGroup, InstrumentedModel, InstrumentationSettings versions 2-6, OTel token/cost histograms, gateway routing, and local models."
 framework: pydanticai
 language: python
 ---
@@ -118,7 +118,7 @@ from pydantic_ai.exceptions import ModelAPIError
 model = FallbackModel(
     'openai:gpt-4o',                    # primary
     'anthropic:claude-sonnet-4-6',      # first fallback
-    'google-gla:gemini-2.0-flash',      # second fallback
+    'google:gemini-2.5-flash',      # second fallback
     fallback_on=(ModelAPIError,),
 )
 agent = Agent(model)
@@ -217,7 +217,7 @@ def empty_reply(resp: ModelResponse) -> bool:
 model = FallbackModel(
     'openai:gpt-4o',
     'anthropic:claude-sonnet-4-6',
-    'google-gla:gemini-2.0-flash',
+    'google:gemini-2.5-flash',
     fallback_on=[
         ModelAPIError,        # exception type
         is_rate_limited,      # exception handler

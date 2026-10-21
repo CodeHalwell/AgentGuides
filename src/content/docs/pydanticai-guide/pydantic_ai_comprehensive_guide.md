@@ -377,12 +377,12 @@ openai_agent = Agent('openai:gpt-4o')
 openai_o3 = Agent('openai:o3-mini')
 
 # Anthropic Claude
-claude_agent = Agent('anthropic:claude-3-5-sonnet-latest')
-claude_opus = Agent('anthropic:claude-3-opus-20250219')
+claude_agent = Agent('anthropic:claude-sonnet-4-6')
+claude_opus = Agent('anthropic:claude-opus-4-7')
 
 # Google Gemini
-gemini_agent = Agent('google-gla:gemini-1.5-flash')
-gemini_pro = Agent('google-gla:gemini-1.5-pro')
+gemini_agent = Agent('google:gemini-2.5-flash')
+gemini_pro = Agent('google:gemini-2.5-pro')
 
 # Groq (fast inference)
 groq_agent = Agent('groq:llama-3.3-70b-versatile')
@@ -394,7 +394,7 @@ deepseek_agent = Agent('deepseek:deepseek-chat')
 mistral_agent = Agent('mistral:mistral-large-latest')
 
 # Grok
-grok_agent = Agent('grok:grok-2-latest')
+grok_agent = Agent('xai:grok-4-latest')
 
 # Amazon Bedrock
 bedrock_agent = Agent('bedrock:anthropic.claude-3-sonnet-20240229-v1:0')
@@ -1834,7 +1834,7 @@ from pydantic_ai import Agent
 from pydantic_ai.tools.xai import XSearchTool, FileSearchTool
 
 agent = Agent(
-    'grok:grok-2-latest',
+    'xai:grok-4-latest',
     tools=[XSearchTool(), FileSearchTool()]
 )
 
@@ -1927,7 +1927,7 @@ asyncio.run(main())
 ```
 
 Provider-specific models follow the `<provider>:<model>` format (e.g.
-`'openai:text-embedding-3-large'`, `'google-gla:text-embedding-004'`). A `TestEmbeddingModel`
+`'openai:text-embedding-3-large'`, `'google:gemini-embedding-001'`). A `TestEmbeddingModel`
 is available for unit tests (no API key required).
 
 ---
@@ -2222,7 +2222,7 @@ from pydantic_ai import Agent, RunContext
 agent = Agent('openai:gpt-4o')
 
 @agent.tool
-async def introspect(ctx: RunContext[None]) -> str:
+async def introspect(ctx: RunContext[object]) -> str:
     return (
         f'run_id={ctx.run_id}, '
         f'conversation_id={ctx.conversation_id}, '
@@ -2285,7 +2285,7 @@ Tools can now raise `CallDeferred` to pause execution and yield pending calls to
 ```python
 from pydantic_ai import Agent, DeferredToolRequests, CallDeferred
 
-agent: Agent[None, DeferredToolRequests | str] = Agent(
+agent: Agent[object, DeferredToolRequests | str] = Agent(
     'openai:gpt-4o',
     output_type=[DeferredToolRequests, str],  # type: ignore[arg-type]
 )
@@ -2649,7 +2649,7 @@ from pydantic_ai import Agent, RunContext
 agent = Agent('openai:gpt-4o-mini')
 
 @agent.tool
-async def fetch_and_maybe_followup(ctx: RunContext[None], query: str) -> str:
+async def fetch_and_maybe_followup(ctx: RunContext[object], query: str) -> str:
     # enqueue() is synchronous — do not await it
     ctx.enqueue('Also double-check that against the latest data.', priority='asap')
     return f'data for {query}'
@@ -3671,11 +3671,11 @@ Tool(
 from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.exceptions import ModelRetry
 
-def validate_age(ctx: RunContext[None], age: int) -> None:
+def validate_age(ctx: RunContext[object], age: int) -> None:
     if age < 0 or age > 150:
         raise ModelRetry(f'Age {age} is not plausible.')
 
-def get_birth_year(ctx: RunContext[None], age: int) -> int:
+def get_birth_year(ctx: RunContext[object], age: int) -> int:
     return 2026 - age
 
 agent = Agent('openai:gpt-4o', tools=[Tool(get_birth_year, args_validator=validate_age)])
@@ -3692,12 +3692,12 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 
 agent = Agent("openai:gpt-4o-mini")
 
-def validate_url(ctx: RunContext[None], url: str) -> None:
+def validate_url(ctx: RunContext[object], url: str) -> None:
     if not url.startswith("https://"):
         raise ModelRetry("URL must use HTTPS")
 
 @agent.tool(args_validator=validate_url)
-async def fetch_url(ctx: RunContext[None], url: str) -> str:
+async def fetch_url(ctx: RunContext[object], url: str) -> str:
     return f"Fetched: {url}"
 ```
 
@@ -4506,7 +4506,7 @@ class StreamedRunResult(Generic[AgentDepsT, OutputDataT]):
 with agent.run_stream_sync('Summarise this text') as result:
     for chunk in result.stream_text_sync(delta=True):
         print(chunk, end='', flush=True)
-    print(result.usage())
+    print(result.usage)
 ```
 
 #### `AgentEventStream` + `AgentRunResultEvent`
@@ -4682,7 +4682,7 @@ from pydantic_ai import Agent
 from pydantic_ai.tools import RunContext
 from pydantic_ai.messages import AgentStreamEvent, PartDeltaEvent, TextPartDelta
 
-async def my_stream_handler(ctx: RunContext[None], events) -> None:
+async def my_stream_handler(ctx: RunContext[object], events) -> None:
     async for event in events:
         if isinstance(event, PartDeltaEvent) and isinstance(event.delta, TextPartDelta):
             print(event.delta.content_delta, end='', flush=True)
@@ -5080,7 +5080,7 @@ from pydantic_ai.messages import SystemPromptPart
 agent = Agent('anthropic:claude-opus-4-8', system_prompt='You are a senior code reviewer.')
 
 @agent.tool
-def require_type_annotations(ctx: RunContext[None]) -> str:
+def require_type_annotations(ctx: RunContext[object]) -> str:
     ctx.enqueue(SystemPromptPart(content='All suggestions MUST include type annotations.'))
     return 'Rule added.'
 ```
@@ -5593,7 +5593,7 @@ import re
 agent = Agent('openai:gpt-4o')
 
 @agent.tool
-async def lookup_user(ctx: RunContext[None], email: str) -> str:
+async def lookup_user(ctx: RunContext[object], email: str) -> str:
     if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
         raise ModelRetry(f'{email!r} is not a valid email address.')
     return f'profile for {email}'
@@ -5631,7 +5631,7 @@ finance_cap = Capability(
 )
 
 @finance_cap.tool
-def get_stock_price(ctx: RunContext[None], ticker: str) -> float:
+def get_stock_price(ctx: RunContext[object], ticker: str) -> float:
     """Return the latest closing price."""
     return 150.0
 

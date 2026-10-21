@@ -1034,7 +1034,7 @@ class Deps:
     role: str  # 'read' or 'admin'
 
 
-agent = Agent(TestModel(custom_result_text='Done.'), deps_type=Deps)
+agent = Agent(TestModel(custom_output_text='Done.'), deps_type=Deps)
 
 
 async def run_as(role: str, query: str) -> str:
@@ -1081,7 +1081,7 @@ class ResearchSummary(BaseModel):
 
 
 agent = Agent(
-    TestModel(custom_result_text='{"topic":"AI","key_facts":["fact1"],"sources":["https://example.com"]}'),
+    TestModel(custom_output_text='{"topic":"AI","key_facts":["fact1"],"sources":["https://example.com"]}'),
     output_type=ResearchSummary,
     system_prompt=(
         'You are a research assistant. Use web_search to discover relevant pages, '
@@ -1142,7 +1142,7 @@ HIGH_RISK_TOOLS = {'delete_record', 'send_email_blast'}
 
 
 async def approval_handler(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     requests: DeferredToolRequests,
 ) -> DeferredToolResults | None:
     results: dict[str, ToolApproved | str] = {}
@@ -1177,7 +1177,7 @@ def delete_record(record_id: str) -> str:
 
 
 agent = Agent(
-    TestModel(custom_result_text='All actions processed.'),
+    TestModel(custom_output_text='All actions processed.'),
     toolsets=[toolset],
     capabilities=[HandleDeferredToolCalls(handler=approval_handler)],
 )
@@ -1226,7 +1226,7 @@ tracker = LatencyTracker()
 
 
 async def latency_observer(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     stream: AsyncIterable[AgentStreamEvent],
 ) -> None:
     tracker.reset()
@@ -1236,7 +1236,7 @@ async def latency_observer(
 
 
 async def strip_thinking(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     stream: AsyncIterable[AgentStreamEvent],
 ) -> AsyncIterator[AgentStreamEvent]:
     async for event in stream:
@@ -1246,7 +1246,7 @@ async def strip_thinking(
 
 
 agent = Agent(
-    TestModel(custom_result_text='42 is the answer.'),
+    TestModel(custom_output_text='42 is the answer.'),
     capabilities=[
         ProcessEventStream(handler=latency_observer),
         ProcessEventStream(handler=strip_thinking),

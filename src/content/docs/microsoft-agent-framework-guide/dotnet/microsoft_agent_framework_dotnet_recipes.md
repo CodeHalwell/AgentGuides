@@ -10,7 +10,9 @@ language: dotnet
 This document provides a collection of practical, copy-paste-ready C# recipes for building common agentic patterns with the Microsoft Agent Framework for .NET.
 
 **Target Platform:** .NET 8.0+  
-**Framework Version:** Microsoft.Agents.AI 1.1.0
+**Framework Version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%)
+
+> **Accuracy note.** Session handling (`AgentSession`, `CreateSessionAsync`, `RunAsync(message, session)`) on this page matches the published packages. Recipes that resolve agents through an `AgentFactory` / `AddAgentFactory` / `UseAzureOpenAI` registration, or memory through `IAgentMemory` / `AddAzureAISearchMemory`, are sketches — those helpers do not exist in `Microsoft.Agents.AI`; build the agent with `ChatClientAgent` or `AsAIAgent(...)` and register it yourself.
 
 ---
 

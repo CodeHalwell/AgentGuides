@@ -1,20 +1,20 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-Class Deep Dives Vol. 2 (1.16.0)"
-description: "Source-verified deep dives for FanInEdgeGroup, FanOutEdgeGroup, FunctionalWorkflow, FunctionalWorkflowAgent, FileCheckpointStorage, InMemoryCheckpointStorage, MCPStdioTool, MCPStreamableHTTPTool, SelectiveToolCallCompactionStrategy, and TodoProvider — all verified against agent-framework 1.16.0 source."
+title: "Microsoft Agent Framework (Python) — 10-Class Deep Dives Vol. 2"
+description: "Source-verified deep dives for FanInEdgeGroup, FanOutEdgeGroup, FunctionalWorkflow, FunctionalWorkflowAgent, FileCheckpointStorage, InMemoryCheckpointStorage, MCPStdioTool, MCPStreamableHTTPTool, SelectiveToolCallCompactionStrategy, and TodoProvider — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-Class Deep Dives Vol. 2
 
-**Verified against:** `agent-framework==1.16.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.16.0)
 **Python requirement:** 3.10+
 
-This volume covers 10 additional public classes from the `agent_framework` package that are not covered in Vol. 1. Each section includes the full `__init__` signature, every meaningful method, and self-contained runnable examples verified against the 1.16.0 source.
+This volume covers 10 additional public classes from the `agent_framework` package that are not covered in Vol. 1. Each section includes the full `__init__` signature, every meaningful method, and self-contained runnable examples first verified against the 1.16.0 source and re-checked against %%version=agent-framework%%.
 
 See [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
 
-> **Vol. 3 available:** See [10-Class Deep Dives Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) for `WorkflowBuilder`, `SlidingWindowStrategy`, `TruncationStrategy`, `ContextWindowCompactionStrategy`, `LocalEvaluator`, `InlineSkill`, `FileAccessProvider`, `MemoryContextProvider`, `FileHistoryProvider`, and `MCPWebsocketTool` — verified against `agent-framework==1.17.0`.
+> **Vol. 3 available:** See [10-Class Deep Dives Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) for `WorkflowBuilder`, `SlidingWindowStrategy`, `TruncationStrategy`, `ContextWindowCompactionStrategy`, `LocalEvaluator`, `InlineSkill`, `FileAccessProvider`, `MemoryContextProvider`, `FileHistoryProvider`, and `MCPWebsocketTool`.
 
 ---
 
@@ -910,7 +910,7 @@ agent = Agent(
 
 `TodoProvider` injects a structured todo-list capability into an agent. It registers five built-in tools (`todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, `todos_get_all`) and a system instruction, enabling agents to create and track sub-tasks during long-running operations. State is stored per-session in a `TodoStore`.
 
-> **Experimental:** Part of the HARNESS feature set.
+> **Stable** since 1.12.0 (it graduated from the HARNESS experimental set); only the on-disk `TodoFileStore` backend is still experimental.
 
 ### Constructor
 

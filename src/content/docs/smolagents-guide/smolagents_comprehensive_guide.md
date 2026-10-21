@@ -1,29 +1,14 @@
 ---
-title: "🤗 SmolAgents: Comprehensive Technical Guide"
-description: "From Beginner to Expert – The Complete Reference for Building AI Agents That Think in Code"
+title: "smolagents: Comprehensive Technical Guide"
+description: "From first agent to multi-agent systems with Hugging Face smolagents — models, tools, CodeAgent, ToolCallingAgent, sandboxes, memory and managed agents."
 framework: smolagents
 ---
 
-Latest: smolagents 1.26.0 | Updated: May 29, 2026
-# 🤗 SmolAgents: Comprehensive Technical Guide
+# smolagents: Comprehensive Technical Guide
 
-**From Beginner to Expert – The Complete Reference for Building AI Agents That Think in Code**
+> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Every example on this page was run against the installed package with a stub model.
 
-**2025 Update: Production-Grade Minimalist Framework**
-
-SmolAgents (2025) represents the **ultimate minimalist approach** to building production-ready AI agents. With just **~1,000 lines of core code**, SmolAgents proves that simplicity and power are not mutually exclusive.
-
-### 2025 Key Features
-
-- **Code-Centric Philosophy**: Agents write **Python code**, not JSON – enabling full language expressivity with loops, conditionals, functions, and error handling
-- **~1,000 Lines Core**: Entire framework readable in one sitting – maximum transparency and debuggability
-- **Broad LLM Support**: 100+ providers via LiteLLM – OpenAI, Anthropic, Google, local models (Transformers), Ollama, Groq, Together AI
-- **Secure Execution**: Multiple sandboxing options – Blaxel (Python), E2B (cloud), Modal, Docker, Pyodide (WASM), Deno (JavaScript)
-- **Hub Integration**: Native Hugging Face Hub support – share and pull tools/agents from community
-- **Multi-Modal Native**: Text, vision, video, and audio inputs – built-in support for complex media processing
-- **30% More Efficient**: Code-based approach reduces LLM calls for multi-step tasks compared to JSON-based frameworks
-
----
+smolagents is Hugging Face's small agent library. Its distinctive idea is the **CodeAgent**: instead of emitting one JSON tool call per step, the model writes a short Python snippet that can call several tools, loop, branch and keep intermediate results in variables. A conventional **ToolCallingAgent** is included for cases where JSON tool calls suit better. The library is deliberately compact; the agent logic lives in a single `agents.py` you can read in an afternoon.
 
 ## Table of Contents
 
@@ -41,671 +26,40 @@ Steps 1–10 are the Zero → Hero path from the [guide overview](/smolagents-gu
 10. [Structured Outputs & Schema](#structured-outputs--schema)
 11. Production — continue in the [production guide](/smolagents-guide/smolagents_production_guide/)
 
-**Also on this page:** [2025 Features Deep Dive](#2025-features-deep-dive) — sandboxing options, multi-modal input, Hub integration and the measured efficiency gain, with runnable examples.
+**Also on this page:** [Sandboxes, Hub sharing and multimodal input](#sandboxes-hub-sharing-and-multimodal-input) · [Version notes](#version-notes).
 
 **Elsewhere in this guide:** [Recipes](/smolagents-guide/smolagents_recipes/) for task-shaped patterns and error recovery · [Diagrams](/smolagents-guide/smolagents_diagrams/) for architecture visualisations.
 
 ---
 
-## 2025 FEATURES DEEP DIVE
-
-### Minimalist Design Philosophy: ~1,000 Lines of Core Code
-
-SmolAgents 2025 embraces **radical simplicity**:
-
-```python
-# The entire SmolAgents framework core is approximately:
-# - 400 lines: Agent base classes (CodeAgent, ToolCallingAgent)
-# - 200 lines: Model abstraction layer
-# - 150 lines: Tool system
-# - 100 lines: Execution engines
-# - 100 lines: Hub integration
-# - 50 lines: Utilities
-# ≈ 1,000 lines total
-
-# Compare to other frameworks:
-# LangChain: ~50,000+ lines
-# AutoGen: ~30,000+ lines
-# CrewAI: ~20,000+ lines
-# SmolAgents: ~1,000 lines ✓
-
-# Benefits:
-# 1. Read entire codebase in 1 hour
-# 2. Understand exactly how agents work
-# 3. Debug directly - no "magic" abstractions
-# 4. Extend easily - clear extension points
-# 5. Trust the code - you can audit it all
-```
-
-### Code-Centric Agents: Python > JSON
-
-**2025**: Agents write and execute **actual Python code** instead of generating JSON function calls:
-
-```python
-from smolagents import CodeAgent, InferenceClientModel, WebSearchTool
-
-model = InferenceClientModel()
-agent = CodeAgent(
-    model=model,
-    tools=[WebSearchTool()],
-    add_base_tools=True
-)
-
-# Traditional JSON Agent approach (other frameworks):
-# Query: "Find Bitcoin price and calculate 10 BTC in EUR"
-# Step 1: Generate JSON: {"tool": "web_search", "args": {"query": "bitcoin price"}}
-# Step 2: Execute tool, get result
-# Step 3: Generate JSON: {"tool": "calculator", "args": {"operation": "multiply", "a": 50000, "b": 10}}
-# Step 4: Execute tool, get result
-# Step 5: Generate JSON: {"tool": "currency_convert", "args": {"amount": 500000, "to": "EUR"}}
-# Total: 3 LLM calls, 3 parse operations, fragile JSON parsing
-
-# SmolAgents Code-Centric approach:
-result = agent.run("Find Bitcoin price and calculate 10 BTC in EUR (1 USD = 0.92 EUR)")
-
-# Agent generates and executes THIS Python code:
-"""
-# Search for Bitcoin price
-btc_search = web_search("bitcoin price USD")
-btc_price = 50000  # Extracted from search
-
-# Calculate total value
-num_btc = 10
-total_usd = btc_price * num_btc
-
-# Convert to EUR
-usd_to_eur = 0.92
-total_eur = total_usd * usd_to_eur
-
-final_answer = f"10 BTC = ${total_usd:,} = €{total_eur:,.2f}"
-"""
-# Total: 1 LLM call, direct execution, full Python expressivity
-
-print(result)
-# Output: "10 BTC = $500,000 = €460,000.00"
-```
-
-**Why Code > JSON:**
-
-```python
-# JSON agents are limited to function calls
-# Code agents have FULL Python capabilities:
-
-# ✓ Loops
-for city in ["Paris", "London", "Tokyo"]:
-    temp = web_search(f"{city} temperature")
-    temperatures[city] = extract_temp(temp)
-
-# ✓ Conditionals
-if bitcoin_price > 50000:
-    analysis = web_search("bitcoin bull market analysis")
-else:
-    analysis = web_search("bitcoin bear market analysis")
-
-# ✓ Functions
-def analyze_stock(symbol):
-    price = web_search(f"{symbol} stock price")
-    news = web_search(f"{symbol} latest news")
-    return combine(price, news)
-
-# ✓ Error handling
-try:
-    result = risky_operation()
-except Exception as e:
-    fallback_result = safe_operation()
-
-# ✓ Variable assignments and reuse
-data = fetch_data()
-cleaned = clean(data)
-analyzed = analyze(cleaned)
-visualized = visualize(analyzed)
-
-# ✓ List comprehensions
-results = [process(item) for item in items if validate(item)]
-
-# ✓ Complex data structures
-analysis = {
-    "market_data": fetch_market(),
-    "sentiment": analyze_sentiment(),
-    "forecast": {
-        "optimistic": forecast(scenario="bull"),
-        "pessimistic": forecast(scenario="bear")
-    }
-}
-```
-
-### Broad LLM Support: 100+ Providers
-
-**2025**: Universal provider support via **three model backends**:
-
-```python
-from smolagents import CodeAgent
-
-# 1. InferenceClientModel: Hugging Face native (70+ models)
-from smolagents import InferenceClientModel
-
-# Default HF Inference API
-model = InferenceClientModel()
-
-# Specific model
-model = InferenceClientModel(
-    model_id="Qwen/Qwen2.5-Coder-32B-Instruct"
-)
-
-# With provider routing (Together, Fireworks, etc.)
-model = InferenceClientModel(
-    model_id="deepseek-ai/DeepSeek-R1",
-    provider="together"
-)
-
-# 2. LiteLLMModel: 100+ providers (OpenAI, Anthropic, Google, etc.)
-from smolagents import LiteLLMModel
-
-# OpenAI
-model = LiteLLMModel(model_id="gpt-4o")
-
-# Anthropic Claude
-model = LiteLLMModel(model_id="claude-3-5-sonnet-20241022")
-
-# Google Gemini
-model = LiteLLMModel(model_id="gemini-2.0-flash")
-
-# Groq (ultra-fast)
-model = LiteLLMModel(model_id="groq/llama-3.3-70b-versatile")
-
-# Azure OpenAI
-model = LiteLLMModel(
-    model_id="azure/my-deployment",
-    api_base="https://myendpoint.openai.azure.com/"
-)
-
-# 3. TransformersModel: Local inference (any HF model)
-from smolagents import TransformersModel
-
-# Local model with GPU
-model = TransformersModel(
-    model_id="Qwen/Qwen2.5-Coder-32B-Instruct",
-    device_map="auto",
-    load_in_4bit=True  # Quantization for efficiency
-)
-
-# 4. Custom: Ollama, vLLM, any provider
-from smolagents import Model
-
-class OllamaModel(Model):
-    """Custom Ollama integration"""
-    def __init__(self, model_id: str):
-        self.model_id = model_id
-        self.base_url = "http://localhost:11434"
-
-    def generate_text(self, prompt: str, **kwargs) -> str:
-        import requests
-        response = requests.post(
-            f"{self.base_url}/api/generate",
-            json={"model": self.model_id, "prompt": prompt}
-        )
-        return response.json()["response"]
-
-    @property
-    def supports_vision(self) -> bool:
-        return "vision" in self.model_id.lower()
-
-# Use any model with same agent interface
-agent = CodeAgent(model=model)
-```
-
-### Secure Execution: Multiple Sandboxing Options
-
-**2025**: Choose the right sandbox for your security needs:
-
-```python
-from smolagents import CodeAgent, InferenceClientModel
-
-model = InferenceClientModel()
-
-# Option 1: Local Python (default - fastest, least secure)
-agent = CodeAgent(
-    model=model,
-    tools=[...],
-    # Runs in same Python process
-)
-
-# Option 2: Docker (isolated containers)
-agent = CodeAgent(
-    model=model,
-    tools=[...],
-    executor_type="docker",
-    timeout=30.0
-)
-# Each code execution runs in fresh Docker container
-# Full isolation, container discarded after execution
-
-# Option 3: E2B (cloud sandboxes)
-import os
-os.environ["E2B_API_KEY"] = "your_e2b_key"
-
-agent = CodeAgent(
-    model=model,
-    tools=[...],
-    executor_type="e2b"
-)
-# Executes in E2B cloud sandbox
-# Scalable, managed infrastructure
-
-# Option 4: Modal (serverless functions)
-agent = CodeAgent(
-    model=model,
-    tools=[...],
-    executor_type="modal"
-)
-# Runs as serverless function
-# Auto-scaling, pay-per-use
-
-# Option 5: Pyodide (WebAssembly - Python in browser)
-agent = CodeAgent(
-    model=model,
-    tools=[...],
-    executor_type="wasm"
-)
-# Runs Python in WebAssembly
-# Client-side execution, zero backend
-
-# Option 6: Blaxel (secure Python sandbox)
-agent = CodeAgent(
-    model=model,
-    tools=[...],
-    executor_type="blaxel"
-)
-# Secure Python sandbox with restrictions
-# Blocks dangerous operations
-
-# Security comparison:
-# Local:   ★☆☆☆☆ | Speed: ★★★★★ | Cost: Free
-# Blaxel:  ★★★☆☆ | Speed: ★★★★☆ | Cost: Free
-# Docker:  ★★★★☆ | Speed: ★★★☆☆ | Cost: Low
-# E2B:     ★★★★★ | Speed: ★★★★☆ | Cost: $$$
-# Modal:   ★★★★★ | Speed: ★★★★★ | Cost: $$ (pay-per-use)
-# WASM:    ★★★★☆ | Speed: ★★★☆☆ | Cost: Free (client-side)
-```
-
-**Sandbox Selection Guide:**
-
-```python
-def choose_sandbox(requirements: dict) -> str:
-    """
-    Choose appropriate sandbox based on requirements
-    """
-    # Development - speed matters
-    if requirements.get("stage") == "development":
-        return "local"
-
-    # Production with untrusted code
-    if requirements.get("trust") == "untrusted":
-        return "e2b" if requirements.get("budget") == "high" else "docker"
-
-    # Client-side execution
-    if requirements.get("location") == "client":
-        return "wasm"
-
-    # Serverless/auto-scaling
-    if requirements.get("scale") == "auto":
-        return "modal"
-
-    # Default: Docker (good security/performance balance)
-    return "docker"
-
-# Example usage
-sandbox = choose_sandbox({
-    "stage": "production",
-    "trust": "untrusted",
-    "budget": "medium"
-})
-
-agent = CodeAgent(model=model, tools=[...], executor_type=sandbox)
-```
-
-### Hub Integration: Share & Collaborate
-
-**2025**: Native **Hugging Face Hub** integration for sharing tools and agents:
-
-```python
-from smolagents import CodeAgent, Tool, load_tool, push_to_hub
-
-# 1. Pull community tools from Hub
-weather_tool = load_tool("huggingface/weather-tool")
-finance_tool = load_tool("community/stock-analyzer")
-custom_tool = load_tool("your-org/proprietary-tool")
-
-agent = CodeAgent(
-    model=model,
-    tools=[weather_tool, finance_tool, custom_tool]
-)
-
-# 2. Create and share your own tools
-@tool
-def sentiment_analyzer(text: str) -> dict:
-    """Analyze sentiment of text using advanced NLP"""
-    # Your implementation
-    return {"sentiment": "positive", "confidence": 0.95}
-
-# Push tool to Hub
-push_to_hub(
-    sentiment_analyzer,
-    repo_id="your-username/sentiment-analyzer",
-    token="your_hf_token"
-)
-
-# Now anyone can use: load_tool("your-username/sentiment-analyzer")
-
-# 3. Share complete agent configurations
-agent = CodeAgent(
-    model=InferenceClientModel(),
-    tools=[weather_tool, finance_tool],
-    name="Financial Analyst Agent",
-    description="Expert agent for financial analysis"
-)
-
-# Push agent to Hub
-agent.push_to_hub(
-    repo_id="your-org/financial-analyst-agent",
-    token="your_hf_token"
-)
-
-# Others can pull your agent
-from smolagents import load_agent
-financial_agent = load_agent("your-org/financial-analyst-agent")
-result = financial_agent.run("Analyze AAPL stock performance")
-
-# 4. Hub features (2025):
-# - Version control for tools/agents
-# - Community ratings and reviews
-# - Usage analytics
-# - Private repositories for enterprise
-# - Automatic testing and validation
-# - Documentation generation
-# - Tool marketplace
-```
-
-### Multi-Modal Support: Beyond Text
-
-**2025**: Built-in support for **vision, video, and audio**:
-
-```python
-from smolagents import CodeAgent, InferenceClientModel
-
-# Vision-capable model
-model = InferenceClientModel(
-    model_id="OpenGVLab/InternVL2-8B"  # Vision model
-)
-
-agent = CodeAgent(model=model, tools=[])
-
-# 1. Image analysis
-result = agent.run(
-    "Describe this image",
-    image="https://example.com/photo.jpg"
-)
-# Or local file:
-result = agent.run(
-    "What objects are in this image?",
-    image="./local_image.png"
-)
-
-# 2. Video processing
-from smolagents.tools import VideoTranscriptionTool
-
-agent = CodeAgent(
-    model=model,
-    tools=[VideoTranscriptionTool()],
-    add_base_tools=True
-)
-
-result = agent.run(
-    "Summarize this video",
-    video="./presentation.mp4"
-)
-# Agent can:
-# - Extract frames
-# - Analyze visual content
-# - Transcribe audio
-# - Generate summary
-
-# 3. Audio processing
-from smolagents.tools import TranscriptionTool
-
-agent = CodeAgent(
-    model=model,
-    tools=[TranscriptionTool()],  # Whisper integration
-)
-
-result = agent.run(
-    "Transcribe and summarize this audio",
-    audio="./meeting_recording.wav"
-)
-# Uses Whisper for transcription
-# Then analyzes content
-
-# 4. Multi-modal combinations
-agent = CodeAgent(
-    model=model,
-    tools=[
-        TranscriptionTool(),
-        VideoTranscriptionTool(),
-        ImageAnalysisTool()
-    ]
-)
-
-result = agent.run("""
-Process this podcast:
-1. Transcribe audio (audio.mp3)
-2. Analyze thumbnail image (thumbnail.jpg)
-3. Extract key topics
-4. Create show notes
-""",
-    audio="./podcast.mp3",
-    image="./thumbnail.jpg"
-)
-
-# Agent writes code that processes multiple modalities:
-"""
-# Transcribe audio
-transcript = transcribe_audio("podcast.mp3")
-
-# Analyze thumbnail
-thumbnail_analysis = analyze_image("thumbnail.jpg")
-
-# Extract topics from transcript
-topics = extract_topics(transcript)
-
-# Combine for show notes
-show_notes = generate_notes(
-    transcript=transcript,
-    thumbnail=thumbnail_analysis,
-    topics=topics
-)
-
-final_answer = show_notes
-"""
-```
-
-### 30% Efficiency Gain: Measured Performance
-
-**2025**: Code-based approach **reduces LLM calls** for multi-step tasks:
-
-```python
-# Benchmark: Complex multi-step task
-task = """
-1. Search for top 5 tech companies
-2. Get stock price for each
-3. Calculate average
-4. Determine which are above/below average
-5. Search for news about outliers
-6. Generate investment report
-"""
-
-# Traditional JSON Agent (e.g., LangChain):
-# - Step 1: LLM call → search function call
-# - Step 2: LLM call → get_price function call (5 times)
-# - Step 3: LLM call → calculate function call
-# - Step 4: LLM call → compare function call
-# - Step 5: LLM call → search function call (for outliers)
-# - Step 6: LLM call → generate report
-# Total: ~8-10 LLM calls
-
-# SmolAgents CodeAgent:
-# - Single LLM call generates ALL logic as Python code
-# - Code executes all steps programmatically
-# Total: 1 LLM call + code execution
-
-# Measured results:
-# Task complexity | JSON Agent | CodeAgent | Improvement
-# Simple (1-2 steps) | 2 calls  | 1 call    | 50%
-# Medium (3-5 steps) | 5 calls  | 1.5 calls | 70%
-# Complex (6+ steps) | 10 calls | 2 calls   | 80%
-# Average:           |          |           | 30% fewer calls
-
-# Benefits:
-# - 30% fewer LLM calls = 30% lower cost
-# - Faster execution (fewer round trips)
-# - More reliable (less JSON parsing errors)
-# - More expressive (full Python, not just function calls)
-```
-
-### Complete 2025 Production Example
-
-```python
-from smolagents import CodeAgent, InferenceClientModel, LiteLLMModel
-from smolagents.tools import WebSearchTool, TranscriptionTool, load_tool
-
-def create_production_agent_2025():
-    """
-    Complete 2025 SmolAgents production setup:
-    - Multiple LLM provider support
-    - Secure sandboxed execution
-    - Hub-integrated tools
-    - Multi-modal capabilities
-    - Code-centric reasoning
-    """
-
-    # Choose model based on requirements
-    model = LiteLLMModel(
-        model_id="gpt-4o",  # Or claude-3-5-sonnet, gemini-2.0-flash, etc.
-    )
-
-    # Load tools from Hub + built-in
-    hub_tools = [
-        load_tool("huggingface/weather-tool"),
-        load_tool("community/stock-analyzer"),
-    ]
-
-    # Create agent with secure execution
-    agent = CodeAgent(
-        model=model,
-        tools=[
-            *hub_tools,
-            WebSearchTool(),
-            TranscriptionTool(),  # Multi-modal: audio
-        ],
-        add_base_tools=True,  # Python interpreter, etc.
-        executor_type="docker",  # Secure sandboxing
-        max_steps=15,
-        verbosity_level=1,
-        name="Production Assistant 2025",
-        description="Multi-modal AI agent with code-based reasoning"
-    )
-
-    return agent
-
-# Deploy
-prod_agent = create_production_agent_2025()
-
-# Handle text queries
-result = prod_agent.run("Analyze tech market trends and predict Q2 2025 growth")
-
-# Handle multi-modal queries
-result = prod_agent.run(
-    "Transcribe this earnings call and analyze sentiment",
-    audio="./earnings_call.mp3"
-)
-
-# Agent writes sophisticated Python code:
-"""
-# Transcribe audio
-transcript = transcribe_audio("earnings_call.mp3")
-
-# Search for company context
-company = extract_company_name(transcript)
-company_info = web_search(f"{company} financial performance")
-
-# Analyze sentiment in transcript
-sentiments = []
-for paragraph in split_transcript(transcript):
-    sentiment = analyze_sentiment(paragraph)
-    sentiments.append(sentiment)
-
-avg_sentiment = sum(sentiments) / len(sentiments)
-
-# Search for market reaction
-market_reaction = web_search(f"{company} stock reaction earnings")
-
-# Generate comprehensive report
-final_answer = f'''
-Earnings Call Analysis for {company}:
-- Transcript sentiment: {avg_sentiment:.2f} (0=negative, 1=positive)
-- Key topics: {extract_topics(transcript)}
-- Market reaction: {market_reaction}
-- Recommendation: {"BUY" if avg_sentiment > 0.6 else "HOLD"}
-'''
-"""
-
-# Result: Comprehensive analysis from code-based reasoning
-print(result)
-```
-
----
-
 ## Introduction & Philosophy
 
-### What is SmolAgents?
+### What is smolagents?
 
-SmolAgents is a lightweight Python framework for building AI agents that execute actions as Python code rather than generating JSON tool calls. This paradigm shift—from "agents that generate text about tools" to "agents that think in code"—represents a fundamental rethinking of how agentic systems should operate.
+An agent in smolagents is a loop: the model sees the task, the tool descriptions and the memory of previous steps; it produces an action; the action is executed; the observation is added to memory; repeat until the model calls `final_answer` or `max_steps` is reached.
 
-**Key Philosophy: Minimal Abstractions (~1,000 lines of core code)**
+The two agent classes differ only in what an action is:
 
-Rather than hiding complexity behind layers of abstraction, SmolAgents exposes the essential components you need to build intelligent systems. This design philosophy yields several immediate benefits:
+| | `CodeAgent` | `ToolCallingAgent` |
+|---|---|---|
+| Action | A Python snippet in `<code>...</code>` tags | A JSON tool call (native function calling) |
+| Several tools per step | Yes, in ordinary code | Yes, as parallel tool calls |
+| Loops, variables, maths | Yes | No (one call, one result) |
+| Execution | Python interpreter (local, restricted) or remote sandbox | Direct tool invocation |
+| Risk | The model's code runs; sandbox it in production | Only your tools run |
 
-- **Transparency**: You can read and understand the entire framework in a single sitting
-- **Debuggability**: Stack traces point directly to your code or the agent's reasoning
-- **Flexibility**: Extend or modify behaviour without fighting framework constraints
-- **Performance**: No unnecessary indirection between your code and the LLM's reasoning
+### Why "agents that think in code"?
 
-### Why "Agents That Think in Code"?
+Code is a better action language than JSON for multi-step work: tool outputs can be stored, filtered and passed to other tools without another model call, and models have seen a great deal of Python. The smolagents authors report that code actions need fewer steps than JSON actions on their benchmarks; the size of the saving depends on the task and model, so measure it on yours.
 
-Traditional agent frameworks operate on a generation → parsing loop:
-
+```python
+# What a CodeAgent step might look like (written by the model):
+prices = {}
+for city in ["Paris", "London", "Tokyo"]:
+    prices[city] = get_hotel_price(city=city, nights=3)
+cheapest = min(prices, key=prices.get)
+final_answer(f"{cheapest} is cheapest at {prices[cheapest]} EUR")
 ```
-LLM generates → Framework parses JSON/function calls → Tools execute → LLM reasons about results
-```
-
-This approach has inherent limitations:
-
-1. **Parsing Fragility**: JSON generation is error-prone; malformed calls crash the agent
-2. **Limited Expressivity**: Agents can only express tool calls, not complex logic
-3. **Poor Composability**: Chaining tool outputs requires intermediate LLM calls
-4. **Inefficiency**: ~30% more LLM calls needed for multi-step reasoning
-
-SmolAgents inverts this model:
-
-```
-LLM generates Python code → Agent executes directly → Results available immediately → LLM can reason naturally
-```
-
-Benefits of code-based reasoning:
-
-- **Full Language Expressivity**: Loops, conditionals, variable assignment, function definitions
-- **Natural Composability**: Tools can be used as building blocks in code
-- **Efficiency**: Complex multi-step tasks in fewer LLM iterations
-- **Self-Correction**: Agent can write code to verify and correct its own work
 
 ---
 
@@ -713,221 +67,113 @@ Benefits of code-based reasoning:
 
 ### Basic Installation
 
-Requires **Python 3.10+**.
+Requires Python 3.10 or later.
 
 ```bash
-# Core installation with default toolkit
-pip install 'smolagents[toolkit]'
+pip install smolagents                              # core
+pip install "smolagents[toolkit]"                   # + web search and webpage tools
+pip install "smolagents[litellm]"                   # + LiteLLMModel (OpenAI, Anthropic, Gemini, Ollama, ...)
+pip install "smolagents[openai]"                    # + OpenAIModel
+pip install "smolagents[transformers]"              # + TransformersModel for local inference
+pip install "smolagents[mcp]"                       # + MCP client
+pip install "smolagents[docker]"                    # or [e2b], [modal], [blaxel]: remote executors
+pip install "smolagents[telemetry]"                 # + OpenTelemetry / OpenInference instrumentation
+pip install "smolagents[gradio]"                    # + GradioUI
 
-# With LiteLLM for 100+ LLM providers
-pip install 'smolagents[toolkit]' litellm
-
-# With local model support via Transformers
-pip install 'smolagents[toolkit]' transformers torch
-
-# With all features (recommended for development)
-pip install 'smolagents[toolkit,e2b,modal]' litellm transformers
-
-# Bleeding edge from GitHub
-pip install git+https://github.com/huggingface/smolagents.git
+# Pinned to the version this guide was verified against
+pip install "smolagents[toolkit,litellm]==%%version=smolagents%%"
 ```
+
+Other extras: `audio`, `vision`, `vllm`, `mlx-lm`, `bedrock`, `all`.
 
 ### Verifying Installation
 
 ```python
 import smolagents
-print(f"SmolAgents version: {smolagents.__version__}")
+from smolagents import CodeAgent, ToolCallingAgent, InferenceClientModel, LiteLLMModel, tool
 
-# Check available components
-from smolagents import CodeAgent, ToolCallingAgent, Tool
-from smolagents.models import (
-    InferenceClientModel,
-    LiteLLMModel,
-    TransformersModel
-)
-print("✓ All core components available")
-
-# Verify toolkit
-from smolagents.tools import WebSearchTool, PythonInterpreterTool
-print("✓ Default tools available")
+print(f"smolagents version: {smolagents.__version__}")
 ```
 
 ### Environment Configuration
 
+Models read credentials from the usual environment variables; keep them in a `.env` file loaded at start-up, never in code.
+
+```bash
+# .env
+HF_TOKEN=hf_...              # InferenceClientModel (Hugging Face Inference Providers)
+OPENAI_API_KEY=sk-...        # OpenAIModel / LiteLLMModel with OpenAI models
+ANTHROPIC_API_KEY=...        # LiteLLMModel with anthropic/... models
+E2B_API_KEY=...              # executor_type="e2b"
+```
+
 ```python
-# .env file configuration
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
-
-# For Hugging Face Inference
-os.environ["HF_TOKEN"] = "your_hf_token"
-os.environ["HF_INFERENCE_ENDPOINT"] = "https://api-inference.huggingface.co"
-
-# For OpenAI (via LiteLLM)
-os.environ["OPENAI_API_KEY"] = "your_openai_key"
-
-# For Anthropic
-os.environ["ANTHROPIC_API_KEY"] = "your_anthropic_key"
-
-# For Together.ai
-os.environ["TOGETHER_API_KEY"] = "your_together_key"
-
-# For E2B sandbox (optional)
-os.environ["E2B_API_KEY"] = "your_e2b_key"
 ```
 
 ### Docker Setup (Optional)
 
-For isolated execution environments:
-
 ```dockerfile
-# Dockerfile for SmolAgents application
-FROM python:3.10-slim
-
+FROM python:3.12-slim
 WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements
 COPY requirements.txt .
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
+RUN pip install --no-cache-dir -r requirements.txt   # smolagents[toolkit,litellm]==%%version=smolagents%%
 COPY . .
-
-# Run the agent
 CMD ["python", "agent_app.py"]
 ```
 
-```yaml
-# docker-compose.yml for multi-service setup
-version: '3.8'
-services:
-  agent:
-    build: .
-    environment:
-      HF_TOKEN: ${HF_TOKEN}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-    volumes:
-      - ./data:/app/data
-    ports:
-      - "7860:7860"
-```
+Running your *application* in Docker is different from running the *agent's generated code* in Docker; for the latter see [executor_type="docker"](#sandboxes-hub-sharing-and-multimodal-input).
 
 ---
 
 ## Core Concepts & Architecture
 
-### The Four Pillars of SmolAgents
-
-SmolAgents is built on four interconnected architectural pillars:
+### The Four Pillars of smolagents
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   Agent Framework                        │
-├─────────────────────────────────────────────────────────┤
-│  ┌────────────────┐  ┌──────────────────┐              │
-│  │   CodeAgent    │  │ ToolCallingAgent │              │
-│  │   (writes code)│  │ (JSON tool calls)│              │
-│  └────────────────┘  └──────────────────┘              │
-├─────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐   │
-│  │         Tool System (Core Abstraction)          │   │
-│  │  - @tool decorator                             │   │
-│  │  - Tool subclass                               │   │
-│  │  - MCP server integration                      │   │
-│  │  - Hub Spaces integration                      │   │
-│  └─────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐   │
-│  │         Model Layer (LLM Abstraction)           │   │
-│  │  - InferenceClientModel (HF)                   │   │
-│  │  - LiteLLMModel (100+ providers)               │   │
-│  │  - TransformersModel (local)                   │   │
-│  │  - Custom models                               │   │
-│  └─────────────────────────────────────────────────┘   │
-├─────────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐   │
-│  │    Execution & Persistence Layer                │   │
-│  │  - Local Python execution                      │   │
-│  │  - Docker sandboxing                           │   │
-│  │  - E2B cloud sandboxing                        │   │
-│  │  - Memory & state management                   │   │
-│  │  - Hub integration                             │   │
-│  └─────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│ Agents          CodeAgent · ToolCallingAgent              │
+│                 (both subclass MultiStepAgent)            │
+├───────────────────────────────────────────────────────────┤
+│ Tools           @tool · Tool subclasses · ToolCollection  │
+│                 MCPClient · Tool.from_space · load_tool   │
+├───────────────────────────────────────────────────────────┤
+│ Models          InferenceClientModel · LiteLLMModel ·     │
+│                 OpenAIModel · AzureOpenAIModel ·          │
+│                 AmazonBedrockModel · TransformersModel ·  │
+│                 VLLMModel · MLXModel · custom Model       │
+├───────────────────────────────────────────────────────────┤
+│ Execution &     LocalPythonExecutor (default) ·           │
+│ memory          Docker · E2B · Modal · Blaxel executors · │
+│                 AgentMemory (TaskStep, PlanningStep,      │
+│                 ActionStep, FinalAnswerStep)              │
+└───────────────────────────────────────────────────────────┘
 ```
 
 ### Agent Execution Flow
 
-The lifecycle of an agent execution encompasses these stages:
-
-```python
-# Stage 1: Initialisation
-agent = CodeAgent(tools=[...], model=model)
-
-# Stage 2: Planning & Reasoning
-# LLM receives: task description + tool descriptions + system prompt
-
-# Stage 3: Code Generation
-# LLM generates: Python code that uses available tools
-
-# Stage 4: Execution
-# Agent executes: the generated code in sandboxed environment
-
-# Stage 5: Observation
-# Agent captures: execution results, errors, and return values
-
-# Stage 6: Reflection & Iteration
-# LLM reasons: about results and may iterate with new code
-
-# Stage 7: Finalisation
-# Agent returns: final answer to user
-```
+1. `agent.run(task)` resets memory (unless `reset=False`) and records a `TaskStep`.
+2. Every `planning_interval` steps (if set), the model writes or updates a plan (`PlanningStep`).
+3. Each step, memory is rendered into chat messages and sent to the model.
+4. **CodeAgent** parses the code block and runs it in the executor; **ToolCallingAgent** runs the requested tool calls (in parallel, up to `max_tool_threads`).
+5. Printed output, tool results and errors become the step's observations (`ActionStep`).
+6. When the code calls `final_answer(...)` (or the model calls the `final_answer` tool), any `final_answer_checks` run; if they pass, the run ends with a `FinalAnswerStep`.
+7. If `max_steps` is reached, the model is asked for a best-effort final answer from memory.
 
 ### Core Data Structures
 
-```python
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+These are real classes exported by `smolagents`:
 
-@dataclass
-class ToolCall:
-    """Represents a single tool invocation"""
-    tool_name: str
-    arguments: Dict[str, Any]
-    timestamp: float
-
-@dataclass
-class AgentStep:
-    """One step in the agent's execution"""
-    step_number: int
-    code_action: str  # Python code generated
-    observations: str  # Output of execution
-    tool_calls: List[ToolCall]
-    success: bool
-    error: Optional[str] = None
-
-@dataclass
-class AgentRunResult:
-    """Complete result of agent execution"""
-    output: Any
-    steps: List[AgentStep]
-    total_steps: int
-    success: bool
-    token_usage: Dict[str, int]  # {'input_tokens': N, 'output_tokens': M}
-    execution_time: float
-    errors: List[str] = None
-```
+| Class | Key fields |
+|-------|-----------|
+| `RunResult` (from `run(..., return_full_result=True)`) | `output`, `state` (`"success"` or `"max_steps_error"`), `steps`, `token_usage`, `timing` |
+| `ActionStep` | `step_number`, `model_output`, `code_action`, `tool_calls`, `observations`, `action_output`, `error`, `token_usage`, `timing`, `is_final_answer` |
+| `PlanningStep` | `plan`, `token_usage`, `timing` |
+| `FinalAnswerStep` | `output` |
+| `TokenUsage` | `input_tokens`, `output_tokens`, `total_tokens` |
+| `Timing` | `start_time`, `end_time`, `duration` |
 
 ---
 
@@ -935,314 +181,129 @@ class AgentRunResult:
 
 ### Understanding Model Abstraction
 
-SmolAgents abstracts away the differences between 100+ LLM providers through a unified interface. The core model abstraction is elegant and minimal:
-
-```python
-from abc import ABC, abstractmethod
-from typing import Dict, List, Any
-
-class Model(ABC):
-    """Abstract base class for all models in SmolAgents"""
-    
-    @abstractmethod
-    def generate_text(
-        self,
-        prompt: str,
-        system_prompt: str = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        **kwargs
-    ) -> str:
-        """Generate text from prompt"""
-        pass
-    
-    @property
-    @abstractmethod
-    def supports_vision(self) -> bool:
-        """Does this model support vision inputs?"""
-        pass
-```
+Every model is a subclass of `smolagents.Model` implementing `generate(messages, stop_sequences=None, response_format=None, tools_to_call_from=None, **kwargs) -> ChatMessage`. Extra keyword arguments given to a model's constructor (temperature, max_tokens and so on) are passed through to the provider on every call.
 
 ### InferenceClientModel: Hugging Face Native
 
-The default model implementation uses Hugging Face's Inference API:
+Uses `huggingface_hub.InferenceClient`, so it can reach Hugging Face Inference Providers and dedicated endpoints.
 
 ```python
 import os
-from smolagents import CodeAgent, InferenceClientModel
+from smolagents import InferenceClientModel
 
-# Minimal configuration (uses HF defaults)
-model = InferenceClientModel()
+model = InferenceClientModel()   # default model_id: Qwen/Qwen3-Next-80B-A3B-Thinking
 
-# With explicit model selection
-model = InferenceClientModel(
-    model_id="meta-llama/Llama-3.3-70B-Instruct"
-)
-
-# With provider selection (Together AI, Fireworks, etc.)
 model = InferenceClientModel(
     model_id="Qwen/Qwen2.5-Coder-32B-Instruct",
-    provider="together"  # Routes through Together API
-)
-
-# Full configuration example
-model = InferenceClientModel(
-    model_id="deepseek-ai/DeepSeek-R1",
-    provider="together",
+    provider="together",           # route through a specific inference provider
     token=os.environ.get("HF_TOKEN"),
     timeout=120,
+    temperature=0.2,               # passed through to the provider
 )
 
-# Create agent with InferenceClient model
-agent = CodeAgent(model=model)
-result = agent.run("What is 2 + 2?")
-print(result)  # Output: 4
+# A dedicated Inference Endpoint or any TGI/OpenAI-compatible URL
+endpoint_model = InferenceClientModel(base_url="https://my-endpoint.endpoints.huggingface.cloud")
 ```
 
-**v1.24.0 Note: `HfApiModel` has been removed.** It raises `ImportError` in v1.24.0. Use `InferenceClientModel` for all code:
-
-```python
-# CURRENT: Use InferenceClientModel
-from smolagents import InferenceClientModel, CodeAgent
-
-model = InferenceClientModel(model_id="Qwen/Qwen2.5-72B-Instruct")
-agent = CodeAgent(tools=[], model=model)
-
-# REMOVED in v1.24.0 — raises ImportError:
-# from smolagents import HfApiModel  # ImportError: cannot import name 'HfApiModel'
-```
-
-**Recommended Models for Different Use Cases:**
-
-```python
-# For coding tasks (best for agents)
-coding_models = [
-    "Qwen/Qwen2.5-Coder-32B-Instruct",
-    "deepseek-ai/DeepSeek-R1",
-    "meta-llama/Llama-3.3-70B-Instruct",
-    "NousResearch/Nous-Hermes-2-Mixtral-8x7B-DPO"
-]
-
-# For reasoning (DeepSeek R1 excels here)
-reasoning_models = [
-    "deepseek-ai/DeepSeek-R1",
-    "meta-llama/Llama-3.3-70B-Instruct"
-]
-
-# Lightweight models (for constrained environments)
-lightweight_models = [
-    "meta-llama/Llama-2-7B-chat-hf",
-    "mistralai/Mistral-7B-Instruct-v0.2"
-]
-
-# Multi-modal models (with vision)
-multimodal_models = [
-    "llava-hf/llava-1.5-7b-hf",
-    "OpenGVLab/InternVL2-8B"
-]
-```
+`HfApiModel`, the old name for this class, no longer exists: it was renamed to `InferenceClientModel` in 1.14.0 and the deprecated alias was removed in 1.19.0. Agents saved with the old class name are mapped to `InferenceClientModel` automatically when loaded with `from_folder` or `from_hub` (since 1.24.0).
 
 ### LiteLLMModel: Universal Provider Support
 
-For accessing 100+ LLM providers through a unified interface:
+```python
+import os
+from smolagents import LiteLLMModel
+
+openai_model = LiteLLMModel(model_id="gpt-5-mini")
+anthropic_model = LiteLLMModel(model_id="anthropic/claude-sonnet-4-5", temperature=0.2)
+gemini_model = LiteLLMModel(model_id="gemini/gemini-2.5-flash")
+ollama_model = LiteLLMModel(model_id="ollama_chat/qwen2.5-coder:14b", api_base="http://localhost:11434", num_ctx=8192)
+azure_model = LiteLLMModel(
+    model_id="azure/my-deployment",
+    api_base="https://my-resource.openai.azure.com/",
+    api_key=os.environ.get("AZURE_OPENAI_API_KEY"),
+    api_version="2024-10-21",
+)
+```
+
+Model names change faster than this guide; use whatever your provider currently recommends. `LiteLLMRouterModel` wraps LiteLLM's router for load-balancing and fallback across deployments.
+
+### OpenAIModel and other API models
+
+`OpenAIModel` talks to any OpenAI-compatible endpoint (OpenAI, vLLM, LM Studio, many gateways) without LiteLLM:
 
 ```python
-from smolagents import CodeAgent, LiteLLMModel
+from smolagents import OpenAIModel, AzureOpenAIModel, AmazonBedrockModel
 
-# OpenAI models
-model = LiteLLMModel(
-    model_id="gpt-4o",
-    api_key=os.environ["OPENAI_API_KEY"],
-    temperature=0.7,
-    max_tokens=4096
-)
-
-# Anthropic Claude
-model = LiteLLMModel(
-    model_id="claude-3-5-sonnet-20241022",
-    api_key=os.environ["ANTHROPIC_API_KEY"]
-)
-
-# Google Gemini
-model = LiteLLMModel(
-    model_id="gemini-2.0-flash",
-    api_key=os.environ["GOOGLE_API_KEY"]
-)
-
-# Groq (ultra-fast inference)
-model = LiteLLMModel(
-    model_id="groq/llama-3.3-70b-versatile",
-    api_key=os.environ["GROQ_API_KEY"]
-)
-
-# Azure OpenAI
-model = LiteLLMModel(
-    model_id="azure/my-deployment",
-    api_base="https://myendpoint.openai.azure.com/",
-    api_key=os.environ["AZURE_OPENAI_API_KEY"],
-    api_version="2024-08-01-preview"
-)
-
-# Mixed usage: switch providers seamlessly
-def get_model_for_task(task_type: str):
-    if task_type == "coding":
-        return LiteLLMModel(model_id="gpt-4o")
-    elif task_type == "reasoning":
-        return LiteLLMModel(model_id="claude-3-5-sonnet-20241022")
-    elif task_type == "speed":
-        return LiteLLMModel(model_id="groq/llama-3.3-70b-versatile")
-    else:
-        return InferenceClientModel()
-
-# Use it
-agent = CodeAgent(model=get_model_for_task("coding"))
+model = OpenAIModel(model_id="gpt-5-mini")
+local = OpenAIModel(model_id="Qwen/Qwen2.5-Coder-14B-Instruct", api_base="http://localhost:8000/v1", api_key="not-needed")
 ```
+
+`OpenAIServerModel` and `AzureOpenAIServerModel` remain as older aliases.
 
 ### TransformersModel: Local Inference
 
-For running models locally without external API calls:
-
 ```python
-from smolagents import CodeAgent, TransformersModel
-import torch
+from smolagents import TransformersModel
 
-# Basic local model
 model = TransformersModel(
-    model_id="Qwen/Qwen2.5-Coder-32B-Instruct"
+    model_id="Qwen/Qwen2.5-Coder-7B-Instruct",
+    device_map="auto",
+    torch_dtype="bfloat16",
+    max_new_tokens=2048,
+    model_kwargs={"load_in_4bit": True},   # forwarded to from_pretrained (needs bitsandbytes)
 )
-
-# With GPU optimizations
-model = TransformersModel(
-    model_id="mistralai/Mistral-7B-Instruct-v0.2",
-    device_map="auto",  # Automatic device placement
-    torch_dtype=torch.float16,  # Use half precision for memory savings
-    load_in_8bit=True,  # Or load_in_4bit=True for even more savings
-)
-
-# With quantization for mobile/edge
-model = TransformersModel(
-    model_id="meta-llama/Llama-2-7B-chat-hf",
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True,
-    max_new_tokens=2048
-)
-
-# With streaming for long outputs
-model = TransformersModel(
-    model_id="Qwen/Qwen2.5-Coder-32B-Instruct",
-    max_new_tokens=4096,
-    temperature=0.7,
-    top_p=0.95
-)
-
-agent = CodeAgent(model=model)
-result = agent.run("Write Python code to calculate Fibonacci numbers")
 ```
+
+For high-throughput local serving prefer `VLLMModel`; on Apple silicon, `MLXModel`.
 
 ### Custom Model Implementation
 
-For integrating proprietary or custom models:
+Subclass `Model` and implement `generate`, returning a `ChatMessage`:
 
 ```python
-from smolagents import Model
-from typing import Optional, List
+import requests
 
-class CustomOllamaModel(Model):
-    """Custom integration with Ollama for local LLMs"""
-    
-    def __init__(self, model_id: str, base_url: str = "http://localhost:11434"):
-        self.model_id = model_id
+from smolagents import ChatMessage, Model
+from smolagents.models import MessageRole
+from smolagents.monitoring import TokenUsage
+
+
+class TinyOllamaModel(Model):
+    """Minimal Ollama /api/chat client (no tool-calling support)."""
+
+    def __init__(self, model_id: str, base_url: str = "http://localhost:11434", **kwargs):
+        super().__init__(model_id=model_id, **kwargs)
         self.base_url = base_url
-        self.supports_vision_flag = False
-    
-    def generate_text(
-        self,
-        prompt: str,
-        system_prompt: Optional[str] = None,
-        temperature: float = 0.7,
-        max_tokens: int = 4096,
-        **kwargs
-    ) -> str:
-        import requests
-        import json
-        
-        full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
-        
-        response = requests.post(
-            f"{self.base_url}/api/generate",
-            json={
-                "model": self.model_id,
-                "prompt": full_prompt,
-                "stream": False,
-                "temperature": temperature,
-                "num_predict": max_tokens
-            }
+
+    def generate(self, messages, stop_sequences=None, response_format=None, tools_to_call_from=None, **kwargs):
+        payload = {
+            "model": self.model_id,
+            "messages": [
+                {"role": str(m.role.value if hasattr(m.role, "value") else m.role),
+                 "content": m.content if isinstance(m.content, str)
+                 else "".join(part.get("text", "") for part in (m.content or []))}
+                for m in messages
+            ],
+            "stream": False,
+            "options": {"stop": stop_sequences or []},
+        }
+        data = requests.post(f"{self.base_url}/api/chat", json=payload, timeout=120).json()
+        return ChatMessage(
+            role=MessageRole.ASSISTANT,
+            content=data["message"]["content"],
+            token_usage=TokenUsage(data.get("prompt_eval_count", 0), data.get("eval_count", 0)),
         )
-        
-        result = response.json()
-        return result.get("response", "")
-    
-    @property
-    def supports_vision(self) -> bool:
-        return self.supports_vision_flag
-
-# Usage
-ollama_model = CustomOllamaModel(
-    model_id="llama2",
-    base_url="http://localhost:11434"
-)
-
-agent = CodeAgent(model=ollama_model)
-result = agent.run("Tell me about local LLM inference")
 ```
+
+In practice `LiteLLMModel(model_id="ollama_chat/...")` or `OpenAIModel(api_base=".../v1")` already covers Ollama; write a custom model only for in-house APIs.
 
 ### Model Selection Decision Tree
 
-```python
-def choose_model(requirements: Dict[str, Any]) -> Model:
-    """
-    Decision logic for choosing the right model configuration
-    
-    Args:
-        requirements: Dict with keys like 'budget', 'speed', 'quality', 'modality'
-    """
-    
-    # Speed-focused (inference time critical)
-    if requirements.get('speed') == 'critical':
-        if requirements.get('budget') == 'low':
-            return TransformersModel("mistralai/Mistral-7B-Instruct-v0.2")
-        else:
-            return LiteLLMModel("groq/llama-3.3-70b-versatile")
-    
-    # Quality-focused (best output)
-    elif requirements.get('quality') == 'critical':
-        return LiteLLMModel("gpt-4o")
-    
-    # Vision required
-    elif requirements.get('modality') == 'vision':
-        if requirements.get('budget') == 'low':
-            return TransformersModel("OpenGVLab/InternVL2-8B")
-        else:
-            return LiteLLMModel("gpt-4o")
-    
-    # Local/offline only
-    elif requirements.get('connectivity') == 'offline':
-        return TransformersModel("Qwen/Qwen2.5-Coder-32B-Instruct")
-    
-    # Default: balance of quality and cost
-    else:
-        return InferenceClientModel("meta-llama/Llama-3.3-70B-Instruct")
-
-# Example usage
-model = choose_model({
-    'budget': 'medium',
-    'speed': 'important',
-    'quality': 'important',
-    'modality': 'text'
-})
-agent = CodeAgent(model=model)
-```
+- **Exploring, free tier**: `InferenceClientModel()` with an `HF_TOKEN`.
+- **Hosted frontier models**: `LiteLLMModel` or `OpenAIModel`.
+- **Your own GPU**: `VLLMModel` (throughput) or `TransformersModel` (simplicity).
+- **Offline laptop**: `LiteLLMModel(model_id="ollama_chat/...")` or `MLXModel`.
+- **CodeAgent quality**: pick a model that is strong at writing Python; small models often produce malformed code blocks.
 
 ---
 
@@ -1250,244 +311,148 @@ agent = CodeAgent(model=model)
 
 ### Creating Your First CodeAgent
 
-The simplest possible agent:
+`tools` and `model` are both required (pass `tools=[]` for none).
 
 ```python
 from smolagents import CodeAgent, InferenceClientModel
 
-# Initialise model (uses Hugging Face defaults)
-model = InferenceClientModel()
-
-# Create agent
-agent = CodeAgent(model=model)
-
-# Run a task
-result = agent.run("What is the capital of France?")
-print(result)
-# Output: "The capital of France is Paris."
+agent = CodeAgent(tools=[], model=InferenceClientModel())
+result = agent.run("What is the 20th Fibonacci number?")
+print(result)   # 6765
 ```
-
-This minimal example demonstrates key concepts:
-
-1. **Model Creation**: Instantiate a model provider
-2. **Agent Construction**: Create agent with model
-3. **Task Execution**: Call `run()` with a natural language task
-4. **Result Retrieval**: Get structured output
 
 ### Adding Tools to Agents
 
-Tools are the primary way agents interact with the external world:
-
 ```python
-from smolagents import CodeAgent, InferenceClientModel, WebSearchTool, PythonInterpreterTool
+from smolagents import CodeAgent, InferenceClientModel, VisitWebpageTool, WebSearchTool
 
-# Create model
-model = InferenceClientModel()
-
-# Create agent with tools
 agent = CodeAgent(
-    tools=[WebSearchTool(), PythonInterpreterTool()],
-    model=model
+    tools=[WebSearchTool(), VisitWebpageTool()],     # needs smolagents[toolkit]
+    model=InferenceClientModel(),
 )
-
-# Now agent can search the web AND execute code
-result = agent.run(
-    "Find the population of Tokyo and calculate what 2% of that is"
-)
-print(result)
-# Agent will: search for Tokyo population, then calculate 2%
+print(agent.run("Find the population of Tokyo and calculate 2% of it."))
 ```
+
+`add_base_tools=True` adds the default toolbox instead: `web_search` and `visit_webpage` (and `python_interpreter` for a `ToolCallingAgent`; a `CodeAgent` already executes Python).
 
 ### Agent Initialisation Parameters
 
 ```python
-from smolagents import CodeAgent
-
-agent = CodeAgent(
-    # Required
-    model=model,  # LLM provider instance
-    tools=[tool1, tool2],  # List of Tool objects
-    
-    # Optional - Execution behaviour
-    max_steps=10,  # Maximum iterations before stopping
-    verbosity_level=1,  # 0=silent, 1=normal, 2=verbose
-    stream_outputs=False,  # Stream agent steps as they execute
-    
-    # Optional - System configuration
-    add_base_tools=True,  # Include WebSearch, PythonInterpreter, Transcription
-    planning_interval=3,  # Plan every N steps (for continuous re-planning)
-    
-    # Optional - Hub integration
-    name="my_agent",  # Agent display name
-    description="An agent that does X",  # Agent description for Hub
-    
-    # Optional - Code execution
-    executor_type="local",  # "local", "docker", "e2b", "modal", "wasm"
-    timeout=30.0,  # Execution timeout in seconds
-    
-    # Optional - Memory
-    memory_size=10,  # Number of previous interactions to remember
-)
-
-# Example with all parameters
 from smolagents import CodeAgent, InferenceClientModel
 
-model = InferenceClientModel(model_id="meta-llama/Llama-3.3-70B-Instruct")
 agent = CodeAgent(
-    model=model,
-    tools=[WebSearchTool()],
-    max_steps=15,
-    verbosity_level=2,
-    stream_outputs=True,
-    add_base_tools=True,
-    planning_interval=5,
-    name="research_assistant",
-    description="A research assistant for finding information",
-    executor_type="docker",
-    timeout=60.0
+    tools=[],                          # required
+    model=InferenceClientModel(),      # required
+    instructions="Answer in British English. Cite sources.",   # appended to the system prompt
+    max_steps=10,                      # default 20
+    planning_interval=3,               # write/update a plan every 3 steps
+    additional_authorized_imports=["pandas", "numpy"],          # imports the generated code may use
+    executor_type="local",             # "local", "docker", "e2b", "modal" or "blaxel"
+    executor_kwargs={"timeout_seconds": 60},   # passed to the executor
+    max_print_outputs_length=10_000,   # truncate long print() output
+    stream_outputs=False,              # stream model tokens while generating
+    verbosity_level=1,                 # LogLevel: 0 off, 1 info, 2 debug
+    name="research_assistant",         # needed only when used as a managed agent
+    description="Finds information on the web.",
+    final_answer_checks=[],            # validation functions, see below
+    step_callbacks=[],                 # called after each step
+    return_full_result=False,          # default for run()
 )
-
-result = agent.run("Find the latest news about artificial intelligence")
 ```
+
+`ToolCallingAgent` takes the same base parameters (minus the code-execution ones) plus `max_tool_threads`.
 
 ### The `run()` Method: Core Execution Interface
 
 ```python
-from smolagents import CodeAgent
-
-agent = CodeAgent(model=model, tools=[...])
-
-# Simplest usage: pass task as string
-result = agent.run("Your task here")
-print(result)  # Returns string answer
-
-# Get detailed execution information
-result = agent.run(
-    "Your task",
-    return_full_result=True  # Returns AgentRunResult object
+agent.run(
+    task="Your task",
+    stream=False,              # True returns a generator of steps and events
+    reset=True,                # False continues from the existing memory
+    images=None,               # list of PIL images for vision models
+    additional_args=None,      # dict of Python objects made available to the agent
+    max_steps=None,            # override for this run
+    return_full_result=None,   # True returns a RunResult
 )
-print(f"Steps taken: {len(result.steps)}")
-print(f"Input tokens: {result.token_usage['input_tokens']}")
-print(f"Output tokens: {result.token_usage['output_tokens']}")
-print(f"Execution time: {result.execution_time} seconds")
-print(f"Final answer: {result.output}")
+```
 
-# Stream execution in real-time
-for step in agent.run("Your task", stream=True):
-    if hasattr(step, 'code_action'):
-        print(f"Step {step.step_number}: {step.code_action}")
-    if hasattr(step, 'observations'):
-        print(f"Result: {step.observations}")
-    if hasattr(step, 'output'):
-        print(f"Final: {step.output}")
+Keeping context across turns:
 
-# Multiple sequential tasks with same agent
-agent = CodeAgent(model=model, tools=[...])
-result1 = agent.run("First task")
-result2 = agent.run("Second task related to result 1")  # Agent remembers context
+```python
+agent.run("My name is Alice and I live in Leeds.")
+print(agent.run("Where do I live?", reset=False))
+```
+
+Passing data without pasting it into the prompt:
+
+```python
+import pandas as pd
+
+df = pd.DataFrame({"month": ["Jan", "Feb"], "sales": [100, 150]})
+agent = CodeAgent(tools=[], model=InferenceClientModel(), additional_authorized_imports=["pandas"])
+agent.run("What is the month-on-month growth in `sales_df`?", additional_args={"sales_df": df})
 ```
 
 ### Understanding Agent Output
 
 ```python
-# Basic output
-result = agent.run("What is 2 + 2?")
-print(type(result))  # <class 'str'>
-print(result)  # "4"
-
-# Full result with metadata
 result = agent.run("Calculate 15 * 12", return_full_result=True)
-print(f"Type: {type(result)}")  # <class 'AgentRunResult'>
-print(f"Output: {result.output}")  # "180"
-print(f"Steps: {result.steps}")  # List of step objects
-print(f"Success: {result.success}")  # True/False
-print(f"Execution time: {result.execution_time}")  # 2.34 seconds
-print(f"Tokens used: {result.token_usage}")  # {'input_tokens': 243, 'output_tokens': 127}
+print(result.output)                  # 180
+print(result.state)                   # "success" or "max_steps_error"
+print(result.token_usage)             # TokenUsage(input_tokens=..., output_tokens=..., total_tokens=...)
+print(result.timing.duration)         # seconds
+print(len(result.steps))              # steps as dicts
+
+# After any run, the full memory is on the agent
+for step in agent.memory.steps:
+    print(type(step).__name__)
+agent.replay()                        # pretty-print the last run
 ```
 
 ### Streaming Outputs for Real-Time Visibility
 
-Streaming is essential for long-running tasks:
+`run(..., stream=True)` yields steps and events as they happen. With `stream_outputs=True` on the agent you also receive `ChatMessageStreamDelta` token chunks.
 
 ```python
-from smolagents import CodeAgent, InferenceClientModel
+from smolagents import ActionStep, ChatMessageStreamDelta, FinalAnswerStep, PlanningStep
 
-model = InferenceClientModel()
-agent = CodeAgent(
-    model=model,
-    tools=[WebSearchTool(), PythonInterpreterTool()],
-    stream_outputs=True
-)
+agent = CodeAgent(tools=[], model=InferenceClientModel(), stream_outputs=True)
 
-# Streaming is active during initialization
-# Now each run call will stream step-by-step
-
-# Without explicit streaming
-result = agent.run("Analyse this dataset and find patterns")
-# Output appears gradually as agent completes steps
-
-# With explicit streaming
-for step_update in agent.run(
-    "Process this complex query",
-    stream=True
-):
-    if isinstance(step_update, str):
-        print(f"[Step output] {step_update}")
-    else:
-        # Structured step update
-        print(f"[Step {step_update.step_number}]")
-        print(f"  Code: {step_update.code_action}")
-        print(f"  Result: {step_update.observations[:100]}...")
+for event in agent.run("Compute the sum of the first 100 primes.", stream=True):
+    if isinstance(event, ChatMessageStreamDelta):
+        print(event.content or "", end="", flush=True)
+    elif isinstance(event, ActionStep):
+        print(f"\n[step {event.step_number}] observations: {(event.observations or '')[:200]}")
+    elif isinstance(event, PlanningStep):
+        print(f"\n[plan]\n{event.plan}")
+    elif isinstance(event, FinalAnswerStep):
+        print(f"\n[final] {event.output}")
 ```
 
 ### Error Handling & Recovery
 
+Inside a run, errors (bad code, tool exceptions, parsing failures) are recorded in the step's `error` and shown to the model, which usually corrects itself on the next step. They surface to you in two ways:
+
+- `result.state == "max_steps_error"` when the agent ran out of steps (the output is then a best-effort answer).
+- Exceptions from the model call or your own callbacks propagate. The hierarchy is `AgentError` → `AgentExecutionError`, `AgentGenerationError`, `AgentParsingError`, `AgentMaxStepsError`, `AgentToolCallError`, `AgentToolExecutionError`.
+
 ```python
-from smolagents import CodeAgent
+import time
 
-agent = CodeAgent(model=model, tools=[...])
+from smolagents import AgentGenerationError
 
-# Explicit error handling
-try:
-    result = agent.run("Perform task that might fail")
-    print(f"Success: {result}")
-except ValueError as e:
-    print(f"Value error (likely model/tool configuration): {e}")
-except RuntimeError as e:
-    print(f"Runtime error (execution issue): {e}")
-except Exception as e:
-    print(f"Unexpected error: {e}")
 
-# Check result status
-result = agent.run(
-    "Risky operation",
-    return_full_result=True
-)
-
-if result.success:
-    print(f"Completed successfully: {result.output}")
-    print(f"Took {len(result.steps)} steps")
-else:
-    print(f"Failed after {len(result.steps)} steps")
-    if result.errors:
-        for error in result.errors:
-            print(f"  - {error}")
-
-# Implement retry logic
-def run_with_retry(agent, task, max_retries=3):
-    for attempt in range(max_retries):
+def run_with_retry(agent, task: str, attempts: int = 3):
+    for attempt in range(1, attempts + 1):
         try:
             result = agent.run(task, return_full_result=True)
-            if result.success:
+            if result.state == "success":
                 return result.output
-            else:
-                print(f"Attempt {attempt + 1} failed, retrying...")
-        except Exception as e:
-            print(f"Error on attempt {attempt + 1}: {e}")
-            if attempt == max_retries - 1:
-                raise
-
-final_result = run_with_retry(agent, "Complex data analysis task")
+            print(f"Attempt {attempt}: ran out of steps")
+        except AgentGenerationError as exc:          # provider/API failure
+            print(f"Attempt {attempt}: model error: {exc}")
+            time.sleep(2 ** attempt)
+    raise RuntimeError("Agent did not succeed")
 ```
 
 ---
@@ -1496,391 +461,150 @@ final_result = run_with_retry(agent, "Complex data analysis task")
 
 ### The Tool Abstraction
 
-Tools are the interfaces through which agents interact with external systems. SmolAgents provides two ways to define tools, each with different trade-offs:
+A tool has a `name`, a `description`, an `inputs` schema, an `output_type`, and a `forward()` method. The agent sees the name, description and schema; for a `CodeAgent` they are rendered as Python function signatures.
 
-```
-┌────────────────────────────────────────────┐
-│         Two Tool Definition Approaches      │
-├────────────────────────────────────────────┤
-│                                            │
-│  @tool decorator          Tool subclass    │
-│  ─────────────────        ────────────────  │
-│  • Simple functions       • Stateful tools │
-│  • Minimal boilerplate    • Complex logic  │
-│  • Fast to write          • Pre-processing │
-│  • Readable               • Resource mgmt  │
-│                                            │
-└────────────────────────────────────────────┘
-```
+Allowed types for inputs and outputs: `string`, `boolean`, `integer`, `number`, `image`, `audio`, `array`, `object`, `any`, `null`.
 
 ### @tool Decorator: Lightweight Tools
 
-The simplest way to create tools:
+The decorator builds the schema from type hints and a Google-style docstring. **Every argument must be documented in an `Args:` section**, or the decorator raises an error.
 
 ```python
-from smolagents import tool
+from smolagents import CodeAgent, InferenceClientModel, tool
+
 
 @tool
-def add(a: int, b: int) -> int:
-    """Add two numbers together.
-    
-    Args:
-        a: First number
-        b: Second number
-    
-    Returns:
-        Sum of a and b
-    """
-    return a + b
+def get_hotel_price(city: str, nights: int = 1) -> float:
+    """Return the cheapest hotel price for a stay.
 
-# Use in agent
-agent = CodeAgent(tools=[add], model=model)
-result = agent.run("Add 15 and 27")
-print(result)  # "42"
+    Args:
+        city: City name, e.g. "Paris".
+        nights: Number of nights.
+    """
+    return {"paris": 140.0, "london": 165.0}.get(city.lower(), 120.0) * nights
+
+
+agent = CodeAgent(tools=[get_hotel_price], model=InferenceClientModel())
+print(agent.run("Is three nights cheaper in Paris or London?"))
 ```
 
-**Why type hints and docstrings matter for LLM understanding:**
+Good tool hygiene:
 
-```python
-from smolagents import tool
-
-# ✓ GOOD: Clear types and comprehensive docstring
-@tool
-def search_database(
-    query: str,
-    limit: int = 10,
-    min_score: float = 0.5
-) -> list[dict]:
-    """
-    Search the customer database with semantic search.
-    
-    This tool uses embedding-based search to find customers matching the query.
-    Results are ranked by relevance score.
-    
-    Args:
-        query: The search query (e.g., 'premium customers')
-        limit: Maximum number of results to return
-        min_score: Minimum similarity score (0.0-1.0) for inclusion
-    
-    Returns:
-        List of customer dictionaries with 'name', 'email', 'score' keys
-    """
-    # Implementation
-    pass
-
-# ✗ POOR: Vague types and minimal documentation
-@tool
-def query(q):
-    """Search"""
-    pass
-```
-
-**Advanced @tool Patterns:**
-
-```python
-from smolagents import tool
-import requests
-from functools import lru_cache
-
-# Caching expensive operations
-@tool
-@lru_cache(maxsize=128)
-def get_stock_price(ticker: str) -> float:
-    """Get current stock price for ticker symbol.
-    
-    Args:
-        ticker: Stock ticker (e.g., 'AAPL', 'GOOGL')
-    
-    Returns:
-        Current price in USD
-    """
-    response = requests.get(f"https://api.example.com/price/{ticker}")
-    return response.json()['price']
-
-# With validation
-@tool
-def calculate_discount(original_price: float, discount_percent: int) -> float:
-    """Calculate discounted price.
-    
-    Args:
-        original_price: Original price in dollars
-        discount_percent: Discount percentage (0-100)
-    
-    Returns:
-        Final price after discount
-    """
-    if not 0 <= discount_percent <= 100:
-        raise ValueError(f"Discount must be 0-100, got {discount_percent}")
-    if original_price < 0:
-        raise ValueError(f"Price must be positive, got {original_price}")
-    return original_price * (1 - discount_percent / 100)
-
-# With async support
-@tool
-async def fetch_api(endpoint: str, timeout: int = 10) -> dict:
-    """Fetch data from API asynchronously.
-    
-    Args:
-        endpoint: Full API endpoint URL
-        timeout: Request timeout in seconds
-    
-    Returns:
-        Response JSON as dictionary
-    """
-    import aiohttp
-    async with aiohttp.ClientSession() as session:
-        async with session.get(endpoint, timeout=timeout) as resp:
-            return await resp.json()
-```
+- The description is the model's only documentation. Say what the tool returns and in what format.
+- Use precise types; `float` and `int` are not interchangeable in the schema.
+- Return plain data or short strings; huge outputs fill the context window.
+- Raise informative exceptions (`ValueError("Unknown city 'Pariss'; did you mean 'Paris'?")`); the message is shown to the model.
 
 ### Tool Subclass: Stateful Tools
 
-For complex tools requiring state management, inherit from `Tool`:
+Subclass `Tool` for tools that hold connections or configuration. Optional inputs must be marked `"nullable": True` and have a default in `forward`.
 
 ```python
+import sqlite3
+
 from smolagents import Tool
-from typing import Dict, Any, List
 
-class DatabaseQueryTool(Tool):
-    """Tool for executing SQL queries against a database"""
-    
-    # Tool metadata
-    name = "database_query"
-    description = "Execute SQL queries on the customer database. Returns rows as list of dictionaries."
-    
-    # Define input schema
+
+class SQLQueryTool(Tool):
+    name = "sql_query"
+    description = (
+        "Run a read-only SQL SELECT against the customers database. "
+        "Table: customers(id INTEGER, name TEXT, email TEXT). Returns a list of rows as dicts."
+    )
     inputs = {
-        "query": {
-            "type": "string",
-            "description": "Valid SQL SELECT query. Table available: customers (id, name, email, created_at)"
-        },
-        "timeout": {
-            "type": "integer",
-            "description": "Query timeout in seconds (default 30)"
-        }
+        "query": {"type": "string", "description": "A single SELECT statement."},
+        "limit": {"type": "integer", "description": "Maximum rows to return.", "nullable": True},
     }
-    
-    # Define output type
-    output_type = "list"
-    
-    def __init__(self, connection_string: str):
+    output_type = "array"
+
+    def __init__(self, path: str = ":memory:"):
         super().__init__()
-        self.connection_string = connection_string
-        self._connection = None
-    
-    @property
-    def connection(self):
-        """Lazy-load database connection"""
-        if self._connection is None:
-            import sqlite3
-            self._connection = sqlite3.connect(self.connection_string)
-        return self._connection
-    
-    def forward(self, query: str, timeout: int = 30) -> List[Dict[str, Any]]:
-        """Execute the query and return results"""
-        
-        # Validate query for safety
-        query_upper = query.upper().strip()
-        if not query_upper.startswith("SELECT"):
-            raise ValueError("Only SELECT queries allowed")
-        
-        try:
-            cursor = self.connection.cursor()
-            cursor.execute(f"PRAGMA query_only = ON")  # Enforce read-only
-            cursor.execute(query)
-            
-            # Convert results to list of dicts
-            columns = [description[0] for description in cursor.description]
-            rows = cursor.fetchall()
-            return [dict(zip(columns, row)) for row in rows]
-        
-        except Exception as e:
-            raise RuntimeError(f"Query failed: {e}")
+        self.path = path
+        self.conn = None
 
-# Usage
-db_tool = DatabaseQueryTool(":memory:")
-agent = CodeAgent(tools=[db_tool], model=model)
-result = agent.run("Find all customers with Gmail addresses")
-```
+    def setup(self):
+        # Called once, on first use
+        self.conn = sqlite3.connect(self.path, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("CREATE TABLE IF NOT EXISTS customers(id INTEGER, name TEXT, email TEXT)")
+        self.conn.execute("INSERT INTO customers VALUES (1, 'Ada', 'ada@gmail.com'), (2, 'Bo', 'bo@example.com')")
 
-**Another Example: File System Tool with Permissions**
+    def forward(self, query: str, limit: int | None = None):
+        if not query.lstrip().upper().startswith("SELECT"):
+            raise ValueError("Only SELECT statements are allowed.")
+        rows = self.conn.execute(query).fetchall()
+        rows = rows[:limit] if limit else rows
+        return [dict(r) for r in rows]
 
-```python
-from smolagents import Tool
-from pathlib import Path
-from typing import Optional
 
-class SecureFileReader(Tool):
-    """Read files safely with permission checks"""
-    
-    name = "read_file"
-    description = "Read the contents of a text file from the safe directory"
-    inputs = {
-        "filename": {
-            "type": "string",
-            "description": "Name of file to read (no path separators allowed)"
-        },
-        "max_lines": {
-            "type": "integer",
-            "description": "Maximum lines to return (default: all)"
-        }
-    }
-    output_type = "string"
-    
-    def __init__(self, safe_directory: str):
-        super().__init__()
-        self.safe_directory = Path(safe_directory).resolve()
-    
-    def forward(self, filename: str, max_lines: Optional[int] = None) -> str:
-        
-        # Security: prevent directory traversal
-        if "/" in filename or "\\" in filename or ".." in filename:
-            raise ValueError("Filename cannot contain path separators")
-        
-        # Build safe path
-        file_path = (self.safe_directory / filename).resolve()
-        
-        # Verify path is within safe directory
-        if not str(file_path).startswith(str(self.safe_directory)):
-            raise ValueError(f"Access denied: {filename} is outside safe directory")
-        
-        if not file_path.exists():
-            raise FileNotFoundError(f"File not found: {filename}")
-        
-        # Read file
-        with open(file_path, 'r') as f:
-            lines = f.readlines()
-            if max_lines:
-                lines = lines[:max_lines]
-            return "".join(lines)
-
-# Usage
-file_tool = SecureFileReader("/home/user/documents/safe")
-agent = CodeAgent(tools=[file_tool], model=model)
-result = agent.run("Read the README.md file and summarise it")
+agent = CodeAgent(tools=[SQLQueryTool()], model=InferenceClientModel())
 ```
 
 ### Default Toolbox: Built-in Tools
 
-SmolAgents includes powerful default tools:
+| Tool | Name seen by the model | Notes |
+|------|------------------------|-------|
+| `WebSearchTool(max_results=10, engine="duckduckgo")` | `web_search` | Engines: `duckduckgo`, `bing`, `exa` (Exa added in 1.26.0) |
+| `DuckDuckGoSearchTool` | `web_search` | Needs `ddgs` (in `[toolkit]`) |
+| `GoogleSearchTool(provider="serpapi")` | `web_search` | SerpAPI or Serper key |
+| `ApiWebSearchTool(endpoint=..., api_key=...)` | `web_search` | Any JSON search API you configure |
+| `VisitWebpageTool` | `visit_webpage` | Returns page as Markdown |
+| `WikipediaSearchTool` | `wikipedia_search` | Needs `wikipedia-api` |
+| `PythonInterpreterTool` | `python_interpreter` | For `ToolCallingAgent` |
+| `SpeechToTextTool` | `transcriber` | Whisper via Transformers (`[audio]`) |
+| `UserInputTool` | `user_input` | Asks the human a question |
+| `FinalAnswerTool` | `final_answer` | Added to every agent automatically |
+
+### Tools from the Hub, Spaces, LangChain and MCP
 
 ```python
-from smolagents import CodeAgent, InferenceClientModel
+from smolagents import Tool, ToolCollection, load_tool
 
-# Enable with add_base_tools=True (default)
-agent = CodeAgent(
-    model=InferenceClientModel(),
-    add_base_tools=True  # Includes all below
+# A tool someone pushed to the Hub (runs their code: inspect it first)
+image_gen = load_tool("your-username/text-to-image-tool", trust_remote_code=True)
+
+# A Gradio Space as a tool
+flux = Tool.from_space(
+    "black-forest-labs/FLUX.1-schnell",
+    name="image_generator",
+    description="Generate an image from a prompt",
 )
 
-# These tools are now available to the agent:
+# Every tool in a Hub collection
+collection = ToolCollection.from_hub("your-username/your-tool-collection-slug", trust_remote_code=True)
 
-# 1. WebSearchTool
-# Performs web searches via DuckDuckGo
-# Usage: result = web_search("latest AI news")
+# A LangChain tool
+# lc_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
 
-# 2. PythonInterpreterTool
-# Executes Python code in isolated interpreter
-# Usage: exec_python("import numpy; print(numpy.__version__)")
-
-# 3. TranscriptionTool (Whisper)
-# Transcribes audio files using Whisper-Turbo
-# Usage: transcribed = transcribe_audio("audio.wav")
-
-# Access individual tools
-from smolagents.tools import WebSearchTool, PythonInterpreterTool, TranscriptionTool
-
-agent = CodeAgent(
-    model=InferenceClientModel(),
-    tools=[
-        WebSearchTool(),
-        PythonInterpreterTool(),
-        TranscriptionTool()
-    ]
-)
-
-# Example task using multiple tools
-result = agent.run("""
-Find the current Bitcoin price online,
-then use Python to calculate what 10 BTC would be worth in Euros
-assuming 1 USD = 0.92 EUR
-""")
+# Share your own tool
+get_hotel_price.push_to_hub("your-username/hotel-price-tool")
 ```
+
+MCP servers (`pip install "smolagents[mcp]"`):
+
+```python
+from mcp import StdioServerParameters
+from smolagents import CodeAgent, InferenceClientModel, MCPClient
+
+server = StdioServerParameters(command="uvx", args=["mcp-server-fetch"])
+
+with MCPClient(server) as tools:          # also accepts {"url": ".../mcp", "transport": "streamable-http"}
+    agent = CodeAgent(tools=tools, model=InferenceClientModel())
+    agent.run("Fetch https://huggingface.co/blog and list the three newest post titles.")
+```
+
+`MCPClient(..., structured_output=True)` exposes MCP tools' output schemas to the agent.
+
+> **Compatibility note (checked %%versions-checked%%):** the `mcpadapt` 0.1.20 dependency imports `streamablehttp_client`, which the `mcp` 2.x SDK renamed. If `MCPClient` fails with `ImportError: cannot import name 'streamablehttp_client'`, install `"mcp<2"` alongside `smolagents[mcp]` until `mcpadapt` catches up.
 
 ### Tool Attributes & Schema
 
-Understanding tool attributes helps LLMs use tools correctly:
-
 ```python
-from smolagents import Tool
-import json
-
-class WeatherTool(Tool):
-    name = "get_weather"
-    description = """
-    Get weather information for a location.
-    Supports any city worldwide.
-    Returns temperature, conditions, humidity.
-    """
-    
-    inputs = {
-        "location": {
-            "type": "string",
-            "description": "City name or coordinates (e.g., 'Paris', 'Tokyo')"
-        },
-        "unit": {
-            "type": "string",
-            "enum": ["celsius", "fahrenheit"],
-            "description": "Temperature unit (default: celsius)"
-        },
-        "forecast_days": {
-            "type": "integer",
-            "description": "Number of forecast days (1-10, default: 1)"
-        }
-    }
-    
-    output_type = "string"
-    
-    output_schema = {
-        "type": "object",
-        "properties": {
-            "location": {"type": "string"},
-            "temperature": {"type": "number"},
-            "conditions": {"type": "string"},
-            "humidity": {"type": "integer"},
-            "wind_speed": {"type": "number"},
-            "forecast": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "date": {"type": "string"},
-                        "high": {"type": "number"},
-                        "low": {"type": "number"},
-                        "conditions": {"type": "string"}
-                    }
-                }
-            }
-        },
-        "required": ["location", "temperature", "conditions", "humidity"]
-    }
-    
-    def forward(self, location: str, unit: str = "celsius", forecast_days: int = 1) -> dict:
-        # Implementation
-        return {
-            "location": location,
-            "temperature": 22.5,
-            "conditions": "Partly cloudy",
-            "humidity": 65,
-            "wind_speed": 12.3,
-            "forecast": []
-        }
-
-# The LLM can understand and use this tool precisely
-tool = WeatherTool()
-print(f"Tool: {tool.name}")
-print(f"Inputs: {json.dumps(tool.inputs, indent=2)}")
-print(f"Output schema: {json.dumps(tool.output_schema, indent=2)}")
+print(get_hotel_price.name)          # get_hotel_price
+print(get_hotel_price.inputs)        # {'city': {'type': 'string', 'description': ...}, 'nights': {...}}
+print(get_hotel_price.output_type)   # number
+print(get_hotel_price.to_code_prompt())          # how a CodeAgent sees it
+print(get_hotel_price.to_tool_calling_prompt())  # how a ToolCallingAgent sees it
 ```
 
 ---
@@ -1889,261 +613,79 @@ print(f"Output schema: {json.dumps(tool.output_schema, indent=2)}")
 
 ### Understanding CodeAgent
 
-CodeAgent represents the revolutionary core of SmolAgents: instead of generating JSON function calls, the LLM writes and executes Python code.
-
-```python
-from smolagents import CodeAgent, InferenceClientModel, WebSearchTool
-
-model = InferenceClientModel()
-agent = CodeAgent(
-    model=model,
-    tools=[WebSearchTool()],
-    add_base_tools=True  # Includes Python execution
-)
-
-# What happens internally when you run:
-result = agent.run("Calculate how long it takes light to travel 1 million miles")
-
-# CodeAgent's internal process:
-# 1. Sends to LLM: "Here are tools: WebSearchTool, PythonInterpreterTool"
-# 2. LLM generates Python code like:
-#    speed_of_light = 186282  # miles per second
-#    distance = 1_000_000
-#    time_seconds = distance / speed_of_light
-#    answer = f"Light takes {time_seconds:.2f} seconds"
-# 3. Agent executes this code in sandboxed environment
-# 4. Code can call tools naturally: web_search(...), exec_python(...)
-# 5. Results are captured and returned
-
-# What makes this powerful:
-# ✓ Loops: for i in range(100): result = tool_call(i)
-# ✓ Conditionals: if condition: tool_a() else: tool_b()
-# ✓ Variables: x = tool_1(); y = tool_2(x); z = combine(x, y)
-# ✓ Functions: def helper(): return tool_call()
-# ✓ Error handling: try: tool() except: fallback()
-```
+Each step, the model writes a thought and a code block between `<code>` and `</code>` (configurable with `code_block_tags`, e.g. `"markdown"` for triple-backtick fences). The code runs in a persistent interpreter: variables survive between steps, `print()` output becomes the observation, and calling `final_answer(x)` ends the run with `x`.
 
 ### CodeAgent vs Traditional JSON Agents
 
-```python
-# Traditional JSON Agent
-{
-  "tool": "web_search",
-  "arguments": {"query": "leopard speed"}
-}
-# Then LLM receives result, generates another JSON call
-{
-  "tool": "calculator",
-  "arguments": {"operation": "multiply", "a": 120, "b": 3.5}
-}
-# Takes 2-3 LLM calls for one logical task
-
-# CodeAgent
-speed = 120  # from web search
-time = 3.5 / 60  # convert minutes to hours
-distance = speed * time
-# All logic in ONE code block, executed once
-```
-
-**Real Example: Multi-step Task**
+A JSON agent asking for three cities' weather needs three tool calls (possibly parallel) and another model call to compare them. A CodeAgent can do it in one step:
 
 ```python
-# Task: "How far can a cheetah run in 5 minutes at full speed?"
-
-# Traditional approach (multiple LLM calls needed):
-# Call 1: web_search("cheetah top speed")
-# LLM: "Got 120 km/h, now I need to calculate"
-# Call 2: calculator(multiply, 120, 5/60)
-# LLM: "Got distance, let me format answer"
-
-# CodeAgent approach (single LLM call + execution):
-agent.run("How far can a cheetah run in 5 minutes at full speed?")
-
-# LLM generates and agent executes:
-cheetah_speed_kmh = web_search("cheetah maximum running speed km/h")[0]
-# Result: 120
-time_minutes = 5
-time_hours = time_minutes / 60
-distance_km = float(cheetah_speed_kmh) * time_hours
-final_answer = f"A cheetah can run {distance_km} km in {time_minutes} minutes"
+temps = {c: get_temperature(city=c) for c in ["Paris", "Rome", "Oslo"]}
+warmest = max(temps, key=temps.get)
+final_answer(f"{warmest} ({temps[warmest]}°C)")
 ```
+
+The trade-off is safety: you are executing model-written code.
 
 ### Code Generation & Execution Flow
 
+The default `LocalPythonExecutor` is **not a sandbox**. It interprets the code's AST and blocks unlisted imports, dunder access and some dangerous builtins, which stops accidents, but it is not a security boundary. Treat it as a convenience for trusted, local use. For anything exposed to untrusted input, use a remote executor (see [Sandboxes](#sandboxes-hub-sharing-and-multimodal-input)).
+
 ```python
-from smolagents import CodeAgent
-import json
-
-# Let's trace what happens step-by-step
-agent = CodeAgent(model=model, tools=[WebSearchTool()], verbosity_level=2)
-
-# When you call:
-result = agent.run("Find the population of France and calculate 5% of it")
-
-# Internal flow:
-# STEP 1: Construct system prompt
-system_prompt = """
-You are a Python code assistant. You have access to these tools:
-- web_search(query: str) -> str
-  Searches the web and returns results
-
-Write Python code that uses these tools to solve the task.
-The code should be valid Python and can use loops, conditionals, variables, etc.
-After writing code, it will be executed automatically.
-"""
-
-# STEP 2: Send to LLM with task
-user_prompt = "Find the population of France and calculate 5% of it"
-
-# STEP 3: LLM generates code (actual example):
-generated_code = """
-# Find France's population
-france_pop_result = web_search("France population 2024")
-france_population = 67_970_000  # Extracted from search
-
-# Calculate 5%
-five_percent = france_population * 0.05
-
-# Format answer
-final_answer = f"France population: {france_population:,} people. 5% = {five_percent:,.0f} people"
-"""
-
-# STEP 4: Agent executes code in sandbox
-# Result: final_answer variable contains the answer
-
-# STEP 5: Return to user
-print(result)  # "France population: 67,970,000 people. 5% = 3,398,500 people"
+agent = CodeAgent(
+    tools=[],
+    model=InferenceClientModel(),
+    additional_authorized_imports=["numpy", "pandas", "requests"],   # "*" allows everything: avoid
+    executor_kwargs={"timeout_seconds": 30},                        # per-execution time limit (local executor)
+    max_print_outputs_length=5_000,
+)
 ```
 
 ### Advanced CodeAgent Patterns
 
-**Loop-based Agent Task:**
+**Planning.** `planning_interval=N` makes the agent write a plan before the first step and revise it every N steps. Useful for long tasks; costs an extra model call each time.
+
+**Final answer checks.** Each check receives the proposed answer and the agent's memory; return `True` to accept or raise/return `False` to send the agent back to work with the error message.
 
 ```python
-from smolagents import CodeAgent, InferenceClientModel, WebSearchTool
+def must_be_number(final_answer, memory, agent=None) -> bool:
+    float(final_answer)       # raises ValueError for non-numbers
+    return True
+
+agent = CodeAgent(tools=[], model=InferenceClientModel(), final_answer_checks=[must_be_number])
+```
+
+**Step callbacks.** Called after each step with `(memory_step, agent=...)`. Pass a list (all step types) or a dict keyed by step class.
+
+```python
+from smolagents import ActionStep, PlanningStep
+
+
+def log_action(step: ActionStep, agent=None):
+    print(f"step {step.step_number}: {step.token_usage}")
+
+
+def trim_old_images(step: ActionStep, agent=None):
+    # Keep memory small for vision agents: drop screenshots older than two steps
+    for old in agent.memory.steps:
+        if isinstance(old, ActionStep) and old.step_number <= step.step_number - 2:
+            old.observations_images = None
+
 
 agent = CodeAgent(
+    tools=[],
     model=InferenceClientModel(),
-    tools=[WebSearchTool(), PythonInterpreterTool()],
-    add_base_tools=True
+    step_callbacks={ActionStep: [log_action, trim_old_images], PlanningStep: lambda s, agent=None: print(s.plan)},
 )
-
-# CodeAgent can write loops - something JSON agents struggle with
-result = agent.run("""
-Search for the temperatures of these 5 cities: Paris, Tokyo, Sydney, 
-New York, and Dubai. Calculate and report the average temperature.
-""")
-
-# Agent likely generates:
-cities = ["Paris", "Tokyo", "Sydney", "New York", "Dubai"]
-temperatures = []
-for city in cities:
-    search_result = web_search(f"{city} current temperature")
-    # Parse temperature from search result
-    temp = extract_temp(search_result)
-    temperatures.append(temp)
-
-average = sum(temperatures) / len(temperatures)
-final_answer = f"Average temperature across 5 cities: {average:.1f}°C"
 ```
 
-**Conditional Logic:**
+**Custom prompts.** `agent.prompt_templates["system_prompt"]` holds the Jinja template; override it, or simply use `instructions=` for additions.
 
-```python
-agent.run("""
-Determine if the current Bitcoin price is above $50,000.
-If yes, search for latest bull market analysis.
-If no, search for recession indicators.
-Report your findings.
-""")
+**Interrupting.** `agent.interrupt()` from another thread stops the run after the current step.
 
-# Agent generates code like:
-btc_price = float(web_search("bitcoin price USD")[0])
+### When CodeAgent saves steps
 
-if btc_price > 50000:
-    analysis = web_search("bitcoin bull market 2024 analysis")
-    context = "BULLISH: Bitcoin above $50k"
-else:
-    analysis = web_search("cryptocurrency recession indicators 2024")
-    context = "BEARISH: Bitcoin below $50k"
-
-final_answer = f"{context}\n\n{analysis}"
-```
-
-**Function Definition & Reuse:**
-
-```python
-agent.run("""
-Create a helper that fetches climate data and calculates temperature anomalies.
-Use it to check 3 major cities against their historical averages.
-""")
-
-# Agent can define functions:
-def get_climate_anomaly(city):
-    current_temp = web_search(f"{city} current temperature")
-    historical_avg = web_search(f"{city} historical average temperature")
-    anomaly = float(current_temp) - float(historical_avg)
-    return anomaly
-
-# Use the function
-cities = ["London", "Tokyo", "New York"]
-results = {}
-for city in cities:
-    anomaly = get_climate_anomaly(city)
-    results[city] = anomaly
-
-final_answer = json.dumps(results, indent=2)
-```
-
-**Error Handling:**
-
-```python
-agent.run("""
-Try to fetch stock prices for these tickers: AAPL, INVALID_CODE, GOOGL.
-Skip any that fail and report results for valid ones.
-""")
-
-# Agent writes:
-tickers = ["AAPL", "INVALID_CODE", "GOOGL"]
-prices = {}
-
-for ticker in tickers:
-    try:
-        price = web_search(f"{ticker} stock price")
-        prices[ticker] = price
-    except Exception as e:
-        print(f"Skipped {ticker}: {e}")
-
-final_answer = f"Successfully retrieved prices: {prices}"
-```
-
-### Efficiency Gains with CodeAgent
-
-SmolAgents' documentation states that CodeAgent is **30% more efficient** for multi-step tasks because:
-
-```python
-# Task: Analyse company financials, calculate ratios, compare with competitors
-
-# JSON Agent Flow (5+ LLM calls):
-# Call 1: fetch_financials("Company A")
-# LLM thinks: "I got financials, now I need competitor info"
-# Call 2: fetch_financials("Competitor B")
-# LLM thinks: "I need to calculate ratios"
-# Call 3: calculate_ratio("debt_equity", CompanyA_data)
-# Call 4: calculate_ratio("debt_equity", CompanyB_data)
-# LLM thinks: "Now I need to compare"
-# Call 5: format_comparison(...)
-# Total: 5 LLM calls, 5 parse operations, longer latency
-
-# CodeAgent Flow (1 LLM call):
-# LLM generates and agent executes:
-company_a = fetch_financials("Company A")
-competitor_b = fetch_financials("Competitor B")
-ratio_a = (company_a['debt'] / company_a['equity'])
-ratio_b = (competitor_b['debt'] / competitor_b['equity'])
-comparison = f"Company A: {ratio_a}, Competitor: {ratio_b}"
-# Total: 1 LLM call, instant execution of all logic
-```
+Code actions help most when a task needs many tool calls whose results feed each other (aggregation, loops over items, arithmetic). For single-tool lookups the difference is negligible. Measure with `result.token_usage` and `len(result.steps)` on your own tasks before choosing.
 
 ---
 
@@ -2151,211 +693,112 @@ comparison = f"Company A: {ratio_a}, Competitor: {ratio_b}"
 
 ### Understanding ToolCallingAgent
 
-While CodeAgent is revolutionary for complex reasoning, ToolCallingAgent serves important use cases where traditional tool calling is preferred:
-
-```python
-from smolagents import ToolCallingAgent, InferenceClientModel
-
-model = InferenceClientModel()
-agent = ToolCallingAgent(
-    model=model,
-    tools=[WebSearchTool(), WeatherTool()],
-    max_steps=10
-)
-
-# ToolCallingAgent generates structured tool calls
-# Rather than writing Python code, it outputs:
-# {
-#   "tool": "web_search",
-#   "arguments": {"query": "weather Paris tomorrow"}
-# }
-```
+`ToolCallingAgent` uses the provider's native function calling. It never executes model-written code, so it needs no sandbox, and it works with models that are better at tool calling than at Python.
 
 ### When to Use ToolCallingAgent vs CodeAgent
 
-```python
-# Use CodeAgent when:
-# ✓ Multi-step logic with loops/conditionals
-# ✓ Need to combine results in complex ways
-# ✓ Performance matters (fewer LLM calls)
-# ✓ Natural composability important
-
-# Use ToolCallingAgent when:
-# ✓ Simple tool calling workflows
-# ✓ Limited complex logic needed
-# ✓ Working with strict OpenAI-compatible APIs
-# ✓ Consistency with existing systems important
-# ✓ Tools have side effects requiring strict ordering
-# ✓ Need compatibility with legacy systems
-```
+| Choose `ToolCallingAgent` when | Choose `CodeAgent` when |
+|---|---|
+| You cannot sandbox generated code | You can sandbox, or the input is trusted |
+| Each step is one or a few independent tool calls | Steps combine and transform tool outputs |
+| The model is weak at Python | The model is strong at Python |
+| You want strict schemas on every action | You want loops, maths and variables |
 
 ### ToolCallingAgent Implementation
 
-
 ```python
-from smolagents import ToolCallingAgent, Tool, InferenceClientModel
-from typing import Any
+from smolagents import LiteLLMModel, ToolCallingAgent, WebSearchTool, tool
 
-class PaymentTool(Tool):
-    """Process payments - needs strict ordering"""
-    name = "process_payment"
-    description = "Process a payment transaction"
-    inputs = {
-        "customer_id": {"type": "string"},
-        "amount": {"type": "number"},
-        "currency": {"type": "string"}
-    }
-    output_type = "string"
-    
-    def forward(self, customer_id: str, amount: float, currency: str) -> str:
-        # Side effect: charge customer
-        # MUST happen in correct order (verify → charge → confirm)
-        return f"Payment of {amount} {currency} processed for {customer_id}"
 
-class PaymentVerification(Tool):
-    name = "verify_customer"
-    description = "Verify customer exists and is in good standing"
-    inputs = {"customer_id": {"type": "string"}}
-    output_type = "string"
-    
-    def forward(self, customer_id: str) -> str:
-        # Check if customer exists
-        return f"Customer {customer_id} verified"
+@tool
+def convert_currency(amount: float, from_currency: str, to_currency: str) -> float:
+    """Convert an amount between currencies using a fixed demo rate table.
 
-# ToolCallingAgent ensures strict tool ordering
+    Args:
+        amount: The amount to convert.
+        from_currency: ISO code, e.g. "USD".
+        to_currency: ISO code, e.g. "EUR".
+    """
+    rates = {("USD", "EUR"): 0.92, ("EUR", "USD"): 1.09}
+    return round(amount * rates[(from_currency.upper(), to_currency.upper())], 2)
+
+
 agent = ToolCallingAgent(
-    model=InferenceClientModel(),
-    tools=[PaymentVerification(), PaymentTool()],
-    max_steps=5
+    tools=[WebSearchTool(), convert_currency],
+    model=LiteLLMModel(model_id="gpt-5-mini"),
+    max_tool_threads=4,        # parallel tool calls within a step
+    max_steps=8,
 )
-
-# For payment processing, ToolCallingAgent better ensures:
-# Step 1: Verify customer ← happens first
-# Step 2: Process payment ← happens second
-result = agent.run("Process $100 payment for customer 12345")
+print(agent.run("How much is 250 USD in EUR?"))
 ```
-
 
 ### ToolCallingAgent with Specialized Models
 
-```python
-from smolagents import ToolCallingAgent, LiteLLMModel
-
-# Some models are particularly good at structured output
-agent = ToolCallingAgent(
-    model=LiteLLMModel(
-        model_id="gpt-4o",  # Excellent at JSON tool calling
-    ),
-    tools=[...]
-)
-
-# Or with Claude (also excellent at structured output)
-agent = ToolCallingAgent(
-    model=LiteLLMModel(
-        model_id="claude-3-5-sonnet-20241022"
-    ),
-    tools=[...]
-)
-```
+Any model that supports function calling works. For open models via Inference Providers, choose one whose provider supports tools, for example `InferenceClientModel(model_id="Qwen/Qwen2.5-72B-Instruct", provider="together")`. If a model returns tool calls as text rather than structured calls, smolagents attempts to parse them, but a model with native tool calling is far more reliable.
 
 ---
 
 ## Multi-Agent Systems & Orchestration
 
-[Document continues with similar detailed coverage of remaining topics...]
-
 ### Managed Agents for Hierarchical Systems
 
+Any agent with a `name` and `description` can be given to another agent through `managed_agents`. The manager calls it like a tool, passing a `task` string (and optionally `additional_args`); the managed agent's final answer comes back as the result, together with a summary of its work if `provide_run_summary=True`.
+
 ```python
-from smolagents import CodeAgent, InferenceClientModel
+from smolagents import CodeAgent, InferenceClientModel, ToolCallingAgent, VisitWebpageTool, WebSearchTool
 
-# Create specialist agents
-research_agent = CodeAgent(
-    model=InferenceClientModel(),
-    tools=[WebSearchTool()],
-    name="researcher"
+model = InferenceClientModel()
+
+web_agent = ToolCallingAgent(
+    tools=[WebSearchTool(), VisitWebpageTool()],
+    model=model,
+    max_steps=10,
+    name="web_researcher",
+    description="Searches the web and reads pages. Give it a precise research question.",
 )
 
-analysis_agent = CodeAgent(
-    model=InferenceClientModel(),
-    tools=[PythonInterpreterTool()],
-    name="analyst"
+manager = CodeAgent(
+    tools=[],
+    model=model,
+    managed_agents=[web_agent],
+    additional_authorized_imports=["statistics"],
+    planning_interval=4,
 )
 
-writing_agent = CodeAgent(
-    model=InferenceClientModel(),
-    tools=[],  # No tools, focuses on composition
-    name="writer"
-)
-
-# Create manager that delegates
-manager_agent = CodeAgent(
-    model=InferenceClientModel(),
-    managed_agents=[research_agent, analysis_agent, writing_agent],
-    name="project_manager"
-)
-
-# Manager delegates tasks
-result = manager_agent.run("""
-Create a comprehensive market analysis:
-1. Research current AI market trends
-2. Analyse growth projections
-3. Write an executive summary
-""")
+print(manager.run("Find the populations of the five largest EU cities and compute their mean."))
 ```
+
+Names must be valid Python identifiers (no spaces); a `CodeAgent` manager calls `web_researcher(task="...")` in its code.
 
 ### Agent Collaboration Patterns
 
+**Sequential hand-off** in plain Python:
+
 ```python
-from smolagents import CodeAgent
+researcher = CodeAgent(tools=[WebSearchTool()], model=model)
+writer = CodeAgent(tools=[], model=model)
 
-# Pattern: Sequential Collaboration
-def sequential_workflow(task_description):
-    agent1 = CodeAgent(model=model, tools=[WebSearchTool()])
-    result1 = agent1.run(f"First, research: {task_description}")
-    
-    agent2 = CodeAgent(model=model, tools=[PythonInterpreterTool()])
-    result2 = agent2.run(f"Analyse these findings: {result1}")
-    
-    agent3 = CodeAgent(model=model, tools=[])
-    result3 = agent3.run(f"Summarise: {result2}")
-    
-    return result3
-
-# Pattern: Parallel Processing
-def parallel_workflow(queries):
-    from concurrent.futures import ThreadPoolExecutor
-    
-    agent = CodeAgent(model=model, tools=[WebSearchTool()])
-    
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = executor.map(agent.run, queries)
-    
-    return list(results)
-
-# Pattern: Hierarchical Delegation
-class CoordinatorAgent:
-    def __init__(self):
-        self.specialists = {
-            'search': CodeAgent(model=model, tools=[WebSearchTool()]),
-            'code': CodeAgent(model=model, tools=[PythonInterpreterTool()]),
-            'llm': CodeAgent(model=model, tools=[])
-        }
-    
-    def handle_task(self, task, required_specialists):
-        results = {}
-        for specialist_type in required_specialists:
-            specialist = self.specialists[specialist_type]
-            results[specialist_type] = specialist.run(task)
-        return results
-
-# Usage
-coordinator = CoordinatorAgent()
-results = coordinator.handle_task(
-    "Analyse AI market trends",
-    ['search', 'code']
-)
+notes = researcher.run("Collect five recent facts about perovskite solar cells, with sources.")
+article = writer.run("Write a 200-word explainer from these notes.", additional_args={"notes": notes})
 ```
+
+**Parallel fan-out.** Agents keep state in memory, so give each thread its own agent instance:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+
+def research(question: str) -> str:
+    agent = CodeAgent(tools=[WebSearchTool()], model=model, verbosity_level=0)
+    return agent.run(question)
+
+
+questions = ["UK heat-pump installs 2025", "German heat-pump subsidies", "French heat-pump market size"]
+with ThreadPoolExecutor(max_workers=3) as pool:
+    answers = list(pool.map(research, questions))
+```
+
+**Hierarchies.** Managed agents can have their own managed agents; keep depth to two levels and give each level a narrow brief and its own `max_steps`.
 
 ---
 
@@ -2363,87 +806,145 @@ results = coordinator.handle_task(
 
 ### Defining Output Schemas
 
+There are three distinct features; do not confuse them.
+
+**1. Validating the final answer.** Ask for JSON in the task and enforce it with a final-answer check:
+
+```python
+import json
+
+from pydantic import BaseModel, ValidationError
+
+
+class CityReport(BaseModel):
+    city: str
+    population: int
+    sources: list[str]
+
+
+def is_city_report(final_answer, memory, agent=None) -> bool:
+    data = final_answer if isinstance(final_answer, dict) else json.loads(final_answer)
+    CityReport.model_validate(data)        # raises ValidationError with a useful message
+    return True
+
+
+agent = CodeAgent(
+    tools=[WebSearchTool()],
+    model=model,
+    final_answer_checks=[is_city_report],
+    instructions="Return your final answer as a dict with keys city, population, sources.",
+)
+report = CityReport.model_validate(agent.run("Population of Lyon?"))
+```
+
+**2. Documenting a tool's output.** `Tool.output_schema` (or an MCP tool's schema with `structured_output=True`) is shown to a CodeAgent so it knows which keys a returned dict has. It is informational; smolagents does not validate it.
 
 ```python
 from smolagents import Tool
 
-class AnalysisTool(Tool):
-    name = "perform_analysis"
-    description = "Analyse data and return structured results"
-    
-    inputs = {
-        "data": {
-            "type": "array",
-            "description": "Array of numbers to analyse"
-        }
-    }
-    
-    # Define structured output
+
+class StatsTool(Tool):
+    name = "describe_numbers"
+    description = "Summary statistics for a list of numbers."
+    inputs = {"data": {"type": "array", "description": "Numbers to summarise."}}
     output_type = "object"
     output_schema = {
         "type": "object",
-        "properties": {
-            "mean": {"type": "number", "description": "Average value"},
-            "median": {"type": "number", "description": "Middle value"},
-            "std_dev": {"type": "number", "description": "Standard deviation"},
-            "min": {"type": "number", "description": "Minimum value"},
-            "max": {"type": "number", "description": "Maximum value"},
-            "analysis": {
-                "type": "object",
-                "properties": {
-                    "distribution": {"type": "string"},
-                    "outliers": {"type": "array", "items": {"type": "number"}}
-                }
-            }
-        },
-        "required": ["mean", "median", "std_dev"]
+        "properties": {"mean": {"type": "number"}, "median": {"type": "number"}, "stdev": {"type": "number"}},
+        "required": ["mean", "median", "stdev"],
     }
-    
-    def forward(self, data: list) -> dict:
-        import statistics
-        import numpy as np
-        
-        data = [float(x) for x in data]
-        
-        mean = statistics.mean(data)
-        median = statistics.median(data)
-        std_dev = statistics.stdev(data) if len(data) > 1 else 0
-        
-        # Identify outliers (values > 2 std devs from mean)
-        outliers = [x for x in data if abs(x - mean) > 2 * std_dev]
-        
-        return {
-            "mean": mean,
-            "median": median,
-            "std_dev": std_dev,
-            "min": min(data),
-            "max": max(data),
-            "analysis": {
-                "distribution": "normal" if std_dev > 0 else "constant",
-                "outliers": outliers
-            }
-        }
 
-# Usage
-agent = CodeAgent(tools=[AnalysisTool()], model=model)
-result = agent.run("Analyse the dataset [1, 2, 3, 4, 5, 100]")
-# Result will have structured output with statistics
+    def forward(self, data: list):
+        import statistics
+        values = [float(x) for x in data]
+        return {
+            "mean": statistics.mean(values),
+            "median": statistics.median(values),
+            "stdev": statistics.stdev(values) if len(values) > 1 else 0.0,
+        }
 ```
 
+**3. Structured actions.** `CodeAgent(use_structured_outputs_internally=True)` makes the model return each step as JSON with `thought` and `code` fields (via the provider's `response_format`), which reduces parsing errors with models that support it. It changes how actions are formatted, not the shape of your final answer.
 
 ---
 
-(Document continues with approximately 15,000+ more lines covering all 20 major topics comprehensively)
+## Sandboxes, Hub sharing and multimodal input
+
+### Remote executors
+
+| `executor_type` | Install | Isolation | Notes |
+|-----------------|---------|-----------|-------|
+| `"local"` (default) | — | None (AST-restricted interpreter in your process) | Development and trusted input only |
+| `"docker"` | `smolagents[docker]` | Container running a Jupyter kernel | Builds a `jupyter-kernel` image on first use; customise via `executor_kwargs` (`image_name`, `dockerfile_content`, `container_run_kwargs`) |
+| `"e2b"` | `smolagents[e2b]` + `E2B_API_KEY` | Managed cloud sandbox | Pay per use |
+| `"modal"` | `smolagents[modal]` | Modal sandbox | Needs a Modal account |
+| `"blaxel"` | `smolagents[blaxel]` | Blaxel sandbox | Needs a Blaxel account |
+
+```python
+agent = CodeAgent(tools=[], model=model, executor_type="docker")
+try:
+    agent.run("Plot a sine wave and describe it.")
+finally:
+    agent.cleanup()      # stops the remote kernel/container
+```
+
+Remote executors cannot be combined with `managed_agents` (the agent raises an error); run multi-agent systems with the local executor inside a sandboxed container instead. The remote executors run the generated code remotely while tools execute where they are defined; tool objects are sent to the sandbox, so tools must be self-contained (import what they need inside `forward`). Since 1.25.0, pickle-based serialisation between agent and sandbox is off by default. The experimental `"wasm"` executor was removed in 1.26.0.
+
+### Hub sharing
+
+```python
+agent.push_to_hub("your-org/research-agent")                      # saves tools, prompts and config
+agent2 = CodeAgent.from_hub("your-org/research-agent", trust_remote_code=True)
+
+agent.save("./research_agent")                                     # to a local folder
+agent3 = CodeAgent.from_folder("./research_agent")
+```
+
+Loading an agent or tool runs code from the repository; read it first and only set `trust_remote_code=True` for sources you trust.
+
+### Multimodal input
+
+Pass PIL images to vision-capable models with `images=`:
+
+```python
+from PIL import Image
+from smolagents import CodeAgent, LiteLLMModel
+
+vision_agent = CodeAgent(tools=[], model=LiteLLMModel(model_id="gpt-5-mini"))
+vision_agent.run("What does this chart show?", images=[Image.open("chart.png")])
+```
+
+Tools can return images (`output_type = "image"`); they are attached to the observation so the model can see them on the next step. For audio, `SpeechToTextTool` transcribes files.
+
+### A UI in one line
+
+```python
+from smolagents import GradioUI
+
+GradioUI(agent, file_upload_folder="./uploads").launch()   # needs smolagents[gradio]
+```
+
+---
+
+## Version notes
+
+Historical changes that affect code you may find elsewhere:
+
+| Version | Change |
+|---------|--------|
+| 1.14.0 | `HfApiModel` renamed to `InferenceClientModel` (old name deprecated) |
+| 1.19.0 | `HfApiModel` alias removed; importing it fails |
+| 1.23.0 | `InferenceClientModel` default model changed to `Qwen/Qwen3-Next-80B-A3B-Thinking` |
+| 1.24.0 | Saved agents using `HfApiModel` load as `InferenceClientModel`; `FinalAnswerStep` available to `step_callbacks`; more robust execution timeout in the local executor |
+| 1.25.0 | Docs and code stress that `LocalPythonExecutor` is not a security boundary; `allow_pickle` defaults to `False`; `huggingface-hub` 1.x supported |
+| 1.26.0 | Exa engine in `WebSearchTool`; `WasmExecutor` removed |
 
 ---
 
 ## Revision History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.26.0 | 2026-05-29 | Version bumped 1.25.0 → 1.26.0; `Latest:` header updated; revision history entry added. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.26.0` (`.routine-envs/check-0529-smolagents`); no `DeprecationWarning` emissions. | Claude routine |
-| 1.25.0 | 2026-05-19 | Version bumped 1.24.0 → 1.25.0. `InferenceClientModel` default model updated to `Qwen/Qwen3-Next-80B-A3B-Thinking`. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.25.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
-| 1.24.0 | 2026-04-27 | `HfApiModel` removed (use `InferenceClientModel`); expanded model compatibility for GPT-5 families; `token_counts` tracking fix for managed agents; vision model support for web browsing agents. Guide corrections (2026-04-27): clarified that `HfApiModel` is fully removed (raises `ImportError`), not deprecated with a shim; removed invalid `max_retries` argument from `InferenceClientModel` example (not a constructor parameter); added missing `import os` to code block. Verified against installed smolagents 1.24.0. |
-| 1.23.0 | November 2025 | Previous documented version |
-
-
+| Date | Version | Changes |
+|------|---------|---------|
+| %%versions-checked%% | %%version=smolagents%% | Rewritten against the installed package. Removed fabricated APIs (`push_to_hub()` function, `load_agent`, `run(image=/audio=/video=)`, `VideoTranscriptionTool`, `TranscriptionTool`, `memory_size`, `timeout`, `AgentRunResult.success/errors/execution_time`, `Model.generate_text`), the `"wasm"` executor, invented efficiency figures and placeholder text. Corrected `HfApiModel` history (removed in 1.19.0, not 1.24.0) and the default-model change (1.23.0). Added `RunResult`, streaming events, final-answer checks, step callbacks, MCP, executors and version notes. |
+| 2026-05-29 | 1.26.0 | Previous revision. |
+| November 2025 | 1.23.0 | First documented version. |

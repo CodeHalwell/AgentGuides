@@ -223,7 +223,7 @@ class ResearchPipeline:
         state: Annotated[ResearchState, "research_done"]  # Depends on research
     ) -> Annotated[ResearchState, "analysis_complete"]:
         """Analysis node - requires research to be done."""
-        agent = Agent('anthropic:claude-3-5-sonnet-latest')
+        agent = Agent('anthropic:claude-sonnet-4-6')
         result = agent.run_sync("Analyze research findings")
 
         state.analysis_complete = True
@@ -905,7 +905,7 @@ class SoftwareDevelopmentGraph:
         )
 
         self.coder = Agent(
-            'anthropic:claude-3-5-sonnet-latest',
+            'anthropic:claude-sonnet-4-6',
             instructions='You are a coding expert. Write clean, tested code.'
         )
 
@@ -997,7 +997,7 @@ class HierarchicalTaskGraph:
     @node(name="worker_pool", role="worker", parallel=True)
     async def execute_subtasks(self, state: TaskState) -> TaskState:
         """Worker agents execute subtasks in parallel."""
-        worker_agent = Agent('anthropic:claude-3-5-sonnet-latest')
+        worker_agent = Agent('anthropic:claude-sonnet-4-6')
 
         # Execute each subtask
         import asyncio
@@ -1136,7 +1136,7 @@ class MonitoredGraph:
 
             logfire.info(
                 "Node completed",
-                tokens=result.usage().total_tokens,
+                tokens=result.usage.total_tokens,
                 output_length=len(result.output)
             )
 

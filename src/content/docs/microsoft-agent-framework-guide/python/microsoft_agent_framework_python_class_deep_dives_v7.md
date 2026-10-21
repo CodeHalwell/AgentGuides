@@ -1,13 +1,13 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 7 (1.20.0)"
-description: "Source-verified deep dives for AgentExecutorRequest, AgentExecutorResponse, AgentExecutorCheckpointState, AgentExecutor, WorkflowExecutor, WorkflowMessage, WorkflowCheckpoint, TodoSessionStore, ClassSkill, and AggregatingSkillsSource/CachingSkillsSource — all verified against agent-framework 1.20.0 source."
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 7"
+description: "Source-verified deep dives for AgentExecutorRequest, AgentExecutorResponse, AgentExecutorCheckpointState, AgentExecutor, WorkflowExecutor, WorkflowMessage, WorkflowCheckpoint, TodoSessionStore, ClassSkill, and AggregatingSkillsSource/CachingSkillsSource — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-API Deep Dives Vol. 7
 
-**Verified against:** `agent-framework==1.20.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.20.0)
 **Python requirement:** 3.10+
 
 This volume covers the executor/checkpoint layer and composable skills pipeline: the three data classes that flow into and out of `AgentExecutor`, the executor itself, `WorkflowExecutor` for embedding a sub-workflow inside a parent, the `WorkflowMessage` envelope, the `WorkflowCheckpoint` snapshot, `TodoSessionStore` for session-resident todo state, `ClassSkill` for class-based skill packages, and the two source combinators `AggregatingSkillsSource` and `CachingSkillsSource`.

@@ -1,14 +1,12 @@
 ---
 title: "Microsoft Agent Framework - Production & Deployment Guide"
-description: "Document Version: 1.0 Target Audience: DevOps, Infrastructure, and Senior Engineers Focus: Enterprise-grade deployment, scaling, monitoring, and security"
+description: "Deploying Microsoft Agent Framework services — containers, Azure Container Apps and AKS, scaling, monitoring, security and disaster recovery."
 framework: microsoft-agent-framework
 ---
 
 # Microsoft Agent Framework - Production & Deployment Guide
-## October 2025 Release
-
-**Document Version:** 1.0  
 **Target Audience:** DevOps, Infrastructure, and Senior Engineers  
+**First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
 **Focus:** Enterprise-grade deployment, scaling, monitoring, and security
 
 ---

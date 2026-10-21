@@ -457,11 +457,11 @@ configure_otel_providers(views=views)
 Two ways to attach business attributes — pick the one that matches lifetime:
 
 1. **Per-`agent.run(...)` call** — pass `additional_properties={"gen_ai.conversation.id": req_id}` so the conversation correlator uses your upstream request ID.
-2. **Per-process resource attributes** — set `OTEL_RESOURCE_ATTRIBUTES=team=payments,env=prod,deployment.version=1.4.2` before launching your service. The framework attaches them to every span/metric/log automatically.
+2. **Per-process resource attributes** — set `OTEL_RESOURCE_ATTRIBUTES=team=payments,env=prod,deployment.version=build-4821` before launching your service. The framework attaches them to every span/metric/log automatically.
 
 ```python
 import os
-os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "team=payments,env=prod,deployment.version=1.4.2"
+os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "team=payments,env=prod,deployment.version=build-4821"
 os.environ["OTEL_SERVICE_NAME"] = "checkout-agent"
 
 from agent_framework.observability import configure_otel_providers

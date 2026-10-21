@@ -1,18 +1,18 @@
 ---
-title: "Microsoft Agent Framework - .NET 2025 Features Guide"
-description: "Document Version: 1.0 Last Updated: November 2025 Target Audience: .NET/C# Developers Preview Status: October 2025 Public Preview .NET Version: 8.0+"
+title: "Microsoft Agent Framework - .NET Feature Tour (2025 preview)"
+description: "Tour of the A2A, workflow, declarative, OpenTelemetry and content-safety features as drafted for the October 2025 .NET preview, with notes on what changed by GA."
 framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework - .NET 2025 Features Guide
-## October 2025 Release - Advanced .NET-Specific Features
+# Microsoft Agent Framework - .NET Feature Tour (2025 preview)
 
-**Document Version:** 1.0
-**Last Updated:** November 2025
+**First written:** November 2025, for the October 2025 public preview
+**Reviewed:** %%versions-checked%% against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%%
 **Target Audience:** .NET/C# Developers
-**Preview Status:** October 2025 Public Preview
 **.NET Version:** 8.0+
+
+> **Read this first.** Much of this page predates GA and does not match the shipped packages. There are no `Microsoft.Agents.AI.Graphs`, `Microsoft.Agents.AI.Config`, `Microsoft.Agents.AI.Telemetry` or `Microsoft.Agents.AI.Safety` namespaces in %%version=Microsoft.Agents.AI%%. The real equivalents are: workflows in `Microsoft.Agents.AI.Workflows` (`AgentWorkflowBuilder`, `InProcessExecution`) and `Microsoft.Agents.AI.Workflows.Declarative`; OpenTelemetry via `AIAgentBuilder.UseOpenTelemetry(...)`; A2A via `Microsoft.Agents.AI.A2A` (`A2AAgent`, preview) and `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (`MapA2A`). Content safety is something you add yourself, typically as agent middleware over `Azure.AI.ContentSafety`. Read the code below as design intent rather than copy-paste material.
 
 ---
 
@@ -1225,7 +1225,5 @@ public class AgentWorker : BackgroundService
 
 ---
 
-**Last Updated:** November 2025
-**Document Version:** 1.0
-**Preview Status:** October 2025 Public Preview
+**First written:** November 2025 (October 2025 public preview) · **Reviewed:** %%versions-checked%%
 

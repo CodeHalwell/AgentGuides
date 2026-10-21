@@ -326,7 +326,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 agent = Agent('openai:gpt-5.2', output_type=str)
 
 @agent.output_validator
-async def no_profanity(ctx: RunContext[None], output: str) -> str:
+async def no_profanity(ctx: RunContext[object], output: str) -> str:
     if 'damn' in output.lower():
         raise ModelRetry('Please respond without profanity.')
     return output
@@ -377,7 +377,7 @@ PydanticAI generates a tagged union schema; the `kind` literal gives the model a
 
 ```python
 @agent.output_validator
-async def must_contain_sources(ctx: RunContext[None], out: Answer) -> Answer:
+async def must_contain_sources(ctx: RunContext[object], out: Answer) -> Answer:
     if not out.reasoning:
         raise ModelRetry('Include a `reasoning` field citing at least one source.')
     return out

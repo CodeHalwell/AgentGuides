@@ -1,16 +1,16 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-Class Deep Dives Vol. 3 (1.17.0)"
-description: "Source-verified deep dives for WorkflowBuilder, SlidingWindowStrategy, TruncationStrategy, ContextWindowCompactionStrategy, LocalEvaluator, InlineSkill, FileAccessProvider, MemoryContextProvider, FileHistoryProvider, and MCPWebsocketTool — all verified against agent-framework 1.17.0 source."
+title: "Microsoft Agent Framework (Python) — 10-Class Deep Dives Vol. 3"
+description: "Source-verified deep dives for WorkflowBuilder, SlidingWindowStrategy, TruncationStrategy, ContextWindowCompactionStrategy, LocalEvaluator, InlineSkill, FileAccessProvider, MemoryContextProvider, FileHistoryProvider, and MCPWebsocketTool — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-Class Deep Dives Vol. 3
 
-**Verified against:** `agent-framework==1.17.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.17.0)
 **Python requirement:** 3.10+
 
-This volume covers 10 additional public classes spanning workflow construction, compaction strategies, local evaluation, skills, file access, memory, history persistence, and WebSocket MCP integration. Each section includes the full `__init__` signature, every meaningful method, and self-contained runnable examples verified against the 1.17.0 source.
+This volume covers 10 additional public classes spanning workflow construction, compaction strategies, local evaluation, skills, file access, memory, history persistence, and WebSocket MCP integration. Each section includes the full `__init__` signature, every meaningful method, and self-contained runnable examples first verified against the 1.17.0 source and re-checked against %%version=agent-framework%%.
 
 See [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
 
@@ -1299,6 +1299,6 @@ asyncio.run(main())
 Install the full package:
 
 ```bash
-pip install agent-framework==1.17.0
+pip install agent-framework==%%version=agent-framework%%
 pip install 'mcp[ws]'  # required for MCPWebsocketTool WebSocket transport
 ```

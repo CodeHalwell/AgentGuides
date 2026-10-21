@@ -1,6 +1,6 @@
 ---
 title: "Google ADK (TypeScript)"
-description: "TypeScript port of the Google Agent Development Kit — active development."
+description: "TypeScript edition of the Google Agent Development Kit — LlmAgent, tools, runners and graph workflows for Node.js and the browser."
 framework: google-adk
 language: typescript
 sidebar:
@@ -10,47 +10,83 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**TypeScript port of Google ADK.** Currently in active development — the same architecture as the Python and Go versions, adapted for Node.
+**The TypeScript edition of Google ADK.** Same architecture as the Python and Go kits — `LlmAgent`, tools, a `Runner` with session, memory and artifact services, plugins, MCP, A2A and graph `Workflow`s — with Zod-typed tool parameters and ESM, CommonJS and web bundles.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    npm install @google/adk
+    npm install @google/adk zod
+    npm install -D @google/adk-devtools
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.0.0** · April 2026 · Node 18+
+    **v%%version=@google/adk%%** · Node.js 20.19+ (checked %%versions-checked%%)
   </Card>
   <Card title="Best for" icon="puzzle">
-    Full-stack Gemini agents, Node backends, browser-compatible flows.
+    Full-stack Gemini agents, Node backends, browser-hosted agents.
   </Card>
 </CardGrid>
 
-<Aside type="caution" title="Active development">
-  The TypeScript port is evolving quickly. For the most complete feature set today, see the [Python](/google-adk-guide/python/) and [Go](/google-adk-guide/go/) guides — patterns port cleanly.
+<Aside type="note" title="Feature coverage">
+  The TypeScript kit versions independently of Python and tracks it closely — the 2.x releases have been porting Python features across (auth, sessions, flows, plugins, CLI). For concepts and deeper patterns, the [Python guide](/google-adk-guide/python/) applies almost one-to-one: camelCase the names (`output_key` → `outputKey`, `run_async` → `runAsync`).
 </Aside>
+
+## Minimal example
+
+Agents do not run themselves; a `Runner` drives them. `InMemoryRunner` wires in in-memory services, and `runEphemeral` runs one turn without keeping the session.
+
+```typescript
+import {FunctionTool, InMemoryRunner, LlmAgent, isFinalResponse, stringifyContent} from '@google/adk';
+import {z} from 'zod';
+
+const getWeather = new FunctionTool({
+  name: 'get_weather',
+  description: 'Returns the current weather for a city.',
+  parameters: z.object({city: z.string().describe('City name')}),
+  execute: async ({city}) => ({city, forecast: 'sunny', tempC: 21}),
+});
+
+const agent = new LlmAgent({
+  name: 'assistant',
+  model: 'gemini-2.5-flash',
+  instruction: 'You are a helpful assistant. Use get_weather for weather questions.',
+  tools: [getWeather],
+});
+
+const runner = new InMemoryRunner({agent, appName: 'demo'});
+
+for await (const event of runner.runEphemeral({
+  userId: 'u1',
+  newMessage: {role: 'user', parts: [{text: 'What is the weather in Leeds?'}]},
+})) {
+  if (isFinalResponse(event)) {
+    console.log(stringifyContent(event));
+  }
+}
+```
+
+Set `GOOGLE_GENAI_API_KEY` (or `GOOGLE_GENAI_USE_VERTEXAI=1` with `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`) before running. For multi-turn conversations, create a session with `runner.sessionService.createSession(...)` and call `runner.runAsync({userId, sessionId, newMessage})`.
+
+Export the agent as `rootAgent` from `agent.ts` and you can drive it with the dev tools: `npx @google/adk-devtools run agent.ts` or `npx @google/adk-devtools web`. Always name the package — a bare `npx adk` fetches an unrelated package from the registry.
+
+## What changed in 2.x
+
+The 2.0.0 release (August 2026) introduced graph orchestration and made a few breaking changes:
+
+- `Workflow`, `FunctionNode`, `JoinNode`, `Edge` and `START` arrive; `Workflow` is still marked experimental. A bare `Workflow` can be the root of a `Runner` or `App`.
+- `BaseAgent` now extends `BaseNode`, so agents inherit `rerunOnResume`, `retryConfig`, `timeout` and the schema fields. A subclass that declares a field of the same name now collides with the inherited one.
+- `SequentialAgent`, `ParallelAgent` and `LoopAgent` log a one-time deprecation warning; they still work.
+- `LLMAgentWrapper` is removed — pass an agent to an edge directly.
+- `InvocationContext.agent` is optional; inside an agent, use `requireAgent(ctx)`.
+
+Later 2.x releases added `Runner.autoCreateSession` (opt-in), `DebugLoggingPlugin`, `ToolCallIntegrityPlugin`, and broad parity work with the Python kit.
 
 ## Getting started
 
 <CardGrid>
   <LinkCard title="Python reference" href="/google-adk-guide/python/" description="Complete ADK feature documentation — patterns apply." />
-  <LinkCard title="Go reference" href="/google-adk-guide/go/" description="GA 1.0 Go SDK documentation." />
+  <LinkCard title="Go reference" href="/google-adk-guide/go/" description="ADK for Go documentation." />
 </CardGrid>
-
-## Install, minimal example
-
-```typescript
-import { LlmAgent } from '@google/adk';
-
-const agent = new LlmAgent({
-  name: 'assistant',
-  model: 'gemini-2.5-flash',
-  instruction: 'You are a helpful assistant.',
-});
-
-const response = await agent.run('What is 15 + 27?');
-console.log(response.text);
-```
 
 ---
 
@@ -58,6 +94,7 @@ console.log(response.text);
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | current | Re-verified against the current npm release. Replaced the minimal example, which called a non-existent `agent.run()`, with a type-checked `InMemoryRunner.runEphemeral` example; added the 2.x changes and the Node.js 20.19 requirement; version now read from the site's version data. |
 | 2026-04-21 | 1.0.0 | Bumped to installed v1.0.0 GA after npm introspection; LLMAgent → LlmAgent (matches Python casing). |
 | 2026-04-21 | 0.6.1 | Index redesigned with language-selector style. |
 | April 4, 2026 | 0.6.1 | Active development release. |

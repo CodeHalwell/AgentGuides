@@ -1,13 +1,13 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 8 (1.21.0)"
-description: "Source-verified deep dives for InProcRunnerContext, FunctionExecutor, EvalItem, EvalResults/EvalItemResult, ChatResponse/ChatResponseUpdate, UsageDetails, FileSkillsSource, MCPSkillsSource, DeduplicatingSkillsSource/FilteringSkillsSource, and AgentFileStore/InMemoryAgentFileStore/FileSystemAgentFileStore — all verified against agent-framework 1.21.0 source."
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 8"
+description: "Source-verified deep dives for InProcRunnerContext, FunctionExecutor, EvalItem, EvalResults/EvalItemResult, ChatResponse/ChatResponseUpdate, UsageDetails, FileSkillsSource, MCPSkillsSource, DeduplicatingSkillsSource/FilteringSkillsSource, and AgentFileStore/InMemoryAgentFileStore/FileSystemAgentFileStore — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-API Deep Dives Vol. 8
 
-**Verified against:** `agent-framework==1.21.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.21.0)
 **Python requirement:** 3.10+
 
 This volume covers the in-process workflow execution context, function-based executors, the evaluation data model, the low-level chat-response layer, cross-provider token usage, filesystem and MCP skill discovery, skill pipeline decorators, and the agent file store abstraction. Each section includes the full verified constructor signature, every meaningful method or property, and self-contained runnable examples.
@@ -26,7 +26,7 @@ See [Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_p
 
 See [Vol. 7](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v7/) for `AgentExecutorRequest`, `AgentExecutorResponse`, `AgentExecutorCheckpointState`, `AgentExecutor`, `WorkflowExecutor`, `WorkflowMessage`, `WorkflowCheckpoint`, `TodoSessionStore`, `ClassSkill`, and `AggregatingSkillsSource`/`CachingSkillsSource`.
 
-> **Vol. 9 available:** See [10-API Deep Dives Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) for `ResponseStream`, `AgentResponseUpdate`, `SessionContext`, `FileSessionStore`, `AgentLoopMiddleware`, `SingleEdgeGroup`, `WorkflowInvocationKwargs`, `StepWrapper`, `DelegatingSkillsSource`, and `SubWorkflowRequestMessage`/`SubWorkflowResponseMessage` — verified against `agent-framework==1.22.0`.
+> **Vol. 9 available:** See [10-API Deep Dives Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/) for `ResponseStream`, `AgentResponseUpdate`, `SessionContext`, `FileSessionStore`, `AgentLoopMiddleware`, `SingleEdgeGroup`, `WorkflowInvocationKwargs`, `StepWrapper`, `DelegatingSkillsSource`, and `SubWorkflowRequestMessage`/`SubWorkflowResponseMessage`.
 
 ---
 

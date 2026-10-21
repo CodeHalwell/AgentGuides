@@ -416,7 +416,7 @@ class WorkerAgent(A2AAgent):
 
         self.specialty = specialty
         self.agent = Agent(
-            'anthropic:claude-3-5-sonnet-latest',
+            'anthropic:claude-sonnet-4-6',
             instructions=f'You are a specialist in {specialty}'
         )
 
@@ -443,7 +443,7 @@ class WorkerAgent(A2AAgent):
                     task_id=task.task_id,
                     result=result.output,
                     success=True,
-                    metadata={'tokens_used': result.usage().total_tokens}
+                    metadata={'tokens_used': result.usage.total_tokens}
                 ).model_dump()
             )
 
@@ -738,7 +738,7 @@ class AgentUIStream:
                 type="agent_complete",
                 data={
                     "output": result.output,
-                    "tokens_used": result.usage().total_tokens,
+                    "tokens_used": result.usage.total_tokens,
                     "duration_ms": 1234
                 }
             )
@@ -979,7 +979,7 @@ class StructuredAgentStream:
                 message="Task completed successfully",
                 progress=1.0,
                 metadata={
-                    "tokens_used": result.usage().total_tokens,
+                    "tokens_used": result.usage.total_tokens,
                     "output_length": len(result.output)
                 }
             )
@@ -1031,18 +1031,18 @@ openai_o3 = Agent('openai:o3-mini')  # Reasoning model
 
 # Anthropic Claude (latest models)
 claude_sonnet = Agent('anthropic:claude-3-5-sonnet-20250219')
-claude_opus = Agent('anthropic:claude-3-opus-20250219')
+claude_opus = Agent('anthropic:claude-opus-4-7')
 
 # Google Gemini
-gemini_pro = Agent('google-gla:gemini-2.0-flash-exp')
-gemini_flash = Agent('google-gla:gemini-1.5-flash')
+gemini_pro = Agent('google:gemini-2.5-flash-exp')
+gemini_flash = Agent('google:gemini-2.5-flash')
 
 # DeepSeek (cost-effective reasoning)
 deepseek = Agent('deepseek:deepseek-chat')
 deepseek_reasoner = Agent('deepseek:deepseek-reasoner')
 
 # Grok (xAI)
-grok = Agent('grok:grok-2-latest')
+grok = Agent('xai:grok-4-latest')
 grok_vision = Agent('grok:grok-2-vision-latest')
 
 # Cohere
@@ -1101,7 +1101,7 @@ openai_structured = Agent(
 
 # Anthropic with prompt caching
 claude_cached = Agent(
-    'anthropic:claude-3-5-sonnet-latest',
+    'anthropic:claude-sonnet-4-6',
     model_settings=ModelSettings(
         cache_system_prompt=True,  # Cache expensive system prompts
         cache_ttl=300  # 5 minute cache
@@ -1110,7 +1110,7 @@ claude_cached = Agent(
 
 # Gemini with thinking mode
 gemini_thinking = Agent(
-    'google-gla:gemini-2.0-flash-thinking-exp',
+    'google:gemini-2.5-flash-thinking-exp',
     model_settings=ModelSettings(
         thinking_mode=True  # Enable reasoning traces
     )
@@ -1146,8 +1146,8 @@ from pydantic_ai import Agent
 fallback_model = FallbackModel(
     primary='openai:gpt-4o',
     fallbacks=[
-        'anthropic:claude-3-5-sonnet-latest',
-        'google-gla:gemini-1.5-pro',
+        'anthropic:claude-sonnet-4-6',
+        'google:gemini-2.5-pro',
         'ollama:llama3.1:70b'  # Local fallback
     ]
 )
@@ -1162,7 +1162,7 @@ class SmartRouter(RouterModel):
         """Select model based on query."""
 
         if "code" in query.lower():
-            return 'anthropic:claude-3-5-sonnet-latest'  # Best for code
+            return 'anthropic:claude-sonnet-4-6'  # Best for code
 
         elif "reasoning" in query.lower() or "math" in query.lower():
             return 'openai:o3-mini'  # Reasoning model
@@ -1271,13 +1271,13 @@ class ProductionAgent(A2AAgent):
         if stream_to_ui:
             await self.ui_stream.emit("task_complete", {
                 "result": result.output,
-                "tokens": result.usage().total_tokens
+                "tokens": result.usage.total_tokens
             })
 
         return {
             "result": result.output,
             "metadata": {
-                "tokens_used": result.usage().total_tokens,
+                "tokens_used": result.usage.total_tokens,
                 "mcp_tools_used": len(result.tool_calls),
                 "durable": True
             }

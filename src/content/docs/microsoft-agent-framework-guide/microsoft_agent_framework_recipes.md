@@ -1,13 +1,14 @@
 ---
 title: "Microsoft Agent Framework - Recipes & Code Patterns"
-description: "Document Version: 1.0 Purpose: Practical code recipes for common agent scenarios Format: Copy-paste ready, production-grade code patterns"
+description: "Language-neutral recipes for common Microsoft Agent Framework scenarios, in Python and C#. For examples verified against the current packages, see the per-language recipe pages."
 framework: microsoft-agent-framework
 ---
 
 # Microsoft Agent Framework - Recipes & Code Patterns
-## October 2025 Release - Production-Ready Examples
+**First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
 
-**Document Version:** 1.0  
+> These recipes date from the preview and were updated only where an API was renamed (sessions instead of threads, `AsAIAgent` instead of `CreateAIAgent`, plain chat-client construction instead of `async with`). For recipes whose code is checked against the current release, use the [Python recipes](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/) and [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/).
+
 **Purpose:** Practical code recipes for common agent scenarios  
 **Format:** Copy-paste ready, production-grade code patterns
 

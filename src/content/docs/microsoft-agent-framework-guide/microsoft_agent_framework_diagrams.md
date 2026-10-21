@@ -1,14 +1,14 @@
 ---
 title: "Microsoft Agent Framework - Architecture Diagrams & Visualisations"
-description: "Document Version: 1.0 Purpose: Visual representation of Agent Framework architecture and system design"
+description: "Architecture and flow diagrams for the Microsoft Agent Framework — agent lifecycle, orchestration patterns, workflows and Azure deployment topology."
 framework: microsoft-agent-framework
 ---
 
 # Microsoft Agent Framework - Architecture Diagrams & Visualisations
-## October 2025 Release
-
-**Document Version:** 1.0  
 **Purpose:** Visual representation of Agent Framework architecture and system design
+**First drawn:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)
+
+> Diagrams are conceptual. Where a box names an API, check it against the [Python](/microsoft-agent-framework-guide/python/) or [.NET](/microsoft-agent-framework-guide/dotnet/) guide — some preview-era names (for example `@ai_function`, threads) were renamed before GA (`@tool`, sessions).
 
 ---
 

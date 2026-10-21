@@ -1,20 +1,19 @@
 ---
 title: "Microsoft Agent Framework Python - Comprehensive Technical Guide"
-description: "Comprehensive technical guide for the Microsoft Agent Framework on Python. Guide content verified against agent-framework 1.14.0 (latest PyPI release: 1.22.0) — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability. For class examples verified against 1.15.0–1.22.0, see the Class Deep Dives Vol. 1–9 guides."
+description: "Comprehensive technical guide for the Microsoft Agent Framework on Python — chat clients, tools, sessions, middleware, MCP, skills, workflows, long-term memory, evaluation, security (FIDES), file access/memory providers, workflow visualization, and observability, plus a consolidated class reference."
 framework: microsoft-agent-framework
 language: python
 ---
 
-Latest: agent-framework 1.22.0 | Guide verified against: 1.14.0 | Python 3.10+
 # Microsoft Agent Framework Python - Comprehensive Technical Guide
 
-**Framework Version (guide content):** 1.14.0 (`agent-framework` and `agent-framework-core`) | **Latest PyPI release:** 1.22.0
+**Framework version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep) — checked %%versions-checked%%. Every code example on this page was re-run through an import-and-signature check against that release; the narrative and the Class & API Reference were first written against 1.14.0, and sections that have since changed carry a dated note.
 **Target Platform:** Python 3.10+
 **Quick check:** `pip index versions agent-framework`
 
 ---
 
-> **API reference (verified against `agent-framework==1.14.0`; 90 APIs verified on 1.15.0–1.22.0 — see [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/), [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/), [Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/), [Vol. 5](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v5/), [Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v6/), [Vol. 7](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v7/), [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v8/), and [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/)).**
+> **API reference (first written against 1.14.0; examples re-checked against %%version=agent-framework%%; 90 further APIs are covered in depth in [10-Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/), [Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/), [Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/), [Vol. 4](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v4/), [Vol. 5](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v5/), [Vol. 6](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v6/), [Vol. 7](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v7/), [Vol. 8](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v8/), and [Vol. 9](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v9/)).**
 >
 > - **Package name / import root:** `agent_framework` (underscores). Install with `pip install agent-framework`.
 > - **Agent classes:** `Agent` (full stack with middleware + telemetry), `RawAgent` (same interface, skips the middleware/telemetry wrappers for latency-sensitive paths), `BaseAgent` (abstract base for custom subclasses).
@@ -22,13 +21,13 @@ Latest: agent-framework 1.22.0 | Guide verified against: 1.14.0 | Python 3.10+
 > - **Tool decorator:** `@tool` from `agent_framework`.
 > - **Multi-turn state:** `session = agent.create_session()`, then `await agent.run(prompt, session=session)`.
 > - **Workflows:** `WorkflowBuilder` (with `.add_edge` / `.add_fan_in_edges` / `.add_fan_out_edges` / `.add_chain` / `.add_multi_selection_edge_group`) and the experimental `@workflow` / `@step` functional API from `agent_framework`. Visualise any workflow with `WorkflowViz`.
-> - **Long-term memory (experimental):** `MemoryStore` + `MemoryContextProvider` from `agent_framework`. File-backed memory: `FileMemoryProvider` (direct import: `from agent_framework._harness._file_memory import FileMemoryProvider` — not yet re-exported from `agent_framework` in 1.14.0).
+> - **Long-term memory (experimental):** `MemoryStore` + `MemoryContextProvider` from `agent_framework`. File-backed memory: `FileMemoryProvider` (`from agent_framework import FileMemoryProvider`).
 > - **File access (experimental):** `FileAccessProvider` + `AgentFileStore` — shared, persistent CRUD/grep access for agents across sessions.
-> - **Agent mode (experimental):** `AgentModeProvider` — plan/execute mode switching, persisted in session state.
+> - **Agent mode (stable since 1.12.0):** `AgentModeProvider` — plan/execute mode switching, persisted in session state.
 > - **Security (experimental — FIDES):** `agent_framework.security` — `LabelTrackingFunctionMiddleware`, `PolicyEnforcementFunctionMiddleware`, `SecureMCPToolProxy`, `SecureAgentConfig` for prompt-injection defence.
 > - **Settings:** `load_settings` + `SecretString` — `TypedDict`-based settings from env vars, `.env` files, and overrides with masked secret values.
 > - **Evaluation:** `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `AgentEvalConverter` from `agent_framework`.
-> - **Declarative YAML agents (beta):** `AgentFactory` / `WorkflowFactory` from `agent_framework.declarative`.
+> - **Declarative YAML agents:** `AgentFactory` / `WorkflowFactory` from `agent_framework.declarative` (the package left beta during 2026).
 
 ---
 
@@ -107,15 +106,17 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # 2. Install the core package
 pip install agent-framework
 
-# 3. Install provider-specific packages (pick what you need)
-pip install agent-framework-azure-ai       # Azure AI Foundry chat client
-pip install agent-framework-openai         # OpenAI / Azure OpenAI chat clients
+#    (pin it for reproducible builds: pip install agent-framework==%%version=agent-framework%%)
+
+# 3. Or install only the pieces you need instead of the meta package
+pip install agent-framework-core           # Agent, tools, workflows, FIDES security, evaluation
+pip install agent-framework-foundry        # Microsoft Foundry chat client (FoundryChatClient)
+pip install agent-framework-openai         # OpenAI / Azure OpenAI chat client (OpenAIChatClient)
 pip install azure-identity                 # DefaultAzureCredential, managed identity
 
-# 4. Optional extras (1.14.0+)
-pip install agent-framework[security]      # FIDES prompt-injection defence
-pip install agent-framework[evals]         # Evaluation tooling (evaluate_workflow, AgentEvalConverter)
+# 4. Optional
 pip install "graphviz>=0.20.0"             # WorkflowViz SVG/PNG/PDF export (also needs system graphviz)
+# There are no [security] / [evals] extras: FIDES and evaluation ship in agent-framework-core.
 ```
 
 ### Authentication and Configuration
@@ -2451,7 +2452,7 @@ asyncio.run(main())
 
 ## Class & API Reference
 
-> Consolidated from the full "class deep dive" volume series that used to ship as 49 separate pages (the base volume plus `_v2`–`_v44` of the main series, and `microsoft_agent_framework_python_sdk_class_deep_dives` plus `_v3`–`_v6` covering the `azure-ai-agents` add-on). Two independent verification passes checked every symbol below against an installed `agent-framework==1.14.0` venv with `inspect.signature()` / `inspect.getsource()`; the `azure-ai-agents` appendix at the end was checked only for internal consistency across its five source volumes — no fresh `pip install` of `azure-ai-agents` was available for that pass, so treat it as best-effort rather than independently re-verified.
+> Consolidated from the full "class deep dive" volume series that used to ship as 49 separate pages (the base volume plus `_v2`–`_v44` of the main series, and `microsoft_agent_framework_python_sdk_class_deep_dives` plus `_v3`–`_v6` covering the `azure-ai-agents` add-on). Two independent verification passes checked every symbol below against an installed `agent-framework` 1.14.0 venv with `inspect.signature()` / `inspect.getsource()`; the `azure-ai-agents` appendix at the end was checked only for internal consistency across its five source volumes — no fresh `pip install` of `azure-ai-agents` was available for that pass, so treat it as best-effort rather than independently re-verified.
 >
 > Several older per-volume pages invented methods or parameters that never existed on any released version of the package. Rather than silently drop those, the corrections are called out inline as **Correction** notes — useful if you're migrating code that was written against one of the old pages.
 
@@ -3103,7 +3104,7 @@ FileSkillsSource(skill_paths: str | Path | Sequence[str | Path], *, script_runne
                   script_filter: Callable[[str, str], bool] | None = None,
                   resource_filter: Callable[[str, str], bool] | None = None)
 ```
-`InlineSkill` requires a `SkillFrontmatter(name, description, *, version=None)` built first — an older per-volume page constructed it directly as `InlineSkill(name=..., description=..., instructions=...)`, which is not a valid call; the frontmatter object is mandatory. `ClassSkill` lets a skill be defined as a Python class instead of a filesystem directory — `@ClassSkill.resource(name=...)` / `@ClassSkill.script(name=...)` decorate methods for auto-discovery. `search_depth` (default 2) / `script_filter` / `resource_filter` are 1.10.0-era additions controlling how deep `FileSkillsSource` scans and which files it includes.
+`InlineSkill` requires a `SkillFrontmatter(*, name, description, license=None, compatibility=None, allowed_tools=None, metadata=None)` built first — an older per-volume page constructed it directly as `InlineSkill(name=..., description=..., instructions=...)`, which is not a valid call; the frontmatter object is mandatory. `ClassSkill` lets a skill be defined as a Python class instead of a filesystem directory — `@ClassSkill.resource(name=...)` / `@ClassSkill.script(name=...)` decorate methods for auto-discovery. `search_depth` (default 2) / `script_filter` / `resource_filter` are 1.10.0-era additions controlling how deep `FileSkillsSource` scans and which files it includes.
 
 ```python
 frontmatter = SkillFrontmatter(name="pdf_summarizer", description="Summarize PDF documents.")
@@ -3570,9 +3571,10 @@ client.delete_agent(agent.id)
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.22.0 | October 21, 2026 | Version sweep: header now tracks the current release via the site's version data instead of a hard-coded number. Every code example re-checked (imports, constructor keywords, method names) against an installed `agent-framework` 1.22.0. Fixed: `AzureOpenAIChatClient` (removed — use `OpenAIChatClient(azure_endpoint=..., credential=...)`), `TruncationStrategy(keep_last_groups=)` → `max_n` / `compact_to`, `mode_descriptions=` → `mode_instructions=`, harness tool names (`todos_add`, `mode_set`, ... since 1.7.0), functional workflows now need `.build()` (since 1.14.0), `MagenticBuilder.with_human_input_on_stall()` (never existed), non-existent `[security]` / `[evals]` extras, `SkillFrontmatter` signature. Stability notes updated: skills stable since 1.11.0, `TodoProvider` / `AgentModeProvider` since 1.12.0. |
 | 1.6.0 | May 22, 2026 | Core bumped 1.5.0 → 1.6.0; `Latest verified release`, `**Framework Version:**`, API reference header, and description frontmatter updated. All 23 core symbols verified against installed `agent-framework-core==1.6.0` (`.routine-envs/check-0522-ms-agent`); 242 public symbols confirmed; no deprecations detected. Note: opentelemetry `importlib.metadata` DeprecationWarning at import (Python 3.11 compat issue) is an upstream opentelemetry bug — suppressed with `warnings.filterwarnings('ignore')` for verification purposes. | Claude routine |
-| 1.4.0 | May 15, 2026 | Core bumped 1.3.0 → 1.4.0. Added `SecureAgentConfig` (`ExperimentalFeature.FIDES`) section covering information-flow control, label tracking, policy enforcement, and audit logging. Added `InMemorySkillsSource`, `DelegatingSkillsSource`, `FunctionExecutor`/`@executor`, and `WorkflowViz` to the relevant reference pages. Version strings updated throughout; verified against installed `agent-framework==1.4.0`. |
-| 1.3.0 | May 9, 2026 | Core bumped 1.2.2 → 1.3.0. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. `MemoryStore` and `SkillResource` now emit `ExperimentalWarning` on import. Version strings updated throughout; `Agent` and `FoundryChatClient` verified against installed `agent-framework==1.3.0` (`.routine-envs/check-0509-py`). |
+| 1.4.0 | May 15, 2026 | Core bumped 1.3.0 → 1.4.0. Added `SecureAgentConfig` (`ExperimentalFeature.FIDES`) section covering information-flow control, label tracking, policy enforcement, and audit logging. Added `InMemorySkillsSource`, `DelegatingSkillsSource`, `FunctionExecutor`/`@executor`, and `WorkflowViz` to the relevant reference pages. Version strings updated throughout; verified against installed `agent-framework` 1.4.0. |
+| 1.3.0 | May 9, 2026 | Core bumped 1.2.2 → 1.3.0. `agent-framework-foundry` and `agent-framework-openai` promoted to stable 1.3.0. `MemoryStore` and `SkillResource` now emit `ExperimentalWarning` on import. Version strings updated throughout; `Agent` and `FoundryChatClient` verified against installed `agent-framework` 1.3.0 (`.routine-envs/check-0509-py`). |
 | 1.2.2 | May 2026 | Guide verified against `agent-framework-core==1.2.2`; skills, functional workflows, and `Agent.as_tool()` added. |
 
 ## Where to go next

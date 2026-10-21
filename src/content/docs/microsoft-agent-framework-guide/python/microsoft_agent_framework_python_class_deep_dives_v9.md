@@ -1,13 +1,13 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 9 (1.22.0)"
-description: "Source-verified deep dives for ResponseStream, AgentResponseUpdate, SessionContext, FileSessionStore, AgentLoopMiddleware, SingleEdgeGroup, WorkflowInvocationKwargs, StepWrapper, DelegatingSkillsSource, and SubWorkflowRequestMessage/SubWorkflowResponseMessage — all verified against agent-framework 1.22.0 source."
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 9"
+description: "Source-verified deep dives for ResponseStream, AgentResponseUpdate, SessionContext, FileSessionStore, AgentLoopMiddleware, SingleEdgeGroup, WorkflowInvocationKwargs, StepWrapper, DelegatingSkillsSource, and SubWorkflowRequestMessage/SubWorkflowResponseMessage — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-API Deep Dives Vol. 9
 
-**Verified against:** `agent-framework==1.22.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.22.0)
 **Python requirement:** 3.10+
 
 This volume covers the streaming infrastructure layer (`ResponseStream`, `AgentResponseUpdate`), the context-provider pipeline state (`SessionContext`), file-backed session persistence (`FileSessionStore`), the judge-driven loop middleware (`AgentLoopMiddleware`), low-level workflow graph primitives (`SingleEdgeGroup`, `WorkflowInvocationKwargs`), the functional-workflow step decorator wrapper (`StepWrapper`), the skills-source decorator base (`DelegatingSkillsSource`), and the sub-workflow message-passing pair (`SubWorkflowRequestMessage` / `SubWorkflowResponseMessage`). Each section includes the full verified constructor signature, every meaningful method or factory, and self-contained runnable examples.

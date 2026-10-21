@@ -92,7 +92,7 @@ DANGEROUS_TOOLS = {"delete_record", "send_email", "execute_sql"}
 HIGH_VALUE_THRESHOLD = 1000
 
 def approval_policy(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     tool_def: ToolDefinition,
     tool_args: dict,
 ) -> bool:

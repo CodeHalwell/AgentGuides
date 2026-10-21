@@ -436,7 +436,7 @@ import (
     "log"
 
     "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/agent/sequentialagent"
+    "google.golang.org/adk/agent/workflowagents/sequentialagent"
 )
 
 func main() {
@@ -493,7 +493,7 @@ import (
     "strings"
 
     "google.golang.org/adk/agent/llmagent"
-    "google.golang.org/adk/agent/parallelagent"
+    "google.golang.org/adk/agent/workflowagents/parallelagent"
 )
 
 func main() {

@@ -9,14 +9,14 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Unified SDK that consolidates Semantic Kernel's plugin/tool system and AutoGen's multi-agent orchestration.** First-party service connectors, Azure-native observability, and A2A protocol support — across both .NET and Python. Core is stable (`agent-framework` 1.17.0 on Python, `Microsoft.Agents.AI` 1.1.0 on .NET); several provider packages are still in public beta (A2A, declarative, copilotstudio, bedrock, anthropic, ollama, orchestrations, redis, durabletask).
+**Unified SDK that consolidates Semantic Kernel's plugin/tool system and AutoGen's multi-agent orchestration.** First-party service connectors, Azure-native observability, and A2A protocol support — across both .NET and Python. The core is stable on both languages; several integration packages are still in public beta or preview (on Python: A2A, Copilot Studio, Bedrock, Anthropic, Ollama, Redis, Durable Task; on .NET: A2A, Foundry, hosting).
 
 <CardGrid>
   <Card title="Status" icon="approve-check">
-    Python **1.17.0** · .NET **1.1.0** stable · providers `1.0.0b260514` beta · August 2026
+    Current releases: Python `agent-framework` **%%version=agent-framework%%** · .NET `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** — the two are versioned independently. Checked %%versions-checked%%.
   </Card>
   <Card title="Languages" icon="puzzle">
-    Python 3.10+ · .NET 8.0+
+    Python 3.10+ · .NET 8.0+ (packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
   </Card>
   <Card title="Best for" icon="rocket">
     Azure-native agents, enterprise multi-agent orchestration, A2A.
@@ -29,12 +29,12 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard
     title="🐍 Python"
     href="/microsoft-agent-framework-guide/python/"
-    description="agent-framework 1.17.0 · asyncio-first, Pydantic types, FastAPI integration."
+    description="agent-framework · asyncio-first, Pydantic types, FastAPI integration."
   />
   <LinkCard
     title="C# .NET"
     href="/microsoft-agent-framework-guide/dotnet/"
-    description="Microsoft.Agents.AI 1.1.0 · DI, ChatClientAgent, Azure RBAC, ASP.NET Core integration."
+    description="Microsoft.Agents.AI · DI, ChatClientAgent, Azure RBAC, ASP.NET Core integration."
   />
 </CardGrid>
 
@@ -54,9 +54,9 @@ These apply to both languages and cover protocols/features that span the framewo
     description="Directed graphs, YAML/JSON agent configs, time-travel debugging."
   />
   <LinkCard
-    title="Enterprise 2025"
+    title="Enterprise patterns"
     href="./microsoft_agent_framework_enterprise_2025/"
-    description="OpenTelemetry, Content Safety, Entra ID, HIPAA/GDPR/SOX/PCI configurations."
+    description="OpenTelemetry, Entra ID, Content Safety and compliance considerations — partly design sketches; read the caution at the top."
   />
   <LinkCard
     title="Comprehensive (language-agnostic)"
@@ -79,9 +79,9 @@ These apply to both languages and cover protocols/features that span the framewo
     description="Copy-paste patterns for common scenarios."
   />
   <LinkCard
-    title="Migration notice"
+    title="Guide split notice"
     href="./migration_notice/"
-    description="Preview → GA migration notes."
+    description="How the original combined guide was split into Python and .NET guides (November 2025)."
   />
 </CardGrid>
 
@@ -96,7 +96,7 @@ These apply to both languages and cover protocols/features that span the framewo
 <Aside type="caution" title="Migrating from Preview to GA">
   - `ChatClientAgentOptions.Instructions` removed — pass instructions directly to the `ChatClientAgent` constructor.
   - Package names: `agent-framework`, `agent-framework-core`, `agent-framework-openai` (no preview suffix).
-  - Dependency floor: `>=1.0.0,<2` — RC installs incompatible.
+  - Dependency floor: `>=1.0.0,<2` — release-candidate installs are incompatible. Minor 1.x releases since GA have still shipped breaking changes in experimental areas; see each language guide's breaking-changes notes.
   - From standalone Semantic Kernel or AutoGen? See the [official migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-semantic-kernel/) (~2–4 hours).
 </Aside>
 
@@ -106,6 +106,7 @@ These apply to both languages and cover protocols/features that span the framewo
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | Py 1.22.0 / .NET 1.25.0 | Version sweep. The status card now reads both current versions from the site's version data rather than hard-coding them. Python examples across the guide re-checked against an installed `agent-framework` 1.22.0; .NET examples checked against the `Microsoft.Agents.AI` 1.25.0 assemblies (thread API → `AgentSession` / `CreateSessionAsync`, `CreateAIAgent` → `AsAIAgent`). Language-neutral pages gained accuracy notes. |
 | 2026-09-08 | Py 1.17.0 / .NET 1.1.0 | Consistency sweep. Status card corrected from a stale `Core 1.4.0` to the versions the language guides actually document (`agent-framework` 1.17.0, `Microsoft.Agents.AI` 1.1.0); language cards now name their package and version. Table of contents on the language-neutral comprehensive guide trimmed to the sections that exist, with per-language pointers for the rest. No package installation or symbol verification performed. |
 | 2026-04-21 | 1.0.1 | Parent index redesigned as language selector + cross-cutting guides. |
 | April 10, 2026 | 1.0.1 | Patch release. |

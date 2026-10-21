@@ -8,7 +8,7 @@ language: dotnet
 # Microsoft Agent Framework Advanced (.NET)
 
 
-Latest: Microsoft.Agents.AI 1.1.0 | Updated: April 2026
+Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%. The service-agent example below goes through `Microsoft.Agents.AI.AzureAI.Persistent`, which wraps the Azure AI Agents SDK (`Azure.AI.Agents.Persistent`).
 Upstream: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.Agents.Persistent | https://learn.microsoft.com/dotnet/api/overview/azure/ai.agents.persistent-readme
 
 ## Topics
@@ -18,29 +18,34 @@ Upstream: https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/ai/Azure.AI.A
 
 ## Azure AI Persistent Agents (.NET) Example
 
+Service-managed agents live in Azure AI Foundry; `Microsoft.Agents.AI.AzureAI.Persistent` (preview) bridges them into the framework as an ordinary `AIAgent`, so the session and streaming APIs are the same as for `ChatClientAgent`:
+
+```bash
+dotnet add package Microsoft.Agents.AI.AzureAI.Persistent --prerelease
+dotnet add package Azure.Identity
+```
+
 ```csharp
 using Azure.AI.Agents.Persistent;
 using Azure.Identity;
+using Microsoft.Agents.AI;
 
-var endpoint = new Uri(Environment.GetEnvironmentVariable("AZURE_AI_ENDPOINT")!);
-var cred = new DefaultAzureCredential();
-var client = new AgentsClient(endpoint, cred);
+var endpoint = Environment.GetEnvironmentVariable("AZURE_AI_PROJECT_ENDPOINT")!;
+var client = new PersistentAgentsClient(endpoint, new DefaultAzureCredential());
 
-// Create or get agent
-var agent = await client.CreateAgentAsync(new CreateAgentOptions(
-    name: "writer",
+// Create the server-side agent and get an AIAgent wrapper for it in one call.
+// (Use client.GetAIAgentAsync(agentId) to attach to an agent that already exists.)
+AIAgent agent = await client.CreateAIAgentAsync(
     model: "gpt-4o-mini",
-    instructions: "You are a helpful writing assistant."
-));
+    name: "writer",
+    instructions: "You are a helpful writing assistant.");
 
-// Send message and get response
-var thread = await client.CreateThreadAsync();
-await client.CreateMessageAsync(thread.Value.Id, MessageRole.User, "Draft a summary of LangGraph.");
-await client.CreateRunAsync(thread.Value.Id, agent.Value.Id);
-var messages = await client.GetMessagesAsync(thread.Value.Id);
-Console.WriteLine(messages.Value[0].Content[0].Text);
+AgentSession session = await agent.CreateSessionAsync();   // backed by a service-side thread
+var response = await agent.RunAsync("Draft a summary of LangGraph.", session);
+Console.WriteLine(response.Text);
 ```
 
+An earlier draft of this page used an `AgentsClient` / `CreateAgentOptions` surface from a pre-release Azure SDK; the current client is `PersistentAgentsClient`.
 ## Resilience & Telemetry
 - Wrap client calls with Polly (retry + circuit-breaker)
 - Add OpenTelemetry spans: agent.create, thread.create, run.create, messages.get

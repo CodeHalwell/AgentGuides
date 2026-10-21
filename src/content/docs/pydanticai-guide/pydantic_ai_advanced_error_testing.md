@@ -7,7 +7,7 @@ language: python
 
 # Advanced Error Handling & Testing
 
-Verified against **pydantic-ai==1.101.0** — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI exposes a small, predictable exception hierarchy. Understanding each exception type — when it is raised, how to catch it, and how to test that your agent handles it correctly — is essential for production-grade agents.
 
@@ -16,18 +16,29 @@ PydanticAI exposes a small, predictable exception hierarchy. Understanding each 
 ## Exception hierarchy
 
 ```
+RuntimeError
+├── AgentRunError                 # base for all errors that occur during agent.run*()
+│   ├── UsageLimitExceeded        # token / request / tool-call / cost budget exhausted
+│   ├── ConcurrencyLimitExceeded  # queue depth exceeded when using ConcurrencyLimiter
+│   ├── RunCancelled              # run cancelled (RunTimedOut is a subclass)
+│   ├── UnexpectedModelBehavior   # model produced structurally invalid output
+│   │   ├── ContentFilterError
+│   │   └── IncompleteToolCall
+│   └── ModelAPIError             # provider/API failure
+│       ├── ModelHTTPError        # non-2xx HTTP from provider (has .status_code)
+│       ├── ModelRateLimitError, ModelQuotaExceededError, ModelServerError,
+│       │   ModelUnavailableError (→ ModelOverloadedError),
+│       │   ModelContextWindowExceededError, ModelConnectionError (→ ModelTimeoutError)
+│       └── ...                   # HTTP errors are also raised as the matching category
+└── UserError                     # programming error (bad arguments, unsupported combination)
+
 Exception
-└── AgentRunError            # base for all errors that occur during agent.run*()
-    ├── UsageLimitExceeded   # token / request / tool-call budget exhausted
-    ├── UnexpectedModelBehavior   # model produced structurally invalid output
-    └── ModelAPIError
-        └── ModelHTTPError   # non-2xx HTTP from provider (has .status_code)
-ModelRetry                   # not an error — a signal to retry (raised inside tools/validators)
-UserError                    # programming error (bad arguments, unsupported combination)
-ConcurrencyLimitExceeded     # queue depth exceeded when using ConcurrencyLimiter
-ApprovalRequired             # tool call needs HITL approval before executing
-FallbackExceptionGroup       # all FallbackModel candidates failed
+├── ModelRetry                    # not an error — a signal to retry (raised inside tools/validators)
+├── ApprovalRequired, CallDeferred  # control flow for deferred / HITL tool calls
+└── FallbackExceptionGroup        # (an ExceptionGroup) all FallbackModel candidates failed
 ```
+
+The categorised `ModelAPIError` subclasses let you catch "rate limited" or "context window exceeded" without inspecting status codes per provider: a 429 from any provider is both a `ModelHTTPError` and a `ModelRateLimitError`.
 
 ---
 
@@ -41,7 +52,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 agent = Agent('openai:gpt-4o')
 
 @agent.tool
-async def lookup_user(ctx: RunContext[None], user_id: int) -> dict:
+async def lookup_user(ctx: RunContext[object], user_id: int) -> dict:
     if user_id <= 0:
         raise ModelRetry(f'user_id must be positive, got {user_id!r}')
     return {'id': user_id, 'name': 'Alice'}
@@ -66,7 +77,7 @@ class Summary(BaseModel):
 agent = Agent('openai:gpt-4o', output_type=Summary)
 
 @agent.output_validator
-async def validate_bullets(ctx: RunContext[None], out: Summary) -> Summary:
+async def validate_bullets(ctx: RunContext[object], out: Summary) -> Summary:
     if len(out.bullets) < 3:
         raise ModelRetry(
             f'Need at least 3 bullet points, got {len(out.bullets)}. '
@@ -162,14 +173,17 @@ except UsageLimitExceeded as e:
 ### All `UsageLimits` fields
 
 ```python
+from decimal import Decimal
 from pydantic_ai import UsageLimits
 
 limits = UsageLimits(
     request_limit=50,           # max number of model requests (default 50)
+    cost_limit=Decimal('0.50'), # max estimated cost per run (uses genai-prices)
     tool_calls_limit=20,        # max successful tool executions
     input_tokens_limit=8_000,   # max prompt tokens per run
     output_tokens_limit=2_000,  # max generated tokens per run
     total_tokens_limit=10_000,  # combined input + output cap
+    per_request_input_tokens_limit=6_000,  # cap on any single request's prompt
     count_tokens_before_request=True,  # pre-check tokens (Anthropic, Google, Bedrock)
 )
 ```
@@ -182,7 +196,7 @@ from pydantic_ai import Agent, RunUsage
 agent = Agent('openai:gpt-4o')
 result = agent.run_sync('Hello')
 
-usage: RunUsage = result.usage()
+usage: RunUsage = result.usage
 print(f'requests={usage.requests}  input={usage.input_tokens}  output={usage.output_tokens}  total={usage.total_tokens}')
 ```
 
@@ -214,7 +228,7 @@ try:
     agent = Agent('openai:gpt-4o', output_type=int)
 
     @agent.output_validator
-    def validate_int(ctx: RunContext[None], out: int) -> int:
+    def validate_int(ctx: RunContext[object], out: int) -> int:
         return out
 
     # Overriding output_type when an output_validator is already registered
@@ -258,7 +272,7 @@ asyncio.run(main())
 
 ## `ModelHTTPError` — provider HTTP failures
 
-`ModelHTTPError` (source: `pydantic_ai/exceptions.py` in 2.33.0) exposes:
+`ModelHTTPError` (source: `pydantic_ai/exceptions.py`) exposes:
 
 | Attribute            | Type              | Notes                                                                       |
 | -------------------- | ----------------- | --------------------------------------------------------------------------- |
@@ -266,7 +280,8 @@ asyncio.run(main())
 | `body`               | `object | None`   | Provider payload if available.                                              |
 | `headers`            | `dict[str, str] | None` | Lowercased header names — use `.get('retry-after')`.                    |
 | `suggested_model_id` | `str | None`      | Set when the provider returned "did you mean <id>?".                        |
-| `retry_after`        | `float | None`    | **Property**. Parses `Retry-After` (integer seconds *or* RFC-9110 date).    |
+| `retry_after`        | `float | None`    | Seconds to wait, parsed from `Retry-After` (integer seconds *or* RFC-9110 date) when the provider sent one. |
+| `provider_error_code` / `provider_error_type` | `str | None` | Provider-specific error identifiers, when available. |
 
 ```python
 from pydantic_ai import Agent
@@ -279,7 +294,7 @@ try:
 except ModelHTTPError as e:
     print(f'Provider returned HTTP {e.status_code}: {e}')
     if e.retry_after is not None:
-        # Property returns float | None — no need to parse the header.
+        # float | None — already parsed from the Retry-After header.
         print(f'  retry after {e.retry_after:.1f}s')
     if e.suggested_model_id:
         print(f'  provider suggested {e.suggested_model_id!r}')
@@ -365,7 +380,7 @@ class Price(BaseModel):
 agent = Agent('openai:gpt-4o', output_type=Price)
 
 @agent.output_validator
-async def no_negative(ctx: RunContext[None], p: Price) -> Price:
+async def no_negative(ctx: RunContext[object], p: Price) -> Price:
     if p.amount < 0:
         raise ModelRetry('Price cannot be negative, please fix.')
     return p
@@ -413,7 +428,7 @@ from pydantic_ai.models.test import TestModel
 agent = Agent('openai:gpt-4o')
 
 @agent.tool(retries=2)
-def always_fails(ctx: RunContext[None]) -> str:
+def always_fails(ctx: RunContext[object]) -> str:
     raise ModelRetry('always broken')
 
 def test_exhausted_retries():
@@ -497,15 +512,15 @@ def test_structured_output():
 from pydantic_ai.models.test import TestModel
 
 # Return a specific text response
-model = TestModel(custom_result_text='The answer is 42.')
+model = TestModel(custom_output_text='The answer is 42.')
 
 # Return structured output as a dict
-model = TestModel(custom_result_args={'value': 42, 'reasoning': 'Basic arithmetic'})
+model = TestModel(custom_output_args={'value': 42, 'reasoning': 'Basic arithmetic'})
 
 # Simulate a tool call before responding
 model = TestModel(
     call_tools=['web_search'],    # tool names to call
-    custom_result_text='Found it.',
+    custom_output_text='Found it.',
 )
 ```
 
@@ -600,7 +615,7 @@ from pydantic_ai import Agent, ModelRetry, RunContext
 agent = Agent('openai:gpt-4o')
 
 @agent.tool(retries=4)
-async def fetch_api(ctx: RunContext[None], url: str) -> str:
+async def fetch_api(ctx: RunContext[object], url: str) -> str:
     delay = 2 ** ctx.retry  # 1s, 2s, 4s, 8s
     try:
         async with httpx.AsyncClient() as client:
@@ -621,7 +636,7 @@ import json
 agent = Agent('openai:gpt-4o')
 
 @agent.tool(retries=3)
-def parse_structured(ctx: RunContext[None], raw: str) -> dict:
+def parse_structured(ctx: RunContext[object], raw: str) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -660,7 +675,7 @@ async def run_with_report(agent: Agent, prompt: str) -> RunSuccess | RunFailure:
         result = await agent.run(prompt)
         return RunSuccess(
             output=result.output,
-            tokens_used=result.usage().total_tokens,
+            tokens_used=result.usage.total_tokens,
         )
     except UsageLimitExceeded as e:
         return RunFailure(reason=str(e), kind='budget_exceeded')
@@ -697,7 +712,7 @@ def failing_agent():
 
 @pytest.fixture
 def test_model():
-    return TestModel(custom_result_text='mocked response')
+    return TestModel(custom_output_text='mocked response')
 
 def test_agent_returns_string(test_model):
     agent = Agent('openai:gpt-4o', output_type=str)
@@ -719,7 +734,7 @@ from pydantic_ai.models.test import TestModel
 ])
 def test_snapshot(prompt, expected):
     agent = Agent('openai:gpt-4o')
-    with agent.override(model=TestModel(custom_result_text=expected)):
+    with agent.override(model=TestModel(custom_output_text=expected)):
         result = agent.run_sync(prompt)
         assert result.output == expected
 ```

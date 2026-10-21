@@ -1,24 +1,26 @@
 ---
-title: "SmolAgents Architecture & Flow Diagrams"
-description: "This document provides comprehensive ASCII diagrams and conceptual visualisations of SmolAgents' architecture, workflows, and design patterns."
+title: "smolagents Architecture & Flow Diagrams"
+description: "ASCII diagrams of smolagents' architecture — agents, tools, models, executors, memory, multi-agent patterns and performance trade-offs."
 framework: smolagents
 ---
 
-# SmolAgents Architecture & Flow Diagrams
+# smolagents Architecture & Flow Diagrams
 
-## Visual Guide to SmolAgents Concepts
+> Reflects `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Timings and token counts in these diagrams are illustrative, not measurements.
 
-This document provides comprehensive ASCII diagrams and conceptual visualisations of SmolAgents' architecture, workflows, and design patterns.
+## Visual Guide to smolagents Concepts
+
+This document provides comprehensive ASCII diagrams and conceptual visualisations of smolagents' architecture, workflows, and design patterns.
 
 ---
 
-## 1. SmolAgents Framework Architecture
+## 1. smolagents Framework Architecture
 
 ### High-Level Component Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     SmolAgents Framework                            │
+│                     smolagents Framework                            │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐  │
@@ -55,8 +57,8 @@ This document provides comprehensive ASCII diagrams and conceptual visualisation
 │  ┌──────────────────────────────┴──────────────────────────────┐  │
 │  │         Execution Engines (Code Runtime)                    │  │
 │  ├──────────┬────────┬─────────┬────────┬──────────────────┤  │
-│  │  Local   │ Docker │ E2B     │ Modal  │ WebAssembly      │  │
-│  │ Python   │        │ Cloud   │ Lambda │ (browser)        │  │
+│  │  Local   │ Docker │ E2B     │ Modal  │ Blaxel           │  │
+│  │ Python   │        │ Cloud   │        │                  │  │
 │  └──────────┴────────┴─────────┴────────┴──────────────────┘  │
 │                                │                                 │
 │  ┌──────────────────────────────┴──────────────────────────────┐  │
@@ -418,7 +420,7 @@ KEY DIFFERENCE: CodeAgent completes in 1 LLM call + 1 execution.
 │       │  Research Agent    │               │ Analyst Agent     │
 │       │                    │               │                   │
 │       │  Tools:            │               │  Tools:           │
-│       │  • WebSearchTool   │               │  • PythonTool     │
+│       │  • WebSearchTool   │               │  • Python exec    │
 │       │  • Wikipedia API   │               │  • DatabaseTool   │
 │       │                    │               │  • StatsTool      │
 │       │  Task:             │               │                   │
@@ -517,12 +519,10 @@ KEY DIFFERENCE: CodeAgent completes in 1 LLM call + 1 execution.
 │         Execution Isolation Level                          │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
-│  WASM (Browser)          ◄ Maximum Isolation             │
-│  • Browser sandbox                                        │
-│  • Offline capable                                        │
-│  • Limited resources                                      │
-│  • Perfect for: Client-side agents                       │
-│  └─ Use: executor_type="wasm"                           │
+│  Blaxel (Cloud)          ◄ Strong Isolation             │
+│  • Managed remote sandbox                               │
+│  • Needs a Blaxel account                               │
+│  └─ Use: executor_type="blaxel"                         │
 │                                                           │
 │  E2B (Cloud)             ◄ Strong Isolation             │
 │  • Cloud-managed sandbox                                │
@@ -534,7 +534,6 @@ KEY DIFFERENCE: CodeAgent completes in 1 LLM call + 1 execution.
 │  Modal (Serverless)      ◄ Managed Isolation           │
 │  • Serverless containers                                │
 │  • Auto-scaling                                          │
-│  • Limited time (15 min)                                │
 │  • Perfect for: Short-lived tasks                       │
 │  └─ Use: executor_type="modal"                         │
 │                                                           │
@@ -545,13 +544,15 @@ KEY DIFFERENCE: CodeAgent completes in 1 LLM call + 1 execution.
 │  • Perfect for: Development & testing                  │
 │  └─ Use: executor_type="docker"                       │
 │                                                           │
-│  Local Python            ◄ Minimal Isolation           │
+│  Local Python            ◄ No security boundary        │
 │  • Same Python process                                 │
-│  • No isolation                                        │
+│  • AST-restricted: blocks unlisted imports/dunders     │
 │  • Fastest execution                                   │
 │  • Perfect for: Trusted code only                      │
 │  └─ Use: executor_type="local" (default)              │
 │                                                           │
+│  (The experimental "wasm" executor was removed in 1.26.0;│
+│   remote executors cannot be used with managed_agents.)  │
 └────────────────────────────────────────────────────────────┘
 ```
 
@@ -592,19 +593,19 @@ Execution Routing:
     └──────────────────────┘               └──────────────────────┘
 
 
-    ▼ executor_type="e2b"                     ▼ executor_type="wasm"
+    ▼ executor_type="e2b"                     ▼ executor_type="modal" / "blaxel"
     
     ┌──────────────────────┐               ┌──────────────────────┐
-    │  E2B Cloud Sandbox   │               │  Browser WASM        │
+    │  E2B Cloud Sandbox   │               │  Modal / Blaxel      │
     │                      │               │                      │
-    │  Managed Container   │               │  WebAssembly Runtime │
-    │  ├─ Auto-scaling     │               │  ├─ Client-side      │
-    │  ├─ Ephemeral        │               │  ├─ Offline capable  │
-    │  ├─ Timeout: 1hr     │               │  ├─ Timeout: limited │
-    │  └─ Full API access  │               │  └─ Limited libs     │
+    │  Managed Container   │               │  Managed sandbox     │
+    │  ├─ Ephemeral        │               │  ├─ Ephemeral        │
+    │  ├─ E2B_API_KEY      │               │  ├─ Provider account │
+    │  └─ Tools sent to    │               │  └─ Tools sent to    │
+    │     the sandbox      │               │     the sandbox      │
     │                      │               │                      │
-    │  Security: ✓ High    │               │  Security: ✓ Very Hi │
-    │  Speed: ○ Medium     │               │  Speed: ✓ Very Fast  │
+    │  Security: ✓ High    │               │  Security: ✓ High    │
+    │  Speed: ○ Medium     │               │  Speed: ○ Medium     │
     └──────────────────────┘               └──────────────────────┘
 
 
@@ -641,107 +642,37 @@ Output Handling:
 ### Conversation History Management
 
 ```
-Agent Lifecycle with Memory
-═════════════════════════════════════════════════════════════
+agent = CodeAgent(tools=[...], model=model)
 
-Session Start:
-┌────────────────────────┐
-│ agent = CodeAgent(...) │
-│ memory_size=3          │  ◄ Remember last 3 interactions
-└──────────┬─────────────┘
-           │
-           ▼
-┌───────────────────────────────────────────────────────┐
-│ Memory Buffer (empty initially)                      │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │  [Slot 0] - Empty                              │ │
-│ │  [Slot 1] - Empty                              │ │
-│ │  [Slot 2] - Empty                              │ │
-│ └─────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
-           │
-           ▼
-First Interaction:
-┌────────────────────────────────────────┐
-│ agent.run("What is the capital of     │
-│            France?")                   │
-└──────────┬─────────────────────────────┘
-           │
-           ▼
-┌───────────────────────────────────────────────────────┐
-│ Memory Buffer                                        │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │  [Slot 0] ← "What is capital of France?"       │ │
-│ │           → "Paris"                             │ │
-│ │  [Slot 1] - Empty                              │ │
-│ │  [Slot 2] - Empty                              │ │
-│ └─────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
-           │
-           ▼
-Second Interaction (agent remembers):
-┌────────────────────────────────────────┐
-│ agent.run("And France borders which    │
-│            countries?")                 │
-│                                        │
-│ Agent's context:                       │
-│ ← "What is capital of France?"        │
-│ → "Paris"                             │
-│ ← "And France borders which...?"      │
-└──────────┬─────────────────────────────┘
-           │
-           ▼
-┌───────────────────────────────────────────────────────┐
-│ Memory Buffer                                        │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │  [Slot 0] - "What is capital of France?" →    │ │
-│ │             "Paris"                            │ │
-│ │  [Slot 1] ← "And France borders which..."     │ │
-│ │           → "Spain, Germany, Italy, ..."       │ │
-│ │  [Slot 2] - Empty                              │ │
-│ └─────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
-           │
-           ▼
-Third Interaction (buffer filling):
-┌────────────────────────────────────────┐
-│ agent.run("Calculate the area of       │
-│            France.")                    │
-└──────────┬─────────────────────────────┘
-           │
-           ▼
-┌───────────────────────────────────────────────────────┐
-│ Memory Buffer (now full)                             │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │  [Slot 0] - "What is capital of France?" →    │ │
-│ │             "Paris"                            │ │
-│ │  [Slot 1] - "And France borders which..." →   │ │
-│ │             "Spain, Germany, Italy, ..."       │ │
-│ │  [Slot 2] ← "Calculate area of France."       │ │
-│ │           → "643,801 km²"                      │ │
-│ └─────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
-           │
-           ▼
-Fourth Interaction (buffer rotates):
-┌────────────────────────────────────────┐
-│ agent.run("What's France's GDP?")      │
-└──────────┬─────────────────────────────┘
-           │
-           ▼
-┌───────────────────────────────────────────────────────┐
-│ Memory Buffer (oldest entry removed)                 │
-│ ┌─────────────────────────────────────────────────┐ │
-│ │  [Slot 0] - "France borders..." → "Spain,..."│ │
-│ │  [Slot 1] - "Calculate area of France" →     │ │
-│ │             "643,801 km²"                    │ │
-│ │  [Slot 2] ← "What's France's GDP?" →        │ │
-│ │           → "$2.78 trillion"                 │ │
-│ └─────────────────────────────────────────────────┘ │
-│                                                      │
-│ Note: Earliest interaction forgotten                │
-│       (first question about capital)                │ │
-└───────────────────────────────────────────────────────┘
+agent.run("What is the capital of France?")          # reset=True (default)
+┌──────────────────────────────────────────────────────┐
+│ agent.memory                                         │
+│  system_prompt: SystemPromptStep                     │
+│  steps:                                              │
+│   [0] TaskStep      "What is the capital of France?" │
+│   [1] ActionStep    code → final_answer("Paris")     │
+└──────────────────────────────────────────────────────┘
+
+agent.run("And which countries border it?", reset=False)
+┌──────────────────────────────────────────────────────┐
+│  steps:                                              │
+│   [0] TaskStep      "What is the capital of France?" │
+│   [1] ActionStep    ... "Paris"                      │
+│   [2] TaskStep      "And which countries border it?" │  ◄ appended
+│   [3] ActionStep    web_search(...)                  │
+│   [4] ActionStep    final_answer("Belgium, ...")     │
+└──────────────────────────────────────────────────────┘
+
+agent.run("New topic")                                # reset=True clears steps
+┌──────────────────────────────────────────────────────┐
+│  steps:                                              │
+│   [0] TaskStep      "New topic"                      │
+└──────────────────────────────────────────────────────┘
+
+There is no size limit: every step is replayed to the model each
+call. Trim long sessions yourself (e.g. a step callback that
+clears old observations_images, or start a fresh run with a
+summary passed in additional_args).
 ```
 
 ### State Preservation Across Tasks
@@ -754,12 +685,12 @@ Fourth Interaction (buffer rotates):
 │  Agent Configuration (unchanging):                     │
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  model: InferenceClientModel(...)              │   │
-│  │  tools: [WebSearchTool(), PythonTool()]        │   │
+│  │  tools: [WebSearchTool(), VisitWebpageTool()]  │   │
 │  │  max_steps: 10                                 │   │
 │  │  executor_type: "docker"                       │   │
 │  └─────────────────────────────────────────────────┘   │
 │                                                         │
-│  Runtime State (accumulating):                         │
+│  Runtime State (accumulating when run(..., reset=False)):│
 │  ┌─────────────────────────────────────────────────┐   │
 │  │  Run 1:                                         │   │
 │  │  ├─ Input: "Find Bitcoin price"               │   │
@@ -871,7 +802,7 @@ CodeAgent (1 LLM call + execution):
 │  └─ Format: 50ms (no network delay, all in one block)
 └─ Total: ~1,600ms (1.6 seconds)
 
-Efficiency Gain: 50% faster (1,600 vs 3,200 ms)
+Illustrative only: the saving depends on the task, model and tools
 ─────────────────────────────────────────────────────
 
 Token Usage (typical):
@@ -898,7 +829,7 @@ Token efficiency: ~40% fewer tokens consumed
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│        SmolAgents in Production                        │
+│        smolagents in Production                        │
 ├────────────────────────────────────────────────────────┤
 │                                                        │
 │  ┌──────────────────────────────────────────────────┐ │
@@ -958,6 +889,6 @@ Token efficiency: ~40% fewer tokens consumed
 
 ---
 
-This comprehensive diagram guide visualises all major concepts, workflows, and architectural patterns in SmolAgents. Refer back to these diagrams when implementing agents or troubleshooting issues.
+This comprehensive diagram guide visualises all major concepts, workflows, and architectural patterns in smolagents. Refer back to these diagrams when implementing agents or troubleshooting issues.
 
 

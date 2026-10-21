@@ -248,13 +248,13 @@ agent = Agent('openai:gpt-4o-mini', capabilities=[hooks])
 
 
 @agent.tool(metadata={'category': 'read_only'})
-def list_files(ctx: RunContext[None]) -> list[str]:
+def list_files(ctx: RunContext[object]) -> list[str]:
     """List files in the project."""
     return ['README.md', 'main.py']
 
 
 @agent.tool(metadata={'category': 'write'})
-def create_file(ctx: RunContext[None], name: str) -> str:
+def create_file(ctx: RunContext[object], name: str) -> str:
     """Create a new file."""
     return f'Created {name}'
 
@@ -813,7 +813,7 @@ agent = Agent('openai:gpt-4o-mini', output_type=Summary, capabilities=[hooks])
 
 
 @agent.output_validator
-async def validate_summary(ctx: RunContext[None], output: Summary) -> Summary:
+async def validate_summary(ctx: RunContext[object], output: Summary) -> Summary:
     if not output.headline:
         raise ModelRetry('Headline cannot be empty.')
     return output
@@ -862,7 +862,7 @@ agent = Agent('openai:gpt-4o-mini', output_type=[str, DeferredToolRequests])
 
 
 @agent.tool
-def delete_record(ctx: RunContext[None], record_id: int) -> str:
+def delete_record(ctx: RunContext[object], record_id: int) -> str:
     """Delete a database record. Requires human approval for IDs > 1000."""
     if record_id > 1000 and not ctx.tool_call_approved:
         # Raise only when the call has NOT yet been approved.

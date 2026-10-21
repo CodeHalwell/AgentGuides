@@ -60,7 +60,7 @@ async def main() -> None:
     print('Nodes visited:', nodes)
     # e.g. ['UserPromptNode', 'ModelRequestNode', 'CallToolsNode', ...]
     print('Answer:', run.result.output)
-    print('Requests:', run.result.usage().requests)
+    print('Requests:', run.result.usage.requests)
 
 
 asyncio.run(main())
@@ -166,7 +166,7 @@ print(result.output.title)
 print(result.output.key_points)
 
 # Usage
-u = result.usage()
+u = result.usage
 print(f'Requests: {u.requests}, in={u.input_tokens}, out={u.output_tokens}')
 
 # Serialise for storage
@@ -218,7 +218,7 @@ async def main() -> None:
             print(chunk, end='', flush=True)
         print()  # newline
         print('Complete:', streamed.is_complete)
-        print('Tokens:', streamed.usage().output_tokens)
+        print('Tokens:', streamed.usage.output_tokens)
 
 
 asyncio.run(main())
@@ -517,7 +517,7 @@ def calculate_tax(income: float, rate: float = 0.2) -> float:
     return income * rate
 
 
-async def inspect_schema(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition:
+async def inspect_schema(ctx: RunContext[object], tool_def: ToolDefinition) -> ToolDefinition:
     print('Tool name :', tool_def.name)
     print('Schema    :', tool_def.parameters_json_schema)
     print('Strict    :', tool_def.strict)
@@ -550,7 +550,7 @@ def search(query: str, max_results: int = 5) -> list[str]:
     return [f'Result {i} for {query}' for i in range(max_results)]
 
 
-async def add_enum_constraint(ctx: RunContext[None], tool_def: ToolDefinition) -> ToolDefinition:
+async def add_enum_constraint(ctx: RunContext[object], tool_def: ToolDefinition) -> ToolDefinition:
     schema = deepcopy(tool_def.parameters_json_schema)
     # Restrict max_results to a small set at the schema level
     schema['properties']['max_results'] = {'type': 'integer', 'enum': [3, 5, 10]}
@@ -604,7 +604,7 @@ result = agent.run_sync(
     usage_limits=UsageLimits(output_tokens_limit=300),
 )
 
-u = result.usage()
+u = result.usage
 print(f'requests          : {u.requests}')
 print(f'input_tokens      : {u.input_tokens}')
 print(f'output_tokens     : {u.output_tokens}')
@@ -631,7 +631,7 @@ questions = [
 total = RunUsage()
 for q in questions:
     r = agent.run_sync(q)
-    total.incr(r.usage())
+    total.incr(r.usage)
 
 print(f'Total over {len(questions)} runs:')
 print(f'  requests     : {total.requests}')
@@ -961,18 +961,18 @@ from pydantic_ai.toolsets import FunctionToolset, ApprovalRequiredToolset
 from pydantic_ai.tools import ToolDefinition
 
 
-async def send_email(ctx: RunContext[None], to: str, body: str) -> str:
+async def send_email(ctx: RunContext[object], to: str, body: str) -> str:
     """Send an email."""
     print(f'[EMAIL] To={to} Body={body[:40]}...')
     return f'Email sent to {to}'
 
 
-async def check_balance(ctx: RunContext[None]) -> float:
+async def check_balance(ctx: RunContext[object]) -> float:
     """Check account balance."""
     return 1234.56
 
 
-def needs_approval(ctx: RunContext[None], tool_def: ToolDefinition, args: dict) -> bool:
+def needs_approval(ctx: RunContext[object], tool_def: ToolDefinition, args: dict) -> bool:
     # Only gate send_email; check_balance is always allowed
     return tool_def.name == 'send_email'
 
@@ -1126,7 +1126,7 @@ agent = Agent(
 | `ModelSettings` | `pydantic_ai.settings` | TypedDict — all fields optional | Per-agent or per-call LLM knobs |
 | `Tool` | `pydantic_ai.tools` | `function`, optional `prepare`, `requires_approval` | Explicit tool with full metadata control |
 | `ToolDefinition` | `pydantic_ai.tools` | `name`, `parameters_json_schema` | Inspect/modify schema inside `prepare` |
-| `RunUsage` | `pydantic_ai.usage` | (returned by `result.usage()`) | Token + cost accounting, `incr()`, `+` |
+| `RunUsage` | `pydantic_ai.usage` | (returned by `result.usage`) | Token + cost accounting, `incr()`, `+` |
 | `ConcurrencyLimiter` | `pydantic_ai.concurrency` | `max_running`, `max_queued` | Rate-limit parallel LLM calls |
 | `ConcurrencyLimit` | `pydantic_ai.concurrency` | `max_running`, `max_queued` | Config dataclass for `Agent(max_concurrency=)` |
 | `MCPToolset` | `pydantic_ai.mcp` | `client` (URL/path/server) | Connect to any MCP server |

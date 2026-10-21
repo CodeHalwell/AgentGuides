@@ -644,7 +644,7 @@ import (
     "context"
     "log"
 
-    "google.golang.org/adk/agent/sequentialagent"
+    "google.golang.org/adk/agent/workflowagents/sequentialagent"
     "google.golang.org/adk/agent/llmagent"
 )
 
@@ -701,7 +701,7 @@ import (
     "context"
     "log"
 
-    "google.golang.org/adk/agent/parallelagent"
+    "google.golang.org/adk/agent/workflowagents/parallelagent"
     "google.golang.org/adk/agent/llmagent"
 )
 
@@ -769,7 +769,7 @@ import (
     "context"
     "log"
 
-    "google.golang.org/adk/agent/loopagent"
+    "google.golang.org/adk/agent/workflowagents/loopagent"
     "google.golang.org/adk/agent/llmagent"
     "google.golang.org/adk/tool/exitlooptool"
 )

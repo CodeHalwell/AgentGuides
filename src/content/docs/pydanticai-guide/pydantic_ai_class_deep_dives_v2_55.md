@@ -430,7 +430,7 @@ async def main():
         )
 
         @agent.tool
-        async def read_readme(ctx: RunContext[None]) -> str:
+        async def read_readme(ctx: RunContext[object]) -> str:
             ws = ctx.workspace
             content = await ws.read_text("readme.txt")
             return content
@@ -459,7 +459,7 @@ async def main():
         )
 
         @agent.tool
-        async def write_report(ctx: RunContext[None], content: str) -> str:
+        async def write_report(ctx: RunContext[object], content: str) -> str:
             await ctx.workspace.write_text("report.md", content)
             return "written"
 
@@ -490,7 +490,7 @@ async def main():
         )
 
         @agent.tool
-        async def try_write(ctx: RunContext[None]) -> str:
+        async def try_write(ctx: RunContext[object]) -> str:
             try:
                 await ctx.workspace.write_text("secret.txt", "oops")
                 return "wrote"

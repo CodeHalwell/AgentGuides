@@ -357,12 +357,12 @@ from pydantic_ai.capabilities import Capability
 from pydantic_ai.tools import RunContext
 
 
-def get_current_time(ctx: RunContext[None]) -> str:
+def get_current_time(ctx: RunContext[object]) -> str:
     """Return the current UTC timestamp."""
     return datetime.now(timezone.utc).isoformat()
 
 
-def log_action(ctx: RunContext[None], action: str) -> str:
+def log_action(ctx: RunContext[object], action: str) -> str:
     """Record an action to the audit log and return a confirmation."""
     print(f"AUDIT: {action}")
     return f"Logged: {action}"
@@ -601,7 +601,7 @@ from pydantic_ai.capabilities import Hooks
 from pydantic_ai.tools import RunContext
 
 
-async def count_tokens(ctx: RunContext[None], *, response, request_context):
+async def count_tokens(ctx: RunContext[object], *, response, request_context):
     """Accumulate usage across requests."""
     usage = ctx.usage
     print(f"Usage so far: {usage.total_tokens} tokens")
@@ -683,7 +683,7 @@ hooks = Hooks()
 
 
 @hooks.on.before_model_request(timeout=2.0)   # fail if hook takes > 2 s
-async def slow_hook(ctx: RunContext[None], request_context):
+async def slow_hook(ctx: RunContext[object], request_context):
     await asyncio.sleep(10)  # would cause HookTimeoutError before this returns
     return request_context   # never reached; shown here for correct hook contract
 ```

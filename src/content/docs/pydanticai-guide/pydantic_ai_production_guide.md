@@ -135,7 +135,7 @@ async def support_query(
             response=result.output,
             suggested_actions=['escalate', 'provide_docs'],
             escalated=request.priority == 'critical',
-            tokens_used=result.usage().total_tokens
+            tokens_used=result.usage.total_tokens
         )
     
     except Exception as e:
@@ -325,7 +325,7 @@ async def handle_request(customer_id: int, query: str):
     logfire.info(
         'agent_response_generated',
         response_length=len(result.output),
-        tokens_used=result.usage().total_tokens
+        tokens_used=result.usage.total_tokens
     )
     
     return result
@@ -394,7 +394,7 @@ async def metrics_middleware(agent_name: str):
             agent_requests.labels(agent_name=agent_name, status='success').inc()
             
             # Track token usage
-            usage = result.usage()
+            usage = result.usage
             tokens_used.labels(agent_name=agent_name, token_type='input').inc(
                 usage.input_tokens
             )
@@ -607,8 +607,8 @@ async def cost_controlled_run(query: str) -> Optional[str]:
     )
     
     # Record actual usage and cost
-    tracker.record_usage(result.usage())
-    cost = tracker.estimate_cost(result.usage())
+    tracker.record_usage(result.usage)
+    cost = tracker.estimate_cost(result.usage)
     
     logger.info(f"Request cost: ${cost:.4f}")
     

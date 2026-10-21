@@ -107,7 +107,7 @@ result = agent.run_sync(
 )
 
 print(result.output.priority)
-print(result.usage())
+print(result.usage)
 ```
 
 Two things to notice:
@@ -366,7 +366,7 @@ agent = Agent(
 
 
 @agent.tool(requires_approval=True)
-def transfer_funds(ctx: RunContext[None], target: str, amount: float) -> str:
+def transfer_funds(ctx: RunContext[object], target: str, amount: float) -> str:
     return f'transferred ${amount:.2f} to {target}'
 
 
@@ -426,7 +426,7 @@ try:
 except FileNotFoundError:
     LONG_HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
 
-agent = Agent('anthropic:claude-3-5-sonnet-latest')
+agent = Agent('anthropic:claude-sonnet-4-6')
 
 # First call — cache is filled. Later calls with the same prefix hit it.
 first = agent.run_sync(
@@ -561,7 +561,7 @@ portable = WebSearchTool(
 )
 
 news_agent = Agent(
-    'anthropic:claude-3-5-sonnet-latest',
+    'anthropic:claude-sonnet-4-6',
     capabilities=[
         # Anthropic honours user_location + max_uses + allowed_domains.
         # The spec must be wrapped in `NativeTool(...)` to become a capability.
@@ -616,7 +616,7 @@ agent = Agent('openai:gpt-4o-mini', output_type=Answer, retries=3)
 
 
 @agent.output_validator
-def only_positive(ctx: RunContext[None], out: Answer) -> Answer:
+def only_positive(ctx: RunContext[object], out: Answer) -> Answer:
     if out.number <= 0:
         raise ModelRetry(
             f'{out.number} is not positive. Return a strictly positive integer.'

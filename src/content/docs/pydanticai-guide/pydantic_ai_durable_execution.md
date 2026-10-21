@@ -204,7 +204,7 @@ async def multi_stage_pipeline(input_data: dict) -> dict:
 
     # Stage 2: Analysis
     analyst_agent = PrefectDurableAgent(
-        'anthropic:claude-3-5-sonnet-latest',
+        'anthropic:claude-sonnet-4-6',
         checkpoint_every_n_steps=1,
         name='DataAnalyst'
     )
@@ -298,7 +298,7 @@ async def monitored_workflow(query: str):
     result = await agent.run(query)
 
     # Log metrics
-    logger.info(f"Tokens used: {result.usage().total_tokens}")
+    logger.info(f"Tokens used: {result.usage.total_tokens}")
     logger.info(f"Checkpoints created: {agent.checkpoint_count}")
 
     return result.output
@@ -398,7 +398,7 @@ async def multi_agent_dbos_workflow(task: str) -> dict:
 
     # Agent 2: Executor
     executor = DBOSDurableAgent(
-        'anthropic:claude-3-5-sonnet-latest',
+        'anthropic:claude-sonnet-4-6',
         name='Executor',
         workflow_id=DBOS.workflow_id
     )
@@ -480,7 +480,7 @@ async def stateful_workflow(query: str) -> dict:
         wf_state.current_step = 1
         result1 = await agent.run("Step 1", step_name="step_1")
         wf_state.results['step_1'] = result1.output
-        wf_state.tokens_used += result1.usage().total_tokens
+        wf_state.tokens_used += result1.usage.total_tokens
 
         # Persist state
         await DBOS.set_state('workflow_state', wf_state.model_dump())
@@ -489,7 +489,7 @@ async def stateful_workflow(query: str) -> dict:
         wf_state.current_step = 2
         result2 = await agent.run("Step 2", step_name="step_2")
         wf_state.results['step_2'] = result2.output
-        wf_state.tokens_used += result2.usage().total_tokens
+        wf_state.tokens_used += result2.usage.total_tokens
 
         await DBOS.set_state('workflow_state', wf_state.model_dump())
 
@@ -869,7 +869,7 @@ class StatefulAgentWorkflow(StatefulWorkflow):
 
         plan_result = await planner.run(f"Create a plan for: {task}")
         self.context.plan = plan_result.output
-        self.context.total_tokens_used += plan_result.usage().total_tokens
+        self.context.total_tokens_used += plan_result.usage.total_tokens
         await self.save_state()
 
         # Phase 2: Execution
@@ -877,14 +877,14 @@ class StatefulAgentWorkflow(StatefulWorkflow):
         await self.save_state()
 
         executor = DurableAgent(
-            'anthropic:claude-3-5-sonnet-latest',
+            'anthropic:claude-sonnet-4-6',
             backend=self.backend,
             workflow_id=self.workflow_id
         )
 
         exec_result = await executor.run(f"Execute: {self.context.plan}")
         self.context.execution_results.append(exec_result.output)
-        self.context.total_tokens_used += exec_result.usage().total_tokens
+        self.context.total_tokens_used += exec_result.usage.total_tokens
         await self.save_state()
 
         # Phase 3: Validation
@@ -1218,7 +1218,7 @@ async def production_analysis_workflow(
             }
         )
 
-        logger.info(f"Analysis completed: {result.usage().total_tokens} tokens used")
+        logger.info(f"Analysis completed: {result.usage.total_tokens} tokens used")
 
         # Validate output
         analysis = result.output

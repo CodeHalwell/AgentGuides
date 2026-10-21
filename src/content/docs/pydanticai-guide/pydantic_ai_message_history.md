@@ -385,7 +385,7 @@ try:
 except FileNotFoundError:
     HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
 
-agent = Agent('anthropic:claude-3-5-sonnet-latest')
+agent = Agent('anthropic:claude-sonnet-4-6')
 
 question1 = 'How many days of PTO does a new full-timer get?'
 question2 = 'And a part-timer?'

@@ -1,13 +1,14 @@
 ---
 title: "Pydantic AI: Advanced Patterns & Deep Dives"
-description: "Version: 1.0.0 Focus: Expert-level patterns, optimisations, and architectural deep dives"
+description: "Expert-level patterns, optimisations, and architectural deep dives for Pydantic AI V2."
 framework: pydanticai
 ---
 
 # Pydantic AI: Advanced Patterns & Deep Dives
 
-**Version:** 1.0.0  
-**Focus:** Expert-level patterns, optimisations, and architectural deep dives
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line; the examples have been updated for the V2 API.
+
+**Focus:** Expert-level patterns, optimisations, and architectural deep dives. Several patterns below are plain-Python orchestration around `Agent`; where Pydantic AI has a built-in equivalent (capabilities, `Hooks`, `ConcurrencyLimiter`, toolsets) it is pointed out.
 
 ---
 
@@ -128,7 +129,7 @@ class HierarchicalCoordinator:
         
         self.specialists = {
             TaskType.ANALYSIS: Agent('openai:gpt-4o', name='Analyst'),
-            TaskType.WRITING: Agent('anthropic:claude-3-5-sonnet', name='Writer'),
+            TaskType.WRITING: Agent('anthropic:claude-sonnet-4-6', name='Writer'),
             TaskType.CODING: Agent('openai:gpt-4o', name='Coder'),
             TaskType.RESEARCH: Agent('openai:gpt-4o', name='Researcher'),
         }
@@ -187,112 +188,68 @@ Generate tools dynamically based on context or capabilities.
 Useful for plugin systems and extensible applications.
 """
 
+from typing import Any, Callable
+
 from pydantic_ai import Agent, Tool
-from typing import Callable, Any
-import inspect
+from pydantic_ai.toolsets import FunctionToolset
+
 
 class DynamicToolRegistry:
-    """Registry for dynamically created tools."""
-    
-    def __init__(self):
-        self.tools: dict[str, Tool] = {}
-        self.agent = Agent('openai:gpt-4o')
-    
+    """Registry for dynamically created tools, exposed to agents as a toolset."""
+
+    def __init__(self) -> None:
+        self.toolset: FunctionToolset = FunctionToolset()
+
     def register_tool_function(
         self,
-        func: Callable,
+        func: Callable[..., Any],
         name: str | None = None,
-        description: str | None = None
+        description: str | None = None,
     ) -> Tool:
+        """Register a plain function (no RunContext) as a tool.
+
+        The JSON schema is generated from the signature and docstring, exactly as
+        with @agent.tool_plain.
         """
-        Register a function as a tool dynamically.
-        
-        Args:
-            func: Function to register
-            name: Tool name (defaults to function name)
-            description: Tool description (uses docstring if not provided)
-        """
-        
-        tool_name = name or func.__name__
-        tool_description = description or func.__doc__ or "No description"
-        
-        # Create Tool instance
-        tool = Tool(
-            func=func,
-            name=tool_name,
-            description=tool_description
-        )
-        
-        self.tools[tool_name] = tool
-        
-        # Add to agent (requires toolset approach)
+        tool = Tool(func, takes_ctx=False, name=name, description=description)
+        self.toolset.add_tool(tool)
         return tool
-    
-    def get_tool_schema(self, tool_name: str) -> dict:
-        """Get JSON schema for a tool."""
-        
-        tool = self.tools.get(tool_name)
-        if not tool:
-            return {}
-        
-        # Extract function signature
-        sig = inspect.signature(tool.func)
-        
-        parameters = {}
-        for param_name, param in sig.parameters.items():
-            if param_name in ('self', 'ctx'):
-                continue
-            
-            annotation = param.annotation
-            
-            parameters[param_name] = {
-                'type': 'string' if annotation == str else 'number',
-                'description': f"Parameter: {param_name}"
-            }
-        
-        return {
-            'name': tool_name,
-            'description': tool.description,
-            'parameters': parameters
-        }
-    
-    def get_available_tools_description(self) -> str:
-        """Get description of all available tools."""
-        
-        descriptions = []
-        for name, tool in self.tools.items():
-            descriptions.append(f"- {name}: {tool.description}")
-        
-        return "\n".join(descriptions)
+
+    def get_tool_schema(self, tool: Tool) -> dict:
+        """The ToolDefinition the model will see."""
+        td = tool.tool_def
+        return {'name': td.name, 'description': td.description, 'parameters': td.parameters_json_schema}
+
 
 # Usage
 registry = DynamicToolRegistry()
 
-# Register tools dynamically
+
 def calculate(a: int, b: int, operation: str) -> int:
-    """Perform arithmetic operations."""
+    """Perform arithmetic operations ('+' or '-')."""
     ops = {'+': lambda x, y: x + y, '-': lambda x, y: x - y}
     return ops[operation](a, b)
+
 
 def search_database(query: str) -> list[dict]:
     """Search the database."""
     return [{'id': 1, 'match': query}]
 
-registry.register_tool_function(calculate)
-registry.register_tool_function(search_database)
 
-# Agent can now use dynamically registered tools
-async def use_dynamic_tools(query: str):
-    tools_desc = registry.get_available_tools_description()
-    
-    agent = Agent(
-        'openai:gpt-4o',
-        system_prompt=f"Available tools:\n{tools_desc}"
-    )
-    
+calc_tool = registry.register_tool_function(calculate)
+registry.register_tool_function(search_database)
+print(registry.get_tool_schema(calc_tool))
+
+# The toolset is read on every run step, so tools registered later are picked up too.
+agent = Agent('openai:gpt-4o', toolsets=[registry.toolset])
+
+
+async def use_dynamic_tools(query: str) -> str:
     result = await agent.run(query)
     return result.output
 ```
+
+For tools that depend on per-run state (the user's permissions, a feature flag), prefer a dynamic toolset (`@agent.toolset` / `DynamicToolset`) or a `prepare` function, which build the tool list for each run rather than mutating a shared registry.
 
 ---
 
@@ -393,7 +350,8 @@ Dynamically choose between early exit and exhaustive tool calling
 based on query complexity.
 """
 
-from pydantic_ai import Agent, EndStrategy
+from pydantic_ai import Agent
+from pydantic_ai.agent import EndStrategy
 import asyncio
 
 class AdaptiveAgentOrchestrator:
@@ -417,18 +375,21 @@ class AdaptiveAgentOrchestrator:
         
         complexity = await self.estimate_complexity(query)
         
-        # Choose strategy based on complexity
+        # EndStrategy is a Literal['early', 'graceful', 'exhaustive'] — plain strings.
+        # Since 2.0 the default is 'graceful': function tools requested alongside a
+        # successful output tool still run. 'early' skips them; 'exhaustive' runs every
+        # tool call, output tools included.
+        strategy: EndStrategy
         if complexity < 0.3:
-            # Simple query - exit early when possible
-            strategy = EndStrategy.EARLY
+            # Simple query - stop as soon as a final output is available
+            strategy = 'early'
             instructions = "Answer quickly and concisely."
         elif complexity < 0.7:
-            # Medium complexity - use some tools
-            strategy = EndStrategy.EARLY
+            strategy = 'graceful'
             instructions = "Use tools only if needed."
         else:
-            # Complex query - use all available tools
-            strategy = EndStrategy.EXHAUSTIVE
+            # Complex query - run every tool call the model makes
+            strategy = 'exhaustive'
             instructions = "Use all available tools to thoroughly answer."
         
         agent = Agent(
@@ -685,69 +646,53 @@ async def handle_request(user_query: str, user_id: str, priority: int = 0) -> bo
 
 ## Advanced Pattern 8: Custom Model Adapters
 
+There are three levels, from least to most work:
+
+1. **OpenAI-compatible endpoint** (vLLM, LiteLLM proxy, an in-house gateway): point `OpenAIChatModel` at it with a custom `OpenAIProvider`. No adapter code at all.
+2. **Arbitrary HTTP API, quick and local**: wrap it in a `FunctionModel`, which turns a Python function into a `Model`.
+3. **Production adapter**: subclass `pydantic_ai.models.Model` and implement `request()` (and `request_stream()` if you need streaming), as the built-in providers do.
+
 ```python
-"""
-Create custom adapters for unsupported models or specialised use cases.
-"""
-
+import httpx2
 from pydantic_ai import Agent
-from typing import Optional
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, UserPromptPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
-class CustomModelAdapter:
-    """Adapter for custom or proprietary models."""
-    
-    def __init__(self, model_endpoint: str, api_key: str):
-        self.model_endpoint = model_endpoint
-        self.api_key = api_key
-    
-    async def call_model(
-        self,
-        system_prompt: str,
-        user_message: str,
-        temperature: float = 0.7
-    ) -> str:
-        """Call custom model endpoint."""
-        
-        import httpx
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                self.model_endpoint,
-                json={
-                    'system': system_prompt,
-                    'messages': [{'role': 'user', 'content': user_message}],
-                    'temperature': temperature,
-                },
-                headers={'Authorization': f'Bearer {self.api_key}'}
-            )
-            
-            return response.json()['result']
+# 1. OpenAI-compatible server
+compatible = OpenAIChatModel(
+    'my-finetune',
+    provider=OpenAIProvider(base_url='https://llm.internal.example.com/v1', api_key='your-api-key'),
+)
+agent_a = Agent(compatible)
 
-# Create agent with custom model
-class CustomAgent:
-    def __init__(self, adapter: CustomModelAdapter):
-        self.adapter = adapter
-    
-    async def run(self, query: str, system_prompt: str = "") -> str:
-        """Run query against custom model."""
-        
-        return await self.adapter.call_model(
-            system_prompt=system_prompt or "You are a helpful assistant.",
-            user_message=query
+# 2. Any HTTP endpoint, via FunctionModel
+CUSTOM_ENDPOINT = 'https://api.custom.example.com/generate'
+
+
+async def call_custom_model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    prompt = next(
+        part.content
+        for message in reversed(messages)
+        for part in message.parts
+        if isinstance(part, UserPromptPart)
+    )
+    async with httpx2.AsyncClient() as client:
+        r = await client.post(
+            CUSTOM_ENDPOINT,
+            json={'system': info.instructions or '', 'prompt': prompt},
+            headers={'Authorization': 'Bearer your-api-key'},
         )
+        r.raise_for_status()
+    return ModelResponse(parts=[TextPart(r.json()['result'])], model_name='custom')
 
-# Usage
-adapter = CustomModelAdapter(
-    model_endpoint='https://api.custom.com/models/gpt',
-    api_key='your-api-key'
-)
 
-custom_agent = CustomAgent(adapter)
-
-result = asyncio.run(
-    custom_agent.run('What is type safety?')
-)
+agent_b = Agent(FunctionModel(call_custom_model), instructions='You are a helpful assistant.')
+# result = await agent_b.run('What is type safety?')
 ```
+
+`FunctionModel` gives you message history, instructions and tool definitions (`info.function_tools`, `info.output_tools`), so it can support tool calling too — return a `ToolCallPart` instead of a `TextPart`. `httpx2` is the HTTP client Pydantic AI itself depends on; plain `httpx` works equally well here.
 
 ---
 
@@ -876,8 +821,7 @@ async def run_with_middleware(query: str, user_id: str):
 
 ```python
 import asyncio
-from pydantic_ai import Agent
-from pydantic_ai._agent_graph import ModelRequestNode, CallToolsNode, UserPromptNode
+from pydantic_ai import Agent, CallToolsNode, ModelRequestNode, UserPromptNode
 from pydantic_graph import End
 
 agent = Agent('openai:gpt-4o')
@@ -890,7 +834,7 @@ async def main():
             nodes_visited.append(type(node).__name__)
 
     print(nodes_visited)
-    # ['UserPromptNode', 'ModelRequestNode', 'CallToolsNode']
+    # ['UserPromptNode', 'ModelRequestNode', 'CallToolsNode', 'End']
     print(run.result.output)
     # 'The capital of France is Paris.'
 
@@ -901,15 +845,14 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from pydantic_ai import Agent
-from pydantic_ai._agent_graph import CallToolsNode
+from pydantic_ai import Agent, CallToolsNode
 from pydantic_graph import End
 
 agent = Agent('openai:gpt-4o')
 
 async def run_with_budget(prompt: str, max_steps: int = 10):
     async with agent.iter(prompt) as run:
-        node = await run.next(None)   # first step
+        node = run.next_node   # the first node (a UserPromptNode), not yet run
         for _ in range(max_steps):
             if isinstance(node, End):
                 break
@@ -933,8 +876,7 @@ Forward agent progress to a WebSocket in real-time:
 ```python
 import asyncio
 import json
-from pydantic_ai import Agent
-from pydantic_ai._agent_graph import ModelRequestNode, CallToolsNode
+from pydantic_ai import Agent, CallToolsNode, ModelRequestNode
 from pydantic_graph import End
 
 agent = Agent('openai:gpt-4o')
@@ -967,10 +909,11 @@ agent = Agent('openai:gpt-4o')
 async def timed_run(prompt: str):
     timings = []
     async with agent.iter(prompt) as run:
-        async for node in run:
+        node = run.next_node
+        while not isinstance(node, End):
             t0 = time.perf_counter()
             step_name = type(node).__name__
-            # Yield to let the node run (it runs as part of iteration)
+            node = await run.next(node)   # actually executes the node
             timings.append((step_name, time.perf_counter() - t0))
 
     for name, elapsed in timings:
@@ -984,8 +927,7 @@ asyncio.run(timed_run('What is the speed of light?'))
 
 ```python
 import asyncio
-from pydantic_ai import Agent
-from pydantic_ai._agent_graph import ModelRequestNode
+from pydantic_ai import Agent, ModelRequestNode
 from pydantic_graph import End
 
 agent = Agent('openai:gpt-4o')
@@ -993,7 +935,7 @@ agent = Agent('openai:gpt-4o')
 async def run_with_model_override(prompt: str):
     """Override model parameters on a specific request node before execution."""
     async with agent.iter(prompt) as run:
-        node = await run.next(None)
+        node = run.next_node
         while not isinstance(node, End):
             if isinstance(node, ModelRequestNode):
                 # Inspect before calling the model — could log, trace, or modify
@@ -1012,14 +954,6 @@ async with agent.iter('prompt') as run:
         pass
 
 run.result           # AgentRunResult — available after the loop completes
-run.usage()          # RunUsage — total tokens across all steps
+run.usage          # RunUsage — total tokens across all steps
 run.all_messages()   # list[ModelMessage] — full conversation
 ```
-
----
-
-(Advanced patterns continue with more sophisticated techniques...)
-
-These patterns demonstrate expert-level usage of Pydantic AI for complex, production-grade applications.
-
-

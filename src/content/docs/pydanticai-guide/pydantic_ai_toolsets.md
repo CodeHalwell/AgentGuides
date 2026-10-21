@@ -79,7 +79,7 @@ Register tools three ways:
 tools = FunctionToolset[None]()
 
 @tools.tool
-def ping(ctx: RunContext[None]) -> str:   # decorator with ctx
+def ping(ctx: RunContext[object]) -> str:   # decorator with ctx
     return 'pong'
 
 @tools.tool_plain                          # no RunContext needed
@@ -423,7 +423,7 @@ agent = Agent(
 ```python
 from pydantic_ai import Agent
 
-sub = Agent('openai:gpt-5.2-mini', name='citations')
+sub = Agent('openai:gpt-5.4-mini', name='citations')
 
 @sub.tool_plain
 def lookup_citation(key: str) -> str: ...
@@ -1179,7 +1179,7 @@ def add_to_cart(item: str) -> str:
     return f'{item} added to cart.'
 
 # Count how many items were added based on tool history
-def cart_filter(ctx: RunContext[None], tool_def) -> bool:
+def cart_filter(ctx: RunContext[object], tool_def) -> bool:
     if tool_def.name != 'confirm_purchase':
         return True
     # Only show confirm_purchase if add_to_cart was called at least once

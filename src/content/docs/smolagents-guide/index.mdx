@@ -1,6 +1,6 @@
 ---
-title: "SmolAgents"
-description: "Minimalist code-centric agents in ~1,000 lines — the fastest path to a working agent."
+title: "smolagents"
+description: "Hugging Face's compact agent library — agents that act by writing Python code, plus classic tool-calling agents."
 framework: smolagents
 language: python
 sidebar:
@@ -10,40 +10,42 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**The smallest complete agent framework.** A `CodeAgent` writes Python to accomplish tasks; a `ToolCallingAgent` uses JSON tool-calling. The entire core is ~1,000 lines — readable, hackable, and a great first step into agents.
+**Agents that act in code.** A `CodeAgent` writes short Python snippets that call your tools, loop and compute; a `ToolCallingAgent` uses ordinary JSON tool calls. The core is small enough to read in an afternoon, which makes it a good first framework and an easy one to debug.
+
+**Current version: `smolagents` %%version=smolagents%%** (checked %%versions-checked%%). Python 3.10+.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install smolagents
+    pip install "smolagents[toolkit]==%%version=smolagents%%"
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.26.0** · May 2026 · Python 3.10+
+    **%%version=smolagents%%** · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
-    Learning, prototyping, simple automation, code-first workflows.
+    Learning, prototyping, code-first automation, Hugging Face Hub workflows.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Where to start">
-  Brand new to agents? This is the easiest framework to get running in 5 minutes. Follow Zero → Hero.
+<Aside type="caution" title="Generated code runs on your machine by default">
+  `CodeAgent`'s default `LocalPythonExecutor` restricts imports but is not a security boundary. Use `executor_type="docker"`, `"e2b"`, `"modal"` or `"blaxel"` for untrusted input.
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Introduction & philosophy" href="./smolagents_comprehensive_guide/#introduction--philosophy" description="Why code > JSON · 10 min" />
-  <LinkCard title="2 · Installation & setup" href="./smolagents_comprehensive_guide/#installation--setup" description="Install, LLM config, hello world · 10 min" />
-  <LinkCard title="3 · Core concepts & architecture" href="./smolagents_comprehensive_guide/#core-concepts--architecture" description="Agent, Tool, Memory · 15 min" />
-  <LinkCard title="4 · Model configuration" href="./smolagents_comprehensive_guide/#model-configuration--selection" description="100+ LLM providers · 15 min" />
-  <LinkCard title="5 · Simple agents fundamentals" href="./smolagents_comprehensive_guide/#simple-agents-fundamentals" description="First agent walk-through · 20 min" />
-  <LinkCard title="6 · Tools: building blocks" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" description="Built-in + custom tools · 20 min" />
-  <LinkCard title="7 · CodeAgent (code paradigm)" href="./smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" description="Python-writing agent · 25 min" />
+  <LinkCard title="1 · Introduction & philosophy" href="./smolagents_comprehensive_guide/#introduction--philosophy" description="Code actions vs JSON actions · 10 min" />
+  <LinkCard title="2 · Installation & setup" href="./smolagents_comprehensive_guide/#installation--setup" description="Extras, credentials, first check · 10 min" />
+  <LinkCard title="3 · Core concepts & architecture" href="./smolagents_comprehensive_guide/#core-concepts--architecture" description="Agents, tools, models, memory · 15 min" />
+  <LinkCard title="4 · Model configuration" href="./smolagents_comprehensive_guide/#model-configuration--selection" description="HF, LiteLLM, OpenAI, local · 15 min" />
+  <LinkCard title="5 · Simple agents fundamentals" href="./smolagents_comprehensive_guide/#simple-agents-fundamentals" description="run(), results, streaming, errors · 20 min" />
+  <LinkCard title="6 · Tools: building blocks" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" description="@tool, Tool subclasses, MCP, Hub · 20 min" />
+  <LinkCard title="7 · CodeAgent (code paradigm)" href="./smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" description="Execution, checks, callbacks · 25 min" />
   <LinkCard title="8 · ToolCallingAgent" href="./smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" description="JSON tool-calling variant · 15 min" />
   <LinkCard title="9 · Multi-agent & orchestration" href="./smolagents_comprehensive_guide/#multi-agent-systems--orchestration" description="Managed agents, delegation · 20 min" />
-  <LinkCard title="10 · Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" description="Schema-validated output · 15 min" />
-  <LinkCard title="11 · Production" href="./smolagents_production_guide/" description="Deployment, safety, cost · 25 min" />
+  <LinkCard title="10 · Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" description="Validated answers, output schemas · 15 min" />
+  <LinkCard title="11 · Production" href="./smolagents_production_guide/" description="Sandboxing, cost, telemetry, deployment · 25 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -54,8 +56,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Custom tools" href="./smolagents_comprehensive_guide/#tools-building-blocks-of-agents" />
   <LinkCard title="Multi-agent orchestration" href="./smolagents_comprehensive_guide/#multi-agent-systems--orchestration" />
   <LinkCard title="Structured outputs" href="./smolagents_comprehensive_guide/#structured-outputs--schema" />
-  <LinkCard title="2025 features deep-dive" href="./smolagents_comprehensive_guide/#2025-features-deep-dive" />
-  <LinkCard title="Model selection (100+ LLMs)" href="./smolagents_comprehensive_guide/#model-configuration--selection" />
+  <LinkCard title="Sandboxes, Hub & multimodal" href="./smolagents_comprehensive_guide/#sandboxes-hub-sharing-and-multimodal-input" />
+  <LinkCard title="Model selection" href="./smolagents_comprehensive_guide/#model-configuration--selection" />
+  <LinkCard title="Version notes" href="./smolagents_comprehensive_guide/#version-notes" />
 </CardGrid>
 
 ## Reference
@@ -67,25 +70,31 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./smolagents_production_guide/" />
 </CardGrid>
 
-## What's new in v1.26.0 (May 2026)
+## Recent releases
 
-- **v1.26.0 (May 2026)** — Minor release; maintenance and dependency updates. All key symbols (`CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent`) verified against installed `smolagents==1.26.0` (`.routine-envs/check-0529-smolagents`); no `DeprecationWarning` emissions.
-- **v1.25.0 (May 2026)** — Minor release. `InferenceClientModel` default model updated to `Qwen/Qwen3-Next-80B-A3B-Thinking`. All key symbols (`CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent`) verified against installed `smolagents==1.25.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions.
-- **v1.24.0 (April 2026)** — `HfApiModel` removed; raises `ImportError`. Use `InferenceClientModel` for all HuggingFace-hosted model access. Expanded model compatibility; `token_counts` tracking fix for managed agents; vision model support for web browsing agents.
+- **1.26.0** — Exa added as a `WebSearchTool` engine; the experimental `WasmExecutor` (`executor_type="wasm"`) removed.
+- **1.25.0** — Security hardening of remote executors; `allow_pickle` defaults to `False`; documentation now states plainly that `LocalPythonExecutor` is not a sandbox; `huggingface-hub` 1.x supported.
+- **1.24.0** — More robust execution timeout for the local executor; `FinalAnswerStep` passed to `step_callbacks`; saved agents that reference the old `HfApiModel` class load as `InferenceClientModel` (the `HfApiModel` import itself has not existed since 1.19.0).
 
-## Install, minimal example
+## Minimal example
 
 ```python
-from smolagents import CodeAgent, tool
+from smolagents import CodeAgent, InferenceClientModel, tool
+
 
 @tool
 def add_numbers(a: int, b: int) -> int:
-    """Add two numbers together."""
+    """Add two numbers together.
+
+    Args:
+        a: The first number.
+        b: The second number.
+    """
     return a + b
 
-agent = CodeAgent(tools=[add_numbers])
-result = agent.run("What is 15 + 27?")
-print(result)
+
+agent = CodeAgent(tools=[add_numbers], model=InferenceClientModel())   # needs HF_TOKEN
+print(agent.run("What is 15 + 27?"))
 ```
 
 Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#introduction--philosophy)**
@@ -96,8 +105,7 @@ Ready? **[Start Zero → Hero Step 1 →](./smolagents_comprehensive_guide/#intr
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-05-29 | 1.26.0 | Version bumped 1.25.0 → 1.26.0; "What's new" heading updated; v1.26.0 bullet added; comprehensive guide header updated; revision history entry added. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.26.0` (`.routine-envs/check-0529-smolagents`); no `DeprecationWarning`. | Claude routine |
-| 2026-05-19 | 1.25.0 | Version bumped 1.24.0 → 1.25.0; "What's new" updated; `InferenceClientModel` default model change noted. `CodeAgent`, `ToolCallingAgent`, `InferenceClientModel`, `LiteLLMModel`, `tool`, `MultiStepAgent` verified against installed `smolagents==1.25.0` (`.routine-envs/check-0519-py`); no `DeprecationWarning`. | Claude routine |
+| %%versions-checked%% | %%version=smolagents%% | All pages re-verified against the installed package; code rewritten where it used non-existent APIs; release notes corrected; version references now come from the site's version data. |
+| 2026-05-29 | 1.26.0 | Version bump. |
 | 2026-04-21 | 1.24.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| January 16, 2026 | 1.24.0 | Expanded model providers; tool call perf; multi-agent patterns. |
 | November 2025 | 1.23.0 | Initial documented version. |

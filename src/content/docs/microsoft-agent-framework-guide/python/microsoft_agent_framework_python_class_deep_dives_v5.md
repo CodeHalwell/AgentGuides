@@ -1,16 +1,16 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 5 (1.19.0)"
-description: "Source-verified deep dives for WorkflowEvent, AgentContext, MiddlewareBundle, ConversationSplit/ConversationSplitter, VectorStoreHistoryProvider, MemoryStore/MemoryFileStore, MemoryTopicRecord, WorkflowRunResult, FunctionInvocationContext, and ChatOptions — all verified against agent-framework 1.19.0 source."
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 5"
+description: "Source-verified deep dives for WorkflowEvent, AgentContext, MiddlewareBundle, ConversationSplit/ConversationSplitter, VectorStoreHistoryProvider, MemoryStore/MemoryFileStore, MemoryTopicRecord, WorkflowRunResult, FunctionInvocationContext, and ChatOptions — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-API Deep Dives Vol. 5
 
-**Verified against:** `agent-framework==1.19.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.19.0)
 **Python requirement:** 3.10+
 
-This volume covers 10 additional public APIs spanning the workflow event bus, agent and function middleware contexts, indivisible middleware bundles, evaluation conversation splitting, vector-store-backed history, topic-based memory stores, workflow run results, progressive tool exposure, and the cross-provider `ChatOptions` TypedDict. Each section includes the full constructor or signature, every meaningful method or factory, and self-contained runnable examples verified against the 1.19.0 source.
+This volume covers 10 additional public APIs spanning the workflow event bus, agent and function middleware contexts, indivisible middleware bundles, evaluation conversation splitting, vector-store-backed history, topic-based memory stores, workflow run results, progressive tool exposure, and the cross-provider `ChatOptions` TypedDict. Each section includes the full constructor or signature, every meaningful method or factory, and self-contained runnable examples first verified against the 1.19.0 source and re-checked against %%version=agent-framework%%.
 
 See [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
 
@@ -1511,7 +1511,7 @@ The other APIs in this volume (`WorkflowEvent`, the memory harness, `ChatOptions
 
 ## See also
 
-- [Python Comprehensive Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — framework overview, content verified against 1.14.0 (latest release badge: 1.19.0)
+- [Python Comprehensive Guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — framework overview and consolidated class reference
 - [Class Deep Dives Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) — workflow visualization, file memory, background agents, tool approval
 - [Class Deep Dives Vol. 2](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v2/) — fan-in/out edges, functional workflows, checkpointing, MCP tools
 - [Class Deep Dives Vol. 3](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives_v3/) — workflow builder, compaction strategies, evaluation, inline skills, file access

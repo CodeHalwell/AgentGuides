@@ -140,7 +140,7 @@ async def run_eval_suite(
             logfire.info(
                 "test_case_complete",
                 passed=passed,
-                tokens=result.usage().total_tokens,
+                tokens=result.usage.total_tokens,
                 latency_ms=latency
             )
 
@@ -150,7 +150,7 @@ async def run_eval_suite(
                 expected=test_case['expected'],
                 actual=result.output,
                 passed=passed,
-                tokens_used=result.usage().total_tokens,
+                tokens_used=result.usage.total_tokens,
                 latency_ms=latency
             )
 
@@ -316,7 +316,7 @@ async def test_simple_query(agent):
         result = await agent.run("What is 2+2?")
 
         assert "4" in result.output
-        assert result.usage().total_tokens > 0
+        assert result.usage.total_tokens > 0
 
 @pytest.mark.asyncio
 async def test_structured_output(agent):
@@ -346,7 +346,7 @@ async def test_with_mock(test_agent):
     result = await test_agent.run("Any query")
 
     assert result.output is not None
-    assert result.usage().total_tokens == 0  # No actual API call
+    assert result.usage.total_tokens == 0  # No actual API call
 
 @pytest.mark.parametrize("input,expected", [
     ("2+2", "4"),
@@ -431,7 +431,7 @@ class EvalRunner:
                 logfire.info(
                     "eval_case_result",
                     status=status.value,
-                    tokens=result.usage().total_tokens
+                    tokens=result.usage.total_tokens
                 )
 
                 return {
@@ -440,7 +440,7 @@ class EvalRunner:
                     "input": case.input,
                     "output": result.output,
                     "expected": case.expected,
-                    "tokens": result.usage().total_tokens
+                    "tokens": result.usage.total_tokens
                 }
 
             except Exception as e:
@@ -558,7 +558,7 @@ async def test_with_test_model():
 
     # TestModel returns structured test data
     assert result.output is not None
-    assert result.usage().total_tokens == 0  # No actual tokens
+    assert result.usage.total_tokens == 0  # No actual tokens
 
 # 2. FunctionModel - Custom response logic
 @pytest.mark.asyncio
@@ -776,7 +776,7 @@ async def test_multi_agent_coordination():
 
     # Create agents
     researcher = Agent('openai:gpt-4o')
-    analyst = Agent('anthropic:claude-3-5-sonnet-latest')
+    analyst = Agent('anthropic:claude-sonnet-4-6')
     writer = Agent('openai:gpt-4o')
 
     # Register agents
@@ -839,7 +839,7 @@ class LatencyBenchmark:
                 logfire.info(
                     f"iteration_{i}",
                     latency_ms=latency,
-                    tokens=result.usage().total_tokens
+                    tokens=result.usage.total_tokens
                 )
 
         # Calculate statistics
@@ -896,7 +896,7 @@ class TokenBenchmark:
         with logfire.span("token_benchmark"):
             for query in queries:
                 result = await self.agent.run(query)
-                usage = result.usage()
+                usage = result.usage
 
                 total_input += usage.input_tokens
                 total_output += usage.output_tokens
@@ -1056,7 +1056,7 @@ class RegressionTester:
             results.append({
                 'input': case['input'],
                 'output': result.output,
-                'tokens': result.usage().total_tokens
+                'tokens': result.usage.total_tokens
             })
 
         # Load baseline
@@ -1194,7 +1194,7 @@ async def query_agent(
         evaluator.log_production_request,
         query,
         result.output,
-        {'tokens': result.usage().total_tokens}
+        {'tokens': result.usage.total_tokens}
     )
 
     return {"response": result.output}

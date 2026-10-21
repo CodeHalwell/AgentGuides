@@ -90,7 +90,7 @@ from pydantic_ai import ModelRequest
 from pydantic_ai.direct import model_request_sync
 
 response = model_request_sync(
-    'google-gla:gemini-2.0-flash',
+    'google:gemini-2.5-flash',
     [ModelRequest.user_text_prompt('Explain backpropagation in two sentences.')],
 )
 print(response.parts[0].content)  # TextPart
@@ -352,7 +352,7 @@ from pydantic_ai.direct import model_request
 MODELS = [
     'openai:gpt-4o-mini',
     'anthropic:claude-haiku-4-5',
-    'google-gla:gemini-2.0-flash',
+    'google:gemini-2.5-flash',
 ]
 
 async def compare(prompt: str) -> None:

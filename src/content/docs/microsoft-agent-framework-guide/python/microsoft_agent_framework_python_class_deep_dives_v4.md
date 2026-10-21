@@ -1,16 +1,16 @@
 ---
-title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 4 (1.18.0)"
-description: "Source-verified deep dives for VectorStoreField, VectorStoreCollectionDefinition, InMemoryCollection, InMemoryStore, Filter, FilterGroup, SecretString, load_settings, create_agent_hooks_middleware, and GroupChatBuilder — all verified against agent-framework 1.18.0 source."
+title: "Microsoft Agent Framework (Python) — 10-API Deep Dives Vol. 4"
+description: "Source-verified deep dives for VectorStoreField, VectorStoreCollectionDefinition, InMemoryCollection, InMemoryStore, Filter, FilterGroup, SecretString, load_settings, create_agent_hooks_middleware, and GroupChatBuilder — all source-verified, re-checked against the current release."
 framework: microsoft-agent-framework
 language: python
 ---
 
 # agent-framework (Python) — 10-API Deep Dives Vol. 4
 
-**Verified against:** `agent-framework==1.18.0`
+**Verified against:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; this volume was first written for 1.18.0)
 **Python requirement:** 3.10+
 
-This volume covers 10 additional public APIs (eight classes and two functions) spanning vector store modelling, portable filter expressions, settings management, AGENT-HOOKS-0.1 enforcement, and multi-agent group chat orchestration. Each section includes the full constructor or signature, every meaningful method, and self-contained runnable examples verified against the 1.18.0 source.
+This volume covers 10 additional public APIs (eight classes and two functions) spanning vector store modelling, portable filter expressions, settings management, AGENT-HOOKS-0.1 enforcement, and multi-agent group chat orchestration. Each section includes the full constructor or signature, every meaningful method, and self-contained runnable examples first verified against the 1.18.0 source and re-checked against %%version=agent-framework%%.
 
 See [Vol. 1](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_class_deep_dives/) for `WorkflowViz`, `FileMemoryProvider`, `AgentModeProvider`, `BackgroundAgentsProvider`, `ToolApprovalMiddleware`, `SwitchCaseEdgeGroup`, `MessageInjectionMiddleware`, `ToolResultCompactionStrategy`, `SummarizationStrategy`, and `TokenBudgetComposedStrategy`.
 
@@ -768,7 +768,7 @@ settings = load_settings(
 
 > **Trust-model caveat:** AGENT-HOOKS-0.1 is a cooperative in-process control contract, not a security boundary. The eight interception points provide best-effort mediation; complete mediation is not guaranteed by the spec. Do not rely solely on this middleware to enforce hard security invariants across trust boundaries.
 
-Requires the optional `agent-hooks-sdk` package: `pip install --pre agent-hooks-sdk` (the SDK is in pre-release as of 1.18.0).
+Requires the optional `agent-hooks-sdk` package: `pip install --pre agent-hooks-sdk` (the SDK was still in pre-release — `0.1.0b2` — at the %%versions-checked%% check).
 
 ### Signature
 

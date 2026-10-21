@@ -1,14 +1,16 @@
 ---
 title: "LlamaIndex TypeScript Production Guide"
-description: "Production deployment patterns for @llamaindex/workflow 1.1.25 — Docker, Kubernetes, Redis, error handling, observability."
+description: "Production deployment patterns for LlamaIndex.TS workflows — Docker, Kubernetes, Redis, error handling, observability (project now deprecated upstream)."
 framework: llamaindex
 language: typescript
 ---
 
 # LlamaIndex TypeScript Production Guide
 
-**Version:** `@llamaindex/workflow` 1.1.25  
-**Target:** Production-ready Node.js (18+) deployments
+**Version:** `@llamaindex/workflow` 1.1.25 (final release) · umbrella `llamaindex` %%version=llamaindex%% · checked %%versions-checked%%  
+**Target:** Node.js 20+ deployments
+
+> **Deprecated upstream — read before deploying.** LlamaIndex.TS is no longer maintained and every `@llamaindex/*` package used here is marked deprecated on npm. Running it in production means owning any bugs and security fixes yourself; pin exact versions, vendor the lock file, and plan a migration path (see the [overview](../)).
 
 > All workflow examples use the functional API (`createWorkflow`, `workflowEvent`, `handle`, `run`). The `llama-index-workflows` package and class-based `extends Workflow` pattern are not part of the published `@llamaindex/workflow` package.
 
@@ -94,15 +96,15 @@ import { z } from 'zod';
 
 const envSchema = z.object({
   NODE_ENV:          z.enum(['development', 'production', 'test']).default('development'),
-  PORT:              z.string().transform(Number).default('3000'),
+  PORT:              z.coerce.number().default(3000),
   OPENAI_API_KEY:    z.string().min(1),
-  LLM_MODEL:         z.string().default('gpt-4o-mini'),
+  LLM_MODEL:         z.string().default('gpt-5-mini'),
   REDIS_URL:         z.string().default('redis://localhost:6379'),
-  CACHE_TTL_SECS:    z.string().transform(Number).default('3600'),
+  CACHE_TTL_SECS:    z.coerce.number().default(3600),
   LOG_LEVEL:         z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   API_KEY:           z.string().optional(),
-  RATE_LIMIT_MAX:    z.string().transform(Number).default('100'),
-  RATE_LIMIT_WINDOW: z.string().transform(Number).default('900000'),
+  RATE_LIMIT_MAX:    z.coerce.number().default(100),
+  RATE_LIMIT_WINDOW: z.coerce.number().default(900000),
 });
 
 export type Env = z.infer<typeof envSchema>;
@@ -114,7 +116,7 @@ export const config = envSchema.parse(process.env);
 NODE_ENV=production
 PORT=8080
 OPENAI_API_KEY=sk-prod-key
-LLM_MODEL=gpt-4o
+LLM_MODEL=gpt-5-mini
 REDIS_URL=redis://redis-production:6379
 CACHE_TTL_SECS=3600
 LOG_LEVEL=info
@@ -131,21 +133,21 @@ RATE_LIMIT_WINDOW=900000
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.prod.json",
-    "start": "node --experimental-vm-modules dist/index.js",
+    "start": "node dist/index.js",
     "test": "jest",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@llamaindex/workflow": "^1.1.25",
-    "@llamaindex/core": "^0.6.23",
-    "@llamaindex/openai": "latest",
+    "@llamaindex/workflow": "1.1.25",
+    "@llamaindex/core": "0.6.23",
+    "@llamaindex/openai": "0.4.23",
     "express": "^4.18.2",
-    "zod": "^3.22.4",
+    "zod": "^4.0.0",
     "winston": "^3.11.0",
     "ioredis": "^5.3.2",
     "express-rate-limit": "^7.1.5",
@@ -172,7 +174,7 @@ RATE_LIMIT_WINDOW=900000
 
 ```dockerfile
 # Builder
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 RUN apk add --no-cache python3 make g++
 
@@ -183,7 +185,7 @@ COPY src ./src
 RUN npm run build
 
 # Production image
-FROM node:18-alpine
+FROM node:22-alpine
 
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
@@ -350,10 +352,10 @@ export class CacheService {
 
   constructor() {
     this.client = new Redis(config.REDIS_URL, {
-      retryStrategy: (times) => Math.min(times * 50, 2_000),
+      retryStrategy: (times: number) => Math.min(times * 50, 2_000),
       maxRetriesPerRequest: 3,
     });
-    this.client.on('error', err => console.error('[redis]', err));
+    this.client.on('error', (err: Error) => console.error('[redis]', err));
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -758,5 +760,6 @@ jobs:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | @llamaindex/workflow 1.1.25 | Deprecation warning added; dependencies pinned exactly to the final releases (deprecated packages should not float); Zod 4 config schema fixed (`z.coerce.number()`); Node 18 (end of life) replaced with Node 20+/22 images; model names updated. |
 | 2026-05-24 | @llamaindex/workflow 1.1.25 | **Workflow code rewrite** — removed all `llama-index-workflows`/`extends Workflow`/`@step()` patterns. Replaced workflow-specific sections with functional API (`createWorkflow`, `workflowEvent`, `handle`, `run`, `createStatefulMiddleware`). Infrastructure sections (Docker, Kubernetes, Redis, environment config, CI/CD) retained and updated to current package names (`@llamaindex/workflow`, `@llamaindex/openai`). API verified against installed `@llamaindex/workflow@1.1.25`. | Claude routine |
 | April 2026 | 1.1.24 | Initial version using incorrect class-based API. |

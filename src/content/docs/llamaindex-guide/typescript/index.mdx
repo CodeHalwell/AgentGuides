@@ -10,24 +10,28 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Event-driven agentic workflows for TypeScript.** Use `@llamaindex/workflow` to model agents as typed events and handlers. First-class RAG, query engines, and agent coordination — all with TypeScript types.
+**Event-driven agentic workflows for TypeScript.** `@llamaindex/workflow` models agents as typed events and handlers, with RAG primitives available from the `llamaindex` umbrella package.
+
+<Aside type="danger" title="Deprecated upstream">
+  LlamaIndex.TS is **no longer maintained**. The [LlamaIndexTS repository](https://github.com/run-llama/LlamaIndexTS) carries a deprecation notice, and npm marks `@llamaindex/workflow`, `@llamaindex/workflow-core`, `@llamaindex/core` and the provider packages as deprecated (`@llamaindex/workflow-core` points to LlamaAgents / Python Workflows instead). The final releases still install and the guides below document them accurately, but there will be no further fixes. For new TypeScript projects prefer a maintained framework such as [LangGraph.js](/langgraph-guide/typescript/) or the [OpenAI Agents SDK](/openai-agents-sdk-typescript-guide/), or call [LlamaIndex (Python)](/llamaindex-guide/python/) behind an API.
+</Aside>
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    npm install @llamaindex/workflow @llamaindex/core zod
+    npm install @llamaindex/workflow@1.1.25 @llamaindex/openai zod
     ```
   </Card>
   <Card title="Version" icon="information">
-    **@llamaindex/workflow 1.1.25** · May 2026 · Node 18+
+    **`llamaindex` %%version=llamaindex%%** (umbrella, final release) · **`@llamaindex/workflow` 1.1.25** (final release) · Node 20+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
-    Typed event-driven agents, full-stack RAG apps, browser-compatible flows.
+    Maintaining existing LlamaIndex.TS code; typed event-driven flows.
   </Card>
 </CardGrid>
 
-<Aside type="caution" title="Migrating from the monorepo package">
-  The legacy `llamaindex` monolith package is superseded by scoped packages: `@llamaindex/workflow`, `@llamaindex/core`, provider-specific packages. Migrate to the scoped ones.
+<Aside type="note" title="Package layout">
+  The old single `llamaindex` package was split into scoped packages: `@llamaindex/workflow` (workflows and agents), `@llamaindex/core` (LLM, tool and memory interfaces), and one package per provider (`@llamaindex/openai`, `@llamaindex/anthropic`, ...). `llamaindex` itself now mainly re-exports these plus indexes, readers and node parsers. Both the umbrella and the scoped packages are part of the deprecated project.
 </Aside>
 
 ## Zero → Hero
@@ -60,24 +64,23 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production guide" href="./llamaindex_typescript_production_guide/" />
 </CardGrid>
 
-## What's new in @llamaindex/workflow 1.1.25 (May 2026)
+## Notes on the final release
 
-- `runWorkflow()` and `runAndCollect()` are now `@deprecated`. Use `run(workflow, event).until(stopEvent).toArray()` instead.
+- `runWorkflow()`, `runAndCollect()` and `runStream()` are marked `@deprecated`; use `run(workflow, event).until(stopEvent).toArray()` instead.
 - `handle()` mutates the workflow in place and returns `void` — method chaining is not supported.
 - Handler signature is `(ctx, ...events)`: the first argument is the workflow context; subsequent arguments are the matched input events in order.
-- `@llamaindex/core` 0.6.23 (a peer dependency) is marked deprecated in its package metadata; it is still required by this version of `@llamaindex/workflow`.
+- Agent workflows built with `agent(...)` / `multiAgent(...)` expose `run()` (a Promise of the final stop event) and `runStream()` (all events).
 
 ## Install, minimal example
 
-`@llamaindex/workflow` 1.1.25 uses a **functional API** — `createWorkflow`, `workflowEvent`, `run`. Earlier drafts of this page documented a class-based `extends Workflow` + `@step()` decorator pattern and a chained `.handle()` call — neither exists in the current package.
+`@llamaindex/workflow` uses a **functional API** — `createWorkflow`, `workflowEvent`, `run`. A class-based `extends Workflow` + `@step()` pattern is the *Python* API and does not exist in the TypeScript package.
 
 ```typescript
 import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
-import { z } from 'zod';
 
-// Define typed events
-const startEvent = workflowEvent({ data: z.object({ input: z.string() }) });
-const stopEvent  = workflowEvent({ data: z.object({ result: z.string() }) });
+// Define typed events — the generic parameter is the payload type
+const startEvent = workflowEvent<{ input: string }>({ debugLabel: 'start' });
+const stopEvent  = workflowEvent<{ result: string }>({ debugLabel: 'stop' });
 
 // Build the workflow — handle() mutates in place; it does not return the workflow
 const workflow = createWorkflow();
@@ -85,12 +88,13 @@ workflow.handle([startEvent], async (ctx, start) => {
   return stopEvent.with({ result: `Echo: ${start.data.input}` });
 });
 
-// Run using the stream API — runWorkflow() is deprecated since 1.1.25
 const events = await run(workflow, startEvent.with({ input: 'Hello!' }))
   .until(stopEvent)
   .toArray();
 console.log(events.at(-1)?.data); // { result: 'Echo: Hello!' }
 ```
+
+For runtime validation of payloads, `zodEvent(schema)` creates an event type from a Zod schema.
 
 For multi-agent topologies use `multiAgent(...)` + `FunctionAgent`. For streaming use `run(...).toStream()` or iterate the return value of `run(...)` directly.
 
@@ -102,6 +106,7 @@ Ready? **[Start Zero → Hero Step 1 →](./llamaindex_workflows_typescript_comp
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-10-21 | llamaindex 0.12.1 / @llamaindex/workflow 1.1.25 | Added the upstream deprecation notice (repository and npm packages deprecated). Minimal example fixed — it passed a Zod schema as `workflowEvent({ data })`, which is not a valid option and does not type-check. Version card now reads from the site's version registry. Comprehensive guide, recipes and production guide re-checked with `tsc`. |
 | 2026-05-04 | @llamaindex/workflow 1.1.25 | Bumped 1.1.24 → 1.1.25. Fixed broken minimal example: corrected handler signature to `(ctx, start)` (was incorrectly `({ data })`); removed unsupported chaining on `handle()`; replaced deprecated `runWorkflow()` with `run().until().toArray()`. Added "What's new in 1.1.25" section documenting `runWorkflow` deprecation and `handle()` void-return behaviour. Snippet executed against installed 1.1.25 in `.routine-envs/check-0504-node`. | Claude routine |
 | 2026-04-21 | 1.1.24 | Minimal example rewritten against functional API (`createWorkflow`/`workflowEvent`/`runWorkflow`) after pkg introspection — class + `@step` pattern documented earlier does not exist. |
 | April 2026 | 1.1.24 | Scoped package migration; typed event handlers stabilised. |
