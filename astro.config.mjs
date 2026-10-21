@@ -5,7 +5,7 @@ import react from '@astrojs/react';
 import tailwindcss from '@tailwindcss/vite';
 import remarkBasePath from './src/plugins/remark-base-path.mjs';
 import remarkVersions from './src/plugins/remark-versions.mjs';
-import { guide } from './src/data/sidebar.mjs';
+import { guideSidebar } from './src/data/sidebar.mjs';
 import { readFileSync } from 'node:fs';
 import { ExpressiveCodeTheme } from '@astrojs/starlight/expressive-code';
 
@@ -138,53 +138,7 @@ export default defineConfig({
             { label: 'All Guides', link: '/guides/' },
           ],
         },
-        {
-          label: 'Multi-Agent Orchestration',
-          collapsed: true,
-          items: [
-            guide('openai-agents-sdk-guides', 'OpenAI Agents SDK (Python)'),
-            guide('openai-agents-sdk-typescript-guide', 'OpenAI Agents SDK (TypeScript)'),
-            guide('crewai-guide', 'CrewAI'),
-            guide('ag2-guide', 'AG2'),
-            guide('autogen-guide', 'Microsoft AutoGen'),
-            guide('langgraph-guide', 'LangGraph'),
-          ],
-        },
-        {
-          label: 'Data & Knowledge',
-          collapsed: true,
-          items: [
-            guide('llamaindex-guide', 'LlamaIndex'),
-            guide('haystack-guide', 'Haystack'),
-            guide('pydanticai-guide', 'PydanticAI'),
-          ],
-        },
-        {
-          label: 'Cloud-Native',
-          collapsed: true,
-          items: [
-            guide('amazon-bedrock-agents-guide', 'Amazon Bedrock Agents'),
-            guide('microsoft-agent-framework-guide', 'Microsoft Agent Framework'),
-            guide('google-adk-guide', 'Google ADK'),
-          ],
-        },
-        {
-          label: 'Model-Specific',
-          collapsed: true,
-          items: [
-            guide('anthropic-claude-agent-sdk-guide', 'Claude Agent SDK (Python)'),
-            guide('anthropic-claude-agent-sdk-typescript-guide', 'Claude Agent SDK (TypeScript)'),
-            guide('mistral-agents-api-guide', 'Mistral Agents API'),
-          ],
-        },
-        {
-          label: 'Enterprise & Lightweight',
-          collapsed: true,
-          items: [
-            guide('semantic-kernel-guide', 'Semantic Kernel'),
-            guide('smolagents-guide', 'SmolAgents'),
-          ],
-        },
+        ...guideSidebar(),
         {
           label: 'Updates',
           collapsed: true,

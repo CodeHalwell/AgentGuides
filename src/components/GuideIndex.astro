@@ -1,0 +1,92 @@
+---
+// The All Guides page: every guide and page, built from the same folder data as
+// the sidebar, so it cannot drift from what is published.
+import { sections, guide } from '../data/sidebar.mjs';
+import { frameworks, categoryGroup } from '../data/frameworks';
+
+type Item = { label: string; link?: string; items?: Item[] };
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const count = (items: Item[]): number => items.reduce((n, i) => n + (i.items ? count(i.items) : 1), 0);
+const forDir = (dir: string) => frameworks.filter((f) => f.href.startsWith(`/${dir}/`));
+---
+
+{
+  sections.map((section) => (
+    <section class="gi-section">
+      <h2>{section.label}</h2>
+      {section.guides.map(([dir, label]) => {
+        const items = guide(dir, label).items as Item[];
+        const fws = forDir(dir);
+        return (
+          <details class="gi-guide">
+            <summary>
+              {fws[0] && (
+                <span class="chip" data-group={categoryGroup[fws[0].category]}>
+                  {fws[0].symbol}
+                </span>
+              )}
+              <span class="gi-name">{label}</span>
+              <span class="gi-meta">
+                {fws.map((f) => f.version).join(' · ')} · {count(items)} pages
+              </span>
+            </summary>
+            <ul>
+              {items.map(function render(i: Item): any {
+                return i.items ? (
+                  <li class="gi-group">
+                    <span>{i.label}</span>
+                    <ul>{i.items.map(render)}</ul>
+                  </li>
+                ) : (
+                  <li>
+                    <a href={`${base}${i.link}`}>{i.label}</a>
+                  </li>
+                );
+              })}
+            </ul>
+          </details>
+        );
+      })}
+    </section>
+  ))
+}
+
+<style>
+  .gi-section h2 {
+    margin-bottom: 0.75rem;
+  }
+  .gi-guide {
+    border-top: 1px solid var(--rl);
+    padding: 0.6rem 0;
+  }
+  .gi-guide:last-child {
+    border-bottom: 1px solid var(--rl);
+  }
+  summary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    cursor: pointer;
+  }
+  .gi-name {
+    font-weight: 600;
+  }
+  .gi-meta {
+    margin-left: auto;
+    font-family: var(--sl-font-mono);
+    font-size: 0.78rem;
+    color: var(--mu);
+  }
+  .gi-guide ul {
+    margin-top: 0.5rem;
+  }
+  .gi-group > span {
+    font-family: var(--sl-font-mono);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--mu);
+  }
+</style>

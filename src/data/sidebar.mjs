@@ -2,7 +2,10 @@
 // without hand-maintaining links (hand-maintained lists left most topic pages
 // out of the sidebar).
 //
-//   guide('langgraph-guide/python', 'LangGraph (Python)')
+//   guide('langgraph-guide', 'LangGraph')
+//
+// `sections` below lists the guides; astro.config.mjs and the All Guides page
+// (GuideIndex.astro) both build from it.
 //
 // Ordering: the folder's index first (as "Overview"), then frontmatter
 // `sidebar.order`, then a default rank from the file name (tutorial chapters,
@@ -16,7 +19,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-const DOCS = new URL('../content/docs/', import.meta.url).pathname;
+// From the project root: this module is also bundled into the All Guides page,
+// where import.meta.url no longer points at src/data.
+const DOCS = join(process.cwd(), 'src/content/docs');
 const LANGS = { python: 'Python', typescript: 'TypeScript', dotnet: '.NET', go: 'Go' };
 const GROUPS = { chapter: 'Tutorial', reference: 'API reference' };
 
@@ -83,7 +88,7 @@ function items(dir, guideName) {
   const list = pages(dir, guideName);
   const result = [];
   for (const [prefix, label] of Object.entries(GROUPS)) {
-    const members = list.filter((p) => p.name.startsWith(`${prefix}-`));
+    const members = list.filter((p) => p.name?.startsWith(`${prefix}-`));
     if (members.length >= 3) {
       for (const p of members) list.splice(list.indexOf(p), 1);
       list.push({ group: { label, collapsed: true, items: members.map(link) }, order: members[0].order });
@@ -92,17 +97,27 @@ function items(dir, guideName) {
   list.sort((a, b) => a.order - b.order);
   for (const p of list) result.push(p.group ?? link(p));
 
+  // Language folders first, in LANGS order, then any other subfolder (such as
+  // ag2-guide/classic), labelled from its index's `sidebar.label` or title.
   const abs = join(DOCS, dir);
-  for (const sub of Object.keys(LANGS)) {
-    try {
-      if (statSync(join(abs, sub)).isDirectory()) {
-        result.push({ label: LANGS[sub], collapsed: true, items: items(`${dir}/${sub}`, guideName) });
-      }
-    } catch {
-      // no such language folder
-    }
+  const subs = readdirSync(abs).filter((e) => statSync(join(abs, e)).isDirectory());
+  const langs = Object.keys(LANGS).filter((l) => subs.includes(l));
+  for (const sub of [...langs, ...subs.filter((s) => !LANGS[s]).sort()]) {
+    result.push({ label: LANGS[sub] ?? folderLabel(join(abs, sub), sub), collapsed: true, items: items(`${dir}/${sub}`, guideName) });
   }
   return result;
+}
+
+function folderLabel(abs, sub) {
+  for (const ext of ['mdx', 'md']) {
+    try {
+      const fm = frontmatter(join(abs, `index.${ext}`));
+      return fm.sidebar?.group ?? fm.title ?? sub;
+    } catch {
+      // no index with this extension
+    }
+  }
+  return sub[0].toUpperCase() + sub.slice(1);
 }
 
 function link(p) {
@@ -112,4 +127,59 @@ function link(p) {
 /** A collapsed sidebar group listing every page under `dir`. */
 export function guide(dir, label) {
   return { label, collapsed: true, items: items(dir, label) };
+}
+
+/** Guides by category, in sidebar order. The sidebar and the All Guides page both read this. */
+export const sections = [
+  {
+    label: 'Multi-Agent Orchestration',
+    guides: [
+      ['openai-agents-sdk-guides', 'OpenAI Agents SDK (Python)'],
+      ['openai-agents-sdk-typescript-guide', 'OpenAI Agents SDK (TypeScript)'],
+      ['crewai-guide', 'CrewAI'],
+      ['ag2-guide', 'AG2'],
+      ['autogen-guide', 'Microsoft AutoGen'],
+      ['langgraph-guide', 'LangGraph'],
+    ],
+  },
+  {
+    label: 'Data & Knowledge',
+    guides: [
+      ['llamaindex-guide', 'LlamaIndex'],
+      ['haystack-guide', 'Haystack'],
+      ['pydanticai-guide', 'PydanticAI'],
+    ],
+  },
+  {
+    label: 'Cloud-Native',
+    guides: [
+      ['amazon-bedrock-agents-guide', 'Amazon Bedrock Agents'],
+      ['microsoft-agent-framework-guide', 'Microsoft Agent Framework'],
+      ['google-adk-guide', 'Google ADK'],
+    ],
+  },
+  {
+    label: 'Model-Specific',
+    guides: [
+      ['anthropic-claude-agent-sdk-guide', 'Claude Agent SDK (Python)'],
+      ['anthropic-claude-agent-sdk-typescript-guide', 'Claude Agent SDK (TypeScript)'],
+      ['mistral-agents-api-guide', 'Mistral Agents API'],
+    ],
+  },
+  {
+    label: 'Enterprise & Lightweight',
+    guides: [
+      ['semantic-kernel-guide', 'Semantic Kernel'],
+      ['smolagents-guide', 'SmolAgents'],
+    ],
+  },
+];
+
+/** The guide categories as Starlight sidebar groups. */
+export function guideSidebar() {
+  return sections.map((s) => ({
+    label: s.label,
+    collapsed: true,
+    items: s.guides.map(([dir, label]) => guide(dir, label)),
+  }));
 }

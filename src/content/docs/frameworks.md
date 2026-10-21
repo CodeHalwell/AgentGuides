@@ -245,33 +245,34 @@ Best For:       Search systems, Q&A, NLP pipelines
 
 ---
 
-### 🧪 Best for Research: AG2 (AutoGen)
+### 🧪 Best for Research: AG2
 
 ```
-Paradigm:      Conversation-based agents
+Paradigm:      Async agents, typed events, hub-and-channel Network
 Learning Time:  ~6-8 hours
-Best For:       Research, experimentation, flexible agent interactions
+Best For:       Research, experimentation, multi-agent systems with MCP and A2A
 ```
+
+AG2 is the community fork of AutoGen 0.2. Since **AG2 1.0** it is a new async API imported as `ag2` (`Agent`, `@tool`, `MemoryStream`, the multi-agent `Network`). The old `import autogen` API (`ConversableAgent`, `GroupChat`) lives on as **AG2 Classic** in maintenance mode. Microsoft's own AutoGen is a separate, archived project.
 
 **Strengths**:
-- Very flexible
-- Great for research
-- GroupChat for multi-agent
-- Large community (original AutoGen)
-- Powerful abstractions
+- Typed events and streams make agent turns easy to observe and test
+- The Network hub models multi-agent systems explicitly (channels, transition graphs)
+- First-class MCP and A2A support
+- Large community from the original AutoGen
 
 **Weaknesses**:
-- More complex setup
-- Learning curve
-- Community moving to AG2
+- 1.x is not a drop-in upgrade from Classic; older tutorials use the `autogen` namespace
+- Younger API than LangGraph or the OpenAI Agents SDK
+- Python only
 
 **When to Choose**:
-- You're doing research
-- You need maximum flexibility
-- You want conversation-based agents
-- You need GroupChat
+- You're doing research or experimentation with multi-agent designs
+- You want explicit, inspectable agent-to-agent routing
+- You need MCP or A2A interop
+- You already run AG2 Classic and want a supported path forward
 
-[📖 AG2 Guide](/ag2-guide/)
+[📖 AG2 Guide](/ag2-guide/) · [AG2 Classic](/ag2-guide/classic/) · [Microsoft AutoGen (archived)](/autogen-guide/)
 
 ---
 

@@ -97,16 +97,16 @@ export default function PeriodicTable({ pages }: { pages: Record<string, number>
           <span className="pt-eyebrow">The periodic table of agent frameworks</span>
           <h1 id="_top" className="pt-title">Pick an element.</h1>
           <p className="pt-lead">
-            Eighteen frameworks across Python, TypeScript, .NET and Go. Every example is checked against the current
+            Nineteen frameworks across Python, TypeScript, .NET and Go. Every example is checked against the current
             release. Select tiles to combine them like a formula.
           </p>
           <div className="pt-formula" aria-live="polite">
             <span className="pt-formula-label">Formula</span>
-            <span className="pt-formula-value">{formula.length ? formula.join(' · ') : 'Ag'}</span>
+            <span className="pt-formula-value">{formula.length ? formula.join(' · ') : '—'}</span>
             <span className="pt-formula-note">
               {formula.length
                 ? `${results.length} guide${results.length === 1 ? '' : 's'}`
-                : 'Nothing selected: showing all eighteen guides'}
+                : 'Nothing selected: showing all nineteen guides'}
             </span>
           </div>
         </div>
