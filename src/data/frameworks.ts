@@ -159,11 +159,11 @@ export const frameworks: Framework[] = [
     name: 'Microsoft Agent Framework',
     tagline: 'Unifies Semantic Kernel + AutoGen. A2A, graphs, declarative.',
     href: '/microsoft-agent-framework-guide/',
-    languages: ['Python', '.NET'],
+    languages: ['Python', '.NET', 'Go'],
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: `Python ${v('agent-framework')} / .NET ${v('Microsoft.Agents.AI')}`,
+    version: `Python ${v('agent-framework')} / .NET ${v('Microsoft.Agents.AI')} / Go ${v('github.com/microsoft/agent-framework-go')}`,
   },
   {
     id: 'google-adk',

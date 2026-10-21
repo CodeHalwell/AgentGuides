@@ -168,6 +168,7 @@ export default defineConfig({
                   ],
                 },
                 { label: '.NET', link: '/microsoft-agent-framework-guide/dotnet/' },
+                { label: 'Go (preview)', link: '/microsoft-agent-framework-guide/go/' },
               ],
             },
             {
