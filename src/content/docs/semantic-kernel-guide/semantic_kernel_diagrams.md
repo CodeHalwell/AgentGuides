@@ -1,12 +1,12 @@
 ---
 title: "Semantic Kernel: Architecture and Pattern Diagrams"
-description: "This document contains comprehensive visual diagrams illustrating Semantic Kernel's architecture, component interactions, and various patterns."
+description: "Visual diagrams of Semantic Kernel's architecture — kernel, plugins, function calling, agents and orchestrations, vector stores and Azure integration."
 framework: semantic-kernel
 ---
 
 # Semantic Kernel: Architecture and Pattern Diagrams
 
-This document contains comprehensive visual diagrams illustrating Semantic Kernel's architecture, component interactions, and various patterns.
+Language-neutral diagrams of Semantic Kernel's architecture and patterns, current for `semantic-kernel` %%version=semantic-kernel%% (Python) and `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (.NET). Code for each flow is in the [Python](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) and [.NET](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/) guides. Semantic Kernel's successor is [Microsoft Agent Framework](/microsoft-agent-framework-guide/).
 
 ---
 
@@ -324,42 +324,34 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 
 ## 4. Memory System Architecture
 
-### 4.1 Memory Store Hierarchy
+### 4.1 Vector Store Abstractions
+
+The old "memory store" API (`VolatileMemoryStore`, `SemanticTextMemory`, `*MemoryStore` connectors) is legacy. Current releases use typed vector store collections — `semantic_kernel.data.vector` in Python, `Microsoft.Extensions.VectorData` in .NET.
 
 ```
 ┌────────────────────────────────────────────────────┐
-│            Memory Store Architecture               │
-├────────────────────────────────────────────────────┤
-│                                                   │
-│  ┌─────────────────────────────────────────────┐ │
-│  │         Kernel                              │ │
-│  │  add_memory_store()                         │ │
-│  └─────────────┬───────────────────────────────┘ │
-│                │                                 │
-│    ┌───────────┴──────────────┐                 │
-│    │                          │                 │
-│    ▼                          ▼                 │
-│ ┌──────────────┐       ┌─────────────────────┐ │
-│ │ Volatile     │       │ Persistent Stores   │ │
-│ │ MemoryStore  │       │                     │ │
-│ │              │       │ ┌────────────────┐  │ │
-│ │ • In-memory  │       │ │Azure AI Search │  │ │
-│ │ • Fast       │       │ └────────────────┘  │ │
-│ │ • Temporary  │       │                     │ │
-│ │              │       │ ┌────────────────┐  │ │
-│ │              │       │ │    Qdrant      │  │ │
-│ │              │       │ └────────────────┘  │ │
-│ │              │       │                     │ │
-│ │              │       │ ┌────────────────┐  │ │
-│ │              │       │ │  Weaviate      │  │ │
-│ │              │       │ └────────────────┘  │ │
-│ │              │       │                     │ │
-│ │              │       │ ┌────────────────┐  │ │
-│ │              │       │ │ Custom Store   │  │ │
-│ │              │       │ └────────────────┘  │ │
-│ └──────────────┘       └─────────────────────┘ │
-│                                                │
-└────────────────────────────────────────────────┘
+│ Record class                                       │
+│   key field · data fields · vector field(s)        │
+│   (VectorStoreField / [VectorStoreKey] etc.)       │
+└─────────────────────┬──────────────────────────────┘
+                      │ typed by
+                      ▼
+┌────────────────────────────────────────────────────┐
+│ VectorStore ── get_collection / GetCollection ──▶  │
+│ VectorStoreCollection<TKey, TRecord>               │
+│   ensure_collection_exists · upsert · get · delete │
+│   search(text or vector, top, filter) · hybrid     │
+│   embedding generator ─▶ embeds on upsert/search   │
+└─────────────────────┬──────────────────────────────┘
+                      │ implemented by connectors
+      ┌───────────────┼───────────────┬─────────────────┐
+      ▼               ▼               ▼                 ▼
+  In-memory     Azure AI Search    Qdrant / Redis   Postgres, Cosmos DB,
+                                   Weaviate ...     SQL Server, Pinecone ...
+                      │
+                      ▼
+      create_search_function / VectorStoreTextSearch
+      ─▶ a kernel function agents can call (RAG as a tool)
 ```
 
 ### 4.2 Embedding and Search Pipeline
@@ -393,10 +385,10 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 │           │                                             │
 │           ▼                                             │
 │  ┌───────────────────────┐                             │
-│  │ Memory Store          │                             │
-│  │ • Collections         │                             │
+│  │ Vector store          │                             │
+│  │ collection            │                             │
 │  │ • Persist vectors     │                             │
-│  │ • Store metadata      │                             │
+│  │ • Store record fields │                             │
 │  └────────┬──────────────┘                             │
 │           │                                             │
 │           ▼                                             │
@@ -419,129 +411,41 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 
 ---
 
-## 5. Planner Architecture
+## 5. Function Calling (replaces planners)
 
-### 5.1 Planner Types and Execution
-
-```
-┌──────────────────────────────────────────────────────────┐
-│          Planner Types and Execution Flow               │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│  INPUT: Goal/Task                                        │
-│  ┌────────────────┐                                      │
-│  │ "Send email"   │                                      │
-│  │ "Generate"     │                                      │
-│  │ "Report"       │                                      │
-│  └────────┬───────┘                                      │
-│           │                                              │
-│     ┌─────┴──────────────────┐                           │
-│     │ Planner Type?          │                           │
-│     └──────┬────────────────┬─┴─────┬──────┐             │
-│            │                │       │      │             │
-│        ┌───▼───┐        ┌───▼──┐ ┌──▼──┐ ┌──▼──┐       │
-│        │Action │        │Step  │ │Seq  │ │Hand │       │
-│        │Planner│        │Planner│ │Plan │ │Plan │       │
-│        └───┬───┘        └───┬──┘ └──┬──┘ └──┬──┘       │
-│            │                │       │      │            │
-│        ┌───▼────────┐       │       │      │            │
-│        │Generates   │       │       │      │            │
-│        │  actions   │       │       │      │            │
-│        │  greedily  │       │       │      │            │
-│        └───┬────────┘       │       │      │            │
-│            │                │       │      │            │
-│        ┌───▼─────┐      ┌───▼──┐ ┌──▼──┐ ┌──▼──┐      │
-│        │Execute  │      │Exec  │ │Exec │ │Call │      │
-│        │Actions  │      │Step  │ │Seq  │ │Human│      │
-│        │         │      │      │ │     │ │     │      │
-│        └────┬────┘      └───┬──┘ └──┬──┘ └──┬──┘      │
-│             │                │       │      │         │
-│        ┌────▼──────┐         │       │      │         │
-│        │Converge   │         │       │      │         │
-│        │To Goal    │         │       │      │         │
-│        │           │         │       │      │         │
-│        └────┬──────┘     ┌───▼──┐ ┌──▼──┐ ┌──▼──┐    │
-│             │             │Done  │ │Done │ │Wait │    │
-│        OUTPUT: Result    └──────┘ └─────┘ └─────┘    │
-│             │                                        │
-│        ┌────▼──────┐                                  │
-│        │Final Plan │                                  │
-│        └───────────┘                                  │
-│                                                       │
-└──────────────────────────────────────────────────────┘
-```
-
-### 5.2 Plan Execution State Machine
+The Sequential, Stepwise, Action and Handlebars planners were removed from Python (1.33.0) and deprecated in .NET. The model now plans implicitly through native function calling:
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│      Plan Execution State Machine                        │
-├──────────────────────────────────────────────────────────┤
-│                                                          │
-│          ┌──────────────────┐                            │
-│          │   CREATED        │                            │
-│          │ Plan generated   │                            │
-│          └────────┬─────────┘                            │
-│                   │                                      │
-│                   ▼                                      │
-│          ┌──────────────────┐                            │
-│          │   VALIDATING     │                            │
-│          │ Check functions  │                            │
-│          │ exist            │                            │
-│          └────────┬─────────┘                            │
-│                   │                                      │
-│           ┌───────┴────────┐                             │
-│           │                │                             │
-│       Valid            Invalid                           │
-│           │                │                             │
-│           ▼                ▼                             │
-│    ┌──────────┐      ┌──────────┐                       │
-│    │EXECUTING │      │FAILED    │                       │
-│    └────┬─────┘      │Validation│                       │
-│         │            │Failed    │                       │
-│         │            └──────────┘                       │
-│         ▼                                                │
-│    ┌───────────┐                                        │
-│    │STEPS      │                                        │
-│    │Execute    │                                        │
-│    │each step  │                                        │
-│    └────┬──────┘                                        │
-│         │                                                │
-│    ┌────┴────────────┐                                  │
-│    │                 │                                  │
-│  Success         Error/Exception                        │
-│    │                 │                                  │
-│    ▼                 ▼                                  │
-│┌───────┐         ┌──────────┐                          │
-││NEXT   │         │ERROR     │                          │
-││STEP   │         │Retry?    │                          │
-│└───┬───┘         └─────┬────┘                          │
-│    │                   │                               │
-│    │          ┌────────┴────────┐                      │
-│    │          │                 │                      │
-│    │        Retry           Abort                      │
-│    │          │                 │                      │
-│    │          ▼                 ▼                      │
-│    │     ┌────────┐         ┌──────────┐             │
-│    │     │STEPS   │         │FAILED    │             │
-│    │     │        │         │Plan      │             │
-│    │     └────┬───┘         │Failed    │             │
-│    │          │             └──────────┘             │
-│    │          │                                      │
-│    ▼          ▼                                      │
-│  ┌──────────────┐                                    │
-│  │ ALL COMPLETE │                                    │
-│  └────────┬─────┘                                    │
-│           │                                          │
-│           ▼                                          │
-│    ┌────────────┐                                    │
-│    │SUCCEEDED  │                                    │
-│    │Return     │                                    │
-│    │Result     │                                    │
-│    └───────────┘                                    │
-│                                                    │
-└──────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│ Prompt / agent turn                                        │
+│   execution settings: FunctionChoiceBehavior.Auto()        │
+└──────────────────────────┬─────────────────────────────────┘
+                           ▼
+              ┌─────────────────────────┐
+              │ Chat completion request │◀────────────────────┐
+              │ (messages + tool schema │                     │
+              │  of kernel functions)   │                     │
+              └────────────┬────────────┘                     │
+                           ▼                                  │
+                 ┌────────────────────┐   no tool calls       │
+                 │ Model response     │──────────────▶ Final answer
+                 └─────────┬──────────┘                       │
+                           │ tool calls                       │
+                           ▼                                  │
+          ┌──────────────────────────────────────┐            │
+          │ Auto-function-invocation filters     │            │
+          │ (approve / block / terminate)        │            │
+          └─────────────────┬────────────────────┘            │
+                            ▼                                 │
+          ┌──────────────────────────────────────┐            │
+          │ Kernel invokes functions             │            │
+          │ (function-invocation filters wrap    │            │
+          │  each call; results appended to      │            │
+          │  chat history)                       │────────────┘
+          └──────────────────────────────────────┘
 ```
+
+For a plan a human must approve first, request it with `FunctionChoiceBehavior.NoneInvoke()` / `None()` or with structured output, review it, then execute.
 
 ---
 
@@ -698,9 +602,9 @@ This document contains comprehensive visual diagrams illustrating Semantic Kerne
 │  │           ▼                               │ │
 │  │  ┌───────────────────────────────────────┐ │ │
 │  │  │ Azure OpenAI Service                  │ │ │
-│  │  │ • gpt-4                               │ │ │
-│  │  │ • gpt-4-turbo                         │ │ │
-│  │  │ • gpt-3.5-turbo                       │ │ │
+│  │  │ • your chat model deployments         │ │ │
+│  │  │   (e.g. a gpt-5 family model)         │ │ │
+│  │  │                                       │ │ │
 │  │  └───┬──────────────────────────────────┘ │ │
 │  │      │                                    │ │
 │  │      ▼                                    │ │

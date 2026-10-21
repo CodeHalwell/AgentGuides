@@ -27,7 +27,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="caution" title="Old agent API removed">
-  `llama-index-core` 0.13.0 removed the legacy agents (`OpenAIAgent`, `FunctionCallingAgent`, `AgentRunner`, the old `ReActAgent.from_tools(...)` / `.chat()`). Current agents — `FunctionAgent`, `ReActAgent`, `CodeActAgent`, `AgentWorkflow` — live in `llama_index.core.agent.workflow` and are run with `await agent.run(...)`. See the [migration table](./llamaindex_comprehensive_guide/#22-migrating-from-the-legacy-agent-api).
+  `llama-index-core` 0.13.0 removed the legacy agents (`OpenAIAgent`, `FunctionCallingAgent`, `AgentRunner`, the old `ReActAgent.from_tools(...)` / `.chat()`). Current agents — `FunctionAgent`, `ReActAgent`, `CodeActAgent`, `AgentWorkflow` — live in `llama_index.core.agent.workflow` and are run with `await agent.run(...)`. See the [migration table](/llamaindex-guide/python/llamaindex_comprehensive_guide/#22-migrating-from-the-legacy-agent-api).
 </Aside>
 
 ## Zero → Hero
@@ -115,7 +115,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./llamaindex_comprehensive_guide/#1-installation-and-setup)**
+Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/python/llamaindex_comprehensive_guide/#1-installation-and-setup)**
 
 ---
 

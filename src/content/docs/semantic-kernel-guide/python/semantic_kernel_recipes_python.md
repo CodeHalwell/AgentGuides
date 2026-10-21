@@ -9,7 +9,7 @@ language: python
 
 > Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Each recipe uses only APIs checked against an installed copy. Model names are examples. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/python/), Semantic Kernel's successor.
 
-**See also:** [language-agnostic recipes](../semantic_kernel_recipes/) · [comprehensive Python guide](../semantic_kernel_comprehensive_python/)
+**See also:** [language-agnostic recipes](/semantic-kernel-guide/semantic_kernel_recipes/) · [comprehensive Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/)
 
 ---
 
@@ -203,7 +203,7 @@ async def write_article(topic: str) -> str:
         await runtime.stop_when_idle()
 ```
 
-For iterative review loops, see the custom group-chat manager in [advanced multi-agent](../semantic_kernel_advanced_multi_agent_python/).
+For iterative review loops, see the custom group-chat manager in [advanced multi-agent](/semantic-kernel-guide/python/semantic_kernel_advanced_multi_agent_python/).
 
 ---
 
@@ -283,4 +283,4 @@ The lambda is translated into each store's native filter syntax; only simple com
 
 ---
 
-**[Back to Python overview](../)**
+**[Back to Python overview](/semantic-kernel-guide/python/)**

@@ -17,7 +17,7 @@ language: dotnet
 
 Production deployment of Semantic Kernel .NET applications including Docker/Kubernetes deployment, monitoring, security, performance optimization.
 
-**See also:** [general production guide](../semantic_kernel_production_guide/) for language-agnostic patterns.
+**See also:** [general production guide](/semantic-kernel-guide/semantic_kernel_production_guide/) for language-agnostic patterns.
 
 ---
 
@@ -168,7 +168,7 @@ Mocking `IChatCompletionService` keeps unit tests offline. For agent tests, the 
 
 ---
 
-For language-agnostic production patterns (scaling, caching, cost control), see the [general production guide](../semantic_kernel_production_guide/).
+For language-agnostic production patterns (scaling, caching, cost control), see the [general production guide](/semantic-kernel-guide/semantic_kernel_production_guide/).
 
-**[Back to .NET overview](../)**
+**[Back to .NET overview](/semantic-kernel-guide/dotnet/)**
 

@@ -9,7 +9,7 @@ language: dotnet
 
 > Targets `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%% (checked %%versions-checked%%). Agents need `Microsoft.SemanticKernel.Agents.Core`; orchestrations need the preview packages `Microsoft.SemanticKernel.Agents.Orchestration` and `.Agents.Runtime.InProcess` and `<NoWarn>$(NoWarn);SKEXP0110</NoWarn>`. For new agent projects consider [Microsoft Agent Framework](/microsoft-agent-framework-guide/dotnet/), Semantic Kernel's successor.
 
-**See also:** [language-agnostic recipes](../semantic_kernel_recipes/) · [comprehensive .NET guide](../semantic_kernel_comprehensive_dotnet/)
+**See also:** [language-agnostic recipes](/semantic-kernel-guide/semantic_kernel_recipes/) · [comprehensive .NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/)
 
 ---
 
@@ -215,6 +215,6 @@ Register the embedding generator with `builder.AddOpenAIEmbeddingGenerator("text
 
 ---
 
-For more, see the [comprehensive guide](../semantic_kernel_comprehensive_dotnet/), the [production guide](../semantic_kernel_production_dotnet/) and the [general recipes](../semantic_kernel_recipes/).
+For more, see the [comprehensive guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/), the [production guide](/semantic-kernel-guide/dotnet/semantic_kernel_production_dotnet/) and the [general recipes](/semantic-kernel-guide/semantic_kernel_recipes/).
 
-**[Back to .NET overview](../)**
+**[Back to .NET overview](/semantic-kernel-guide/dotnet/)**

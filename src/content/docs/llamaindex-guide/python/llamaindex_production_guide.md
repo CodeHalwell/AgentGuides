@@ -999,7 +999,7 @@ class DistributedCache:
 
 ### Token Usage Tracking
 
-`TokenCountingHandler` (see the [observability page](../llamaindex_observability_python/#4-token-counting)) gives per-request counts; the tracker below aggregates them against budgets.
+`TokenCountingHandler` (see the [observability page](/llamaindex-guide/python/llamaindex_observability_python/#4-token-counting)) gives per-request counts; the tracker below aggregates them against budgets.
 
 ```python
 class TokenUsageTracker:
@@ -1288,6 +1288,6 @@ jobs:
 
 ---
 
-For serving workflows without writing the HTTP layer yourself, see [Deploying workflows (LlamaAgents)](../llamaindex_comprehensive_guide/#14-deploying-workflows-llamaagents).
+For serving workflows without writing the HTTP layer yourself, see [Deploying workflows (LlamaAgents)](/llamaindex-guide/python/llamaindex_comprehensive_guide/#14-deploying-workflows-llamaagents).
 
 

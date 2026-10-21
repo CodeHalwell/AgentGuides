@@ -7,7 +7,7 @@ language: python
 
 # LlamaIndex Architecture and System Diagrams
 
-Visual reference for LlamaIndex components, workflows and patterns. Class names match `llama-index-core` %%version=llama-index%%; see the [comprehensive guide](../llamaindex_comprehensive_guide/) for code.
+Visual reference for LlamaIndex components, workflows and patterns. Class names match `llama-index-core` %%version=llama-index%%; see the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/) for code.
 
 ---
 
@@ -813,5 +813,5 @@ Response        Response + Cache
 
 ---
 
-For runnable versions of these flows see the [comprehensive guide](../llamaindex_comprehensive_guide/) and [advanced agents](../llamaindex_advanced_agents_python/).
+For runnable versions of these flows see the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/) and [advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).
 

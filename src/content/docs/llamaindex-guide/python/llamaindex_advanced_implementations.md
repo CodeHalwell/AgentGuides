@@ -7,7 +7,7 @@ language: python
 
 # LlamaIndex: Advanced Implementation Patterns
 
-> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). For multi-agent routing and human-in-the-loop see [Advanced agents](../llamaindex_advanced_agents_python/).
+> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). For multi-agent routing and human-in-the-loop see [Advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).
 
 Earlier versions of this page were built on the retired `llama-agents` package (`AgentOrchestrator`, `SimpleMessageQueue`) and on an `AgentWorkflow.from_tools(...)` constructor that never existed. The patterns below use the current Workflows runtime.
 
@@ -199,7 +199,7 @@ class LLMLogger(BaseEventHandler):
 get_dispatcher().add_event_handler(LLMLogger())
 ```
 
-For wall-clock timings and traces, export spans with OpenTelemetry — see the [observability page](../llamaindex_observability_python/).
+For wall-clock timings and traces, export spans with OpenTelemetry — see the [observability page](/llamaindex-guide/python/llamaindex_observability_python/).
 
 ---
 

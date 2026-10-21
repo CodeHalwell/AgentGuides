@@ -245,7 +245,6 @@ using Azure.Identity;
 using Azure.Search.Documents;
 using Azure.Search.Documents.Models;
 using Microsoft.Agents.AI;
-using OpenAI.Chat;
 
 public record KnowledgeDocument(string Id, string Content, string Source);
 
@@ -265,7 +264,7 @@ public class KnowledgeWorker
             SearchTime = TextSearchProviderOptions.TextSearchBehavior.BeforeAIInvoke,
         }, loggerFactory: null);
 
-        _ragAgent = Agents.ChatClient().AsAIAgent(new ChatClientAgentOptions
+        _ragAgent = new ChatClientAgent(Agents.ChatClient(), new ChatClientAgentOptions
         {
             Name = "rag",
             ChatOptions = new() { Instructions = "Answer using the provided sources and cite them. Say so if they don't cover the question." },
@@ -303,7 +302,7 @@ public class KnowledgeWorker
 }
 ```
 
-`AsAIAgent(ChatClientAgentOptions)` here is the `Microsoft.Extensions.AI` `IChatClient` overload; the instructions go in `ChatOptions.Instructions`. Set `SearchTime = OnDemandFunctionCalling` to expose search as a tool the model calls only when it needs to.
+`ChatClientAgentOptions` is the long-form way to configure an agent: instructions go in `ChatOptions.Instructions`, context providers in `AIContextProviders`. Set `SearchTime = OnDemandFunctionCalling` to expose search as a tool the model calls only when it needs to.
 
 ---
 

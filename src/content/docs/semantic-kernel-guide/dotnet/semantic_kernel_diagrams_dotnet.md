@@ -7,7 +7,7 @@ language: dotnet
 
 # Semantic Kernel Diagrams (.NET)
 
-Diagrams for `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%%. Code for each flow is in the [comprehensive .NET guide](../semantic_kernel_comprehensive_dotnet/).
+Diagrams for `Microsoft.SemanticKernel` %%version=Microsoft.SemanticKernel%%. Code for each flow is in the [comprehensive .NET guide](/semantic-kernel-guide/dotnet/semantic_kernel_comprehensive_dotnet/).
 
 ---
 
@@ -85,6 +85,6 @@ OrchestrationResult<T>.GetValueAsync(timeout)
 
 ---
 
-For more diagrams, see the [language-agnostic diagrams](../semantic_kernel_diagrams/).
+For more diagrams, see the [language-agnostic diagrams](/semantic-kernel-guide/semantic_kernel_diagrams/).
 
-**[Back to .NET overview](../)**
+**[Back to .NET overview](/semantic-kernel-guide/dotnet/)**

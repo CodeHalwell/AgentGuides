@@ -649,7 +649,7 @@ async def block_dangerous(context: AutoFunctionInvocationContext, next):
     await next(context)
 ```
 
-Use `kernel.add_filter(FilterTypes..., fn)` for the non-decorator form. The [middleware page](../semantic_kernel_middleware_python/) has more patterns.
+Use `kernel.add_filter(FilterTypes..., fn)` for the non-decorator form. The [middleware page](/semantic-kernel-guide/python/semantic_kernel_middleware_python/) has more patterns.
 
 ---
 

@@ -7,7 +7,7 @@ language: python
 
 # Semantic Kernel Advanced Multi‑Agent (Python)
 
-> Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Orchestrations are experimental in Semantic Kernel; Microsoft Agent Framework's workflows are their supported successor — see the [comprehensive guide](../semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework).
+> Verified against `semantic-kernel` %%version=semantic-kernel%% (checked %%versions-checked%%). Orchestrations are experimental in Semantic Kernel; Microsoft Agent Framework's workflows are their supported successor — see the [comprehensive guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework).
 
 Earlier versions of this page used pre-1.0 APIs (`kernel.add_chat_service`, `ChatCompletionAgent(tools=...)`, `AgentGroupChat(execution_settings=...)`) that no longer exist. Everything below uses the orchestration API.
 
@@ -162,5 +162,5 @@ debate = ConcurrentOrchestration[str, Opinions](members=[optimist, sceptic], out
 ## 6. Observability and testing
 
 - `agent_response_callback` gives every agent message — log agent name, length and latency with a request ID.
-- Semantic Kernel emits OpenTelemetry spans for agent invocations and function calls; see the [middleware page](../semantic_kernel_middleware_python/) for filters that add your own attributes.
+- Semantic Kernel emits OpenTelemetry spans for agent invocations and function calls; see the [middleware page](/semantic-kernel-guide/python/semantic_kernel_middleware_python/) for filters that add your own attributes.
 - Test routers and managers as plain Python (they are deterministic); test agents against a stub chat service (subclass `ChatCompletionClientBase` and return canned messages).

@@ -10,7 +10,7 @@ language: typescript
 **Version:** `@llamaindex/workflow` 1.1.25 (final release) · umbrella `llamaindex` %%version=llamaindex%% · checked %%versions-checked%%  
 **Target:** Node.js 20+ deployments
 
-> **Deprecated upstream — read before deploying.** LlamaIndex.TS is no longer maintained and every `@llamaindex/*` package used here is marked deprecated on npm. Running it in production means owning any bugs and security fixes yourself; pin exact versions, vendor the lock file, and plan a migration path (see the [overview](../)).
+> **Deprecated upstream — read before deploying.** LlamaIndex.TS is no longer maintained and every `@llamaindex/*` package used here is marked deprecated on npm. Running it in production means owning any bugs and security fixes yourself; pin exact versions, vendor the lock file, and plan a migration path (see the [overview](/llamaindex-guide/typescript/)).
 
 > All workflow examples use the functional API (`createWorkflow`, `workflowEvent`, `handle`, `run`). The `llama-index-workflows` package and class-based `extends Workflow` pattern are not part of the published `@llamaindex/workflow` package.
 

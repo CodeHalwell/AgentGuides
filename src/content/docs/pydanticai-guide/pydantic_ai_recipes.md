@@ -1,12 +1,13 @@
 ---
 title: "Pydantic AI: Recipes & Real-World Examples"
-description: "Version: 1.107.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
+description: "Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
 framework: pydanticai
 ---
 
 # Pydantic AI: Recipes & Real-World Examples
 
-**Version:** 1.107.0 (June 2026)
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%); first written for 1.107.0 (June 2026) and updated for the V2 API.
+
 **Purpose:** Practical, production-tested code examples for common scenarios
 
 ---
@@ -62,7 +63,7 @@ class SupportDependencies:
 class SupportResponse(BaseModel):
     """Structured support response."""
     solution: str = Field(..., description="Detailed solution to customer's problem")
-    category: str = Field(..., regex='^(technical|billing|general|escalation)$')
+    category: str = Field(..., pattern='^(technical|billing|general|escalation)$')
     confidence: float = Field(..., ge=0.0, le=1.0)
     next_steps: list[str] = Field(..., description="Recommended next steps")
 
@@ -210,6 +211,7 @@ Multi-agent system where agents specialise in different tasks:
 3. EditorAgent: Reviews and refines
 """
 
+import asyncio
 from pydantic_ai import Agent, RunContext
 from dataclasses import dataclass
 from pydantic import BaseModel
@@ -1059,9 +1061,11 @@ if __name__ == '__main__':
 ```python
 """
 Research agent that combines WebSearch (for discovery) and WebFetch (for full content).
-Uses native=True on both capabilities so the agent picks the fastest path on each
-provider; falls back to DuckDuckGo / markdownify-based fetch on providers that don't
-support native tools.
+Native tools are used where the provider has them. Since 2.0 the capabilities are
+native-only unless you pass local=...; here local= opts into DuckDuckGo search and a
+markdownify-based fetch for providers without native support. Settings that only a
+native tool can honour (blocked_domains, enable_citations, ...) raise UserError on the
+local path rather than being dropped, so keep them off if you rely on the fallback.
 
 Requirements (for the local fallback paths):
   pip install "pydantic-ai-slim[web-fetch,duckduckgo]"
@@ -1071,7 +1075,6 @@ import asyncio
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch, WebFetch
-from pydantic_ai.models.test import TestModel
 
 
 class ResearchSummary(BaseModel):
@@ -1081,7 +1084,7 @@ class ResearchSummary(BaseModel):
 
 
 agent = Agent(
-    TestModel(custom_output_text='{"topic":"AI","key_facts":["fact1"],"sources":["https://example.com"]}'),
+    'anthropic:claude-sonnet-4-6',   # native web search + web fetch
     output_type=ResearchSummary,
     system_prompt=(
         'You are a research assistant. Use web_search to discover relevant pages, '
@@ -1089,13 +1092,10 @@ agent = Agent(
     ),
     capabilities=[
         WebSearch(
-            native=True,
             local='duckduckgo',
-            search_context_size='high',
             blocked_domains=['reddit.com', 'twitter.com'],
         ),
         WebFetch(
-            native=True,
             local=True,
             enable_citations=True,
             max_content_tokens=4096,
@@ -1134,7 +1134,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import HandleDeferredToolCalls
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
-from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 
 
 LOW_RISK_TOOLS = {'send_notification', 'log_event'}
@@ -1145,20 +1145,22 @@ async def approval_handler(
     ctx: RunContext[object],
     requests: DeferredToolRequests,
 ) -> DeferredToolResults | None:
-    results: dict[str, ToolApproved | str] = {}
+    # requires_approval=True tools arrive in requests.approvals;
+    # externally executed (CallDeferred / ExternalToolset) ones in requests.calls.
+    decisions: dict[str, ToolApproved | ToolDenied] = {}
 
-    for call in requests.tool_calls:
+    for call in requests.approvals:
         if call.tool_name in LOW_RISK_TOOLS:
-            results[call.tool_call_id] = ToolApproved()
+            decisions[call.tool_call_id] = ToolApproved()
         elif call.tool_name in HIGH_RISK_TOOLS:
-            results[call.tool_call_id] = (
+            decisions[call.tool_call_id] = ToolDenied(
                 f'Rejected: {call.tool_name} requires manual review'
             )
 
-    if not results:
-        return None
+    if not decisions:
+        return None  # leave everything unresolved for the next handler / the caller
 
-    return requests.build_results(results)
+    return requests.build_results(approvals=decisions)
 
 
 toolset = FunctionToolset()

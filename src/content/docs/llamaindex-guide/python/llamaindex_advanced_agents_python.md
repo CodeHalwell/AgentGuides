@@ -7,7 +7,7 @@ language: python
 
 # LlamaIndex Advanced Agents (Python)
 
-> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Basics — `FunctionAgent`, tools, `Context` — are covered in the [comprehensive guide](../llamaindex_comprehensive_guide/#4-agent-classes-and-types).
+> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Basics — `FunctionAgent`, tools, `Context` — are covered in the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/#4-agent-classes-and-types).
 
 All examples assume:
 
@@ -266,7 +266,7 @@ async for ev in handler.stream_events():
             print(f"\n[{who} finished a turn]")
 ```
 
-For production tracing (OpenTelemetry, Phoenix, Langfuse and others), use the instrumentation hooks described on the [observability page](../llamaindex_observability_python/) rather than the event stream.
+For production tracing (OpenTelemetry, Phoenix, Langfuse and others), use the instrumentation hooks described on the [observability page](/llamaindex-guide/python/llamaindex_observability_python/) rather than the event stream.
 
 ---
 
@@ -275,4 +275,4 @@ For production tracing (OpenTelemetry, Phoenix, Langfuse and others), use the in
 - **Transient tool failures** — retry inside the tool (`tenacity`), and return a clear error string on final failure so the model can choose another path.
 - **Model provider errors** — the OpenAI and Anthropic LLM classes take `max_retries` and `timeout`; set them explicitly.
 - **Runaway loops** — pass `max_iterations=` to `run()` and set a workflow `timeout=`; use `early_stopping_method="generate"` to get a best-effort answer instead of an exception.
-- **Whole-step retries in custom workflows** — `@step(retry_policy=ConstantDelayRetryPolicy(...))`; see [advanced implementations](../llamaindex_advanced_implementations/).
+- **Whole-step retries in custom workflows** — `@step(retry_policy=ConstantDelayRetryPolicy(...))`; see [advanced implementations](/llamaindex-guide/python/llamaindex_advanced_implementations/).

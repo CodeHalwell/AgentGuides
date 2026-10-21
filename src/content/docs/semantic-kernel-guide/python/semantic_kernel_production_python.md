@@ -17,7 +17,7 @@ language: python
 
 This guide covers production deployment of Semantic Kernel Python applications including Docker/Kubernetes deployment, monitoring, security, performance optimization, and operational best practices.
 
-**See also:** [general production guide](../../semantic_kernel_production_guide/) for language-agnostic patterns.
+**See also:** [general production guide](/semantic-kernel-guide/semantic_kernel_production_guide/) for language-agnostic patterns.
 
 ---
 
@@ -597,16 +597,16 @@ async def test_simple_invocation(kernel):
 7. **Regular dependency updates**
 8. **Content filtering and guardrails**
 
-See: [Middleware Guide](../semantic_kernel_middleware_python/) for guardrails implementation.
+See: [Middleware Guide](/semantic-kernel-guide/python/semantic_kernel_middleware_python/) for guardrails implementation.
 
 ---
 
 ## Additional Resources
 
-- [Comprehensive Guide](../semantic_kernel_comprehensive_python/) - Complete reference
-- [Recipes](../semantic_kernel_recipes_python/) - Code examples
-- [General Production Guide](../../semantic_kernel_production_guide/) - Language-agnostic patterns
-- [Streaming Server Guide](../semantic_kernel_streaming_server_fastapi/) - FastAPI patterns
+- [Comprehensive Guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/) - Complete reference
+- [Recipes](/semantic-kernel-guide/python/semantic_kernel_recipes_python/) - Code examples
+- [General Production Guide](/semantic-kernel-guide/semantic_kernel_production_guide/) - Language-agnostic patterns
+- [Streaming Server Guide](/semantic-kernel-guide/python/semantic_kernel_streaming_server_fastapi/) - FastAPI patterns
 
-**[Back to Python overview](../)**
+**[Back to Python overview](/semantic-kernel-guide/python/)**
 

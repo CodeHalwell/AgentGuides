@@ -107,7 +107,7 @@ The counts are estimates from the tokenizer; for billing-grade numbers read the 
 | Agent iterations per request | histogram | agent name |
 | Cache hit rate (ingestion, semantic cache) | gauge | cache |
 
-The [production guide](../llamaindex_production_guide/#monitoring-and-observability) shows these wired into Prometheus.
+The [production guide](/llamaindex-guide/python/llamaindex_production_guide/#monitoring-and-observability) shows these wired into Prometheus.
 
 ## 6. Logs
 
@@ -122,4 +122,4 @@ import logging, sys
 logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)   # very verbose: shows HTTP calls and prompts
 ```
 
-For agents, iterate `handler.stream_events()` and print `ToolCall` / `ToolCallResult` events — see [streaming](../llamaindex_comprehensive_guide/#11-streaming-responses).
+For agents, iterate `handler.stream_events()` and print `ToolCall` / `ToolCallResult` events — see [streaming](/llamaindex-guide/python/llamaindex_comprehensive_guide/#11-streaming-responses).

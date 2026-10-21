@@ -847,7 +847,7 @@ async for event in handler.stream_events():
 result = await handler
 ```
 
-For logging and tracing rather than UI updates, use the instrumentation module instead of the event stream — see the [observability page](../llamaindex_observability_python/).
+For logging and tracing rather than UI updates, use the instrumentation module instead of the event stream — see the [observability page](/llamaindex-guide/python/llamaindex_observability_python/).
 
 ---
 
@@ -1065,7 +1065,7 @@ llamactl init             # pick a starter template
 llamactl serve            # run the workflows locally
 ```
 
-You do not need any of that to put a workflow behind your own API: a workflow is just an async object. The [FastAPI streaming page](../llamaindex_streaming_server_fastapi/) shows an agent served over Server-Sent Events, and the [production guide](../llamaindex_production_guide/) covers containers and scaling.
+You do not need any of that to put a workflow behind your own API: a workflow is just an async object. The [FastAPI streaming page](/llamaindex-guide/python/llamaindex_streaming_server_fastapi/) shows an agent served over Server-Sent Events, and the [production guide](/llamaindex-guide/python/llamaindex_production_guide/) covers containers and scaling.
 
 What survives from the old `llama-agents` architecture is the idea, not the API: if you need agents in separate processes, run each as its own service (or its own `llamactl` deployment) and call it from a tool.
 
@@ -1100,7 +1100,7 @@ async for event in handler.stream_events():
 print(await handler)
 ```
 
-Within one process you can keep the handler alive and call `handler.ctx.send_event(...)` whenever the answer arrives. Approval that must survive a restart is easier with a small custom workflow whose state is all serialisable — see [durable approval](../llamaindex_advanced_agents_python/#42-approval-that-outlives-the-process); a prebuilt agent paused inside a tool cannot currently be resumed from a serialised context, because its memory is not serialised.
+Within one process you can keep the handler alive and call `handler.ctx.send_event(...)` whenever the answer arrives. Approval that must survive a restart is easier with a small custom workflow whose state is all serialisable — see [durable approval](/llamaindex-guide/python/llamaindex_advanced_agents_python/#42-approval-that-outlives-the-process); a prebuilt agent paused inside a tool cannot currently be resumed from a serialised context, because its memory is not serialised.
 
 ---
 
