@@ -1,20 +1,50 @@
 ---
-title: "Microsoft Agent Framework - .NET Feature Tour (2025 preview)"
-description: "Tour of the A2A, workflow, declarative, OpenTelemetry and content-safety features as drafted for the October 2025 .NET preview, with notes on what changed by GA."
+title: "Microsoft Agent Framework - .NET Feature Tour"
+description: "Tour of the .NET A2A, workflow, checkpointing, human-in-the-loop, declarative agent, OpenTelemetry, content-safety and dependency-injection features, with compiled examples."
 framework: microsoft-agent-framework
 language: dotnet
 ---
 
-# Microsoft Agent Framework - .NET Feature Tour (2025 preview)
+# Microsoft Agent Framework - .NET Feature Tour
 
 **First written:** November 2025, for the October 2025 public preview
-**Reviewed:** %%versions-checked%% against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%%
-**Target Audience:** .NET/C# Developers
-**.NET Version:** 8.0+
+**Verified against:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%). Every C# block on this page was compiled against that release.
+**Target audience:** .NET/C# developers
+**.NET version:** 8.0+
 
-> **Read this first.** Much of this page predates GA and does not match the shipped packages. There are no `Microsoft.Agents.AI.Graphs`, `Microsoft.Agents.AI.Config`, `Microsoft.Agents.AI.Telemetry` or `Microsoft.Agents.AI.Safety` namespaces in %%version=Microsoft.Agents.AI%%. The real equivalents are: workflows in `Microsoft.Agents.AI.Workflows` (`AgentWorkflowBuilder`, `InProcessExecution`) and `Microsoft.Agents.AI.Workflows.Declarative`; OpenTelemetry via `AIAgentBuilder.UseOpenTelemetry(...)`; A2A via `Microsoft.Agents.AI.A2A` (`A2AAgent`, preview) and `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (`MapA2A`). Content safety is something you add yourself, typically as agent middleware over `Azure.AI.ContentSafety`. Read the code below as design intent rather than copy-paste material.
+The preview-era version of this page described `Microsoft.Agents.AI.Graphs`, `.Config`, `.Telemetry` and `.Safety` namespaces (`AgentGraph`, `HITLConfig`, `A2AProtocolAdapter`, `AgentTelemetry`, `ContentSafetyConfig`). They never shipped. The shipped equivalents are:
 
----
+| Feature | Package / namespace | Key types |
+| --- | --- | --- |
+| A2A client | `Microsoft.Agents.AI.A2A` (preview) | `A2ACardResolver.GetAIAgentAsync()`, `A2AAgent` |
+| A2A server | `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (preview) | `AddA2AServer`, `MapA2AJsonRpc` |
+| Graph workflows | `Microsoft.Agents.AI.Workflows` | `WorkflowBuilder`, `Executor<TIn,TOut>`, `InProcessExecution` |
+| Checkpointing | `Microsoft.Agents.AI.Workflows` | `CheckpointManager`, `CheckpointInfo` |
+| Human-in-the-loop | `Microsoft.Agents.AI.Workflows` | `RequestPort`, `RequestInfoEvent` |
+| Declarative agents | `Microsoft.Agents.AI.Declarative` (rc) | `ChatClientPromptAgentFactory`, `CreateFromYamlAsync` |
+| Declarative workflows | `Microsoft.Agents.AI.Workflows.Declarative` | `DeclarativeWorkflowBuilder` |
+| OpenTelemetry | `Microsoft.Agents.AI` | `.AsBuilder().UseOpenTelemetry()` |
+| Content safety | your middleware over `Azure.AI.ContentSafety` | `.AsBuilder().Use(...)` |
+| Hosting / DI | `Microsoft.Agents.AI.Hosting` (preview) | `AddAIAgent`, `AddWorkflow` |
+
+The examples share one helper for creating a chat client:
+
+```csharp
+// Models.cs
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Extensions.AI;
+
+public static class Models
+{
+    public static IChatClient ChatClient() =>
+        new AzureOpenAIClient(
+                new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+                new DefaultAzureCredential())
+            .GetChatClient(Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "gpt-4o-mini")
+            .AsIChatClient();
+}
+```
 
 ## Table of Contents
 
@@ -24,153 +54,89 @@ language: dotnet
 4. [OpenTelemetry Integration - .NET](#opentelemetry-integration---net)
 5. [Content Safety - .NET](#content-safety---net)
 6. [Dependency Injection Patterns](#dependency-injection-patterns)
+7. [Best Practices](#best-practices)
 
 ---
 
 ## Agent2Agent (A2A) Protocol - .NET
 
-### Quick Start with A2A
+[A2A](https://a2a-protocol.org/) lets agents on different frameworks call each other over HTTP. In the framework a remote A2A agent is just another `AIAgent`, and any `AIAgent` can be published as an A2A endpoint.
+
+```bash
+dotnet add package Microsoft.Agents.AI.A2A --prerelease
+dotnet add package Microsoft.Agents.AI.Hosting.A2A.AspNetCore --prerelease
+```
+
+### Calling a remote A2A agent
+
+The client resolves the remote agent's card (`/.well-known/agent-card.json`) and wraps it as an `AIAgent`. Authentication is whatever the remote agent's card asks for; supply it through the `HttpClient`.
 
 ```csharp
+using A2A;
 using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.A2A;
-using Azure.Identity;
-using System;
-using System.Threading.Tasks;
 
-public class A2AExample
+public static class A2AClientExample
 {
-    public static async Task SetupA2AAgentAsync()
+    public static async Task CallRemoteAgentAsync()
     {
-        // Create base agent
-        var agent = new ChatClientAgent(
-            instructions: "You are a helpful sales data agent.",
-            name: "SalesAgent"
-        );
+        using var http = new HttpClient();
+        // e.g. http.DefaultRequestHeaders.Authorization = new("Bearer", token);
 
-        // Wrap with A2A adapter
-        var a2aAdapter = new A2AProtocolAdapter(
-            agent: agent,
-            agentId: "agent_sales_001",
-            endpoint: new Uri("https://api.contoso.com/agents/sales"),
-            authentication: new A2AAuthentication
-            {
-                Method = A2AAuthMethod.EntraId,
-                Credential = new DefaultAzureCredential()
-            }
-        );
+        var resolver = new A2ACardResolver(new Uri("https://api.partner.com/agents/analytics/"), http);
+        AIAgent analytics = await resolver.GetAIAgentAsync(http);
 
-        // Register message handler
-        a2aAdapter.OnMessage(async (message) =>
-        {
-            var query = message.Payload.Content?.ToString();
-            var response = await agent.RunAsync(query);
-
-            return new A2AResponse
-            {
-                Type = "response",
-                Status = "success",
-                Content = response
-            };
-        });
-
-        await a2aAdapter.RegisterAsync();
-        return a2aAdapter;
-    }
-
-    public static async Task CallOpenAIAgentAsync()
-    {
-        // Call external OpenAI agent via A2A
-        var client = new A2AClient(
-            agentId: "agent_sales_001",
-            authentication: new A2AAuthentication
-            {
-                Method = A2AAuthMethod.OAuth2,
-                ClientId = "your_client_id",
-                ClientSecret = "your_client_secret"
-            }
-        );
-
-        var message = new A2AMessage
-        {
-            RecipientAgentId = "agent_openai_analytics",
-            RecipientEndpoint = new Uri("https://api.partner.com/agents/analytics"),
-            RecipientFramework = "openai-sdk",
-            Payload = new A2APayload
-            {
-                Type = "request",
-                Action = "query",
-                Content = "Analyze Q3 sales trends"
-            }
-        };
-
-        var response = await client.SendMessageAsync(message);
-        Console.WriteLine($"Response: {response.Payload.Content}");
+        AgentSession session = await analytics.CreateSessionAsync();   // maps to an A2A context id
+        AgentResponse response = await analytics.RunAsync("Analyse Q3 sales trends", session);
+        Console.WriteLine(response.Text);
     }
 }
 ```
 
-### Type-Safe A2A with Records
+Because it is an `AIAgent`, a remote A2A agent can sit in a workflow, be wrapped with middleware, or be handed to another agent as a tool with `analytics.AsAIFunction()`.
+
+### Exposing an agent over A2A
+
+```csharp
+// Program.cs (ASP.NET Core)
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+
+var builder = WebApplication.CreateBuilder(args);
+
+AIAgent salesAgent = new ChatClientAgent(
+    Models.ChatClient(),
+    instructions: "You are a helpful sales data agent.",
+    name: "SalesAgent",
+    description: "Answers questions about sales figures.");
+
+builder.AddA2AServer(salesAgent);
+
+var app = builder.Build();
+app.MapA2AJsonRpc(salesAgent, "/agents/sales");   // JSON-RPC binding; MapA2AHttpJson for HTTP+JSON
+app.Run();
+```
+
+Put the endpoint behind your normal ASP.NET Core authentication (`.RequireAuthorization()`).
+
+### Type-safe exchanges
+
+A2A carries messages, not typed RPC. For a typed contract, serialise the request into the message and ask the remote side for JSON; locally, `RunAsync<T>` gives you the same safety against an in-process agent.
 
 ```csharp
 using System.Text.Json;
+using Microsoft.Agents.AI;
 
-// Define strongly-typed request/response models
-public record SalesQuery(
-    string QueryType,
-    string DateRange,
-    string? Region = null,
-    string Currency = "USD"
-);
+public record SalesQuery(string QueryType, string DateRange, string? Region = null, string Currency = "USD");
 
-public record SalesResponse(
-    decimal TotalSales,
-    string Period,
-    string Region,
-    string Currency,
-    Dictionary<string, decimal> Breakdown
-);
+public record SalesResponse(decimal TotalSales, string Period, string Region, string Currency, Dictionary<string, decimal> Breakdown);
 
-public class TypeSafeA2A
+public static class TypedSales
 {
-    public static async Task<SalesResponse> TypeSafeA2ACallAsync(SalesQuery query)
+    public static async Task<SalesResponse> QueryAsync(AIAgent salesAgent, SalesQuery query)
     {
-        var client = new A2AClient(agentId: "sales_agent");
-
-        var message = new A2AMessage
-        {
-            RecipientAgentId = "analytics_agent",
-            RecipientEndpoint = new Uri("https://api.partner.com/agents/analytics"),
-            Payload = new A2APayload
-            {
-                Type = "request",
-                Action = "query_sales",
-                Content = JsonSerializer.Serialize(query)
-            }
-        };
-
-        var response = await client.SendMessageAsync(message);
-
-        // Deserialize with type safety
-        var salesData = JsonSerializer.Deserialize<SalesResponse>(
-            response.Payload.Content?.ToString()
-        );
-
-        return salesData!;
-    }
-
-    public static async Task Main()
-    {
-        var query = new SalesQuery(
-            QueryType: "regional_sales",
-            DateRange: "2025-Q3",
-            Region: "EMEA",
-            Currency: "EUR"
-        );
-
-        var result = await TypeSafeA2ACallAsync(query);
-        Console.WriteLine($"Total Sales: {result.TotalSales} {result.Currency}");
-        Console.WriteLine($"Breakdown: {string.Join(", ", result.Breakdown)}");
+        AgentResponse<SalesResponse> response = await salesAgent.RunAsync<SalesResponse>(
+            $"Answer this query as JSON: {JsonSerializer.Serialize(query)}");
+        return response.Result;
     }
 }
 ```
@@ -179,547 +145,331 @@ public class TypeSafeA2A
 
 ## Graph-Based Workflows - .NET
 
-### Building Complex Workflows
+Workflows are directed graphs of **executors**. An executor is a class deriving from `Executor<TInput, TOutput>` (or `Executor<TInput>`), a plain function bound with `BindAsExecutor`, or an `AIAgent`. Edges carry typed messages between them; the workflow runs in supersteps and can checkpoint after each one.
+
+```bash
+dotnet add package Microsoft.Agents.AI.Workflows --version %%version=Microsoft.Agents.AI%%
+```
+
+### Building a workflow
 
 ```csharp
-using Microsoft.Agents.AI.Graphs;
-using Microsoft.Agents.AI;
-using System;
-using System.Collections.Generic;
-using System.Threading.Tasks;
+using Microsoft.Agents.AI.Workflows;
 
-public class ContentPipeline
+public record Document(string Title, string Body);
+
+public sealed class DraftExecutor() : Executor<string, Document>("draft")
 {
-    public static async Task<AgentGraph> CreateContentPipelineAsync()
+    public override ValueTask<Document> HandleAsync(string topic, IWorkflowContext context, CancellationToken cancellationToken = default) =>
+        ValueTask.FromResult(new Document(topic, $"A first draft about {topic}."));
+}
+
+public sealed class ReviewExecutor() : Executor<Document, string>("review")
+{
+    public override async ValueTask<string> HandleAsync(Document doc, IWorkflowContext context, CancellationToken cancellationToken = default)
     {
-        // Define specialized agents
-        var researchAgent = new ChatClientAgent(
-            instructions: "You research topics thoroughly.",
-            name: "ResearchAgent"
-        );
+        await context.QueueStateUpdateAsync("reviewed-title", doc.Title, cancellationToken: cancellationToken);
+        return $"{doc.Title}: {doc.Body} (reviewed)";
+    }
+}
 
-        var writerAgent = new ChatClientAgent(
-            instructions: "You write engaging content.",
-            name: "WriterAgent"
-        );
+public static class ContentPipeline
+{
+    public static Workflow Build()
+    {
+        var draft = new DraftExecutor();
+        var review = new ReviewExecutor();
 
-        var editorAgent = new ChatClientAgent(
-            instructions: "You edit and improve content quality.",
-            name: "EditorAgent"
-        );
-
-        var seoAgent = new ChatClientAgent(
-            instructions: "You optimize content for SEO.",
-            name: "SEOAgent"
-        );
-
-        // Create graph
-        var graph = new AgentGraph("ContentPipeline");
-
-        // Add nodes
-        graph.AddNode("research", researchAgent);
-        graph.AddNode("write", writerAgent);
-        graph.AddNode("edit", editorAgent);
-        graph.AddNode("seo", seoAgent);
-
-        // Linear workflow
-        graph.AddEdge("research", "write");
-        graph.AddEdge("write", "edit");
-        graph.AddEdge("edit", "seo");
-
-        graph.SetEntryPoint("research");
-
-        return graph;
+        return new WorkflowBuilder(draft)
+            .AddEdge(draft, review)
+            .WithOutputFrom(review)
+            .WithName("ContentPipeline")
+            .Build();
     }
 
-    public static async Task RunWithStreamingAsync(string topic)
+    public static async Task RunAsync()
     {
-        var graph = await CreateContentPipelineAsync();
-
-        Console.WriteLine($"Creating content for: {topic}\n");
-
-        // Stream execution events
-        await foreach (var evt in graph.StreamAsync(
-            initialState: new Dictionary<string, object>
-            {
-                ["topic"] = topic,
-                ["target_length"] = 1500
-            },
-            streamMode: StreamMode.Updates
-        ))
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(Build(), "agent frameworks");
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
         {
-            var nodeId = evt.Node;
-            var eventType = evt.Type;
-
-            switch (eventType)
+            switch (evt)
             {
-                case "node_start":
-                    Console.WriteLine($"▶ Starting: {nodeId}");
+                case ExecutorCompletedEvent done:
+                    Console.WriteLine($"[{done.ExecutorId}] completed");
                     break;
-                case "node_output":
-                    var output = evt.Data?["output"]?.ToString();
-                    Console.WriteLine($"  Output preview: {output?[..Math.Min(100, output.Length)]}...");
-                    break;
-                case "node_complete":
-                    Console.WriteLine($"✓ Completed: {nodeId}\n");
+                case WorkflowOutputEvent output:
+                    Console.WriteLine(output.As<string>());
                     break;
             }
         }
-
-        var finalResult = await graph.GetFinalStateAsync();
-        Console.WriteLine($"Final content ready!");
     }
 }
 ```
 
-### Conditional Routing
+Agents slot in the same way: `new WorkflowBuilder(researcher).AddEdge(researcher, writer)` where both are `AIAgent`s. Send a `TurnToken` after starting the run so agent executors begin their turn (see the [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-8-explicit-multi-agent-graph-with-workflowbuilder)).
+
+### Conditional routing
+
+`AddEdge<T>(source, target, condition)` only delivers a message when the predicate holds. For many branches, `AddSwitch` reads more clearly.
 
 ```csharp
-public class ConditionalWorkflow
+using Microsoft.Agents.AI.Workflows;
+
+public record Claim(string Id, decimal Amount);
+
+public static class ClaimsRouting
 {
-    public static async Task<AgentGraph> CreateConditionalWorkflowAsync()
+    public static Workflow Build()
     {
-        var classifierAgent = new ChatClientAgent(
-            instructions: "Classify customer queries by urgency and type."
-        );
+        var intake = ((Func<string, Claim>)(text => new Claim(Guid.NewGuid().ToString("N")[..8], decimal.Parse(text))))
+            .BindAsExecutor("intake");
+        var autoApprove = ((Func<Claim, string>)(c => $"Claim {c.Id} auto-approved")).BindAsExecutor("auto-approve");
+        var manualReview = ((Func<Claim, string>)(c => $"Claim {c.Id} sent for manual review")).BindAsExecutor("manual-review");
 
-        var simpleAgent = new ChatClientAgent(
-            instructions: "Handle simple queries quickly."
-        );
+        return new WorkflowBuilder(intake)
+            .AddSwitch(intake, s => s
+                .AddCase<Claim>(c => c!.Amount < 1_000m, autoApprove)
+                .WithDefault(manualReview))
+            .WithOutputFrom(autoApprove, manualReview)
+            .Build();
+    }
+}
+```
 
-        var complexAgent = new ChatClientAgent(
-            instructions: "Handle complex queries with detailed analysis."
-        );
+### Parallel execution
 
-        var urgentAgent = new ChatClientAgent(
-            instructions: "Handle urgent queries with priority."
-        );
+Fan-out sends one message to several executors in the same superstep; a fan-in barrier waits for all of them. For agents only, `AgentWorkflowBuilder.BuildConcurrent(agents)` does this for you.
 
-        var graph = new AgentGraph("CustomerSupport");
+```csharp
+using Microsoft.Agents.AI.Workflows;
 
-        graph.AddNode("classifier", classifierAgent);
-        graph.AddNode("simple", simpleAgent);
-        graph.AddNode("complex", complexAgent);
-        graph.AddNode("urgent", urgentAgent);
+public static class ParallelChecks
+{
+    public static Workflow Build()
+    {
+        var start = ((Func<string, string>)(text => text)).BindAsExecutor("start");
+        var spelling = ((Func<string, string>)(t => $"spelling: ok ({t.Length} chars)")).BindAsExecutor("spelling");
+        var tone = ((Func<string, string>)(t => "tone: neutral")).BindAsExecutor("tone");
 
-        // Conditional routing function
-        string RouteQuery(Dictionary<string, object> state)
+        // Collects one result per branch, then emits the combined report.
+        var report = new AggregatingExecutor<string, string>(
+            "report", (acc, next) => acc is null ? next : $"{acc}; {next}");
+
+        return new WorkflowBuilder(start)
+            .AddFanOutEdge(start, [spelling, tone])
+            .AddFanInBarrierEdge([spelling, tone], report)
+            .WithOutputFrom(report)
+            .Build();
+    }
+}
+```
+
+### Checkpointing and recovery
+
+Pass a `CheckpointManager` when you start the run and the workflow checkpoints at the end of every superstep. `CheckpointManager.CreateInMemory()` is for tests; `CheckpointManager.CreateJson(new FileSystemJsonCheckpointStore(dir))` or the Cosmos DB store (`Microsoft.Agents.AI.CosmosNoSql`) persist across processes.
+
+```csharp
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Agents.AI.Workflows.Checkpointing;
+
+public static class CheckpointDemo
+{
+    public static async Task RunAsync()
+    {
+        var store = new FileSystemJsonCheckpointStore(new DirectoryInfo("./checkpoints"));
+        CheckpointManager checkpoints = CheckpointManager.CreateJson(store);
+        Workflow workflow = ContentPipeline.Build();
+
+        CheckpointInfo? last = null;
+        await using (StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, "durable workflows", checkpoints))
         {
-            var urgency = state.GetValueOrDefault("urgency", "normal")?.ToString();
-            var complexity = state.GetValueOrDefault("complexity", "simple")?.ToString();
-
-            return urgency == "high" ? "urgent"
-                : complexity == "high" ? "complex"
-                : "simple";
-        }
-
-        graph.AddConditionalEdge(
-            source: "classifier",
-            pathFunction: RouteQuery,
-            pathMap: new Dictionary<string, string>
+            await foreach (WorkflowEvent evt in run.WatchStreamAsync())
             {
-                ["simple"] = "simple",
-                ["complex"] = "complex",
-                ["urgent"] = "urgent"
-            }
-        );
-
-        return graph;
-    }
-}
-```
-
-### Parallel Execution
-
-```csharp
-public class ParallelWorkflow
-{
-    public static async Task<AgentGraph> CreateParallelAnalysisAsync()
-    {
-        var sentimentAgent = new ChatClientAgent(instructions: "Analyze sentiment");
-        var keywordAgent = new ChatClientAgent(instructions: "Extract keywords");
-        var summaryAgent = new ChatClientAgent(instructions: "Summarize text");
-        var aggregatorAgent = new ChatClientAgent(instructions: "Combine results");
-
-        var graph = new AgentGraph("ParallelAnalysis");
-
-        graph.AddNode("sentiment", sentimentAgent);
-        graph.AddNode("keywords", keywordAgent);
-        graph.AddNode("summary", summaryAgent);
-        graph.AddNode("aggregator", aggregatorAgent);
-
-        // Parallel fan-out
-        var parallelNodes = new[] { "sentiment", "keywords", "summary" };
-        foreach (var node in parallelNodes)
-        {
-            graph.AddEdge("START", node);
-            graph.AddEdge(node, "aggregator");
-        }
-
-        return graph;
-    }
-
-    public static async Task RunParallelAsync()
-    {
-        var graph = await CreateParallelAnalysisAsync();
-
-        var result = await graph.RunAsync(new Dictionary<string, object>
-        {
-            ["text"] = "Sample text to analyze..."
-        });
-
-        Console.WriteLine($"Aggregated results: {result["aggregator"]}");
-    }
-}
-```
-
-### Checkpointing and Recovery
-
-```csharp
-using Microsoft.Agents.AI.Graphs;
-
-public class CheckpointedWorkflow
-{
-    public static async Task<AgentGraph> CreateCheckpointedWorkflowAsync()
-    {
-        var graph = new AgentGraph("DataProcessing");
-
-        // Configure checkpointing
-        var checkpointConfig = new CheckpointConfig
-        {
-            Backend = "azure-storage",
-            ConnectionString = Environment.GetEnvironmentVariable("AZURE_STORAGE_CONNECTION"),
-            Container = "agent-checkpoints",
-            CheckpointInterval = CheckpointInterval.NodeCompletion,
-            RetentionDays = 7
-        };
-
-        graph.ConfigureCheckpointing(checkpointConfig);
-
-        // Add nodes...
-
-        return graph;
-    }
-
-    public static async Task<object> ResumeFromCheckpointAsync(string checkpointId)
-    {
-        var graph = await CreateCheckpointedWorkflowAsync();
-
-        // Load checkpoint
-        var checkpoint = await graph.LoadCheckpointAsync(checkpointId);
-
-        Console.WriteLine($"Resuming from: {checkpoint.CurrentNode}");
-        Console.WriteLine($"State: {checkpoint.State}");
-
-        // Resume execution
-        var result = await graph.ResumeAsync(checkpoint);
-
-        return result;
-    }
-}
-```
-
-### Human-in-the-Loop
-
-```csharp
-using Microsoft.Agents.AI.Graphs;
-
-public class ApprovalWorkflow
-{
-    public static async Task<AgentGraph> CreateApprovalWorkflowAsync()
-    {
-        var graph = new AgentGraph("ContentApproval");
-
-        var draftAgent = new ChatClientAgent(instructions: "Draft content");
-        var reviewAgent = new ChatClientAgent(instructions: "Review content");
-        var publishAgent = new ChatClientAgent(instructions: "Publish content");
-
-        graph.AddNode("draft", draftAgent);
-        graph.AddNode("review", reviewAgent);
-        graph.AddNode("publish", publishAgent);
-
-        // Configure HITL
-        var hitlConfig = new HITLConfig
-        {
-            Enabled = true,
-            ApprovalEndpoint = new Uri("https://approval.contoso.com/api/requests"),
-            NotificationChannels = new[] { "email", "teams" },
-            TimeoutSeconds = 3600
-        };
-
-        graph.AddHITLCheckpoint(
-            afterNode: "review",
-            config: hitlConfig,
-            approvalPrompt: "Review and approve this content"
-        );
-
-        graph.AddEdge("draft", "review");
-        graph.AddEdge("review", "publish");
-
-        return graph;
-    }
-
-    public static async Task RunInteractiveApprovalAsync()
-    {
-        var graph = await CreateApprovalWorkflowAsync();
-
-        await foreach (var evt in graph.StreamAsync(
-            new Dictionary<string, object> { ["topic"] = "Product Launch" }
-        ))
-        {
-            if (evt.Type == "hitl_required")
-            {
-                var content = evt.Content?.ToString();
-                var requestId = evt.RequestId;
-
-                Console.WriteLine("\n" + new string('=', 60));
-                Console.WriteLine("APPROVAL REQUIRED");
-                Console.WriteLine(new string('=', 60));
-                Console.WriteLine($"Content:\n{content}");
-                Console.WriteLine(new string('=', 60));
-
-                Console.Write("Approve? (yes/no): ");
-                var decision = Console.ReadLine()?.ToLower();
-
-                if (decision == "yes")
+                if (evt is SuperStepCompletedEvent step && step.CompletionInfo?.Checkpoint is { } cp)
                 {
-                    await graph.ApproveHITLAsync(requestId);
-                }
-                else
-                {
-                    Console.Write("Rejection reason: ");
-                    var reason = Console.ReadLine();
-                    await graph.RejectHITLAsync(requestId, reason);
+                    last = cp;   // persist cp.SessionId / cp.CheckpointId somewhere durable
                 }
             }
         }
+
+        // Later, possibly in another process: resume from the saved checkpoint.
+        if (last is not null)
+        {
+            await using StreamingRun resumed = await InProcessExecution.ResumeStreamingAsync(workflow, last, checkpoints);
+            await foreach (WorkflowEvent evt in resumed.WatchStreamAsync())
+            {
+                if (evt is WorkflowOutputEvent output) Console.WriteLine(output.As<string>());
+            }
+        }
     }
 }
 ```
+
+### Human-in-the-loop
+
+A `RequestPort` is a node that leaves the workflow: messages sent to it surface as `RequestInfoEvent`s, and the workflow waits until you send back a response. Combined with checkpointing, the wait can last as long as you like.
+
+```csharp
+using Microsoft.Agents.AI.Workflows;
+
+public record ApprovalRequest(string Content);
+public record ApprovalDecision(bool Approved, string? Comment = null);
+
+public static class ApprovalWorkflow
+{
+    public static Workflow Build()
+    {
+        var draft = ((Func<string, ApprovalRequest>)(topic => new ApprovalRequest($"Draft post about {topic}")))
+            .BindAsExecutor("draft");
+        var approval = RequestPort.Create<ApprovalRequest, ApprovalDecision>("human-approval");
+        var publish = ((Func<ApprovalDecision, string>)(d => d.Approved ? "Published." : $"Rejected: {d.Comment}"))
+            .BindAsExecutor("publish");
+
+        return new WorkflowBuilder(draft)
+            .AddEdge(draft, approval)
+            .AddEdge(approval, publish)
+            .WithOutputFrom(publish)
+            .Build();
+    }
+
+    public static async Task RunAsync()
+    {
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(Build(), "release notes");
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
+        {
+            switch (evt)
+            {
+                case RequestInfoEvent request when request.Request.TryGetDataAs<ApprovalRequest>(out var ask):
+                    Console.Write($"Approve '{ask.Content}'? [y/N] ");
+                    bool ok = Console.ReadLine()?.Trim().ToLowerInvariant() == "y";
+                    await run.SendResponseAsync(request.Request.CreateResponse(new ApprovalDecision(ok, ok ? null : "Not now")));
+                    break;
+                case WorkflowOutputEvent output:
+                    Console.WriteLine(output.As<string>());
+                    break;
+            }
+        }
+    }
+}
+```
+
+For tool-level approval inside a single agent (rather than a workflow step), wrap the tool in `ApprovalRequiredAIFunction`; see the [.NET comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tool-approval).
 
 ---
 
 ## Declarative Agents with .NET
 
-### JSON Configuration
+`Microsoft.Agents.AI.Declarative` (release candidate) builds agents from a YAML definition, so instructions, model options and output schema can live in configuration rather than code.
+
+```bash
+dotnet add package Microsoft.Agents.AI.Declarative --prerelease
+```
+
+### YAML definition
+
+```yaml
+# agents/customer-service.yaml
+kind: Prompt
+name: CustomerServiceAgent
+description: Handles customer enquiries
+instructions: |
+  You are a helpful customer service agent.
+  Always be polite and professional.
+model:
+  options:
+    temperature: 0.7
+    topP: 0.95
+outputSchema:
+  properties:
+    category:
+      type: string
+      required: true
+      description: billing, technical or general
+    answer:
+      type: string
+      required: true
+      description: The reply to the customer.
+```
+
+### Loading the definition
+
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+
+public static class DeclarativeAgents
+{
+    public static async Task<AIAgent> LoadAsync(IChatClient chatClient, string path)
+    {
+        var factory = new ChatClientPromptAgentFactory(chatClient);
+        string yaml = await File.ReadAllTextAsync(path);
+        return await factory.CreateFromYamlAsync(yaml);
+    }
+
+    public static async Task RunAsync()
+    {
+        AIAgent agent = await LoadAsync(Models.ChatClient(), "agents/customer-service.yaml");
+        Console.WriteLine(await agent.RunAsync("My invoice is wrong."));
+    }
+}
+```
+
+The model is the chat client you pass in; the YAML sets the options. Workflows have a declarative form too (`DeclarativeWorkflowBuilder.Build<T>("workflow.yaml", options)` in `Microsoft.Agents.AI.Workflows.Declarative`), covered on the [graph workflows and declarative agents page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/).
+
+### Strongly-typed configuration with the options pattern
+
+When you would rather keep agent settings in `appsettings.json`, bind them with the ordinary .NET options pattern and build the agent from them. Nothing here is framework-specific, which is the point.
 
 ```json
 {
-  "agent": {
-    "name": "CustomerSupportAgent",
-    "version": "1.0.0",
-    "model": {
-      "provider": "azure-openai",
-      "deployment": "gpt-4o-mini",
-      "temperature": 0.7,
-      "maxTokens": 1000
-    },
-    "instructions": "You are a helpful customer support agent.\nProvide clear, concise answers.",
-    "tools": [
-      {
-        "name": "search_kb",
-        "type": "function",
-        "function": {
-          "assembly": "Tools.KnowledgeBase",
-          "type": "KnowledgeBaseTools",
-          "method": "SearchKnowledgeBase"
-        }
-      }
-    ],
-    "memory": {
-      "type": "persistent",
-      "backend": "cosmos-db",
-      "connectionString": "${COSMOS_CONNECTION_STRING}"
-    },
-    "authentication": {
-      "method": "entra-id",
-      "tenantId": "${AZURE_TENANT_ID}"
+  "Agents": {
+    "Support": {
+      "Name": "support",
+      "Instructions": "You are a helpful customer service agent.",
+      "Temperature": 0.7,
+      "MaxOutputTokens": 800
     }
   }
 }
 ```
 
-### Loading Configuration
-
 ```csharp
-using Microsoft.Agents.AI.Config;
-using System.Text.Json;
-using Azure.Identity;
-
-public class ConfigurationLoader
-{
-    public static async Task<ChatClientAgent> LoadAgentFromJsonAsync(string configPath)
-    {
-        // Read configuration file
-        var json = await File.ReadAllTextAsync(configPath);
-
-        // Deserialize to strongly-typed config
-        var config = JsonSerializer.Deserialize<AgentConfiguration>(json);
-
-        // Load agent from configuration
-        var agent = await AgentConfiguration.LoadAgentAsync(
-            config: config!,
-            credential: new DefaultAzureCredential()
-        );
-
-        return agent;
-    }
-
-    public static async Task Main()
-    {
-        var agent = await LoadAgentFromJsonAsync("agent-config.json");
-
-        // Agent is fully configured and ready
-        var result = await agent.RunAsync("Help me with my order");
-        Console.WriteLine(result);
-    }
-}
-```
-
-### Strongly-Typed Configuration Models
-
-```csharp
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
-
-public record ModelConfiguration
-{
-    [Required]
-    [JsonPropertyName("provider")]
-    public string Provider { get; init; } = "azure-openai";
-
-    [Required]
-    [JsonPropertyName("deployment")]
-    public string Deployment { get; init; } = default!;
-
-    [Range(0.0, 2.0)]
-    [JsonPropertyName("temperature")]
-    public double Temperature { get; init; } = 0.7;
-
-    [Range(1, int.MaxValue)]
-    [JsonPropertyName("maxTokens")]
-    public int MaxTokens { get; init; } = 1000;
-}
-
-public record ToolConfiguration
-{
-    [Required]
-    public string Name { get; init; } = default!;
-
-    public string Type { get; init; } = "function";
-
-    public FunctionConfig Function { get; init; } = default!;
-}
-
-public record FunctionConfig
-{
-    [Required]
-    public string Assembly { get; init; } = default!;
-
-    [Required]
-    public string Type { get; init; } = default!;
-
-    [Required]
-    public string Method { get; init; } = default!;
-}
-
-public record AgentConfiguration
-{
-    [Required]
-    public string Name { get; init; } = default!;
-
-    public string Version { get; init; } = "1.0.0";
-
-    [Required]
-    public ModelConfiguration Model { get; init; } = default!;
-
-    [Required]
-    public string Instructions { get; init; } = default!;
-
-    public List<ToolConfiguration> Tools { get; init; } = new();
-
-    // Validation method
-    public bool Validate()
-    {
-        return !string.IsNullOrWhiteSpace(Name)
-            && !string.IsNullOrWhiteSpace(Instructions)
-            && Model != null;
-    }
-}
-```
-
-### Configuration with Options Pattern
-
-```csharp
-using Microsoft.Extensions.Configuration;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Options;
 
-public class AgentOptions
+public sealed class AgentSettings
 {
-    public const string Section = "Agent";
-
-    public string Name { get; set; } = default!;
-    public string Instructions { get; set; } = default!;
-    public ModelOptions Model { get; set; } = default!;
+    public required string Name { get; init; }
+    public required string Instructions { get; init; }
+    public float Temperature { get; init; } = 0.7f;
+    public int MaxOutputTokens { get; init; } = 1000;
 }
 
-public class ModelOptions
+public static class ConfiguredAgentRegistration
 {
-    public string Provider { get; set; } = "azure-openai";
-    public string Deployment { get; set; } = default!;
-    public double Temperature { get; set; } = 0.7;
-    public int MaxTokens { get; set; } = 1000;
-}
-
-public class AgentService
-{
-    private readonly AgentOptions _options;
-    private readonly ChatClientAgent _agent;
-
-    public AgentService(IOptions<AgentOptions> options)
+    public static void AddConfiguredSupportAgent(this IHostApplicationBuilder builder)
     {
-        _options = options.Value;
-        _agent = new ChatClientAgent(
-            instructions: _options.Instructions,
-            name: _options.Name
-        );
-    }
+        builder.Services.AddOptions<AgentSettings>()
+            .Bind(builder.Configuration.GetSection("Agents:Support"))
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
 
-    public async Task<string> ExecuteAsync(string query)
-    {
-        var result = await _agent.RunAsync(query);
-        return result;
-    }
-}
-
-// appsettings.json
-/*
-{
-  "Agent": {
-    "Name": "CustomerSupportAgent",
-    "Instructions": "You are a helpful support agent.",
-    "Model": {
-      "Provider": "azure-openai",
-      "Deployment": "gpt-4o-mini",
-      "Temperature": 0.7,
-      "MaxTokens": 1000
-    }
-  }
-}
-*/
-
-// Startup configuration
-public class Startup
-{
-    public void ConfigureServices(IServiceCollection services, IConfiguration configuration)
-    {
-        // Bind configuration
-        services.Configure<AgentOptions>(
-            configuration.GetSection(AgentOptions.Section)
-        );
-
-        // Register service
-        services.AddSingleton<AgentService>();
+        builder.AddAIAgent("support", (sp, name) =>
+        {
+            AgentSettings settings = sp.GetRequiredService<IOptions<AgentSettings>>().Value;
+            return new ChatClientAgent(sp.GetRequiredService<IChatClient>(), new ChatClientAgentOptions
+            {
+                Name = name,
+                ChatOptions = new ChatOptions
+                {
+                    Instructions = settings.Instructions,
+                    Temperature = settings.Temperature,
+                    MaxOutputTokens = settings.MaxOutputTokens,
+                },
+            });
+        });
     }
 }
 ```
@@ -728,356 +478,144 @@ public class Startup
 
 ## OpenTelemetry Integration - .NET
 
-### Complete Observability Setup
+### Observability set-up
+
+Wrap the agent with `UseOpenTelemetry(sourceName)` and subscribe to that source. Workflows have the matching `WorkflowBuilder.WithOpenTelemetry()`. The spans follow the OpenTelemetry GenAI conventions (`invoke_agent`, `chat`, `execute_tool`).
 
 ```csharp
-using OpenTelemetry;
-using OpenTelemetry.Trace;
-using OpenTelemetry.Metrics;
-using OpenTelemetry.Resources;
-using Microsoft.Agents.AI.Telemetry;
 using Azure.Monitor.OpenTelemetry.Exporter;
-using System.Diagnostics;
+using Microsoft.Agents.AI;
+using OpenTelemetry;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
-public class TelemetrySetup
+public static class Observability
 {
-    public static void ConfigureOpenTelemetry()
-    {
-        var serviceName = "customer-support-agents";
-        var serviceVersion = "1.0.0";
+    public const string SourceName = "Contoso.Agents";
 
-        // Configure Tracing
-        using var tracerProvider = Sdk.CreateTracerProviderBuilder()
-            .SetResourceBuilder(ResourceBuilder.CreateDefault()
-                .AddService(serviceName: serviceName, serviceVersion: serviceVersion)
-                .AddAttributes(new Dictionary<string, object>
-                {
-                    ["deployment.environment"] = "production",
-                    ["service.region"] = "eastus"
-                }))
-            .AddSource("Microsoft.Agents.AI.*")
-            .AddHttpClientInstrumentation()
-            .AddAspNetCoreInstrumentation()
-            .AddOtlpExporter(options =>
-            {
-                options.Endpoint = new Uri("https://otel-collector.contoso.com:4317");
-            })
-            .AddAzureMonitorTraceExporter(options =>
-            {
-                options.ConnectionString = Environment.GetEnvironmentVariable(
-                    "APPLICATIONINSIGHTS_CONNECTION_STRING"
-                );
-            })
+    public static TracerProvider StartTracing() =>
+        Sdk.CreateTracerProviderBuilder()
+            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("enterprise-agents"))
+            .AddSource(SourceName)
+            .AddOtlpExporter()                                   // OTEL_EXPORTER_OTLP_ENDPOINT
+            .AddAzureMonitorTraceExporter(o =>
+                o.ConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING"))
             .Build();
 
-        // Configure Metrics
-        using var meterProvider = Sdk.CreateMeterProviderBuilder()
-            .SetResourceBuilder(ResourceBuilder.CreateDefault()
-                .AddService(serviceName: serviceName, serviceVersion: serviceVersion))
-            .AddMeter("Microsoft.Agents.AI.*")
-            .AddHttpClientInstrumentation()
-            .AddAspNetCoreInstrumentation()
-            .AddOtlpExporter()
-            .AddAzureMonitorMetricExporter()
+    public static AIAgent Instrument(AIAgent agent) =>
+        agent.AsBuilder()
+            .UseOpenTelemetry(SourceName, o => o.EnableSensitiveData = false)   // no prompt text in spans
             .Build();
-
-        // Enable agent telemetry
-        AgentTelemetry.Configure(new AgentTelemetryOptions
-        {
-            TraceAllOperations = true,
-            IncludeMessageContent = false, // Exclude PII
-            CustomTags = new Dictionary<string, string>
-            {
-                ["environment"] = "production",
-                ["region"] = "eastus"
-            }
-        });
-    }
-
-    public static async Task ExecuteWithTracingAsync()
-    {
-        ConfigureOpenTelemetry();
-
-        var activitySource = new ActivitySource("MyApp.Agents");
-
-        using var activity = activitySource.StartActivity("customer_support_workflow");
-        activity?.SetTag("customer.id", "cust_12345");
-        activity?.SetTag("query.type", "order_status");
-
-        var agent = new ChatClientAgent(
-            instructions: "You help customers with orders."
-        );
-
-        var response = await agent.RunAsync("Where is my order?");
-
-        activity?.SetTag("response.length", response.Length);
-        activity?.AddEvent(new ActivityEvent("response_generated"));
-
-        Console.WriteLine(response);
-    }
 }
 ```
 
-### Custom Metrics
+In an ASP.NET Core app use `builder.Services.AddOpenTelemetry().WithTracing(t => t.AddSource(Observability.SourceName))` from `OpenTelemetry.Extensions.Hosting` instead of building the provider by hand.
+
+### Custom metrics
+
+Your own metrics are plain `System.Diagnostics.Metrics`. Token usage is on every `AgentResponse`.
 
 ```csharp
+using System.Diagnostics;
 using System.Diagnostics.Metrics;
+using Microsoft.Agents.AI;
 
-public class AgentMetrics
+public sealed class AgentMetrics
 {
-    private static readonly Meter Meter = new("MyApp.Agents", "1.0");
+    private static readonly Meter Meter = new("Contoso.Agents.Business");
+    private static readonly Counter<long> Requests = Meter.CreateCounter<long>("agent.requests");
+    private static readonly Histogram<double> Latency = Meter.CreateHistogram<double>("agent.latency", unit: "ms");
+    private static readonly Counter<long> Tokens = Meter.CreateCounter<long>("agent.tokens");
 
-    private static readonly Counter<long> RequestsCounter = Meter.CreateCounter<long>(
-        name: "agent.requests.total",
-        unit: "1",
-        description: "Total agent requests"
-    );
-
-    private static readonly Histogram<double> LatencyHistogram = Meter.CreateHistogram<double>(
-        name: "agent.latency",
-        unit: "ms",
-        description: "Agent request latency"
-    );
-
-    private static readonly UpDownCounter<int> ActiveRequestsCounter = Meter.CreateUpDownCounter<int>(
-        name: "agent.requests.active",
-        unit: "1",
-        description: "Currently active requests"
-    );
-
-    public static async Task<string> MonitoredExecutionAsync(string query)
+    public static async Task<AgentResponse> RunMeasuredAsync(AIAgent agent, string input, string tenant)
     {
-        var tags = new TagList
-        {
-            { "agent", "support" }
-        };
-
-        ActiveRequestsCounter.Add(1, tags);
-
+        var tags = new TagList { { "agent", agent.Name }, { "tenant", tenant } };
         var stopwatch = Stopwatch.StartNew();
 
-        try
-        {
-            var agent = new ChatClientAgent(instructions: "You help customers.");
-            var response = await agent.RunAsync(query);
+        AgentResponse response = await agent.RunAsync(input);
 
-            // Record success
-            RequestsCounter.Add(1, new TagList
-            {
-                { "agent", "support" },
-                { "status", "success" }
-            });
-
-            stopwatch.Stop();
-            LatencyHistogram.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
-
-            return response;
-        }
-        catch (Exception ex)
-        {
-            // Record failure
-            RequestsCounter.Add(1, new TagList
-            {
-                { "agent", "support" },
-                { "status", "error" },
-                { "error_type", ex.GetType().Name }
-            });
-
-            throw;
-        }
-        finally
-        {
-            ActiveRequestsCounter.Add(-1, tags);
-        }
+        Requests.Add(1, tags);
+        Latency.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
+        Tokens.Add(response.Usage?.TotalTokenCount ?? 0, tags);
+        return response;
     }
 }
+
+// Export it with .AddMeter("Contoso.Agents.Business") on your MeterProvider.
 ```
 
 ---
 
 ## Content Safety - .NET
 
-### Azure AI Content Safety Integration
+There is no `Microsoft.Agents.AI.Safety` namespace and no `contentSafety:` option on `ChatClientAgent`. Content safety is middleware you write over `Azure.AI.ContentSafety`, attached with `agent.AsBuilder().Use(...)`. The full input-and-output screening example is on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#net-content-safety-integration).
+
+### A reusable safety wrapper
+
+The middleware can also be written as a class deriving from `DelegatingAIAgent`, which is easier to test and to register in DI.
 
 ```csharp
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Safety;
 using Azure.AI.ContentSafety;
-using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-public class SafeAgent
+public sealed class ContentSafetyAgent(AIAgent inner, ContentSafetyClient safety, int maxSeverity = 2)
+    : DelegatingAIAgent(inner)
 {
-    public static ChatClientAgent CreateSafeAgent()
+    protected override async Task<AgentResponse> RunCoreAsync(
+        IEnumerable<ChatMessage> messages, AgentSession? session, AgentRunOptions? options, CancellationToken cancellationToken)
     {
-        // Configure Content Safety
-        var contentSafetyConfig = new ContentSafetyConfig
+        var text = string.Join("\n", messages.Where(m => m.Role == ChatRole.User).Select(m => m.Text));
+        var analysis = await safety.AnalyzeTextAsync(new AnalyzeTextOptions(text), cancellationToken);
+        if (analysis.Value.CategoriesAnalysis.Any(c => c.Severity > maxSeverity))
         {
-            Endpoint = new Uri(Environment.GetEnvironmentVariable("CONTENT_SAFETY_ENDPOINT")!),
-            Credential = new DefaultAzureCredential(),
-            Categories = new Dictionary<string, CategoryConfig>
-            {
-                ["Hate"] = new CategoryConfig
-                {
-                    SeverityThreshold = 2,
-                    BlockOnViolation = true
-                },
-                ["Sexual"] = new CategoryConfig
-                {
-                    SeverityThreshold = 2,
-                    BlockOnViolation = true
-                },
-                ["Violence"] = new CategoryConfig
-                {
-                    SeverityThreshold = 4,
-                    BlockOnViolation = true
-                },
-                ["SelfHarm"] = new CategoryConfig
-                {
-                    SeverityThreshold = 2,
-                    BlockOnViolation = true
-                }
-            },
-            CheckInput = true,
-            CheckOutput = true,
-            ActionOnViolation = ViolationAction.BlockAndLog
-        };
-
-        var agent = new ChatClientAgent(
-            instructions: "You are a customer support agent.",
-            contentSafety: contentSafetyConfig
-        );
-
-        return agent;
-    }
-
-    public static async Task SafeExecutionAsync()
-    {
-        var agent = CreateSafeAgent();
-
-        try
-        {
-            var result = await agent.RunAsync("User query here");
-            Console.WriteLine(result);
+            return new AgentResponse(new ChatMessage(ChatRole.Assistant, "I can't help with that request."));
         }
-        catch (ContentSafetyViolationException ex)
-        {
-            Console.WriteLine($"Content violation: {ex.Category} (Severity: {ex.Severity})");
-            // Handle violation
-        }
+
+        return await base.RunCoreAsync(messages, session, options, cancellationToken);
     }
 }
+
+// AIAgent safe = new ContentSafetyAgent(agent, new ContentSafetyClient(endpoint, credential));
 ```
 
-### Custom Safety Handler
+Override `RunCoreStreamingAsync` as well if callers stream; otherwise streaming calls bypass the check.
+
+### PII detection
+
+Azure AI Language (`Azure.AI.TextAnalytics`) redacts PII; run it on user messages before the model sees them.
 
 ```csharp
-using Microsoft.Agents.AI.Safety;
+using Azure.AI.TextAnalytics;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
 
-public class CustomSafetyHandler : ISafetyViolationHandler
+public static class PiiRedaction
 {
-    public async Task<SafetyResponse> HandleInputViolationAsync(
-        ContentSafetyViolation violation,
-        CancellationToken cancellationToken = default)
-    {
-        // Log to security monitoring
-        await LogSecurityEventAsync(new SecurityEvent
-        {
-            Type = "input_violation",
-            Category = violation.Category,
-            Severity = violation.Severity,
-            UserId = violation.Context?.GetValueOrDefault("user_id")?.ToString(),
-            Timestamp = DateTime.UtcNow
-        });
-
-        return new SafetyResponse
-        {
-            Blocked = true,
-            Message = "Your message violates our content policy.",
-            ReferenceId = violation.Id
-        };
-    }
-
-    public async Task<SafetyResponse> HandleOutputViolationAsync(
-        ContentSafetyViolation violation,
-        CancellationToken cancellationToken = default)
-    {
-        await LogSecurityEventAsync(new SecurityEvent
-        {
-            Type = "output_violation",
-            Category = violation.Category,
-            AgentId = violation.AgentId
-        });
-
-        return new SafetyResponse
-        {
-            Blocked = true,
-            Message = "I apologize, but I cannot provide that information.",
-            Fallback = true
-        };
-    }
-
-    private async Task LogSecurityEventAsync(SecurityEvent evt)
-    {
-        // Log to security system
-        await Task.CompletedTask;
-    }
-}
-
-public record SecurityEvent
-{
-    public string Type { get; init; } = default!;
-    public string Category { get; init; } = default!;
-    public int Severity { get; init; }
-    public string? UserId { get; init; }
-    public string? AgentId { get; init; }
-    public DateTime Timestamp { get; init; }
-}
-```
-
-### PII Detection
-
-```csharp
-using Microsoft.Agents.AI.Safety;
-
-public class PIIProtection
-{
-    public static ChatClientAgent CreatePIIProtectedAgent()
-    {
-        var piiConfig = new PIIDetectionConfig
-        {
-            Enabled = true,
-            DetectCategories = new[]
-            {
-                "Email",
-                "PhoneNumber",
-                "SSN",
-                "CreditCard",
-                "PersonName",
-                "Address"
-            },
-            Action = PIIAction.Redact,
-            RedactionPattern = "[REDACTED_{category}]"
-        };
-
-        var agent = new ChatClientAgent(
-            instructions: "You handle customer data.",
-            piiDetection: piiConfig
-        );
-
-        return agent;
-    }
-
-    public static async Task TestPIIRedactionAsync()
-    {
-        var agent = CreatePIIProtectedAgent();
-
-        var response = await agent.RunAsync(
-            "My email is john@example.com and SSN is 123-45-6789"
-        );
-
-        Console.WriteLine(response);
-        // Output: "My email is [REDACTED_Email] and SSN is [REDACTED_SSN]"
-    }
+    public static AIAgent WithPiiRedaction(this AIAgent agent, TextAnalyticsClient language) =>
+        agent.AsBuilder()
+            .Use(
+                runFunc: async (messages, session, options, inner, ct) =>
+                {
+                    var redacted = new List<ChatMessage>();
+                    foreach (ChatMessage message in messages)
+                    {
+                        if (message.Role == ChatRole.User && !string.IsNullOrWhiteSpace(message.Text))
+                        {
+                            PiiEntityCollection entities = await language.RecognizePiiEntitiesAsync(message.Text, cancellationToken: ct);
+                            redacted.Add(new ChatMessage(ChatRole.User, entities.RedactedText));
+                        }
+                        else
+                        {
+                            redacted.Add(message);
+                        }
+                    }
+                    return await inner.RunAsync(redacted, session, options, ct);
+                },
+                runStreamingFunc: null)
+            .Build();
 }
 ```
 
@@ -1085,145 +623,72 @@ public class PIIProtection
 
 ## Dependency Injection Patterns
 
-### Registering Agents in DI Container
+### Registering agents and workflows
+
+`Microsoft.Agents.AI.Hosting` registers agents (and workflows) as keyed `AIAgent` services. A workflow registered with `AddWorkflow(...).AddAsAIAgent()` is callable exactly like an agent, and both can then be mapped to OpenAI-compatible, A2A or AG-UI endpoints.
 
 ```csharp
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
+// Program.cs
 using Microsoft.Agents.AI;
-using Azure.Identity;
+using Microsoft.Agents.AI.Hosting;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.AI;
 
-public class Program
-{
-    public static async Task Main(string[] args)
-    {
-        var host = Host.CreateDefaultBuilder(args)
-            .ConfigureServices((context, services) =>
-            {
-                // Register credential
-                services.AddSingleton<DefaultAzureCredential>();
+var builder = WebApplication.CreateBuilder(args);
 
-                // Register agents
-                services.AddSingleton<ChatClientAgent>(sp =>
-                {
-                    return new ChatClientAgent(
-                        instructions: "You are a helpful assistant.",
-                        credential: sp.GetRequiredService<DefaultAzureCredential>()
-                    );
-                });
+builder.Services.AddChatClient(Models.ChatClient());
 
-                // Register agent service
-                services.AddScoped<IAgentService, AgentService>();
+builder.AddAIAgent("researcher", "You research topics thoroughly.");
+builder.AddAIAgent("writer", "You turn research into a short, clear brief.");
 
-                // Register hosted service
-                services.AddHostedService<AgentWorker>();
-            })
-            .Build();
+builder.AddWorkflow("research-brief", (sp, name) =>
+        AgentWorkflowBuilder.BuildSequential(
+            name,
+            [sp.GetRequiredKeyedService<AIAgent>("researcher"), sp.GetRequiredKeyedService<AIAgent>("writer")]))
+    .AddAsAIAgent();
 
-        await host.RunAsync();
-    }
-}
+builder.AddOpenAIResponses();
 
-public interface IAgentService
-{
-    Task<string> ExecuteQueryAsync(string query, CancellationToken cancellationToken = default);
-}
+var app = builder.Build();
 
-public class AgentService : IAgentService
-{
-    private readonly ChatClientAgent _agent;
-    private readonly ILogger<AgentService> _logger;
+app.MapPost("/brief", async (BriefRequest request, [FromKeyedServices("research-brief")] AIAgent workflow) =>
+    Results.Ok(new { brief = (await workflow.RunAsync(request.Topic)).Text }));
 
-    public AgentService(ChatClientAgent agent, ILogger<AgentService> logger)
-    {
-        _agent = agent;
-        _logger = logger;
-    }
+app.MapOpenAIResponses();   // POST /v1/responses with "model": "researcher" | "writer" | "research-brief"
+app.Run();
 
-    public async Task<string> ExecuteQueryAsync(
-        string query,
-        CancellationToken cancellationToken = default)
-    {
-        _logger.LogInformation("Executing query: {Query}", query);
-
-        var result = await _agent.RunAsync(query, cancellationToken);
-
-        _logger.LogInformation("Query completed successfully");
-
-        return result;
-    }
-}
-
-public class AgentWorker : BackgroundService
-{
-    private readonly IAgentService _agentService;
-    private readonly ILogger<AgentWorker> _logger;
-
-    public AgentWorker(IAgentService agentService, ILogger<AgentWorker> logger)
-    {
-        _agentService = agentService;
-        _logger = logger;
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try
-            {
-                var result = await _agentService.ExecuteQueryAsync(
-                    "Process next item",
-                    stoppingToken
-                );
-
-                _logger.LogInformation("Result: {Result}", result);
-
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in agent worker");
-            }
-        }
-    }
-}
+public record BriefRequest(string Topic);
 ```
+
+### Lifetimes
+
+- Register the `IChatClient` as a singleton; it owns the HTTP connection pool.
+- Agents are safe to share as singletons (the default for `AddAIAgent`); keep per-user state in sessions.
+- Use `ServiceLifetime.Scoped` on `AddAIAgent` only when the agent depends on scoped services (for example a per-request `DbContext` used by its tools).
 
 ---
 
 ## Best Practices
 
-### 1. Async All the Way
-- Always use `async`/`await` throughout
-- Avoid `.Result` or `.Wait()` - deadlock risk
-- Use `ConfigureAwait(false)` in library code
-- Implement cancellation tokens
+### 1. Async all the way
+- Use `async`/`await` throughout; never block on `.Result` or `.Wait()`.
+- Flow `CancellationToken`s from the request into `RunAsync`.
 
-### 2. Dependency Injection
-- Register agents with appropriate lifetimes
-- Use `IOptions<T>` for configuration
-- Implement proper disposal patterns
-- Leverage DI for testability
+### 2. Dependency injection
+- One `IChatClient` per model deployment, registered once.
+- Resolve agents as `AIAgent` (keyed by name) so implementations can change without touching callers.
+- Bind configuration with `IOptions<T>` and validate it on start-up.
 
-### 3. Type Safety
-- Use record types for immutable data
-- Leverage nullable reference types
-- Use attributes for metadata
-- Implement validation
+### 3. Type safety
+- Use records for workflow messages and structured output.
+- Prefer `RunAsync<T>` over parsing JSON out of `response.Text`.
 
-### 4. Error Handling
-- Use specific exception types
-- Implement proper logging
-- Design for resilience
-- Handle cancellation gracefully
+### 4. Error handling
+- Catch `ClientResultException` (OpenAI SDK) or `RequestFailedException` (Azure SDK) around model calls; add retries with `Microsoft.Extensions.Http.Resilience` on the `HttpClient`.
+- Watch for `WorkflowErrorEvent` and `ExecutorFailedEvent` in workflow streams.
 
 ### 5. Performance
-- Use `ValueTask` where appropriate
-- Implement object pooling for high-throughput
-- Configure connection pooling
-- Monitor and optimize allocations
-
----
-
-**First written:** November 2025 (October 2025 public preview) · **Reviewed:** %%versions-checked%%
-
+- Stream (`RunStreamingAsync`) for user-facing latency.
+- Use `AgentWorkflowBuilder.BuildConcurrent` or fan-out edges for independent work.
+- Keep histories bounded with compaction or a chat reducer.
