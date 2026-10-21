@@ -6,7 +6,7 @@ framework: pydanticai
 
 # Pydantic AI: Architecture & Flow Diagrams
 
-Visual representations of Pydantic AI patterns, architectures, and workflows.
+Visual representations of Pydantic AI patterns, architectures, and workflows. The diagrams are conceptual; API names in them match **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%).
 
 ---
 
@@ -207,7 +207,7 @@ Visual representations of Pydantic AI patterns, architectures, and workflows.
 
 ---
 
-## 4. Multi-Agent Coordination (A2A Protocol)
+## 4. Multi-Agent Coordination (agent delegation)
 
 ```
                     ┌──────────────────────────┐
@@ -228,7 +228,7 @@ Visual representations of Pydantic AI patterns, architectures, and workflows.
      └──────┬───────┘  └──────┬───────┘  └──────┬───────┘
             │                 │                 │
             └────────────────→ Tools ←──────────┘
-                      (Call each other)
+              (coordinator calls each agent from a tool)
 
 WORKFLOW:
 1. Coordinator: "Research topic X"
@@ -239,6 +239,8 @@ WORKFLOW:
 6. EditorAgent: Reviews and suggests improvements
 7. Coordinator: Returns final result to user
 ```
+
+In code this is *agent delegation*: the coordinator has one tool per specialist, and each tool calls `await specialist.run(..., usage=ctx.usage)` so token usage rolls up into the parent run. Agents in other processes or written in other frameworks can be reached over the A2A protocol instead — see [Integrations](/pydanticai-guide/pydantic_ai_integrations_2025/#agent-to-agent-a2a).
 
 ---
 
@@ -612,9 +614,3 @@ UNIT TEST            INTEGRATION TEST
 └─ Fast (~100ms)       └─ Slow (~5s+)
   ✅ Unit tests         ✅ Integration tests
 ```
-
----
-
-(Diagrams continue with more architectural patterns, message flows, and system designs)
-
-

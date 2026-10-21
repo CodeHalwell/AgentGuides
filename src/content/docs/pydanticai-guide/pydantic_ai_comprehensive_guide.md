@@ -464,7 +464,7 @@ article_agent = Agent(
     instructions='Write comprehensive technical articles.'
 )
 
-# ── UsageLimits (verified against pydantic-ai 2.10.0 usage.py) ──────────────────
+# ── UsageLimits (usage.py) ──────────────────
 
 # All fields — every limit defaults to None (disabled) except request_limit=50
 from pydantic_ai import UsageLimits
@@ -495,7 +495,7 @@ def get_fact() -> str:
     return 'Python was created in 1991.'
 
 result2 = agent.run_sync('Tell me a fact.', usage_limits=UsageLimits(request_limit=3))
-usage: RunUsage = result2.usage   # property in 2.33.0
+usage: RunUsage = result2.usage   # a property since 2.0
 print(f"requests={usage.requests}")           # total LLM API calls made
 print(f"tool_calls={usage.tool_calls}")       # total successful tool executions
 print(f"input_tokens={usage.input_tokens}")   # cumulative prompt tokens
@@ -541,7 +541,7 @@ result = agent.run_sync('What is the capital of France?')
 print(f"Answer: {result.output}")
 #> Answer: The capital of France is Paris.
 
-# 3. Access usage information (property in 2.33.0)
+# 3. Access usage information (a property since 2.0)
 usage = result.usage
 print(f"Tokens: {usage.input_tokens} input, {usage.output_tokens} output")
 #> Tokens: 18 input, 8 output
@@ -748,7 +748,7 @@ result_full = agent.run_sync('What is type coercion?')
 messages = result_full.all_messages()
 print(f"Total messages: {len(messages)}")
 
-# Check usage (property in 2.33.0)
+# Check usage (a property since 2.0)
 usage = result_full.usage
 print(f"Used {usage.input_tokens} input tokens, {usage.output_tokens} output tokens")
 ```
@@ -805,7 +805,7 @@ import re
 
 class CodeReview(BaseModel):
     issues: list[str] = Field(..., min_items=1, description="List of code issues")
-    severity: str = Field(..., regex='^(low|medium|high)$')
+    severity: str = Field(..., pattern='^(low|medium|high)$')
     suggestions: list[str] = Field(...)
 
 agent = Agent(
@@ -925,7 +925,7 @@ from typing import Union
 
 class ApiResponse(BaseModel):
     """Response that can be success or error."""
-    status: str = Field(..., regex='^(success|error)$')
+    status: str = Field(..., pattern='^(success|error)$')
     data: Union[dict, list, str]
     timestamp: datetime = Field(default_factory=datetime.now)
 
@@ -1041,7 +1041,7 @@ from pydantic_ai import Agent
 class ExtractedInfo(BaseModel):
     """Information extracted from text."""
     entities: list[str] = Field(..., description="Named entities found")
-    sentiment: str = Field(..., regex='^(positive|negative|neutral)$')
+    sentiment: str = Field(..., pattern='^(positive|negative|neutral)$')
     summary: str = Field(..., description="Brief summary")
 
 agent = Agent(
@@ -1074,7 +1074,7 @@ class Address(BaseModel):
 
 class Contact(BaseModel):
     """Contact information."""
-    email: str = Field(..., regex=r'^[\w\.-]+@[\w\.-]+\.\w+$')
+    email: str = Field(..., pattern=r'^[\w\.-]+@[\w\.-]+\.\w+$')
     phone: Optional[str] = None
 
 class Company(BaseModel):
@@ -1561,9 +1561,9 @@ async def safe_database_operation(
 
 ### Native Tool Library
 
-Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). In 2.33.0 they are passed via `capabilities=[NativeTool(...)]` — the old `builtin_tools=[...]` parameter is removed. All native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`; the `NativeTool` wrapper that registers them as capabilities lives in `pydantic_ai.capabilities`.
+Pydantic AI provides native tools that delegate to model-provider capabilities (e.g. Anthropic's web fetch, OpenAI's code execution). Since 2.0 they are passed via `capabilities=[NativeTool(...)]` — the V1 `builtin_tools=[...]` parameter was removed. All native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`; the `NativeTool` wrapper that registers them as capabilities lives in `pydantic_ai.capabilities`.
 
-**Supported native tools (2.33.0):**
+**Supported native tools:**
 
 | Tool | Import | Providers |
 |------|--------|-----------|
@@ -1576,7 +1576,7 @@ Pydantic AI provides native tools that delegate to model-provider capabilities (
 | `AdvisorTool` | `from pydantic_ai import AdvisorTool` | Anthropic, OpenRouter |
 | `XSearchTool` | `from pydantic_ai import XSearchTool` | xAI |
 
-> **Migration (2.33.0):** `Agent(builtin_tools=[...])` → `Agent(capabilities=[NativeTool(...)])`. `UrlContextTool` is removed — use `WebFetchTool` instead.
+> **Migration (2.0):** `Agent(builtin_tools=[...])` → `Agent(capabilities=[NativeTool(...)])`. `UrlContextTool` was removed — use `WebFetchTool` instead. Full details: [built-in tools guide](/pydanticai-guide/pydantic_ai_builtin_tools/).
 >
 > **Import note:** Native tool classes (`WebSearchTool`, `WebFetchTool`, etc.) are re-exported from `pydantic_ai`. The `NativeTool` wrapper capability lives under `pydantic_ai.capabilities`.
 
@@ -2195,8 +2195,8 @@ many `ModelRetry` cycles a tool/output gets before the run raises.
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o', retries=3)
-result = agent.run_sync('Fetch three URLs and summarise.', end_strategy='graceful')
+agent = Agent('openai:gpt-4o', retries=3, end_strategy='graceful')   # end_strategy is set on the agent
+result = agent.run_sync('Fetch three URLs and summarise.')
 ```
 
 #### `capture_run_messages`
@@ -2508,7 +2508,7 @@ async def read_readme(ctx: RunContext) -> str:
 
 #### `ModelProfile` + `DEFAULT_PROFILE` + `ModelProfileSpec` + `merge_profile`
 
-As of pydantic-ai 2.23+, `ModelProfile` is a **`TypedDict`** (`total=False`), not a `@dataclass`. There is no `.update()` instance method any more — the canonical way to layer profiles is the module-level `merge_profile()` function. `ModelProfileSpec` is `ModelProfile | Callable[[ModelProfile], ModelProfile]` (the callable receives the provider's already-resolved default profile and returns the final one).
+Since pydantic-ai 2.0, `ModelProfile` is a **`TypedDict`** (`total=False`), not a `@dataclass`. There is no `.update()` instance method any more — the canonical way to layer profiles is the module-level `merge_profile()` function. `ModelProfileSpec` is `ModelProfile | Callable[[ModelProfile], ModelProfile]` (the callable receives the provider's already-resolved default profile and returns the final one).
 
 ```python
 class ModelProfile(TypedDict, total=False):
@@ -2632,7 +2632,7 @@ agent = Agent(model)
 
 try:
     result = agent.run_sync('Hello')
-except* FallbackExceptionGroup as eg:
+except FallbackExceptionGroup as eg:   # an ExceptionGroup subclass: catch it with plain except
     for exc in eg.exceptions:
         print(type(exc).__name__, exc)
 ```
@@ -3439,7 +3439,7 @@ from pydantic_ai import Agent, IncludeReturnSchemasToolset, FunctionToolset
 from pydantic_ai.capabilities import IncludeToolReturnSchemas
 
 toolset = FunctionToolset()
-@toolset.tool
+@toolset.tool_plain
 def get_weather(city: str) -> dict:
     """Get current weather."""
     return {'temp_c': 22.5, 'condition': 'sunny'}
@@ -3448,15 +3448,14 @@ agent = Agent('openai:gpt-4o', toolsets=[IncludeReturnSchemasToolset(toolset)])
 # or agent-wide: Agent('openai:gpt-4o', toolsets=[toolset], capabilities=[IncludeToolReturnSchemas()])
 ```
 
-#### `ExternalToolset` (+ deprecated `DeferredToolset` alias)
+#### `ExternalToolset` (formerly `DeferredToolset`)
 
 Registers tool *schemas* for the model without ever executing them in-process — the calls are
 resolved by an external system and fed back via `deferred_tool_results`. `call_tool()` raises
 `NotImplementedError`; every registered tool gets `tool_kind='external'` via a
 `TOOL_SCHEMA_VALIDATOR = SchemaValidator(schema=core_schema.any_schema())` that accepts any args
 shape. `id=` gives the toolset a stable identity for durable-execution runtimes to match
-activities across replays. `DeferredToolset` is a deprecated alias for backward compatibility —
-migrate to `ExternalToolset`.
+activities across replays. The V1 name `DeferredToolset` was removed in 2.0.
 
 ```python
 ExternalToolset(tool_defs: list[ToolDefinition], *, id: str | None = None)
@@ -3704,10 +3703,9 @@ agent = Agent(
 )
 ```
 
-#### `WebFetchTool` (+ deprecated `UrlContextTool` alias)
+#### `WebFetchTool` (formerly `UrlContextTool`)
 
-Fetches URL content directly into the model's context (Anthropic, Google). `UrlContextTool` is a
-deprecated alias kept only so old serialised payloads (`kind='url_context'`) still deserialise.
+Fetches URL content directly into the model's context (Anthropic, Google). The V1 name `UrlContextTool` was removed in 2.0.
 
 ```python
 WebFetchTool(*, max_uses=None, allowed_domains=None, blocked_domains=None,
@@ -3853,7 +3851,7 @@ from pydantic_ai.native_tools import AdvisorTool
 
 agent = Agent(
     'anthropic:claude-haiku-4-5',
-    capabilities=[NativeTool(AdvisorTool(model='claude-opus-4-8', max_uses=2, max_tokens=512))],
+    capabilities=[NativeTool(AdvisorTool(model='claude-opus-4-8', max_uses=2, max_tokens=1024))],
 )
 ```
 
@@ -4122,13 +4120,13 @@ async def watch(agent, prompt):
                 print('result', event.part.content)
 ```
 
-#### `BuiltinToolCallEvent` / `BuiltinToolResultEvent` — deprecated, migrate now
+#### `BuiltinToolCallEvent` / `BuiltinToolResultEvent` — removed in 2.0
 
-Deprecated in favour of the richer `PartStartEvent`/`PartEndEvent` pathway (which supports
+Removed in 2.0 in favour of the `PartStartEvent`/`PartEndEvent` pathway (which supports
 streaming deltas for native tool call arguments, unlike the old start/end-only events).
 
 ```python
-# Before (deprecated)              # After
+# Before (V1)                      # After (V2)
 BuiltinToolCallEvent                PartStartEvent + isinstance(event.part, NativeToolCallPart)
 BuiltinToolResultEvent              PartEndEvent   + isinstance(event.part, NativeToolReturnPart)
 ```
@@ -5469,7 +5467,9 @@ desc, params = doc_descriptions(search, signature(search), docstring_format='aut
 
 ### Durable Execution & Integrations (Temporal, DBOS, Prefect)
 
-> Requires the respective optional dependency group (`temporal`, `dbos`, `prefect`) — not installed in the verification venv, so only import paths and top-level structure were re-confirmed; per-class field details below should be spot-checked against the exact pinned version in production.
+> Since 2.14.0 the recommended form is a capability on an ordinary agent — `TemporalDurability`, `DBOSDurability`, `PrefectDurability` — and the `TemporalAgent` / `DBOSAgent` / `PrefectAgent` wrappers described below are deprecated (they emit `PydanticAIDeprecationWarning` with a per-argument migration). Worked, tested examples of the capability form are in the [durable execution guide](/pydanticai-guide/pydantic_ai_durable_execution/).
+
+> Requires the respective optional dependency group (`temporal`, `dbos`, `prefect`).
 
 #### `TemporalAgent` + `TemporalModel` + `TemporalProviderFactory`
 
@@ -5544,9 +5544,10 @@ class StepConfig(TypedDict, total=False):
 
 ```python
 from pydantic_ai import Agent
-from pydantic_ai.durable_exec.dbos import DBOSAgent
+from pydantic_ai.durable_exec.dbos import DBOSDurability
 
-durable = DBOSAgent(Agent('openai:gpt-4o', name='researcher'), name='researcher', model_step_config={'retries': 3})
+# Capability form (since 2.14.0); DBOSAgent(...) still works but is deprecated
+agent = Agent('openai:gpt-4o', name='researcher', capabilities=[DBOSDurability(model_step_config={'max_attempts': 3})])
 ```
 
 #### `PrefectAgent` + `TaskConfig` + `PrefectAgentInputs` + `DEFAULT_PYDANTIC_AI_CACHE_POLICY`
@@ -6421,7 +6422,7 @@ from pydantic_ai.toolsets.approval_required import ApprovalRequiredToolset
 from pydantic_ai import FunctionToolset
 
 toolset = FunctionToolset()
-@toolset.tool
+@toolset.tool_plain
 async def delete_record(record_id: str) -> str: return f'Deleted {record_id}'
 
 agent = Agent('openai:gpt-4o', toolsets=[ApprovalRequiredToolset(toolset)])
