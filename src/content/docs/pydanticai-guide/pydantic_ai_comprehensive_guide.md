@@ -3025,6 +3025,60 @@ result = agent.run_sync('What is a decorator?', deps=UserProfile(name='Alice', l
 
 ---
 
+### Realtime voice sessions & workspaces
+
+#### `Agent.realtime()` + `AgentRealtime` + `RealtimeSession`
+
+Speech-to-speech models (OpenAI `gpt-realtime`, Gemini Live, xAI voice, ElevenLabs; extras `openai-realtime`, `google-realtime`, `xai-realtime`, `elevenlabs-realtime`) run through `agent.realtime(model, ...)`, which returns an `AgentRealtime` bound to the agent's tools, instructions, capabilities and deps. Each `.session()` opens a `RealtimeSession`: tools run exactly as in text runs, and the conversation is recorded as ordinary `ModelMessage`s, so `session.all_messages()` can seed a later `agent.run(message_history=...)` and vice versa.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.realtime import TurnDetection
+
+agent = Agent('openai:gpt-5.2', instructions='You are a helpful voice assistant.')
+
+
+@agent.tool_plain
+async def get_weather(city: str) -> str:
+    """Current weather for a city."""
+    return f'Sunny, 22°C in {city}'
+
+
+async def main():
+    realtime = agent.realtime(
+        'openai:gpt-realtime',
+        model_settings={'turn_detection': TurnDetection(sensitivity='medium', silence_duration_ms=600)},
+    )
+    async with realtime.session(handle_barge_in=True) as session:
+        await session.send("What's the weather like in Tokyo?")    # text, image or audio input
+        await session.wait_for_reply()
+        history = session.all_messages()
+```
+
+- **Session I/O**: `send(content, respond=...)`, `send_audio(pcm16, ...)`, `commit_audio()` (push-to-talk), `create_response()`, `interrupt()` (barge-in), `clear_audio()`; output via `stream_audio()` and `stream_transcripts(delta=...)`.
+- **`RealtimeModelSettings`**: `turn_detection` (`TurnDetection(sensitivity=, prefix_padding_ms=, silence_duration_ms=)`, or `None` for manual turn-taking), `input_transcription_model`, `output_modality`, `thinking`, `tool_choice`, `parallel_tool_calls`, `async_tool_calls`, `max_tokens`, `handshake_timeout`, `reconnect`.
+- **History retention**: `session(audio_retention='transcript_only', retain_images_every_n=1, retain_images_max=100, retain_audio_max_seconds=1800)` bounds memory on long calls.
+- **Browsers**: `AgentRealtime.answer_webrtc_offer(sdp)` and `create_client_secret()` support WebRTC, so audio flows browser ↔ provider while tools still run on your server.
+
+#### `LocalWorkspace` + workspaces
+
+A *workspace* is a filesystem-and-shell surface that tools reach through `ctx.workspace` (`read_text`, `write_text`, `run`, …). `LocalWorkspace(working_dir, read_only=False, env=None)` backs it with a directory on this machine; commands get a minimal environment (not `os.environ`), so secrets don't leak. It isolates **nothing** — use a container- or VM-backed workspace for untrusted code. Durable-execution integrations route workspace calls through their durable units.
+
+```python
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.capabilities import LocalWorkspace
+
+agent = Agent('anthropic:claude-sonnet-4-6', capabilities=[LocalWorkspace('~/project', read_only=True)])
+
+
+@agent.tool
+async def read_readme(ctx: RunContext) -> str:
+    """Read the project README."""
+    return await ctx.workspace.read_text('README.md')
+```
+
+---
+
 ### Models & Providers
 
 #### `ModelProfile` + `DEFAULT_PROFILE` + `ModelProfileSpec` + `merge_profile`
@@ -3683,7 +3737,7 @@ agent = Agent('openai:gpt-4o', tools=[Tool(get_birth_year, args_validator=valida
 
 `prepare=` mutates or hides the `ToolDefinition` before each step (return `None` to hide);
 `requires_approval=True` raises `ApprovalRequired` on call (see Security section);
-`sequential=True` forces the tool to never run in parallel with others in the same step.
+`sequential=True` makes the tool a barrier: calls emitted before it finish first, it runs alone, then later calls start (other tools still run in parallel around it).
 `args_validator` runs after schema validation but before execution — receives schema-validated
 kwargs and should raise `ModelRetry` on failure.
 
@@ -3700,6 +3754,57 @@ def validate_url(ctx: RunContext[object], url: str) -> None:
 async def fetch_url(ctx: RunContext[object], url: str) -> str:
     return f"Fetched: {url}"
 ```
+
+#### `ToolDefinition` — what the model actually sees
+
+Every tool reaches the model as a `ToolDefinition`; `prepare=` functions, `PreparedToolset` and hooks receive and may return modified copies (use `dataclasses.replace`). Fields: `name`, `parameters_json_schema`, `description`, `strict`, `sequential`, `kind` (`'function'`, `'output'`, `'external'`, `'unapproved'`), `metadata`, `timeout`, `defer_loading`, `return_schema` / `include_return_schema`, plus bookkeeping such as `toolset_id`.
+
+```python
+from dataclasses import replace
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.tools import ToolDefinition
+
+
+async def only_for_admins(ctx: RunContext[dict], tool_def: ToolDefinition) -> ToolDefinition | None:
+    if not ctx.deps.get('admin'):
+        return None                                   # hide the tool this step
+    return replace(tool_def, description=f'{tool_def.description} (admin only)')
+
+
+agent = Agent('openai:gpt-5.2', deps_type=dict)
+
+
+@agent.tool(prepare=only_for_admins)
+def purge_cache(ctx: RunContext[dict]) -> str:
+    """Purge the CDN cache."""
+    return 'purged'
+```
+
+#### `ToolReturn` — a result for the model plus extra content
+
+Return `ToolReturn(return_value, content=..., metadata=...)` from a tool when the model should get a compact result *and* additional user-visible content (images, documents, long text) in the same turn; `metadata` stays on the `ToolReturnPart` for your application and is never sent to the model.
+
+```python
+from pydantic_ai import Agent, BinaryContent, ToolReturn
+
+agent = Agent('anthropic:claude-sonnet-4-6')
+
+
+@agent.tool_plain
+def screenshot(url: str) -> ToolReturn:
+    """Take a screenshot of a web page."""
+    png = b'\x89PNG...'                                # real code: capture the page
+    return ToolReturn(
+        return_value=f'Captured {url}',
+        content=['Here is the screenshot:', BinaryContent(png, media_type='image/png')],
+        metadata={'bytes': len(png)},
+    )
+```
+
+#### `ToolSelector` — choosing tools for hooks and capabilities
+
+Wherever an API takes `tools=` to scope itself (hook decorators such as `@hooks.on.before_tool_execute(tools=...)`, `SetToolMetadata`, `PrefixTools`, …) it accepts a `ToolSelector`: `'all'`, a list of tool names, a dict matched against each tool's `metadata` (e.g. `{'category': 'read_only'}`), or a sync/async predicate `(ctx, tool_def) -> bool`. The first three forms serialise into an `AgentSpec`.
 
 #### `FunctionToolset` — the primary toolset
 
@@ -5049,6 +5154,16 @@ from pydantic_ai.messages import InstructionPart
 
 parts = [InstructionPart('Current time: 14:30', dynamic=True), InstructionPart('Be helpful.', dynamic=False)]
 optimised = InstructionPart.sorted(parts)   # static first, dynamic last
+```
+
+`InstructionPart` also takes `name=` (and an `id`), which makes an instruction *addressable*: capabilities and history processors can find, replace or drop it by name, and named static parts keep a stable position for prompt caching. Internally each instruction is wrapped in a `SourcedInstruction` (`pydantic_ai._instructions`) recording its name, qualified id, source and whether it is dynamic — not something you construct yourself.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.messages import InstructionPart
+
+policy = InstructionPart('You are a support agent for Acme. Be concise.', name='company_policy')
+agent = Agent('openai:gpt-5.2', instructions=[policy])
 ```
 
 #### `AgentInstructions` pipeline

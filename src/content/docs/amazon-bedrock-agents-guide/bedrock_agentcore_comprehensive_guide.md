@@ -6,6 +6,8 @@ framework: amazon-bedrock-agents
 
 # Amazon Bedrock AgentCore: Comprehensive Technical Guide
 
+> TypeScript version of this: [Bedrock AgentCore TypeScript SDK](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/).
+
 A technical reference for Amazon Bedrock AgentCore, AWS's platform for deploying and operating agents built with any framework and any model. AgentCore is a set of modular services — Runtime, Memory, Gateway, Identity, Code Interpreter, Browser, Observability, and the newer managed Harness — that you can use together or on their own.
 
 > **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore%% and `boto3` %%version=boto3%% (checked %%versions-checked%%). Every class, function and boto3 operation shown here was checked against those installed packages.

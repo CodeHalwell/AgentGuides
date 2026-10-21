@@ -83,6 +83,17 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="March 2025 updates (archived)" href="./march_2025_updates_summary/" description="Historical changelog; not current." />
 </CardGrid>
 
+## TypeScript
+
+The same stack is available for Node.js: `@strands-agents/sdk` %%version=@strands-agents/sdk%% for the agent and `bedrock-agentcore` %%version=bedrock-agentcore-ts%% (npm, pre-1.0) for AgentCore Runtime, Memory, Code Interpreter, Browser and Identity. Node.js 22+.
+
+<CardGrid>
+  <LinkCard title="TypeScript overview" href="/amazon-bedrock-agents-guide/typescript/" description="Install, minimal Runtime agent, coverage compared with Python." />
+  <LinkCard title="Strands Agents TypeScript SDK" href="/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/" description="Agents, Zod tools, streaming, hooks, Graph, Swarm, MCP." />
+  <LinkCard title="AgentCore TypeScript SDK" href="/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/" description="BedrockAgentCoreApp, Memory, Code Interpreter, Browser, Identity." />
+  <LinkCard title="Deploying TypeScript agents" href="/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/" description="AgentCore CLI, containers, NODE_22 code bundles." />
+</CardGrid>
+
 ## What's new
 
 - **Bedrock Agents Classic in maintenance mode (30 July 2026)** — closed to new customers; AgentCore (managed harness or code-defined agents on Runtime) is the migration target.

@@ -1,14 +1,14 @@
 ---
-title: "Pydantic AI: Advanced Patterns & Deep Dives"
-description: "Expert-level patterns, optimisations, and architectural deep dives for Pydantic AI V2."
+title: "Pydantic AI: Advanced Patterns"
+description: "Expert-level patterns and architectural techniques for Pydantic AI V2: reflection, hierarchies, dynamic tools, caching, routing, composition, rate limiting, custom models, middleware and AgentRun iteration."
 framework: pydanticai
 ---
 
-# Pydantic AI: Advanced Patterns & Deep Dives
+# Pydantic AI: Advanced Patterns
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). First written for the 1.x line; the examples have been updated for the V2 API.
 
-**Focus:** Expert-level patterns, optimisations, and architectural deep dives. Several patterns below are plain-Python orchestration around `Agent`; where Pydantic AI has a built-in equivalent (capabilities, `Hooks`, `ConcurrencyLimiter`, toolsets) it is pointed out.
+**Focus:** Expert-level patterns, optimisations and architectural techniques. Several patterns below are plain-Python orchestration around `Agent`; where Pydantic AI has a built-in equivalent (capabilities, `Hooks`, `ConcurrencyLimiter`, toolsets) it is pointed out.
 
 ---
 
