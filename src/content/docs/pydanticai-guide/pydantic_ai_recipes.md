@@ -1,13 +1,16 @@
 ---
-title: "Pydantic AI: Recipes & Real-World Examples"
-description: "Version: 1.107.0 Purpose: Practical, production-tested code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
-framework: pydanticai
+title: "PydanticAI: Recipes"
+description: "Practical code examples for common scenarios — customer support, multi-agent pipelines, RAG, streaming, memory, error recovery, research agents, batch processing, node inspection, XML prompt enrichment, Capability bundles, WebSearch/WebFetch, HandleDeferredToolCalls, ProcessEventStream."
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Recipes"
+  order: 20
 ---
 
-# Pydantic AI: Recipes & Real-World Examples
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%); first written for 1.107.0 (June 2026) and updated for the V2 API.
 
-**Version:** 1.107.0 (June 2026)
-**Purpose:** Practical, production-tested code examples for common scenarios
+**Purpose:** Practical code examples for common scenarios
 
 ---
 
@@ -62,13 +65,13 @@ class SupportDependencies:
 class SupportResponse(BaseModel):
     """Structured support response."""
     solution: str = Field(..., description="Detailed solution to customer's problem")
-    category: str = Field(..., regex='^(technical|billing|general|escalation)$')
+    category: str = Field(..., pattern='^(technical|billing|general|escalation)$')
     confidence: float = Field(..., ge=0.0, le=1.0)
     next_steps: list[str] = Field(..., description="Recommended next steps")
 
 # Create agent
 support_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=SupportDependencies,
     output_type=SupportResponse,
     name='CustomerSupportAgent'
@@ -210,6 +213,7 @@ Multi-agent system where agents specialise in different tasks:
 3. EditorAgent: Reviews and refines
 """
 
+import asyncio
 from pydantic_ai import Agent, RunContext
 from dataclasses import dataclass
 from pydantic import BaseModel
@@ -224,7 +228,7 @@ class SharedContext:
 
 # Research Agent
 research_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     name='ResearchAgent',
     instructions='You are a research specialist. Gather comprehensive information on topics.'
 )
@@ -261,7 +265,7 @@ class Article(BaseModel):
     conclusion: str
 
 writer_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=Article,
     name='WriterAgent',
     instructions='You are a technical writer. Structure information into clear, engaging articles.'
@@ -295,7 +299,7 @@ class EditedArticle(BaseModel):
     improvements: str
 
 editor_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=EditedArticle,
     name='EditorAgent',
     instructions='You are a professional editor. Review content for clarity, grammar, and impact.'
@@ -353,21 +357,19 @@ if __name__ == '__main__':
 ```python
 """
 RAG pattern combining semantic search with LLM generation.
-Requires: pgvector, asyncpg, openai (for embeddings)
+Requires: pgvector, asyncpg
 """
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, Embedder, RunContext
 from dataclasses import dataclass
 import asyncpg
-from openai import AsyncOpenAI
 from pydantic import BaseModel
 
 @dataclass
 class RAGDependencies:
     """RAG system dependencies."""
     db_pool: asyncpg.Pool
-    openai_client: AsyncOpenAI
-    embedding_model: str = 'text-embedding-3-small'
+    embedder: Embedder
 
 class RAGResponse(BaseModel):
     answer: str
@@ -375,7 +377,7 @@ class RAGResponse(BaseModel):
     confidence: float
 
 rag_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=RAGDependencies,
     output_type=RAGResponse,
     name='RAGAgent'
@@ -389,13 +391,9 @@ async def retrieve_documents(
 ) -> str:
     """Retrieve relevant documents using vector search."""
     
-    # Create embedding for query
-    embedding_response = await ctx.deps.openai_client.embeddings.create(
-        input=query,
-        model=ctx.deps.embedding_model
-    )
-    
-    query_embedding = embedding_response.data[0].embedding
+    # Embed the query with the same model that embedded the documents
+    result = await ctx.deps.embedder.embed_query(query)
+    query_embedding = result.embeddings[0]
     
     # Search for similar documents using pgvector
     async with ctx.deps.db_pool.acquire() as conn:
@@ -418,14 +416,11 @@ async def retrieve_documents(
 async def rag_query(
     query: str,
     db_pool: asyncpg.Pool,
-    openai_client: AsyncOpenAI
+    embedder: Embedder
 ) -> RAGResponse:
     """Execute RAG query."""
     
-    deps = RAGDependencies(
-        db_pool=db_pool,
-        openai_client=openai_client
-    )
+    deps = RAGDependencies(db_pool=db_pool, embedder=embedder)
     
     result = await rag_agent.run(query, deps=deps)
     return result.output
@@ -434,13 +429,13 @@ async def rag_query(
 async def main():
     # Initialize database pool
     pool = await asyncpg.create_pool('postgresql://localhost/documents')
-    openai_client = AsyncOpenAI()
+    embedder = Embedder('openai:text-embedding-3-small')   # see the Embeddings page for other providers
     
     try:
         response = await rag_query(
             "How do I implement type safety in Python?",
             pool,
-            openai_client
+            embedder
         )
         
         print(f"Answer: {response.answer}")
@@ -467,7 +462,7 @@ from pydantic_ai import Agent
 import asyncio
 
 app = FastAPI()
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @app.post('/api/chat/stream')
 async def chat_stream(message: str):
@@ -497,7 +492,7 @@ async def structured_stream(message: str):
         metadata: dict
     
     structured_agent = Agent(
-        'openai:gpt-4o',
+        'openai:%%model=openai%%',
         output_type=Response
     )
     
@@ -563,7 +558,7 @@ class MemoryDependencies:
     session_id: str
 
 memory_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=MemoryDependencies,
     name='MemoryAgent'
 )
@@ -708,7 +703,7 @@ class ResilientAgent:
 
 # Usage
 resilient = ResilientAgent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     max_retries=3,
     strategy=ErrorRecoveryStrategy.EXPONENTIAL_BACKOFF
 )
@@ -741,7 +736,7 @@ class ResearchSummary(BaseModel):
     confidence: float = Field(..., ge=0.0, le=1.0)
 
 research_agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=ResearchSummary,
     tools=[
         duckduckgo_search_tool(max_results=3),
@@ -791,7 +786,7 @@ class ItemAnalysis(BaseModel):
 
 # Shared limiter: max 5 parallel model calls, queue up to 15 more
 shared_limiter = ConcurrencyLimiter(max_running=5, max_queued=15, name='batch-pool')
-model = limit_model_concurrency('openai:gpt-4o', limiter=shared_limiter)
+model = limit_model_concurrency('openai:%%model=openai%%', limiter=shared_limiter)
 agent = Agent(model, output_type=ItemAnalysis)
 
 async def analyse_item(item_id: str, text: str) -> ItemAnalysis | None:
@@ -839,7 +834,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_graph import End
 from pydantic_ai.run import AgentRun
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool_plain
 def get_temperature(city: str) -> float:
@@ -925,7 +920,7 @@ class Recommendation(BaseModel):
     total_cost: float
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ShoppingContext,
     output_type=Recommendation,
 )
@@ -1034,7 +1029,7 @@ class Deps:
     role: str  # 'read' or 'admin'
 
 
-agent = Agent(TestModel(custom_result_text='Done.'), deps_type=Deps)
+agent = Agent(TestModel(custom_output_text='Done.'), deps_type=Deps)
 
 
 async def run_as(role: str, query: str) -> str:
@@ -1059,9 +1054,11 @@ if __name__ == '__main__':
 ```python
 """
 Research agent that combines WebSearch (for discovery) and WebFetch (for full content).
-Uses native=True on both capabilities so the agent picks the fastest path on each
-provider; falls back to DuckDuckGo / markdownify-based fetch on providers that don't
-support native tools.
+Native tools are used where the provider has them. Since 2.0 the capabilities are
+native-only unless you pass local=...; here local= opts into DuckDuckGo search and a
+markdownify-based fetch for providers without native support. Settings that only a
+native tool can honour (blocked_domains, enable_citations, ...) raise UserError on the
+local path rather than being dropped, so keep them off if you rely on the fallback.
 
 Requirements (for the local fallback paths):
   pip install "pydantic-ai-slim[web-fetch,duckduckgo]"
@@ -1071,7 +1068,6 @@ import asyncio
 from pydantic import BaseModel
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import WebSearch, WebFetch
-from pydantic_ai.models.test import TestModel
 
 
 class ResearchSummary(BaseModel):
@@ -1081,7 +1077,7 @@ class ResearchSummary(BaseModel):
 
 
 agent = Agent(
-    TestModel(custom_result_text='{"topic":"AI","key_facts":["fact1"],"sources":["https://example.com"]}'),
+    'anthropic:%%model=anthropic%%',   # native web search + web fetch
     output_type=ResearchSummary,
     system_prompt=(
         'You are a research assistant. Use web_search to discover relevant pages, '
@@ -1089,13 +1085,10 @@ agent = Agent(
     ),
     capabilities=[
         WebSearch(
-            native=True,
             local='duckduckgo',
-            search_context_size='high',
             blocked_domains=['reddit.com', 'twitter.com'],
         ),
         WebFetch(
-            native=True,
             local=True,
             enable_citations=True,
             max_content_tokens=4096,
@@ -1134,7 +1127,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import HandleDeferredToolCalls
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.toolsets import FunctionToolset
-from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved
+from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults, ToolApproved, ToolDenied
 
 
 LOW_RISK_TOOLS = {'send_notification', 'log_event'}
@@ -1142,23 +1135,25 @@ HIGH_RISK_TOOLS = {'delete_record', 'send_email_blast'}
 
 
 async def approval_handler(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     requests: DeferredToolRequests,
 ) -> DeferredToolResults | None:
-    results: dict[str, ToolApproved | str] = {}
+    # requires_approval=True tools arrive in requests.approvals;
+    # externally executed (CallDeferred / ExternalToolset) ones in requests.calls.
+    decisions: dict[str, ToolApproved | ToolDenied] = {}
 
-    for call in requests.tool_calls:
+    for call in requests.approvals:
         if call.tool_name in LOW_RISK_TOOLS:
-            results[call.tool_call_id] = ToolApproved()
+            decisions[call.tool_call_id] = ToolApproved()
         elif call.tool_name in HIGH_RISK_TOOLS:
-            results[call.tool_call_id] = (
+            decisions[call.tool_call_id] = ToolDenied(
                 f'Rejected: {call.tool_name} requires manual review'
             )
 
-    if not results:
-        return None
+    if not decisions:
+        return None  # leave everything unresolved for the next handler / the caller
 
-    return requests.build_results(results)
+    return requests.build_results(approvals=decisions)
 
 
 toolset = FunctionToolset()
@@ -1177,7 +1172,7 @@ def delete_record(record_id: str) -> str:
 
 
 agent = Agent(
-    TestModel(custom_result_text='All actions processed.'),
+    TestModel(custom_output_text='All actions processed.'),
     toolsets=[toolset],
     capabilities=[HandleDeferredToolCalls(handler=approval_handler)],
 )
@@ -1226,7 +1221,7 @@ tracker = LatencyTracker()
 
 
 async def latency_observer(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     stream: AsyncIterable[AgentStreamEvent],
 ) -> None:
     tracker.reset()
@@ -1236,7 +1231,7 @@ async def latency_observer(
 
 
 async def strip_thinking(
-    ctx: RunContext[None],
+    ctx: RunContext[object],
     stream: AsyncIterable[AgentStreamEvent],
 ) -> AsyncIterator[AgentStreamEvent]:
     async for event in stream:
@@ -1246,7 +1241,7 @@ async def strip_thinking(
 
 
 agent = Agent(
-    TestModel(custom_result_text='42 is the answer.'),
+    TestModel(custom_output_text='42 is the answer.'),
     capabilities=[
         ProcessEventStream(handler=latency_observer),
         ProcessEventStream(handler=strip_thinking),

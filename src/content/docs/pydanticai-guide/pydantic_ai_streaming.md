@@ -1,13 +1,14 @@
 ---
 title: "PydanticAI: Streaming Output & Events"
 description: "run_stream, AgentStream, iter, stream_text, stream_output, stream_response, run_stream_events, event_stream_handler, partial validation, cancel, drain, and debounce."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Streaming"
+  order: 7
 ---
 
-# Streaming
-
-Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.result`, `pydantic_ai.agent.abstract`, `pydantic_ai.run`.
 
 PydanticAI streams at three levels:
 
@@ -22,7 +23,7 @@ Pick the right one for your use case.
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Tell me a joke.') as stream:
@@ -39,7 +40,7 @@ async def main():
 | API                              | Returns                        | When to use                                                                 |
 | -------------------------------- | ------------------------------ | --------------------------------------------------------------------------- |
 | `agent.run_stream(...)`          | `StreamedRunResult`            | You want validated output streamed as it arrives. Stops at first final output. |
-| `agent.run_stream_events(...)`   | `AsyncIterator[AgentStreamEvent \| AgentRunResultEvent]` | You want raw protocol events for the full run (including tool calls, retries). |
+| `async with agent.run_stream_events(...) as events:` | `AgentRunEvents` (async iterator of `AgentStreamEvent \| AgentRunResultEvent`) | You want raw protocol events for the full run (including tool calls, retries). |
 | `async with agent.iter(...) as run:` | `AgentRun` (iterate nodes)  | You want to inspect / interleave nodes, drive the graph manually, or branch. |
 | `agent.run_stream_sync(...)`     | `StreamedRunResultSync`        | Sync code path (CLI, notebook). Wraps the async version.                    |
 | `event_stream_handler=` on `run` | side-channel only              | You want a fire-and-forget tap into events without changing the return type. |
@@ -54,7 +55,7 @@ class City(BaseModel):
     name: str
     population: int
 
-agent = Agent('openai:gpt-5.2', output_type=City)
+agent = Agent('openai:%%model=openai%%', output_type=City)
 
 async def main():
     async with agent.run_stream('Tell me about Paris.') as stream:
@@ -63,11 +64,11 @@ async def main():
         final: City = await stream.get_output()
 ```
 
-Key methods on `StreamedRunResult` (`result.py:328`):
+Key methods on `StreamedRunResult` (`result.py`):
 
 - `stream_output(debounce_by=0.1)` — yields the output type repeatedly as Pydantic partial-validates. Useful for structured progress bars.
 - `stream_text(delta=False, debounce_by=0.1)` — text-only streams. `delta=True` yields token deltas; `False` (default) yields cumulative strings.
-- `stream_responses(debounce_by=0.1)` — yields raw `ModelResponse` snapshots (all parts so far).
+- `stream_response(debounce_by=0.1)` — yields raw `ModelResponse` snapshots (all parts so far). (V1's plural `stream_responses()`, which yielded `(response, is_last)` tuples, was removed in 2.0; check `response.state != 'incomplete'` instead.)
 - `get_output()` — awaits the full response, runs output validators, returns the final typed value.
 - `all_messages() / new_messages() / *_json()` — once the stream is drained.
 - `is_complete: bool` — set after any terminal stream method.
@@ -87,25 +88,30 @@ from pydantic_ai.messages import (
     PartStartEvent, PartDeltaEvent, FunctionToolCallEvent, FunctionToolResultEvent,
 )
 
-async for event in agent.run_stream_events('Search docs for X.'):
-    if isinstance(event, PartStartEvent):
-        print(f'[start part kind={event.part.part_kind}]')
-    elif isinstance(event, PartDeltaEvent):
-        print('Δ', event.delta)
-    elif isinstance(event, FunctionToolCallEvent):
-        print(f'→ {event.part.tool_name}({event.part.args_as_json_str()})')
-    elif isinstance(event, FunctionToolResultEvent):
-        print(f'← {event.result.tool_name} = {event.result.content!r}')
+async def main():
+    async with agent.run_stream_events('Search docs for X.') as events:
+        async for event in events:
+            if isinstance(event, PartStartEvent):
+                print(f'[start part kind={event.part.part_kind}]')
+            elif isinstance(event, PartDeltaEvent):
+                print('Δ', event.delta)
+            elif isinstance(event, FunctionToolCallEvent):
+                print(f'→ {event.part.tool_name}({event.part.args_as_json_str()})')
+            elif isinstance(event, FunctionToolResultEvent):
+                print(f'← {event.part.tool_name} = {event.part.content!r}')
 ```
+
+Since 2.0, `run_stream_events()` is an **async context manager only** — the V1 form `async for event in agent.run_stream_events(...)` no longer works. Entering the context without iterating never starts the run; the handle also exposes `cancel()`, `usage`, `all_messages()` and, after completion, `result`. `FunctionToolResultEvent.result` was renamed to `.part` in 2.0.
 
 Event types (`messages.py`):
 
 - `PartStartEvent` — a new part (text, thinking, tool call, ...) began.
 - `PartDeltaEvent` — incremental update to the current part. `event.delta` is a `TextPartDelta` / `ThinkingPartDelta` / `ToolCallPartDelta`.
 - `PartEndEvent` — the part finished.
-- `FunctionToolCallEvent` — an agent-defined tool is about to be called.
-- `FunctionToolResultEvent` — that tool finished.
-- `BuiltinToolCallEvent` / `BuiltinToolResultEvent` — built-in tools (web search, etc.).
+- `FunctionToolCallEvent` — an agent-defined tool is about to be called (`event.part` is the `ToolCallPart`; the V1 `call_id` is now `tool_call_id`).
+- `FunctionToolResultEvent` — that tool finished (`event.part` is the return part).
+- `OutputToolCallEvent` / `OutputToolResultEvent` — the same for output tools (since 2.0 these no longer arrive as `FunctionTool*Event`).
+- Native tools (web search, etc.) have no dedicated events since 2.0 — they appear as `NativeToolCallPart` / `NativeToolReturnPart` inside `PartStartEvent` / `PartDeltaEvent`.
 - `FinalResultEvent` — the step that produced the final output (appears once).
 - `AgentRunResultEvent` — the terminating event for `run_stream_events`; carries the `AgentRunResult`.
 
@@ -128,7 +134,7 @@ You can also `await run.next(my_node)` to drive step-by-step, or call `run.ctx.s
 
 ## `event_stream_handler=` — tap events without changing API shape
 
-Any of `run`, `run_sync`, or `iter` accept an `event_stream_handler: EventStreamHandler[Deps]` (`agent/abstract.py:68`), a callable `(RunContext, AsyncIterable[AgentStreamEvent]) -> Awaitable[None]` that fires with the event stream. The run's return type is unchanged.
+Any of `run`, `run_sync`, `run_stream` or `iter` accept an `event_stream_handler: EventStreamHandler[Deps]` (`agent/abstract.py`), a callable `(RunContext, AsyncIterable[AgentStreamEvent]) -> Awaitable[None]` that fires with the event stream. The run's return type is unchanged. (Only the per-run argument survives in 2.0; the agent-level `Agent(event_stream_handler=...)` became `capabilities=[ProcessEventStream(...)]`.)
 
 ```python
 async def tap(ctx, events):
@@ -140,9 +146,13 @@ result = await agent.run('hi', event_stream_handler=tap)
 
 ## Sync streaming — `run_stream_sync`
 
-`agent.run_stream_sync(...)` returns a `StreamedRunResultSync` (`result.py:637`). All stream methods yield **sync** iterators — handy for CLI tools.
+`agent.run_stream_sync(...)` returns a `StreamedRunResultSync` (`result.py`). All stream methods yield **sync** iterators — handy for CLI tools.
 
 ```python
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%')
+
 with agent.run_stream_sync('hi') as stream:
     for chunk in stream.stream_text(delta=True):
         print(chunk, end='')
@@ -167,7 +177,7 @@ from fastapi.responses import StreamingResponse
 from pydantic_ai import Agent
 
 app = FastAPI()
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 @app.get('/stream')
 async def stream_endpoint(q: str):
@@ -213,18 +223,19 @@ async with agent.run_stream(q) as s:
     async for _ in s.stream_text(delta=True):
         pass
     await s.get_output()
-    used = s.usage()  # RunUsage available via the public API once streaming is done
+    used = s.usage  # RunUsage — a property since 2.0 (was s.usage() in V1)
 print(used)
 ```
 
 ### 4. Tool-call tracing via `run_stream_events`
 
 ```python
-async for e in agent.run_stream_events(q):
-    if isinstance(e, FunctionToolCallEvent):
-        logger.info('tool_call', name=e.part.tool_name, args=e.part.args)
-    elif isinstance(e, FunctionToolResultEvent):
-        logger.info('tool_result', name=e.result.tool_name)
+async with agent.run_stream_events(q) as events:
+    async for e in events:
+        if isinstance(e, FunctionToolCallEvent):
+            logger.info('tool_call', name=e.part.tool_name, args=e.part.args)
+        elif isinstance(e, FunctionToolResultEvent):
+            logger.info('tool_result', name=e.part.tool_name)
 ```
 
 ### 5. Cancel mid-stream
@@ -251,7 +262,7 @@ import asyncio
 from pydantic_ai import Agent
 from pydantic_ai.messages import ThinkingPart, TextPart, ToolCallPart
 
-agent = Agent('anthropic:claude-opus-4-7', model_settings={'thinking': 'low'})
+agent = Agent('anthropic:%%model=anthropic-flagship%%', model_settings={'thinking': 'low'})
 
 async def main():
     async with agent.run_stream('Is 17 a prime number? Show your reasoning.') as stream:
@@ -265,15 +276,15 @@ async def main():
 asyncio.run(main())
 ```
 
-## `cancel()` and `drain()` — stream lifecycle control
+## `cancel()` — stream lifecycle control
 
-**`cancel()`** stops token generation and closes the upstream connection. Call it inside the `async with` block when you want to abort mid-stream:
+**`cancel()`** stops local consumption of the current model response and asks the provider SDK to shut the stream down (whether remote generation actually stops depends on the provider). The interrupted response is recorded in the message history. It stops only the current response; to end a whole multi-step run use `AgentRun.cancel()` or `RunContext.cancel()`. Call it inside the `async with` block:
 
 ```python
 import asyncio
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Count from 1 to 10000, each on a new line.') as stream:
@@ -289,31 +300,7 @@ async def main():
 asyncio.run(main())
 ```
 
-**`drain()`** consumes the remaining stream silently. Use it when you've already extracted what you need but must cleanly close the context:
-
-```python
-import asyncio
-from pydantic_ai import Agent
-
-agent = Agent('openai:gpt-4o')
-
-async def peek_and_discard(prompt: str, peek_chars: int = 50) -> str:
-    """Stream the first N characters, then discard the rest."""
-    async with agent.run_stream(prompt) as stream:
-        preview = ''
-        async for chunk in stream.stream_text(delta=True):
-            preview += chunk
-            if len(preview) >= peek_chars:
-                break
-        await stream.drain()   # cleanly finish without reading more
-        return preview[:peek_chars]
-
-async def main():
-    preview = await peek_and_discard('Write a long essay on Python.', 50)
-    print(f'Preview: {preview!r}')
-
-asyncio.run(main())
-```
+There is no `drain()` on `StreamedRunResult`; leaving the `async with` block early is enough to close it cleanly. (`drain()` does exist on the lower-level `AgentStream` you get from `ModelRequestNode.stream(ctx)` inside `agent.iter()`, where it discards the remaining events of that one response.)
 
 ## Accessing usage and identity after streaming
 
@@ -323,7 +310,7 @@ Properties available after the stream completes (after `get_output()` or after d
 import asyncio
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def main():
     async with agent.run_stream('Tell me something interesting.') as stream:
@@ -351,11 +338,9 @@ asyncio.run(main())
 
 ## Reference
 
-- `Agent.run_stream(...)` — `agent/abstract.py:518`
-- `Agent.run_stream_events(...)` — `agent/abstract.py:934`
-- `Agent.run_stream_sync(...)` — `agent/abstract.py:794`
-- `Agent.iter(...)` — `agent/__init__.py:952`
-- `StreamedRunResult` — `result.py:328`
-- `AgentStream` — `result.py:48`
-- `AgentStreamEvent` union — `messages.py` (`PartStart`, `PartDelta`, `PartEnd`, `FunctionToolCall`, `FunctionToolResult`, `BuiltinToolCall`, `BuiltinToolResult`, `FinalResult`)
-- `EventStreamHandler` type alias — `agent/abstract.py:68`
+- `Agent.run_stream(...)`, `Agent.run_stream_events(...)`, `Agent.run_stream_sync(...)`, `AgentRunEvents` — `agent/abstract.py`
+- `Agent.iter(...)` — `agent/__init__.py`
+- `StreamedRunResult`, `AgentStream` — `result.py`
+- `AgentRunResultEvent` — `run.py`
+- `AgentStreamEvent` union — `messages.py` (`PartStart`, `PartDelta`, `PartEnd`, `FinalResult`, `FunctionToolCall`, `FunctionToolResult`, `OutputToolCall`, `OutputToolResult`, …)
+- `EventStreamHandler` type alias — `agent/abstract.py`

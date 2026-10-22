@@ -1,15 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — Multi-Agent Orchestration"
-description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders — verified against agent-framework 1.11.0. Real signatures and runnable examples."
-framework: microsoft-agent-framework
-language: python
+description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders, plus WorkflowBuilder graphs — real signatures and runnable examples."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Multi-Agent Orchestration — Python
 
 Five built-in orchestration patterns ship in `agent-framework-orchestrations`. Each is a fluent builder that produces a `Workflow` — the same object type returned by `WorkflowBuilder`. Once you have a workflow, run it with `workflow.run(...)` or stream events with `workflow.run(..., stream=True)`.
 
-All signatures below are verified against `agent-framework==1.11.0`.
+All signatures below are verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.11.0).
 
 | Pattern | Builder | Topology | Use case |
 |---|---|---|---|
@@ -72,19 +70,19 @@ from agent_framework_orchestrations import SequentialBuilder
 workflow = SequentialBuilder(participants=[researcher, analyst, writer]).build()
 
 result = await workflow.run("Quantum computing in 2026")
-print(result.get_outputs()[-1])  # final conversation
+print(result.get_outputs()[-1].text)  # the last agent's AgentResponse
 ```
 
 Optional knobs:
 
 - `chain_only_agent_responses=True` — pass only assistant messages between agents (skip user history). Useful when the conversation would otherwise balloon.
-- `intermediate_outputs=True` — yield per-participant responses as events, not just the final one.
+- `intermediate_output_from="all_other"` (or a list of participants) — also surface per-participant responses, as `intermediate` events.
 - `checkpoint_storage=...` — persist state between runs; see the [HITL page](./microsoft_agent_framework_python_hitl/) for resuming from a checkpoint.
 - `.with_request_info(agents=[...])` — pause after each (or a subset of) participants for human review.
 
 ```python
 workflow = (
-    SequentialBuilder(participants=[researcher, analyst, writer], intermediate_outputs=True)
+    SequentialBuilder(participants=[researcher, analyst, writer], intermediate_output_from="all_other")
     .with_request_info(agents=[analyst])  # pause only after the analyst
     .build()
 )
@@ -100,7 +98,7 @@ Dispatches the same input to every participant in parallel and aggregates the re
 from agent_framework_orchestrations import ConcurrentBuilder
 
 workflow = ConcurrentBuilder(participants=[researcher, analyst, writer]).build()
-result = await workflow.run("Summarise agent-framework 1.5.0")
+result = await workflow.run("Summarise the latest agent-framework release notes")
 ```
 
 Custom aggregator (sync or async, returning a value or `None`):
@@ -130,13 +128,16 @@ A decentralised, mesh-or-directed routing pattern. Each agent receives tools tha
 from agent_framework_orchestrations import HandoffBuilder
 
 triage = Agent(client=client, name="triage",
-               instructions="Classify the request and hand off to billing or technical.")
+               instructions="Classify the request and hand off to billing or technical.",
+               require_per_service_call_history_persistence=True)
 billing = Agent(client=client, name="billing",
                 instructions="You resolve billing questions.",
-                description="Handles invoices, refunds, plan changes.")
+                description="Handles invoices, refunds, plan changes.",
+                require_per_service_call_history_persistence=True)
 technical = Agent(client=client, name="technical",
                   instructions="You resolve technical questions.",
-                  description="Handles bugs, API errors, outages.")
+                  description="Handles bugs, API errors, outages.",
+                  require_per_service_call_history_persistence=True)
 
 workflow = (
     HandoffBuilder(participants=[triage, billing, technical])
@@ -151,9 +152,11 @@ result = await workflow.run("My card was charged twice for last month.")
 Notes:
 
 - Participants **must** be `Agent` instances — the builder clones them and injects handoff tools, which isn't possible for the bare `SupportsAgentRun` protocol.
+- Every participant needs `require_per_service_call_history_persistence=True`; `build()` raises `ValueError` otherwise.
+- `.with_start_agent(...)` is required.
 - If you omit `add_handoff(...)`, every agent can hand off to every other (mesh topology).
 - `agent.description` is used as the handoff tool's description — fill this in for each specialist so the triage agent picks correctly.
-- `.with_autonomous_mode(enabled_agents=[...], turn_limits={...})` lets certain specialists answer autonomously for N turns before re-querying the user.
+- `.with_autonomous_mode(agents=[...], turn_limits={...})` lets certain specialists answer autonomously for N turns before re-querying the user.
 - `.with_termination_condition(lambda conv: len(conv) > 20)` — stop after a size or content check.
 
 ## GroupChat
@@ -165,9 +168,8 @@ A central orchestrator picks the next speaker on every turn. Two ways to drive i
 ```python
 from agent_framework_orchestrations import GroupChatBuilder, GroupChatState
 
-def pick_next_speaker(state: GroupChatState) -> str | None:
-    if state.current_round >= 3:
-        return None                        # None terminates the chat
+def pick_next_speaker(state: GroupChatState) -> str:
+    # Must return a participant name. Stopping is the job of max_rounds or termination_condition.
     last = state.conversation[-1].author_name if state.conversation else None
     return "writer" if last == "researcher" else "researcher"
 
@@ -175,7 +177,7 @@ workflow = (
     GroupChatBuilder(
         participants=[researcher, writer],
         selection_func=pick_next_speaker,
-        max_rounds=10,
+        max_rounds=4,
     )
     .build()
 )
@@ -212,83 +214,84 @@ Optional:
 
 - `termination_condition=lambda conv: any("DONE" in m.text for m in conv[-1:])`
 - `checkpoint_storage=...` for mid-session persistence.
-- `intermediate_outputs=True` to observe each speaker's message as it happens.
+- `intermediate_output_from="all"` to observe each speaker's message as it happens.
 
 ## Magentic (Magentic-One)
 
 Magentic adds a **task ledger** and **progress ledger**. A manager plans the task, dispatches subtasks to participants, re-plans on stalls, and synthesises a final answer. This is the pattern used in Microsoft's Magentic-One research system.
 
-The builder takes a `StandardMagenticManager` (wrapping your manager agent) as its sole positional argument; participants are added fluently with `.add_participant()`.
+`MagenticBuilder` takes everything as keyword arguments: `participants=` plus exactly one way of supplying the manager — `manager_agent=` (an `Agent`, wrapped in a `StandardMagenticManager` for you), `manager=` (a `MagenticManagerBase` instance, e.g. a `StandardMagenticManager` with custom ledger prompts), or the `*_factory` variants.
 
 ```python
-from agent_framework_orchestrations import MagenticBuilder, StandardMagenticManager
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+from agent_framework_orchestrations import MagenticBuilder
 
 # The manager is itself an Agent — give it a capable model.
 manager_agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     name="magentic-manager",
     instructions="You coordinate specialists. Produce a task ledger, assign subtasks, and synthesise results.",
 )
 
-workflow = (
-    MagenticBuilder(StandardMagenticManager(manager_agent))
-    .add_participant(researcher)
-    .add_participant(analyst)
-    .add_participant(writer)
-    .build()
-)
+workflow = MagenticBuilder(
+    participants=[researcher, analyst, writer],
+    manager_agent=manager_agent,
+    max_round_count=20,     # hard upper bound on coordination rounds
+    max_stall_count=3,      # replan after three rounds without progress
+    max_reset_count=2,      # cap how often the manager may reset and replan
+).build()
 
 result = await workflow.run("Write a research memo on post-training alignment.")
-print(result.get_outputs()[-1].agent_response.text)
+print(result.get_outputs()[-1])
 ```
 
-Alternative: bring your own manager by subclassing `MagenticManagerBase` and wrapping it instead of `StandardMagenticManager`. Use this when you want deterministic planning logic rather than an LLM-driven coordinator.
+Alternative: bring your own manager by subclassing `MagenticManagerBase` (abstract methods `plan`, `replan`, `create_progress_ledger`, `prepare_final_answer`) and passing it as `manager=`. Use this when you want deterministic planning logic rather than an LLM-driven coordinator — the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) has a worked example.
 
 ### HITL — plan sign-off
 
-Call `.require_plan_signoff()` on the builder before `.build()` to pause after the manager produces the initial task ledger. Register a handler for `MagenticPlanReviewRequest` on the resulting workflow:
+Pass `enable_plan_review=True` (or call `.with_plan_review()` on the builder) to pause after the manager produces the initial task ledger. The pause surfaces as an ordinary `request_info` event whose data is a `MagenticPlanReviewRequest`; with plan review on, the same request is raised again when the manager stalls and replans (`request.is_stalled` is then `True`). Reply with `request.approve()` or `request.revise(feedback)`:
 
 ```python
-from agent_framework_orchestrations import (
-    MagenticBuilder,
-    StandardMagenticManager,
-    MagenticPlanReviewRequest,
-    MagenticPlanReviewResponse,
-)
+from agent_framework_orchestrations import MagenticBuilder, MagenticPlanReviewRequest
 
-workflow = (
-    MagenticBuilder(StandardMagenticManager(manager_agent))
-    .add_participant(researcher)
-    .add_participant(analyst)
-    .add_participant(writer)
-    .require_plan_signoff()   # pause for human approval
-    .build()
-)
+workflow = MagenticBuilder(
+    participants=[researcher, analyst, writer],
+    manager_agent=manager_agent,
+    enable_plan_review=True,   # pause for human approval of the plan
+).build()
 
-async def human_plan_review(request: MagenticPlanReviewRequest) -> MagenticPlanReviewResponse:
-    print("Proposed plan:")
-    print(request.plan.text)           # plan is a Message, not an iterable
-    approved = input("Approve? [y/n] ").strip().lower() == "y"
-    if approved:
-        return request.approve()
-    else:
-        return request.revise("Please break the plan into smaller steps.")
+result = await workflow.run("Analyse LLM safety benchmarks.")
 
-workflow.add_request_info_handler(MagenticPlanReviewRequest, human_plan_review)
-result = await workflow.run("Analyse LLM safety benchmarks for 2025.")
+while pending := result.get_request_info_events():
+    replies = {}
+    for event in pending:
+        request: MagenticPlanReviewRequest = event.data
+        print("Proposed plan:")
+        print(request.plan.text)           # plan is a Message, not an iterable
+        approved = input("Approve? [y/n] ").strip().lower() == "y"
+        replies[event.request_id] = (
+            request.approve() if approved
+            else request.revise("Please break the plan into smaller steps.")
+        )
+    result = await workflow.run(responses=replies)
+
+print(result.get_outputs()[-1])
 ```
+
+
 
 ### Observability
 
-Stream events from a running workflow to observe plan updates, participant turns, and the final output:
+Stream events from a running workflow to observe plan updates, participant turns, and the final output. Manager activity arrives as `magentic_orchestrator` events whose `data` is a `MagenticOrchestratorEvent` (`event_type` is `PLAN_CREATED`, `REPLANNED` or `PROGRESS_LEDGER_UPDATED`):
 
 ```python
 async for event in workflow.run("…", stream=True):
     match event.type:
-        case "orchestrator":
-            print("[manager]", event.data)
-        case "agent":
-            print(f"[{event.agent_name}]", event.data)
+        case "magentic_orchestrator":
+            print(f"[manager:{event.data.event_type.name}]", event.data.content)
+        case "executor_completed":
+            print(f"[{event.executor_id}] done")
         case "output":
             print("Final answer:", event.data)
 ```
@@ -372,6 +375,28 @@ When to share:
 
 - Multi-turn loops where one agent plans, another executes, and a third verifies — all against the same scratchpad.
 - A supervisor agent that needs to see what a worker remembered from an earlier turn.
+
+### Per-run tool kwargs and client kwargs — `WorkflowInvocationKwargs`
+
+`workflow.run()` takes the same `function_invocation_kwargs=` (forwarded to tool calls) and `client_kwargs=` (forwarded to chat-client calls) as `agent.run()`, plus a runtime `tools=` list made available to every agent executor. Each kwargs argument accepts three shapes:
+
+- a **flat mapping**, applied to every agent executor: `{"tenant_id": "acme"}`;
+- a **per-executor mapping**, keyed by agent name or executor id: `{"invoice_parser": {...}, "summariser": {...}}`;
+- a **`WorkflowInvocationKwargs`** when you need both shared defaults and per-executor overrides. The executor entry wins over the global one.
+
+```python
+from agent_framework import WorkflowInvocationKwargs
+
+result = await workflow.run(
+    "Process the attached invoice.",
+    function_invocation_kwargs=WorkflowInvocationKwargs(
+        global_kwargs={"tenant_id": "acme", "language_hint": "en"},
+        executor_kwargs={"french_summariser": {"language_hint": "fr"}},
+    ),
+)
+```
+
+Tools read these values through `FunctionInvocationContext.kwargs`, as they do for a plain agent (see [Tools → runtime context](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#runtime-context--hidden-parameters)).
 
 ### Cloning executors for graph reuse — `AgentExecutor.clone`
 
@@ -487,10 +512,14 @@ Each reviewer receives the router's output concurrently. `merger` receives `list
 
 #### Switch-case routing
 
-Route a message to exactly one branch based on conditions evaluated in order. Use `Case` for conditions and `Default` as the fallback:
+Route a message to exactly one branch based on conditions evaluated in order. Use `Case` for conditions and `Default` as the fallback.
+
+Every target must accept the type the source sends. An agent node accepts `str`, `Message`, a list of these, or an upstream agent's response, so a dataclass such as `SupportTicket` can't be routed straight to an `Agent`: `build()` raises `TypeCompatibilityError`. Give each branch a small executor that takes the ticket and calls its agent:
 
 ```python
 from dataclasses import dataclass
+from typing_extensions import Never
+
 from agent_framework import (
     Agent,
     Case,
@@ -518,45 +547,54 @@ class TriageExecutor(Executor):
         await ctx.send_message(SupportTicket(category=category, text=text))
 
 
+class Specialist(Executor):
+    """Accepts a SupportTicket and answers it with its agent."""
+
+    def __init__(self, agent: Agent) -> None:
+        super().__init__(id=agent.name)
+        self.agent = agent
+
+    @handler
+    async def answer(self, ticket: SupportTicket, ctx: WorkflowContext[Never, str]) -> None:
+        response = await self.agent.run(ticket.text)
+        await ctx.yield_output(response.text)
+
+
 client = OpenAIChatClient()
 triage = TriageExecutor(id="triage")
-billing_agent = Agent(client=client, name="billing", instructions="You resolve billing questions.")
-technical_agent = Agent(client=client, name="technical", instructions="You resolve technical questions.")
-general_agent = Agent(client=client, name="general", instructions="You handle general inquiries.")
+billing = Specialist(Agent(client=client, name="billing", instructions="You resolve billing questions."))
+technical = Specialist(Agent(client=client, name="technical", instructions="You resolve technical questions."))
+general = Specialist(Agent(client=client, name="general", instructions="You handle general enquiries."))
 
 workflow = (
     WorkflowBuilder(start_executor=triage)
     .add_switch_case_edge_group(
-        source=triage,
-        cases=[
-            Case(condition=lambda msg: msg.category == "billing",   target=billing_agent),
-            Case(condition=lambda msg: msg.category == "technical", target=technical_agent),
-            Default(target=general_agent),
+        triage,
+        [
+            Case(condition=lambda ticket: ticket.category == "billing", target=billing),
+            Case(condition=lambda ticket: ticket.category == "technical", target=technical),
+            Default(target=general),
         ],
     )
     .build()
 )
 
 result = await workflow.run("I was charged twice on my last invoice.")
-print(result.get_outputs()[-1].text)
+print(result.get_outputs()[-1])
 ```
 
 Conditions are evaluated in declaration order; the first `Case` whose condition returns `True` wins. The `Default` case matches everything that falls through. Exactly one branch executes.
 
 #### Multi-selection edge group
 
-A `selection_func` receives the outgoing message and the list of candidate executor IDs, and returns the subset that should receive it. Unlike switch-case (exactly one branch), multi-selection can send to any number of targets — including all or none.
+A `selection_func` receives the outgoing message and the list of candidate executor IDs, and returns the subset that should receive it. Unlike switch-case (exactly one branch), multi-selection can send to any number of targets, including all or none. The same type rule applies, so the workers below are executors that unwrap the task for their agent:
 
 ```python
 from dataclasses import dataclass
-from agent_framework import (
-    Agent,
-    AgentExecutor,
-    Executor,
-    WorkflowBuilder,
-    WorkflowContext,
-    handler,
-)
+from typing_extensions import Never
+
+from agent_framework import Agent, Executor, WorkflowBuilder, WorkflowContext, handler
+from agent_framework.openai import OpenAIChatClient
 
 
 @dataclass
@@ -572,29 +610,39 @@ class Dispatcher(Executor):
         await ctx.send_message(AnalysisTask(priority=priority, text=text))
 
 
+class Worker(Executor):
+    def __init__(self, id: str, agent: Agent) -> None:
+        super().__init__(id=id)
+        self.agent = agent
+
+    @handler
+    async def work(self, task: AnalysisTask, ctx: WorkflowContext[Never, str]) -> None:
+        response = await self.agent.run(task.text)
+        await ctx.yield_output(f"[{self.id}] {response.text}")
+
+
 def route_by_priority(task: AnalysisTask, candidate_ids: list[str]) -> list[str]:
     """High-priority tasks go to all workers; low-priority only to the fast worker."""
     if task.priority == "high":
-        return candidate_ids                # all workers
+        return candidate_ids
     return [cid for cid in candidate_ids if "fast" in cid]
 
 
-fast_agent = Agent(id="fast_agent", model="gpt-4o-mini", instructions="Answer concisely.")
-thorough_agent = Agent(id="thorough_agent", model="gpt-4o", instructions="Answer thoroughly.")
-
+fast_worker = Worker("fast_worker", Agent(OpenAIChatClient(model="%%model=openai-small%%"), "Answer concisely."))
+thorough_worker = Worker("thorough_worker", Agent(OpenAIChatClient(model="%%model=openai%%"), "Answer thoroughly."))
 dispatcher = Dispatcher(id="dispatcher")
-fast_worker = AgentExecutor(id="fast_worker", agent=fast_agent)
-thorough_worker = AgentExecutor(id="thorough_worker", agent=thorough_agent)
 
 workflow = (
     WorkflowBuilder(start_executor=dispatcher)
     .add_multi_selection_edge_group(
-        source=dispatcher,
-        targets=[fast_worker, thorough_worker],
+        dispatcher,
+        [fast_worker, thorough_worker],
         selection_func=route_by_priority,
     )
     .build()
 )
+
+print((await workflow.run("Short question")).get_outputs())     # fast_worker only
 ```
 
 The selection function is synchronous; the framework calls it once per outgoing message, before dispatching to the chosen subset. Return an empty list to drop the message entirely.
@@ -687,11 +735,27 @@ If your start executor was written to accept a `dict` directly, either rewrite i
 
 `WorkflowExecutor` wraps a whole `Workflow` as a single node in a parent workflow. Great for reuse (a "document pipeline" sub-workflow called from many higher-level flows) and for isolating state between phases.
 
+The `WorkflowExecutor` node emits whatever the inner workflow outputs, here an `AgentResponse`. An agent node doesn't accept that type, so a one-line executor passes the response's messages on:
+
 ```python
-from agent_framework import AgentExecutor, WorkflowBuilder, WorkflowExecutor
+from agent_framework import (
+    AgentExecutor,
+    AgentResponse,
+    Message,
+    WorkflowBuilder,
+    WorkflowContext,
+    WorkflowExecutor,
+    executor,
+)
 
 # Inner workflow — turn a research prompt into a structured dossier.
 inner = SequentialBuilder(participants=[researcher, analyst]).build()
+
+
+@executor(id="dossier_to_messages")
+async def dossier_to_messages(response: AgentResponse, ctx: WorkflowContext[list[Message]]) -> None:
+    await ctx.send_message(response.messages)
+
 
 # Outer workflow — call the dossier producer, then the writer.
 dossier_node = WorkflowExecutor(inner, id="dossier")
@@ -699,7 +763,7 @@ writer_node = AgentExecutor(writer, id="writer")
 
 outer = (
     WorkflowBuilder(start_executor=dossier_node)
-    .add_edge(dossier_node, writer_node)
+    .add_chain([dossier_node, dossier_to_messages, writer_node])
     .build()
 )
 
@@ -747,7 +811,7 @@ class UserLookupExecutor(Executor):
 outer = (
     WorkflowBuilder(start_executor=dossier_node)
     .add_edge(dossier_node, UserLookupExecutor(user_db={"u-1": {"name": "Ada"}}))
-    .add_edge(dossier_node, writer_node)
+    .add_chain([dossier_node, dossier_to_messages, writer_node])
     .build()
 )
 ```
@@ -807,12 +871,9 @@ If you don't pass `selection_func_name=` the framework tries to derive it from t
 A real-world example: shard a stream of orders by region, with a fallback for unknown regions:
 
 ```python
+import asyncio
 from typing import Any
-from agent_framework import (
-    FanOutEdgeGroup,
-    FunctionExecutor,
-    WorkflowBuilder,
-)
+from agent_framework import FanOutEdgeGroup, WorkflowBuilder, WorkflowContext, executor
 
 
 def shard_by_region(order: dict[str, Any], available: list[str]) -> list[str]:
@@ -826,27 +887,47 @@ def shard_by_region(order: dict[str, Any], available: list[str]) -> list[str]:
     return ["dead_letter"]                       # everything else
 
 
-# Stand-in executors — in a real workflow these would be AgentExecutors
-# wrapping region-specific agents.
-ingest = FunctionExecutor(lambda raw: raw, id="ingest")
-worker_eu   = FunctionExecutor(lambda o: o, id="worker_eu")
-worker_na   = FunctionExecutor(lambda o: o, id="worker_na")
-worker_apac = FunctionExecutor(lambda o: o, id="worker_apac")
-dead_letter = FunctionExecutor(lambda o: o, id="dead_letter")
+@executor(id="ingest")
+async def ingest(order: dict, ctx: WorkflowContext[dict]) -> None:
+    await ctx.send_message(order)
 
-shard = FanOutEdgeGroup(
-    source_id=ingest.id,
-    target_ids=[worker_eu.id, worker_na.id, worker_apac.id, dead_letter.id],
-    selection_func=shard_by_region,
-    selection_func_name="shard_by_region",      # stable id for serialisation
-    id="region-shard",
+
+def make_worker(name: str):
+    @executor(id=name)
+    async def worker(order: dict, ctx: WorkflowContext[None, str]) -> None:
+        await ctx.yield_output(f"{name}: order {order['id']}")
+    return worker
+
+
+worker_eu, worker_na, worker_apac, dead_letter = (
+    make_worker(n) for n in ("worker_eu", "worker_na", "worker_apac", "dead_letter")
 )
 
 workflow = (
     WorkflowBuilder(start_executor=ingest)
-    .add_executors([worker_eu, worker_na, worker_apac, dead_letter])
-    .add_edge_group(shard)
+    .add_multi_selection_edge_group(
+        ingest,
+        [worker_eu, worker_na, worker_apac, dead_letter],
+        selection_func=shard_by_region,
+    )
     .build()
+)
+
+result = asyncio.run(workflow.run({"id": 1, "region": "EU"}))
+print(result.get_outputs())   # ['worker_eu: order 1']
+```
+
+`add_multi_selection_edge_group(source, targets, selection_func)` builds the `FanOutEdgeGroup` for you; there is no `add_edge_group()` or `add_executors()` on `WorkflowBuilder`. Note the executors take a `WorkflowContext` and call `send_message` / `yield_output` — a `FunctionExecutor` wrapping a context-free function discards its return value, so it cannot pass data downstream.
+
+If you construct the group yourself (for serialisation tests, say), the constructor takes ids rather than executors:
+
+```python
+shard = FanOutEdgeGroup(
+    source_id="ingest",
+    target_ids=["worker_eu", "worker_na", "worker_apac", "dead_letter"],
+    selection_func=shard_by_region,
+    selection_func_name="shard_by_region",      # stable id for serialisation
+    id="region-shard",
 )
 ```
 
@@ -869,13 +950,14 @@ print(shard.to_dict()["selection_func_name"])   # 'shard_by_region'
 `add_switch_case_edge_group` accepts a list of `Case` predicates plus a terminal `Default`. The first matching `Case` wins — evaluation is top-to-bottom — so order your conditions from most specific to least specific:
 
 ```python
+import asyncio
 from dataclasses import dataclass
 from agent_framework import (
     Case,
     Default,
-    Executor,
-    FunctionExecutor,
     WorkflowBuilder,
+    WorkflowContext,
+    executor,
 )
 
 
@@ -885,24 +967,29 @@ class Ticket:
     priority: str
 
 
-class DeadLetter(Executor):
-    def __init__(self) -> None:
-        super().__init__(id="dead_letter", defer_discovery=True)
+@executor(id="classify")
+async def classifier(raw: dict, ctx: WorkflowContext[Ticket]) -> None:
+    await ctx.send_message(Ticket(**raw))
 
 
-# Minimal stand-ins — in a real workflow these would be AgentExecutors wrapping
-# named agents, or FunctionExecutors running your handler code.
-classifier   = FunctionExecutor(lambda raw: Ticket(**raw), id="classify")
-vip_billing  = FunctionExecutor(lambda t: "vip billing handled",   id="vip_billing")
-billing      = FunctionExecutor(lambda t: "billing handled",       id="billing")
-technical    = FunctionExecutor(lambda t: "technical handled",     id="technical")
+def handler_for(name: str):
+    @executor(id=name)
+    async def handle(ticket: Ticket, ctx: WorkflowContext[None, str]) -> None:
+        await ctx.yield_output(f"{name} handled {ticket.category}/{ticket.priority}")
+    return handle
 
+
+# Minimal stand-ins. An agent can't take a Ticket directly, so in a real workflow
+# each of these would be an executor that calls its agent with the ticket's text.
+vip_billing, billing, technical, dead_letter = (
+    handler_for(n) for n in ("vip_billing", "billing", "technical", "dead_letter")
+)
 
 workflow = (
     WorkflowBuilder(start_executor=classifier)
     .add_switch_case_edge_group(
-        source=classifier,
-        cases=[
+        classifier,
+        [
             # Most specific first — high-priority billing jumps the queue.
             Case(
                 condition=lambda t: t.priority == "P0" and t.category == "billing",
@@ -911,11 +998,14 @@ workflow = (
             Case(condition=lambda t: t.category == "billing",   target=billing),
             Case(condition=lambda t: t.category == "technical", target=technical),
             # Default is mandatory — guarantees routing never produces an empty target.
-            Default(target=DeadLetter()),
+            Default(target=dead_letter),
         ],
     )
     .build()
 )
+
+print(asyncio.run(workflow.run({"category": "billing", "priority": "P0"})).get_outputs())
+# ['vip_billing handled billing/P0']
 ```
 
 `Default` is not optional — the framework guarantees every message lands somewhere, even if no `Case` predicate matches. Point its target at a dead-letter executor if that's the correct behaviour for "I have no idea what to do with this."
@@ -953,6 +1043,8 @@ async def classify(text: str, ctx: WorkflowContext[str, str]) -> None:
 
 classify_node = FunctionExecutor(classify, id="classify", output=str)
 ```
+
+The return value of the wrapped function is discarded. A context-free function such as `normalise` above suits side effects (logging, metrics); to pass data downstream, take a `WorkflowContext` parameter and call `await ctx.send_message(...)` or `await ctx.yield_output(...)`.
 
 A few rules the constructor enforces — each raises `ValueError` at build time so wiring bugs surface before the workflow runs:
 
@@ -1051,13 +1143,7 @@ Key constraints surfaced by the constructors (each raises `ValueError` early so 
 - `SwitchCaseEdgeGroup` — minimum 2 cases including the default; **exactly one** `SwitchCaseEdgeGroupDefault`. The framework warns (rather than errors) if `Default` isn't last, but cases evaluate top-to-bottom so an early `Default` short-circuits everything after it.
 - `SwitchCaseEdgeGroupCase` — `target_id` is required and non-empty.
 
-Once built, register the group with `WorkflowBuilder.add_edge_group(...)` (the low-level entry point that all the helpers funnel into):
-
-```python
-builder = WorkflowBuilder(start_executor=dispatcher)
-builder.add_edge_group(broadcast)
-builder.add_edge_group(collector)
-```
+`WorkflowBuilder` has no public method that takes a pre-built edge group: its `add_*` helpers construct these classes for you. Build them directly only for serialisation, inspection and tooling, as above.
 
 #### Round-tripping through serialised form
 
@@ -1110,47 +1196,15 @@ Event types you'll see (the `type` attribute is a `Literal[...]` string):
 
 ## Further `WorkflowBuilder` patterns
 
-### Dynamic fan-out with a selection function
-
-`add_multi_selection_edge_group` evaluates a selector per payload and sends the message to the subset of targets it returns. Good for priority routing or feature-flag gated workers:
-
-```python
-from dataclasses import dataclass
-from agent_framework import WorkflowBuilder
-
-
-@dataclass
-class Task:
-    priority: str
-    data: str
-
-
-def pick_workers(task: Task, available: list[str]) -> list[str]:
-    if task.priority == "high":
-        return available                    # broadcast to all workers
-    return [available[0]]                   # single worker for low-priority
-
-
-workflow = (
-    WorkflowBuilder(start_executor=dispatcher)
-    .add_multi_selection_edge_group(
-        dispatcher,
-        [worker_a, worker_b, worker_c],
-        selection_func=pick_workers,
-    )
-    .build()
-)
-```
-
 ### Collecting outputs from a subset of executors
 
-By default the workflow yields outputs from any executor that calls `ctx.yield_output(...)`. Restrict to specific ones with `output_executors=` — useful when upstream nodes emit debug traces you don't want in the final `get_outputs()`:
+By default the workflow yields outputs from any executor that calls `ctx.yield_output(...)`. Restrict to specific ones with `output_from=` (the older `output_executors=` is deprecated), which is useful when upstream nodes emit debug traces you don't want in the final `get_outputs()`:
 
 ```python
 workflow = (
     WorkflowBuilder(
         start_executor=classifier,
-        output_executors=[billing, refund, fallback],
+        output_from=[billing, refund, fallback],
     )
     .add_switch_case_edge_group(classifier, cases=[...])
     .build()

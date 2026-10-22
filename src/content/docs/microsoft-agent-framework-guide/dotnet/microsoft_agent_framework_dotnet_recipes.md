@@ -1,490 +1,530 @@
 ---
-title: "Microsoft Agent Framework .NET - Recipes and Code Patterns"
-description: "This document provides a collection of practical, copy-paste-ready C# recipes for building common agentic patterns with the Microsoft Agent Framework for .NET."
-framework: microsoft-agent-framework
-language: dotnet
+title: "Microsoft Agent Framework (.NET) — Recipes"
+description: "Practical, compiled C# recipes for common agent patterns with the Microsoft Agent Framework for .NET: chat, tools, workflows, routing, RAG, ASP.NET Core hosting, Azure Functions and streaming."
+framework: "microsoft-agent-framework"
+language: "dotnet"
+sidebar:
+  label: "Recipes"
 ---
 
-# Microsoft Agent Framework .NET - Recipes and Code Patterns
+A collection of practical C# recipes for common agent patterns with the Microsoft Agent Framework for .NET.
 
-This document provides a collection of practical, copy-paste-ready C# recipes for building common agentic patterns with the Microsoft Agent Framework for .NET.
+**Target platform:** .NET 8.0+
+**Framework version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%). Every C# block on this page was compiled against that release.
 
-**Target Platform:** .NET 8.0+  
-**Framework Version:** Microsoft.Agents.AI 1.1.0
+Packages used across the recipes:
+
+```bash
+dotnet add package Microsoft.Agents.AI --version %%version=Microsoft.Agents.AI%%
+dotnet add package Microsoft.Agents.AI.OpenAI --version %%version=Microsoft.Agents.AI%%
+dotnet add package Microsoft.Agents.AI.Workflows --version %%version=Microsoft.Agents.AI%%
+dotnet add package Azure.AI.OpenAI --prerelease
+dotnet add package Azure.Identity
+```
+
+There is no `AgentFactory`, `AddAgentFactory`, `UseAzureOpenAI`, `AgentOptions` or `IAgentMemory` in the framework. An agent is built from a chat client — `AzureOpenAIClient(...).GetChatClient(deployment).AsAIAgent(...)`, or `new ChatClientAgent(IChatClient, ...)` — and you register it in DI yourself (or with `builder.AddAIAgent(...)` from the hosting package, shown in Recipe 9). The recipes share this small helper:
+
+```csharp
+// Agents.cs
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
+using OpenAI.Chat;
+
+public static class Agents
+{
+    private static readonly AzureOpenAIClient Client = new(
+        new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+        new DefaultAzureCredential());
+
+    private static string Deployment =>
+        Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "%%model=openai-small%%";
+
+    /// The IChatClient abstraction, for DI registration and ChatClientAgent.
+    public static IChatClient ChatClient() => Client.GetChatClient(Deployment).AsIChatClient();
+
+    public static ChatClientAgent Create(string instructions, string? name = null, IList<AITool>? tools = null) =>
+        Client.GetChatClient(Deployment).AsAIAgent(instructions: instructions, name: name, tools: tools);
+}
+```
 
 ---
 
 ## Beginner Recipes
 
-These recipes are for developers new to the framework and cover fundamental concepts.
+### Recipe 1: Simple chat agent
 
-### Recipe 1: Simple Chat Agent (C#)
-
-This is the "Hello, World!" of the Agent Framework—a basic conversational agent that maintains history.
+The "Hello, World!" of the framework: a conversational agent that keeps history in an `AgentSession`.
 
 ```csharp
 // SimpleChatAgent.cs
 using Microsoft.Agents.AI;
-using System;
-using System.Threading.Tasks;
 
 public class SimpleChatAgent
 {
-    private readonly ChatClientAgent _agent;
-
-    public SimpleChatAgent(AgentFactory agentFactory)
-    {
-        var options = new AgentOptions
-        {
-            Instructions = "You are a friendly AI assistant. Keep your responses concise."
-        };
-        _agent = agentFactory.CreateAgent<ChatClientAgent>(options);
-    }
+    private readonly AIAgent _agent =
+        Agents.Create("You are a friendly AI assistant. Keep your responses concise.", name: "chat");
 
     public async Task RunInteractiveAsync()
     {
-        Console.WriteLine("Chat Agent Initialized. Type 'exit' to quit.");
-        var thread = _agent.CreateThread();
+        Console.WriteLine("Chat agent ready. Type 'exit' to quit.");
+        AgentSession session = await _agent.CreateSessionAsync();
 
         while (true)
         {
             Console.Write("You: ");
             var userInput = Console.ReadLine();
-
             if (string.IsNullOrWhiteSpace(userInput) || userInput.Equals("exit", StringComparison.OrdinalIgnoreCase))
             {
                 break;
             }
 
-            var response = await thread.InvokeAsync(userInput);
-            Console.WriteLine($"Assistant: {response.GetContent<string>()}");
+            AgentResponse response = await _agent.RunAsync(userInput, session);
+            Console.WriteLine($"Assistant: {response.Text}");
         }
     }
 }
 
-// --- To run this (in Program.cs) ---
-// var chatAgent = host.Services.GetRequiredService<SimpleChatAgent>();
-// await chatAgent.RunInteractiveAsync();
+// Program.cs:  await new SimpleChatAgent().RunInteractiveAsync();
 ```
 
-### Recipe 2: Agent with a Single Tool
+### Recipe 2: Agent with a single tool
 
-This recipe shows how to add a simple tool to an agent, allowing it to perform an action.
+Tools are `AIFunction`s created with `AIFunctionFactory.Create` (from `Microsoft.Extensions.AI`). The `[Description]` attributes become the tool and parameter descriptions the model sees.
 
 ```csharp
 // AgentWithTool.cs
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Tools;
 using System.ComponentModel;
-using System.Threading.Tasks;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
-// 1. Define the tool
-public class TimeTool
+public static class TimeTools
 {
     [Description("Gets the current UTC date and time.")]
-    public string GetCurrentTime()
-    {
-        return DateTime.UtcNow.ToString("F");
-    }
+    public static string GetCurrentTime() => DateTime.UtcNow.ToString("F");
 }
 
-// 2. Create the agent and add the tool
 public class ToolAgent
 {
-    private readonly ChatClientAgent _agent;
-
-    public ToolAgent(AgentFactory agentFactory)
-    {
-        var timeTool = new TimeTool();
-        var tool = AIFunctionFactory.CreateTool(timeTool);
-
-        var options = new AgentOptions
-        {
-            Instructions = "You have a tool to get the current time. Use it when asked about the time.",
-            Tools = { tool }
-        };
-        _agent = agentFactory.CreateAgent<ChatClientAgent>(options);
-    }
+    public AIAgent Agent { get; } = Agents.Create(
+        "You have a tool to get the current time. Use it when asked about the time.",
+        tools: [AIFunctionFactory.Create(TimeTools.GetCurrentTime)]);
 
     public async Task<string> AskAboutTimeAsync()
     {
-        var thread = _agent.CreateThread();
-        var response = await thread.InvokeAsync("What time is it right now?");
-        return response.GetContent<string>();
+        AgentResponse response = await Agent.RunAsync("What time is it right now?");
+        return response.Text;
     }
 }
 ```
 
-### Recipe 3: Basic Error Handling in Tools
+### Recipe 3: Error handling in tools
 
-This recipe demonstrates how to handle errors within a tool gracefully.
+If a tool throws, the function-invocation loop catches the exception and tells the model the call failed — but by default **without** the exception message, so internal details do not leak into the conversation. When the model should know *why*, return the explanation as the result instead of throwing.
 
 ```csharp
 // ErrorHandlingTool.cs
 using System.ComponentModel;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
-public class MathTool
+public static class MathTools
 {
     [Description("Divides two numbers.")]
-    public string Divide(double numerator, double denominator)
+    public static string Divide(
+        [Description("The number to divide")] double numerator,
+        [Description("The number to divide by")] double denominator)
     {
         if (denominator == 0)
         {
-            // The framework will pass this exception message to the LLM,
-            // allowing it to understand what went wrong.
-            throw new ArgumentException("Cannot divide by zero. Please ask the user for a non-zero denominator.");
+            // A result string reaches the model verbatim; it can then ask the user for another value.
+            return "Error: cannot divide by zero. Ask the user for a non-zero denominator.";
         }
+
         return (numerator / denominator).ToString();
     }
-}
 
-// --- Agent Setup ---
-// var mathTool = new MathTool();
-// var agentOptions = new AgentOptions { Tools = { AIFunctionFactory.CreateTool(mathTool) } };
-// var agent = factory.CreateAgent<ChatClientAgent>(agentOptions);
-// var response = await agent.CreateThread().InvokeAsync("What is 10 divided by 0?");
-// The agent will respond with something like: "I cannot divide by zero. Could you please provide a different number?"
+    public static async Task DemoAsync()
+    {
+        AIAgent agent = Agents.Create("You are a calculator.", tools: [AIFunctionFactory.Create(Divide)]);
+        AgentResponse response = await agent.RunAsync("What is 10 divided by 0?");
+        Console.WriteLine(response.Text);   // e.g. "I can't divide by zero — could you give me a different number?"
+    }
+}
 ```
+
+If you build the pipeline yourself (`chatClient.AsBuilder().UseFunctionInvocation(configure: f => f.IncludeDetailedErrors = true)`), exception messages are passed to the model too; only do that when they contain nothing sensitive.
 
 ---
 
 ## Intermediate Recipes
 
-These recipes cover multi-agent systems, memory, and more complex tool interactions.
+### Recipe 4: Sequential multi-agent workflow
 
-### Recipe 4: Simple Multi-Agent Workflow (Sequential)
-
-This recipe shows how to chain two agents together: a researcher and a summarizer.
+Two agents in a pipeline — a researcher, then a summariser — built with `AgentWorkflowBuilder.BuildSequential` from `Microsoft.Agents.AI.Workflows`. Each agent sees the conversation so far and adds its turn. (Do not share one `AgentSession` between two different agents; a session belongs to the agent that created it.)
 
 ```csharp
 // SequentialWorkflow.cs
-public class SequentialWorkflow
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
+
+public static class SequentialWorkflow
 {
-    private readonly ChatClientAgent _researcher;
-    private readonly ChatClientAgent _summarizer;
-
-    public SequentialWorkflow(AgentFactory factory)
+    public static async Task<string> RunAsync(string topic)
     {
-        _researcher = factory.CreateAgent<ChatClientAgent>(new() {
-            Instructions = "You are a world-class researcher. Find detailed information on the given topic."
-        });
-        _summarizer = factory.CreateAgent<ChatClientAgent>(new() {
-            Instructions = "You are a skilled editor. Summarize the provided text into a single, concise paragraph."
-        });
-    }
+        AIAgent researcher = Agents.Create(
+            "You are a world-class researcher. Find detailed information on the given topic.", name: "researcher");
+        AIAgent summariser = Agents.Create(
+            "You are a skilled editor. Summarise the conversation so far into one concise paragraph.", name: "summariser");
 
-    public async Task<string> RunAsync(string topic)
-    {
-        // Use a single thread to pass context between agents
-        var thread = _researcher.CreateThread();
+        Workflow workflow = AgentWorkflowBuilder.BuildSequential(researcher, summariser);
 
-        // Step 1: Researcher gathers information
-        var researchResponse = await thread.InvokeAsync($"Please research the topic: {topic}");
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(
+            workflow, new List<ChatMessage> { new(ChatRole.User, $"Research the topic: {topic}") });
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));   // start the agents
 
-        // Step 2: Summarizer is invoked on the same thread. It sees the researcher's output.
-        var summaryResponse = await _summarizer.InvokeAsync(thread, "Please summarize your findings.");
+        string summary = "";
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
+        {
+            if (evt is WorkflowOutputEvent output && output.Is<List<ChatMessage>>(out var conversation))
+            {
+                summary = conversation.Last().Text;   // the summariser's turn
+            }
+        }
 
-        return summaryResponse.GetContent<string>();
+        return summary;
     }
 }
 ```
 
-### Recipe 5: Agent with Multiple Tools and a Router
+### Recipe 5: Router to specialist agents
 
-This recipe demonstrates a router agent that decides which specialist agent should handle a request.
+A small router agent classifies the request with structured output (`RunAsync<T>`), then the matching specialist answers. For routing where the specialists can hand the conversation back and forth, use `AgentWorkflowBuilder.CreateHandoffBuilderWith(...)` instead (see the [workflows page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/)).
 
 ```csharp
-// RouterAgent.cs
+// RouterWorkflow.cs
+using System.Text.Json.Serialization;
+using Microsoft.Agents.AI;
+
+[JsonConverter(typeof(JsonStringEnumConverter<Route>))]
+public enum Route { Billing, TechnicalSupport }
+
+public record RouteDecision(Route Route, string Reason);
+
 public class RouterWorkflow
 {
-    private readonly ChatClientAgent _routerAgent;
-    private readonly ChatClientAgent _billingAgent;
-    private readonly ChatClientAgent _techSupportAgent;
+    private readonly AIAgent _router = Agents.Create(
+        "Classify the user's request as Billing or TechnicalSupport.", name: "router");
 
-    public RouterWorkflow(AgentFactory factory)
+    private readonly Dictionary<Route, AIAgent> _specialists = new()
     {
-        _routerAgent = factory.CreateAgent<ChatClientAgent>(new() {
-            Instructions = "You are a request router. Your job is to determine if a user's query is about 'Billing' or 'Technical Support'. Respond with only one of those two words."
-        });
-        _billingAgent = factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a billing support specialist." });
-        _techSupportAgent = factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a technical support specialist." });
-    }
+        [Route.Billing] = Agents.Create("You are a billing support specialist.", name: "billing"),
+        [Route.TechnicalSupport] = Agents.Create("You are a technical support specialist.", name: "tech"),
+    };
 
     public async Task<string> RouteAndHandleRequestAsync(string userInput)
     {
-        var routingResponse = await _routerAgent.CreateThread().InvokeAsync(userInput);
-        var route = routingResponse.GetContent<string>();
+        AgentResponse<RouteDecision> decision = await _router.RunAsync<RouteDecision>(userInput);
+        AIAgent specialist = _specialists[decision.Result.Route];
 
-        var conversationThread = _billingAgent.CreateThread(); // Thread can be from any agent
-        await conversationThread.AddMessageAsync(new { Role = "user", Content = userInput });
-
-        if (route.Contains("Billing", StringComparison.OrdinalIgnoreCase))
-        {
-            var response = await _billingAgent.InvokeAsync(conversationThread, "Provide a response to the user's billing question.");
-            return response.GetContent<string>();
-        }
-        else // Default to technical support
-        {
-            var response = await _techSupportAgent.InvokeAsync(conversationThread, "Provide a response to the user's technical question.");
-            return response.GetContent<string>();
-        }
+        AgentResponse answer = await specialist.RunAsync(userInput);
+        return answer.Text;
     }
 }
 ```
 
-### Recipe 6: Memory Integration with Azure AI Search
+### Recipe 6: Retrieval with Azure AI Search
 
-This recipe shows how to configure an agent to use Azure AI Search for long-term memory and RAG.
+The framework's retrieval hook is `TextSearchProvider`, an `AIContextProvider` that runs your search function and injects the results into the prompt before each model call. The search itself is plain `Azure.Search.Documents` (`dotnet add package Azure.Search.Documents`). Ingestion is done with the search SDK too; there is no framework-level "memory upsert".
 
 ```csharp
-// In Program.cs
-builder.Services.AddAgentFactory(b =>
-{
-    b.UseAzureOpenAI(deploymentName);
-    
-    // Configure Azure AI Search as the memory backend
-    b.AddAzureAISearchMemory(options =>
-    {
-        options.Endpoint = new Uri(builder.Configuration["AzureAISearch:Endpoint"]);
-        options.Credential = new DefaultAzureCredential();
-    });
-});
+// KnowledgeWorker.cs
+using Azure.Identity;
+using Azure.Search.Documents;
+using Azure.Search.Documents.Models;
+using Microsoft.Agents.AI;
 
-// Agent that can ingest and retrieve knowledge
+public record KnowledgeDocument(string Id, string Content, string Source);
+
 public class KnowledgeWorker
 {
-    private readonly IAgentMemory _memory;
-    private readonly ChatClientAgent _ragAgent;
+    private readonly SearchClient _search = new(
+        new Uri(Environment.GetEnvironmentVariable("AZURE_SEARCH_ENDPOINT")!),
+        indexName: "knowledge",
+        new DefaultAzureCredential());
 
-    public KnowledgeWorker(IAgentMemory memory, AgentFactory factory)
+    private readonly AIAgent _ragAgent;
+
+    public KnowledgeWorker()
     {
-        _memory = memory;
-        _ragAgent = factory.CreateAgent<ChatClientAgent>(new() {
-            Instructions = "You answer questions based on the knowledge you have stored."
+        var retrieval = new TextSearchProvider(SearchAsync, new TextSearchProviderOptions
+        {
+            SearchTime = TextSearchProviderOptions.TextSearchBehavior.BeforeAIInvoke,
+        }, loggerFactory: null);
+
+        _ragAgent = new ChatClientAgent(Agents.ChatClient(), new ChatClientAgentOptions
+        {
+            Name = "rag",
+            ChatOptions = new() { Instructions = "Answer using the provided sources and cite them. Say so if they don't cover the question." },
+            AIContextProviders = [retrieval],
         });
     }
 
-    public async Task IngestKnowledgeAsync(string documentId, string content)
+    public async Task IngestKnowledgeAsync(string documentId, string content, string source)
     {
-        await _memory.UpsertAsync(documentId, content);
-        Console.WriteLine($"Ingested document: {documentId}");
+        await _search.MergeOrUploadDocumentsAsync([new KnowledgeDocument(documentId, content, source)]);
     }
 
     public async Task<string> AnswerQuestionAsync(string question)
     {
-        var thread = _ragAgent.CreateThread();
-        var response = await thread.InvokeAsync(question);
-        return response.GetContent<string>();
+        AgentResponse response = await _ragAgent.RunAsync(question);
+        return response.Text;
+    }
+
+    private async Task<IEnumerable<TextSearchProvider.TextSearchResult>> SearchAsync(string query, CancellationToken ct)
+    {
+        SearchResults<KnowledgeDocument> results =
+            await _search.SearchAsync<KnowledgeDocument>(query, new SearchOptions { Size = 5 }, ct);
+
+        var hits = new List<TextSearchProvider.TextSearchResult>();
+        await foreach (SearchResult<KnowledgeDocument> hit in results.GetResultsAsync())
+        {
+            hits.Add(new TextSearchProvider.TextSearchResult
+            {
+                Text = hit.Document.Content,
+                SourceName = hit.Document.Source,
+            });
+        }
+        return hits;
     }
 }
 ```
+
+`ChatClientAgentOptions` is the long-form way to configure an agent: instructions go in `ChatOptions.Instructions`, context providers in `AIContextProviders`. Set `SearchTime = OnDemandFunctionCalling` to expose search as a tool the model calls only when it needs to.
 
 ---
 
 ## Advanced Recipes
 
-These recipes cover more complex scenarios like RAG and custom tool development.
-
-### Recipe 7: RAG (Retrieval-Augmented Generation) Agent
-
-This builds on the memory recipe to create a full RAG agent that can ingest and query documents.
+### Recipe 7: RAG end to end
 
 ```csharp
-// RagAgent.cs - (See Recipe 6 for DI setup)
-
+// RagSystem.cs
 public class RagSystem
 {
-    private readonly KnowledgeWorker _knowledge;
-
-    public RagSystem(KnowledgeWorker knowledge)
-    {
-        _knowledge = knowledge;
-    }
+    private readonly KnowledgeWorker _knowledge = new();
 
     public async Task RunExampleAsync()
     {
-        // 1. Ingest documents into memory
-        await _knowledge.IngestKnowledgeAsync("doc-001", "The Microsoft Agent Framework unifies Semantic Kernel and AutoGen.");
-        await _knowledge.IngestKnowledgeAsync("doc-002", "The framework is available for .NET and Python.");
+        // 1. Ingest documents into the index
+        await _knowledge.IngestKnowledgeAsync("doc-001",
+            "The Microsoft Agent Framework unifies Semantic Kernel and AutoGen.", "overview.md");
+        await _knowledge.IngestKnowledgeAsync("doc-002",
+            "The framework is available for .NET and Python.", "platforms.md");
 
-        // 2. Ask a question that requires retrieval
-        var answer = await _knowledge.AnswerQuestionAsync("What two frameworks were unified?");
-        
-        Console.WriteLine($"Question: What two frameworks were unified?");
-        Console.WriteLine($"Answer: {answer}");
-        // Expected output will mention Semantic Kernel and AutoGen.
+        // 2. Ask a question that needs retrieval
+        const string question = "What two frameworks were unified?";
+        var answer = await _knowledge.AnswerQuestionAsync(question);
+
+        Console.WriteLine($"Question: {question}");
+        Console.WriteLine($"Answer: {answer}");   // mentions Semantic Kernel and AutoGen, citing overview.md
     }
 }
 ```
 
-### Recipe 8: Complex Multi-Agent Orchestration with `Workflow`
+Azure AI Search indexes documents asynchronously, so in a real system ingestion and querying are separate processes; this example runs them together for brevity.
 
-This recipe uses the `Workflow` engine for a more robust and explicit multi-agent collaboration.
+### Recipe 8: Explicit multi-agent graph with `WorkflowBuilder`
+
+`WorkflowBuilder` gives you the graph directly: agents (or custom executors) as nodes, edges between them, and a declared output. An `AIAgent` converts to an executor binding implicitly.
 
 ```csharp
-// WorkflowOrchestration.cs
-using Microsoft.Agents.AI.Orchestration;
+// AdvancedWorkflow.cs
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
 
 public class AdvancedWorkflow
 {
-    private readonly AgentFactory _factory;
-
-    public AdvancedWorkflow(AgentFactory factory)
+    public async Task<string> RunPipelineAsync(string topic)
     {
-        _factory = factory;
-    }
+        AIAgent researcher = Agents.Create("You are a researcher. Find three key points on the topic.", name: "researcher");
+        AIAgent analyst = Agents.Create("You are a data analyst. Assess the key points critically.", name: "analyst");
+        AIAgent writer = Agents.Create("You are a technical writer. Write a short brief from the analysis.", name: "writer");
 
-    public async Task<string> RunHandoffWorkflowAsync(string topic)
-    {
-        // 1. Define agents
-        var researcher = _factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a researcher." });
-        var analyst = _factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a data analyst." });
-        var writer = _factory.CreateAgent<ChatClientAgent>(new() { Instructions = "You are a technical writer." });
+        Workflow workflow = new WorkflowBuilder(researcher)
+            .AddEdge(researcher, analyst)
+            .AddEdge(analyst, writer)
+            .WithOutputFrom(writer)
+            .WithName("ResearchBriefWorkflow")
+            .Build();
 
-        // 2. Create a workflow
-        var workflow = new Workflow("ResearchPaperWorkflow");
+        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(
+            workflow, new ChatMessage(ChatRole.User, topic));
+        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-        // 3. Add agents as steps
-        var researchStep = workflow.AddAgent(researcher);
-        var analysisStep = workflow.AddAgent(analyst);
-        var writeStep = workflow.AddAgent(writer);
+        var brief = new System.Text.StringBuilder();
+        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
+        {
+            switch (evt)
+            {
+                case AgentResponseUpdateEvent update when update.ExecutorId.StartsWith("writer"):
+                    brief.Append(update.Update.Text);
+                    break;
+                case WorkflowErrorEvent error:
+                    throw new InvalidOperationException("Workflow failed", error.Exception);
+            }
+        }
 
-        // 4. Define the execution flow
-        workflow.AddEdge(researchStep, analysisStep); // Researcher hands off to Analyst
-        workflow.AddEdge(analysisStep, writeStep);   // Analyst hands off to Writer
-
-        // 5. Execute the workflow
-        var initialContext = new { Topic = topic, Instructions = "Find three key points on the topic." };
-        var result = await workflow.ExecuteAsync(initialContext);
-
-        return result.GetLastMessage().GetContent<string>();
+        return brief.ToString();
     }
 }
 ```
+
+Use `AddEdge<T>(source, target, condition)` for conditional routing, `AddFanOutEdge` / `AddFanInBarrierEdge` for parallel branches, and `AddSwitch` for multi-way branching.
 
 ---
 
 ## Integration Recipes
 
-These recipes show how to integrate the Agent Framework with other .NET and Azure technologies.
+### Recipe 9: Exposing an agent through ASP.NET Core
 
-### Recipe 9: Exposing an Agent via ASP.NET Core API
+`Microsoft.Agents.AI.Hosting` (preview) registers agents in DI by name; `AddAIAgent` resolves the `IChatClient` you registered. You can write your own endpoint, keeping one session per conversation, or let `Microsoft.Agents.AI.Hosting.OpenAI` expose an OpenAI-compatible Responses endpoint for you.
 
-This recipe shows how to create a web API endpoint to interact with an agent.
+```bash
+dotnet add package Microsoft.Agents.AI.Hosting --prerelease
+dotnet add package Microsoft.Agents.AI.Hosting.OpenAI --prerelease   # optional: OpenAI-compatible endpoints
+```
 
 ```csharp
-// In an ASP.NET Core project (e.g., Program.cs for minimal APIs)
+// Program.cs (ASP.NET Core minimal API)
+using System.Text.Json;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.AI;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddAgentFactory(b => b.UseAzureOpenAI(...));
-builder.Services.AddScoped<SimpleChatAgent>(); // Register our agent
+builder.Services.AddChatClient(Agents.ChatClient());
+builder.Services.AddDistributedMemoryCache();          // swap for Redis / SQL in production
+builder.AddAIAgent("assistant", "You are a helpful assistant. Keep answers short.");
+builder.AddOpenAIResponses();                           // optional, for app.MapOpenAIResponses()
 
 var app = builder.Build();
 
-// Define the API endpoint
-app.MapPost("/chat", async (ChatRequest request, SimpleChatAgent agent) =>
+app.MapPost("/chat/{conversationId}", async (
+    string conversationId,
+    ChatRequest request,
+    [FromKeyedServices("assistant")] AIAgent agent,
+    IDistributedCache cache,
+    CancellationToken ct) =>
 {
-    var response = await agent.RespondToAsync(request.UserId, request.Message);
-    return Results.Ok(new { Reply = response });
+    // Restore this conversation's session, or start a new one.
+    string? saved = await cache.GetStringAsync($"session:{conversationId}", ct);
+    AgentSession session = saved is null
+        ? await agent.CreateSessionAsync(ct)
+        : await agent.DeserializeSessionAsync(JsonDocument.Parse(saved).RootElement, cancellationToken: ct);
+
+    AgentResponse response = await agent.RunAsync(request.Message, session, cancellationToken: ct);
+
+    JsonElement state = await agent.SerializeSessionAsync(session, cancellationToken: ct);
+    await cache.SetStringAsync($"session:{conversationId}", state.GetRawText(), ct);
+
+    return Results.Ok(new { reply = response.Text });
 });
+
+// OpenAI Responses-compatible endpoint for every registered agent (POST /v1/responses).
+app.MapOpenAIResponses();
 
 app.Run();
 
-public record ChatRequest(string UserId, string Message);
-
-// Modify the SimpleChatAgent to support specific threads
-public class SimpleChatAgent 
-{
-    // ... constructor ...
-    public async Task<string> RespondToAsync(string userId, string message)
-    {
-        var thread = _agent.GetThread($"user-{userId}");
-        var response = await thread.InvokeAsync(message);
-        return response.GetContent<string>();
-    }
-}
+public record ChatRequest(string Message);
 ```
 
-### Recipe 10: Event-Driven Agents with Azure Functions
+Authenticate the endpoint before exposing it (`app.MapPost(...).RequireAuthorization()`), and derive `conversationId` from the authenticated user rather than trusting the URL alone.
 
-This recipe demonstrates how to trigger an agent workflow from an Azure Queue Storage message.
+### Recipe 10: Event-driven agents with Azure Functions
+
+A queue-triggered function on the isolated worker model. The agent is created once and reused across invocations.
 
 ```csharp
 // AgentTriggerFunction.cs
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using System.Threading.Tasks;
 
-public class AgentTriggerFunction
+public class AgentTriggerFunction(ILogger<AgentTriggerFunction> logger)
 {
-    private readonly AdvancedWorkflow _workflow;
-    private readonly ILogger<AgentTriggerFunction> _logger;
-
-    public AgentTriggerFunction(AdvancedWorkflow workflow, ILogger<AgentTriggerFunction> logger)
-    {
-        _workflow = workflow;
-        _logger = logger;
-    }
+    private static readonly AdvancedWorkflow Workflow = new();
 
     [Function("ProcessQueueItem")]
-    public async Task Run([QueueTrigger("agent-tasks", Connection = "AzureWebJobsStorage")] string myQueueItem)
+    public async Task Run([QueueTrigger("agent-tasks", Connection = "AzureWebJobsStorage")] string topic)
     {
-        _logger.LogInformation($"C# Queue trigger function processed: {myQueueItem}");
+        logger.LogInformation("Processing topic {Topic}", topic);
 
-        // myQueueItem could be a JSON payload with the topic
-        var result = await _workflow.RunHandoffWorkflowAsync(myQueueItem);
+        string brief = await Workflow.RunPipelineAsync(topic);
 
-        _logger.LogInformation($"Workflow completed. Result: {result}");
-        // Could write the result to another queue, a database, etc.
+        logger.LogInformation("Workflow completed with {Length} characters", brief.Length);
+        // Write the result to another queue, a blob or a database.
     }
 }
 
-// --- Startup.cs for Azure Functions ---
-// public class Startup : FunctionsStartup
-// {
-//     public override void Configure(IFunctionsHostBuilder builder)
-//     {
-//         builder.Services.AddAgentFactory(...);
-//         builder.Services.AddSingleton<AdvancedWorkflow>();
-//     }
-// }
+// Program.cs for the Functions isolated worker:
+//   var builder = FunctionsApplication.CreateBuilder(args);
+//   builder.Build().Run();
 ```
+
+Long-running or human-in-the-loop work fits Durable Functions better than a single queue trigger, because a durable orchestration can wait days for an approval without holding a worker.
 
 ---
 
 ## Troubleshooting Patterns
 
-These patterns help with debugging and monitoring your agents.
+### Pattern 11: Watching tool calls with streaming
 
-### Pattern 11: Debugging Agent Execution with Streaming
-
-Stream the agent's thoughts and tool calls in real-time to understand its decision-making process.
+`RunStreamingAsync` yields `AgentResponseUpdate`s. Their `Contents` show the model's text as it arrives and the tool calls and results as they happen.
 
 ```csharp
-public async Task DebugWithStreamingAsync(string userInput)
-{
-    var agent = new ToolAgent(factory).GetAgent(); // Assuming ToolAgent exposes its agent
-    var thread = agent.CreateThread();
+// StreamingDebug.cs
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 
-    await foreach (var message in thread.StreamAsync(userInput))
+public static class StreamingDebug
+{
+    public static async Task DebugWithStreamingAsync(string userInput)
     {
-        if (message.Role == "tool")
+        AIAgent agent = new ToolAgent().Agent;
+        AgentSession session = await agent.CreateSessionAsync();
+
+        await foreach (AgentResponseUpdate update in agent.RunStreamingAsync(userInput, session))
         {
-            // This is a tool call
-            var toolCall = message.GetContent<ToolCall>();
-            Console.ForegroundColor = ConsoleColor.Gray;
-            Console.WriteLine($"[Tool Call: {toolCall.ToolName}]");
-            Console.ResetColor();
+            foreach (AIContent content in update.Contents)
+            {
+                switch (content)
+                {
+                    case FunctionCallContent call:
+                        Console.ForegroundColor = ConsoleColor.Gray;
+                        Console.WriteLine($"[tool call] {call.Name}({string.Join(", ", call.Arguments ?? new Dictionary<string, object?>())})");
+                        Console.ResetColor();
+                        break;
+                    case FunctionResultContent result:
+                        Console.ForegroundColor = ConsoleColor.DarkGray;
+                        Console.WriteLine($"[tool result] {result.Result}");
+                        Console.ResetColor();
+                        break;
+                    case TextContent text:
+                        Console.Write(text.Text);
+                        break;
+                }
+            }
         }
-        else if (message.Role == "assistant")
-        {
-            // This is the final response or an intermediate thought
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine($"[Assistant]: {message.GetContent<string>()}");
-            Console.ResetColor();
-        }
+
+        Console.WriteLine();
     }
 }
 ```
+
+For anything beyond local debugging, wrap the agent with `.AsBuilder().UseOpenTelemetry(...)` and look at the spans instead; see the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#opentelemetry-instrumentation).

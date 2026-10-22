@@ -1,0 +1,49 @@
+---
+// Header mark: the bonded tile (D and H joined by an oxide bond), compact size.
+const { siteTitle, siteTitleHref } = Astro.locals.starlightRoute;
+---
+
+<a href={siteTitleHref} class="site-title sl-flex">
+  <span class="bonded" aria-hidden="true">D<span class="bond"></span>H</span>
+  <span class="title-text" translate="no">{siteTitle}</span>
+</a>
+
+<style>
+  .site-title {
+    align-items: center;
+    gap: 0.85rem;
+    color: var(--tx);
+    text-decoration: none;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .bonded {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: none;
+    border: 2px solid var(--tx);
+    background: var(--bg);
+    color: var(--tx);
+    box-shadow: 4px 4px 0 var(--ac);
+    font-family: var(--brand-font-display);
+    font-size: 0.85rem;
+    line-height: 1;
+  }
+  .bond {
+    width: 4px;
+    height: 2px;
+    background: var(--ac);
+  }
+  .title-text {
+    overflow: hidden;
+    font-family: var(--sl-font-mono);
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+</style>

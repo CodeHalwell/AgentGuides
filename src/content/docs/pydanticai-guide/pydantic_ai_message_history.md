@@ -1,13 +1,14 @@
 ---
 title: "PydanticAI: Message History & Multi-Turn"
 description: "Model messages, message_history, new_messages vs all_messages, ModelMessagesTypeAdapter (de)serialization, and HistoryProcessor."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Message history"
+  order: 6
 ---
 
-# Message History & Multi-Turn Conversations
-
-Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.messages`, `pydantic_ai.run`, `pydantic_ai._history_processor`.
 
 Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that list (or the serialised form) back into the next run to keep a multi-turn conversation. Message history is what makes chat applications possible on top of PydanticAI's otherwise stateless `Agent`.
 
@@ -16,7 +17,7 @@ Every run of a PydanticAI agent produces a list of `ModelMessage`s. Pass that li
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 result1 = agent.run_sync('My name is Alice.')
 print(result1.output)
@@ -35,12 +36,14 @@ print(result2.output)
 
 ## The message types
 
-`ModelMessage` is a discriminated union of `ModelRequest` and `ModelResponse` (`messages.py:2030`):
+`ModelMessage` is a discriminated union of `ModelRequest` and `ModelResponse` (`messages.py`):
 
 | Type            | Direction      | Notable parts inside                                      |
 | --------------- | -------------- | --------------------------------------------------------- |
-| `ModelRequest`  | client → model | `SystemPromptPart`, `UserPromptPart`, `ToolReturnPart`, `RetryPromptPart`, `InstructionPart` |
-| `ModelResponse` | model → client | `TextPart`, `ThinkingPart`, `ToolCallPart`, `BuiltinToolCallPart`, `BuiltinToolReturnPart`, `FilePart` |
+| `ModelRequest`  | client → model | `SystemPromptPart`, `UserPromptPart`, `ToolReturnPart`, `RetryPromptPart`, `InstructionDeltaPart` / `InstructionBaselinePart`, `ToolAvailabilityDeltaPart`, `SpeechPart` |
+| `ModelResponse` | model → client | `TextPart`, `ThinkingPart`, `ToolCallPart`, `NativeToolCallPart`, `NativeToolReturnPart`, `FilePart`, `CompactionPart`, `SpeechPart` |
+
+`NativeToolCallPart` / `NativeToolReturnPart` were called `BuiltinToolCallPart` / `BuiltinToolReturnPart` in V1; their serialised `part_kind` is still `'builtin-tool-call'` / `'builtin-tool-return'`, so histories stored under V1 load unchanged.
 
 Every part has a `part_kind` discriminator; delta events (`TextPartDelta`, `ThinkingPartDelta`, `ToolCallPartDelta`) exist for streaming and carry `part_delta_kind`.
 
@@ -55,7 +58,7 @@ Both return `list[ModelMessage]`. The difference is what counts as "this run":
 
 Use `all_messages()` as the next run's `message_history`; use `new_messages()` when you only want to persist what _this_ turn produced.
 
-There are JSON variants too (`run.py:151`): `all_messages_json()` and `new_messages_json()` return `bytes` you can store in a DB column.
+There are JSON variants too (`run.py`): `all_messages_json()` and `new_messages_json()` return `bytes` you can store in a DB column.
 
 ```python
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -68,7 +71,7 @@ row.messages_json = ModelMessagesTypeAdapter.dump_json(existing)
 
 ## (De)serialisation with `ModelMessagesTypeAdapter`
 
-`messages.py:2034` exports a Pydantic `TypeAdapter[list[ModelMessage]]`. This is the supported way to round-trip history through JSON / DB / queue:
+`pydantic_ai.messages.ModelMessagesTypeAdapter` (also exported from `pydantic_ai`) is a Pydantic `TypeAdapter[list[ModelMessage]]`. This is the supported way to round-trip history through JSON / DB / queue:
 
 ```python
 from pydantic_ai.messages import ModelMessagesTypeAdapter
@@ -120,7 +123,7 @@ async def async_ctx(
     return msgs[-ctx.deps.window:]
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     capabilities=[ProcessHistory(last_n)],
 )
 ```
@@ -177,7 +180,7 @@ def sliding_window(max_turns: int):
     return processor
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     capabilities=[ProcessHistory(sliding_window(max_turns=5))],
 )
 ```
@@ -210,7 +213,7 @@ def redact_pii(msgs: list[ModelMessage]) -> list[ModelMessage]:
             cleaned.append(msg)
     return cleaned
 
-agent = Agent('openai:gpt-4o', capabilities=[ProcessHistory(redact_pii)])
+agent = Agent('openai:%%model=openai%%', capabilities=[ProcessHistory(redact_pii)])
 ```
 
 ### Pattern 3 — chained processors (window → redact)
@@ -220,7 +223,7 @@ from pydantic_ai import Agent
 from pydantic_ai.capabilities import ProcessHistory
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     capabilities=[
         ProcessHistory(sliding_window(max_turns=10)),  # trim first …
         ProcessHistory(redact_pii),                    # … then scrub what remains
@@ -248,7 +251,7 @@ async def dynamic_window(
     return msgs[-n * 2:]  # each turn = 1 request + 1 response
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ChatConfig,
     capabilities=[ProcessHistory(dynamic_window)],
 )
@@ -256,12 +259,12 @@ agent = Agent(
 
 ## `capture_run_messages` — inspect mid-failure
 
-If a run raises (validation error, model error, tool retry exhaustion), you still need to see the messages up to the failure. `capture_run_messages` (`_agent_graph.py:1791`) exposes them:
+If a run raises (validation error, model error, tool retry exhaustion), you still need to see the messages up to the failure. `capture_run_messages` (exported from `pydantic_ai`) exposes them:
 
 ```python
 from pydantic_ai import Agent, capture_run_messages
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 with capture_run_messages() as messages:
     try:
@@ -318,7 +321,7 @@ def window(n: int):
         return msgs[:2] + msgs[-n:] if len(msgs) > n + 2 else msgs
     return _proc
 
-agent = Agent('openai:gpt-5.2', capabilities=[ProcessHistory(window(20))])
+agent = Agent('openai:%%model=openai%%', capabilities=[ProcessHistory(window(20))])
 ```
 
 ### 3. Summarise-on-overflow
@@ -366,14 +369,14 @@ b = agent.run_sync('Continue sarcastically.', message_history=branch_b)
 
 ## `CachePoint` — provider-native prompt caching
 
-`CachePoint` (`pydantic_ai.messages`, 2.33.0) is a marker part you drop into `UserPromptPart.content` to signal a cache boundary. Providers that don't support caching filter it out silently, so the same code works everywhere.
+`CachePoint` (`pydantic_ai.messages`) is a marker part you drop into `UserPromptPart.content` to signal a cache boundary. Providers that don't support caching filter it out silently, so the same code works everywhere.
 
 | Field  | Type / default                | Notes                                                              |
 | ------ | ----------------------------- | ------------------------------------------------------------------ |
 | `kind` | `Literal['cache-point']`      | Discriminator (all parts have one).                                |
 | `ttl`  | `Literal['5m', '1h']` (`'5m'`)| Anthropic / Bedrock honour per-marker TTL. OpenAI ignores it and uses `openai_prompt_cache_options['ttl']` instead. |
 
-Supported (2.33.0): Anthropic · Amazon Bedrock (Converse API) · OpenAI (GPT-5.6 models) · OpenRouter (Anthropic/Gemini models via `OpenRouterModel`, and OpenAI GPT-5.6 via `OpenAIChatModel`/`OpenAIResponsesModel` with `OpenRouterProvider`).
+Supported: Anthropic · Amazon Bedrock (Converse API) · OpenAI (GPT-5.6 models) · OpenRouter (Anthropic/Gemini models via `OpenRouterModel`, and OpenAI GPT-5.6 via `OpenAIChatModel`/`OpenAIResponsesModel` with `OpenRouterProvider`).
 
 ```python
 from pathlib import Path
@@ -385,7 +388,7 @@ try:
 except FileNotFoundError:
     HANDBOOK = 'X' * 20_000  # stand-in when no real handbook is on disk
 
-agent = Agent('anthropic:claude-3-5-sonnet-latest')
+agent = Agent('anthropic:%%model=anthropic%%')
 
 question1 = 'How many days of PTO does a new full-timer get?'
 question2 = 'And a part-timer?'
@@ -415,10 +418,10 @@ Tips:
 ## Reference
 
 - `ModelMessage`, `ModelRequest`, `ModelResponse` — `messages.py`
-- `ModelMessagesTypeAdapter` — `messages.py:2034`
+- `ModelMessagesTypeAdapter` — `messages.py`
 - `AgentRunResult.all_messages()` / `.new_messages()` / `.all_messages_json()` — `run.py`
-- `capture_run_messages()` — `_agent_graph.py:1791`
-- `HistoryProcessorFunc` — `_history_processor.py:17`
+- `capture_run_messages()` — `_agent_graph.py` (since 2.0 it also captures the partial request/response of an interrupted run, marked `state='interrupted'`)
+- `HistoryProcessorFunc` — `_history_processor.py`
 - `ProcessHistory` — `pydantic_ai.capabilities`
 - `Agent(capabilities=[ProcessHistory(...)])` — `agent/__init__.py`
-- `CachePoint` — `messages.py` (2.33.0)
+- `CachePoint` — `messages.py`

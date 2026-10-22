@@ -1,1112 +1,390 @@
 ---
-title: "Claude Agent SDK (TypeScript) - Practical Recipes and Examples"
-description: "Practical code recipes and implementation examples for the Anthropic Claude Agent SDK in TypeScript."
-framework: anthropic-claude-agent-sdk-typescript
+title: "Claude Agent SDK (TypeScript) — Recipes"
+description: "Type-checked TypeScript recipes for the Claude Agent SDK: code review, research, QA, documentation, performance and security agents."
+framework: "claude-agent-sdk"
+language: "typescript"
 ---
 
-# Claude Agent SDK (TypeScript) - Practical Recipes and Examples
+Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%); every block type-checks with `strict: true`. Install with:
 
-## Production-Ready Code Recipes
-
-### Recipe 1: Multi-Turn Code Review Agent
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import fs from 'fs';
-import path from 'path';
-
-interface CodeReviewFinding {
-  file: string;
-  line: number;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  category: string;
-  description: string;
-  suggestion: string;
-}
-
-class CodeReviewAgent {
-  private sessionId?: string;
-
-  async reviewDirectory(
-    dirPath: string,
-    filePattern: RegExp = /\.(ts|tsx|js|jsx)$/
-  ): Promise<CodeReviewFinding[]> {
-    const files = this.getFiles(dirPath, filePattern);
-
-    const findings: CodeReviewFinding[] = [];
-
-    for (const file of files) {
-      const content = fs.readFileSync(file, 'utf-8');
-      const localFindings = await this.reviewFile(content, file);
-      findings.push(...localFindings);
-    }
-
-    return findings;
-  }
-
-  private async reviewFile(content: string, filePath: string): Promise<CodeReviewFinding[]> {
-    const prompt = `Review this TypeScript/JavaScript file for issues:
-
-File: ${filePath}
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Analyse for:
-1. Type safety issues
-2. Performance problems
-3. Security vulnerabilities
-4. Best practice violations
-5. Error handling gaps
-
-Provide findings in JSON format.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        resume: this.sessionId,
-        forkSession: false
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'system' && message.subtype === 'init' && message.session_id) {
-        this.sessionId = message.session_id;
-      }
-
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    return this.parseFindings(output, filePath);
-  }
-
-  private parseFindings(output: string, filePath: string): CodeReviewFinding[] {
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-
-    if (!jsonMatch) {
-      return [];
-    }
-
-    const data = JSON.parse(jsonMatch[1]);
-    const findings: CodeReviewFinding[] = [];
-
-    for (const item of data.findings || []) {
-      findings.push({
-        file: filePath,
-        line: item.line || 1,
-        severity: item.severity || 'medium',
-        category: item.category || 'general',
-        description: item.description,
-        suggestion: item.suggestion
-      });
-    }
-
-    return findings;
-  }
-
-  private getFiles(dirPath: string, pattern: RegExp): string[] {
-    const files: string[] = [];
-
-    const traverse = (currentPath: string) => {
-      const entries = fs.readdirSync(currentPath);
-
-      for (const entry of entries) {
-        const fullPath = path.join(currentPath, entry);
-        const stat = fs.statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          // Skip node_modules and dist
-          if (!['node_modules', 'dist', '.git'].includes(entry)) {
-            traverse(fullPath);
-          }
-        } else if (pattern.test(entry)) {
-          files.push(fullPath);
-        }
-      }
-    };
-
-    traverse(dirPath);
-    return files;
-  }
-}
-
-// Usage
-const reviewer = new CodeReviewAgent();
-
-const findings = await reviewer.reviewDirectory('./src');
-
-console.log('Code Review Findings:');
-findings.forEach(finding => {
-  console.log(`\n${finding.file}:${finding.line}`);
-  console.log(`[${finding.severity.toUpperCase()}] ${finding.category}`);
-  console.log(`Issue: ${finding.description}`);
-  console.log(`Suggestion: ${finding.suggestion}`);
-});
+```bash
+npm install @anthropic-ai/claude-agent-sdk@%%version=@anthropic-ai/claude-agent-sdk%% zod@^4
 ```
 
-### Recipe 2: Research and Analysis Pipeline
+All recipes are ES modules (`"type": "module"`) and reuse this helper. It returns the final `result` message even when the run failed: after an error result the `query()` iterator throws, and the helper turns that back into the result so callers can check `is_error` and `subtype`.
 
 ```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
+// run.ts
+import { query, type Options, type SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 
-interface ResearchResult {
-  topic: string;
-  research: string;
-  analysis: string;
-  synthesis: string;
-  recommendations: string[];
-  sources: string[];
+export async function run(prompt: string, options: Options = {}): Promise<SDKResultMessage> {
+  let result: SDKResultMessage | undefined;
+  try {
+    for await (const message of query({ prompt, options })) {
+      if (message.type === 'result') result = message;
+    }
+  } catch (err) {
+    // The iterator throws after an error result. Rethrow anything else
+    // (failed start, crash, abort).
+    if (!result?.is_error) throw err;
+  }
+  if (!result) throw new Error('agent finished without a result');
+  return result;
 }
 
-class ResearchPipeline {
-  async conduct(topic: string): Promise<ResearchResult> {
-    console.log(`Starting research on: ${topic}`);
+export function text(result: SDKResultMessage): string {
+  if (result.subtype !== 'success') {
+    throw new Error(`agent failed: ${result.subtype} ${result.errors.join('; ')}`);
+  }
+  if (result.is_error) throw new Error(`agent failed: ${result.result}`);
+  return result.result;
+}
+```
 
-    // Step 1: Research
-    const research = await this.research(topic);
+For retries, use `runResilient` from the [production guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/#error-handling).
 
-    // Step 2: Analyse
-    const analysis = await this.analyse(research);
+---
 
-    // Step 3: Synthesise
-    const synthesis = await this.synthesise(research, analysis);
+## Recipe 1: Multi-turn code review
 
-    // Step 4: Extract recommendations
-    const recommendations = await this.extractRecommendations(synthesis);
+A reviewer that keeps context across follow-up questions. The prompt is an async queue, so the process stays alive between turns.
 
-    // Step 5: Find sources
-    const sources = await this.findSources(topic);
+```typescript
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 
+class Inbox implements AsyncIterable<SDKUserMessage> {
+  private queue: SDKUserMessage[] = [];
+  private waiting?: (m: IteratorResult<SDKUserMessage>) => void;
+  private closed = false;
+
+  send(text: string): void {
+    const message: SDKUserMessage = {
+      type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null,
+    };
+    if (this.waiting) { this.waiting({ value: message, done: false }); this.waiting = undefined; }
+    else this.queue.push(message);
+  }
+
+  close(): void {
+    this.closed = true;
+    this.waiting?.({ value: undefined, done: true });
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
     return {
-      topic,
-      research,
-      analysis,
-      synthesis,
-      recommendations,
-      sources
-    };
-  }
-
-  private async research(topic: string): Promise<string> {
-    const prompt = `Research the topic: "${topic}"
-
-Gather information about:
-- Definition and background
-- Current state and trends
-- Key players and developments
-- Statistics and data points
-- Recent news and updates
-
-Provide comprehensive research findings.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.7
-      }
-    });
-
-    let result = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        result += message.content;
-      }
-    }
-
-    return result;
-  }
-
-  private async analyse(research: string): Promise<string> {
-    const prompt = `Analyse this research data:
-
-${research}
-
-Provide deep analysis covering:
-- Key patterns and trends
-- Strengths and weaknesses
-- Opportunities and threats
-- Root causes of observed phenomena
-- Predictive insights
-
-Format as structured analysis.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.5
-      }
-    });
-
-    let result = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        result += message.content;
-      }
-    }
-
-    return result;
-  }
-
-  private async synthesise(research: string, analysis: string): Promise<string> {
-    const prompt = `Synthesise research and analysis:
-
-RESEARCH:
-${research}
-
-ANALYSIS:
-${analysis}
-
-Create a cohesive synthesis that:
-- Connects findings to broader context
-- Identifies key insights
-- Highlights implications
-- Suggests future directions
-
-Provide executive summary style synthesis.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.6
-      }
-    });
-
-    let result = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        result += message.content;
-      }
-    }
-
-    return result;
-  }
-
-  private async extractRecommendations(synthesis: string): Promise<string[]> {
-    const prompt = `Extract actionable recommendations from this synthesis:
-
-${synthesis}
-
-Provide 5-10 specific, actionable recommendations.
-Format as JSON array of strings.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/\[[\s\S]*?\]/);
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-  }
-
-  private async findSources(topic: string): Promise<string[]> {
-    const prompt = `Find authoritative sources on: "${topic}"
-
-Suggest 5-10 credible sources (books, papers, websites, organisations)
-Format as JSON array of strings.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/\[[\s\S]*?\]/);
-    return jsonMatch ? JSON.parse(jsonMatch[0]) : [];
-  }
-}
-
-// Usage
-const pipeline = new ResearchPipeline();
-
-const result = await pipeline.conduct('The Future of TypeScript');
-
-console.log(`\nResearch Results for: ${result.topic}\n`);
-console.log(`Research:\n${result.research}\n`);
-console.log(`Analysis:\n${result.analysis}\n`);
-console.log(`Synthesis:\n${result.synthesis}\n`);
-console.log('Recommendations:');
-result.recommendations.forEach((rec, i) => {
-  console.log(`${i + 1}. ${rec}`);
-});
-console.log('\nSources:');
-result.sources.forEach((source, i) => {
-  console.log(`${i + 1}. ${source}`);
-});
-```
-
-### Recipe 3: Autonomous Testing and QA Agent
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import fs from 'fs';
-import path from 'path';
-
-interface TestCase {
-  name: string;
-  description: string;
-  input: Record<string, unknown>;
-  expectedOutput: Record<string, unknown>;
-  edgeCases: string[];
-}
-
-interface TestResult {
-  testCase: TestCase;
-  passed: boolean;
-  actualOutput?: Record<string, unknown>;
-  error?: string;
-  coverage?: number;
-}
-
-class AutomatedQAAgent {
-  async analyseCodeAndGenerateTests(codeFile: string): Promise<TestCase[]> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-
-    const prompt = `Analyse this code and generate comprehensive test cases:
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Generate test cases covering:
-1. Normal operation paths
-2. Edge cases and boundary conditions
-3. Error handling
-4. Performance scenarios
-5. Integration points
-
-Format as JSON array with: name, description, input, expectedOutput, edgeCases`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-    return jsonMatch ? JSON.parse(jsonMatch[1]) : [];
-  }
-
-  async generateTestFile(codeFile: string, testFramework: 'jest' | 'vitest' = 'jest'): Promise<string> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-    const testCases = await this.analyseCodeAndGenerateTests(codeFile);
-
-    const prompt = `Generate ${testFramework} test code for these test cases:
-
-Original Code:
-\`\`\`typescript
-${content}
-\`\`\`
-
-Test Cases:
-${JSON.stringify(testCases, null, 2)}
-
-Generate complete, runnable ${testFramework} test file with:
-- All test cases implemented
-- Setup and teardown
-- Mock implementations where needed
-- Assertions for all scenarios`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.5
-      }
-    });
-
-    let testCode = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        testCode += message.content;
-      }
-    }
-
-    // Extract code block
-    const codeMatch = testCode.match(/```typescript\n([\s\S]*?)\n```/);
-    return codeMatch ? codeMatch[1] : testCode;
-  }
-
-  async assessTestCoverage(codeFile: string): Promise<{
-    overallCoverage: number;
-    lineCoverage: number;
-    branchCoverage: number;
-    functionCoverage: number;
-    recommendations: string[];
-  }> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-
-    const prompt = `Assess test coverage needs for this code:
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Analyse:
-1. Lines that should be tested
-2. Branches and conditionals
-3. Functions and methods
-4. Edge cases
-5. Error paths
-
-Provide coverage assessment with recommendations in JSON format.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[1]);
-    }
-
-    return {
-      overallCoverage: 0,
-      lineCoverage: 0,
-      branchCoverage: 0,
-      functionCoverage: 0,
-      recommendations: []
+      next: () => {
+        const next = this.queue.shift();
+        if (next) return Promise.resolve({ value: next, done: false });
+        if (this.closed) return Promise.resolve({ value: undefined, done: true });
+        return new Promise((resolve) => { this.waiting = resolve; });
+      },
     };
   }
 }
 
-// Usage
-const qaAgent = new AutomatedQAAgent();
-
-const codeFile = './src/utils/calculator.ts';
-
-// Generate test cases
-const testCases = await qaAgent.analyseCodeAndGenerateTests(codeFile);
-console.log('Generated test cases:', testCases);
-
-// Generate test file
-const testCode = await qaAgent.generateTestFile(codeFile, 'jest');
-fs.writeFileSync('./src/utils/calculator.test.ts', testCode);
-console.log('Test file generated');
-
-// Assess coverage
-const coverage = await qaAgent.assessTestCoverage(codeFile);
-console.log('Coverage assessment:', coverage);
-```
-
-### Recipe 4: Documentation Auto-Generator
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import fs from 'fs';
-import path from 'path';
-
-interface DocSection {
-  name: string;
-  content: string;
-  examples: string[];
-  relatedSections: string[];
-}
-
-class DocumentationGenerator {
-  async generateFromCode(codeFile: string): Promise<string> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-    const fileName = path.basename(codeFile);
-
-    const prompt = `Generate comprehensive documentation for this code file (${fileName}):
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Documentation should include:
-1. Overview and purpose
-2. Installation/import instructions
-3. API reference with all functions/classes
-4. Parameter descriptions and types
-5. Return values
-6. Usage examples
-7. Error handling
-8. Best practices
-9. Common pitfalls
-10. Related documentation
-
-Format as Markdown.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.5
-      }
-    });
-
-    let documentation = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        documentation += message.content;
-      }
-    }
-
-    return documentation;
-  }
-
-  async generateAPIReference(codeFile: string): Promise<string> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-
-    const prompt = `Generate an API reference for this code file:
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-For each exported function, class, or interface, provide:
-- Name and signature
-- Description
-- Parameters with types
-- Return type
-- Exceptions/errors
-- Example usage
-
-Format as detailed Markdown API reference.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let reference = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        reference += message.content;
-      }
-    }
-
-    return reference;
-  }
-
-  async generateUsageExamples(codeFile: string): Promise<string> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-
-    const prompt = `Generate comprehensive usage examples for this code:
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Create examples covering:
-1. Basic usage
-2. Advanced patterns
-3. Error handling
-4. Integration with other modules
-5. Performance considerations
-6. Common use cases
-
-Format with code blocks and explanations.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let examples = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        examples += message.content;
-      }
-    }
-
-    return examples;
-  }
-
-  async generateCompleteDocumentation(projectDir: string): Promise<void> {
-    const files = this.findTypeScriptFiles(projectDir);
-
-    console.log(`Generating documentation for ${files.length} files...`);
-
-    for (const file of files) {
-      const relativePath = path.relative(projectDir, file);
-      const docFileName = `${path.basename(file, '.ts')}.md`;
-      const docPath = path.join(projectDir, 'docs', docFileName);
-
-      console.log(`Processing: ${relativePath}`);
-
-      const documentation = await this.generateFromCode(file);
-
-      // Ensure docs directory exists
-      const docsDir = path.dirname(docPath);
-      if (!fs.existsSync(docsDir)) {
-        fs.mkdirSync(docsDir, { recursive: true });
-      }
-
-      fs.writeFileSync(docPath, documentation);
-      console.log(`Documentation saved: ${docPath}`);
-    }
-  }
-
-  private findTypeScriptFiles(dir: string): string[] {
-    const files: string[] = [];
-
-    const traverse = (currentPath: string) => {
-      const entries = fs.readdirSync(currentPath);
-
-      for (const entry of entries) {
-        const fullPath = path.join(currentPath, entry);
-        const stat = fs.statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          if (!['node_modules', 'dist', '.git', 'docs'].includes(entry)) {
-            traverse(fullPath);
-          }
-        } else if (entry.endsWith('.ts') && !entry.endsWith('.test.ts')) {
-          files.push(fullPath);
-        }
-      }
-    };
-
-    traverse(dir);
-    return files;
-  }
-}
-
-// Usage
-const docGenerator = new DocumentationGenerator();
-
-// Generate docs for single file
-const docs = await docGenerator.generateFromCode('./src/utils/auth.ts');
-fs.writeFileSync('./docs/auth.md', docs);
-
-// Generate API reference
-const apiRef = await docGenerator.generateAPIReference('./src/services/UserService.ts');
-fs.writeFileSync('./docs/api/UserService.md', apiRef);
-
-// Generate for entire project
-await docGenerator.generateCompleteDocumentation('./src');
-```
-
-### Recipe 5: Performance Analysis and Optimisation Agent
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import fs from 'fs';
-
-interface PerformanceIssue {
-  type: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  location: string;
-  description: string;
-  impact: string;
-  solution: string;
-  example: string;
-}
-
-class PerformanceAnalysisAgent {
-  async analysePerformance(codeFile: string): Promise<PerformanceIssue[]> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-
-    const prompt = `Analyse this code for performance issues:
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Identify:
-1. Algorithm inefficiencies
-2. N+1 query problems
-3. Memory leaks
-4. Unnecessary re-renders (React)
-5. Synchronous operations that should be async
-6. Missing caching opportunities
-7. Inefficient loops or iterations
-8. Large bundle size issues
-
-For each issue, provide: type, severity, location, description, impact, solution, example
-
-Format as JSON array.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.5
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-    return jsonMatch ? JSON.parse(jsonMatch[1]) : [];
-  }
-
-  async suggestOptimisations(codeFile: string): Promise<string> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-    const issues = await this.analysePerformance(codeFile);
-
-    const prompt = `Based on these performance issues:
-
-${JSON.stringify(issues, null, 2)}
-
-For the code:
-\`\`\`typescript
-${content}
-\`\`\`
-
-Generate optimised version of the code addressing all issues.
-Provide refactored code with explanations of optimisations.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.3
-      }
-    });
-
-    let optimisedCode = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        optimisedCode += message.content;
-      }
-    }
-
-    return optimisedCode;
-  }
-
-  async estimatePerformanceGain(originalFile: string, optimisedFile: string): Promise<{
-    estimatedSpeedup: string;
-    memoryImprovement: string;
-    cpuReduction: string;
-    recommendations: string[];
-  }> {
-    const original = fs.readFileSync(originalFile, 'utf-8');
-    const optimised = fs.readFileSync(optimisedFile, 'utf-8');
-
-    const prompt = `Compare performance impact of these versions:
-
-ORIGINAL:
-\`\`\`typescript
-${original}
-\`\`\`
-
-OPTIMISED:
-\`\`\`typescript
-${optimised}
-\`\`\`
-
-Estimate performance gains in terms of:
-- Execution speed (X times faster)
-- Memory usage (percentage reduction)
-- CPU usage (percentage reduction)
-- Additional benefits
-
-Format as JSON.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[1]);
-    }
-
-    return {
-      estimatedSpeedup: 'unknown',
-      memoryImprovement: 'unknown',
-      cpuReduction: 'unknown',
-      recommendations: []
-    };
-  }
-}
-
-// Usage
-const perfAgent = new PerformanceAnalysisAgent();
-
-const issues = await perfAgent.analysePerformance('./src/data-processor.ts');
-console.log('Performance Issues:');
-issues.forEach(issue => {
-  console.log(`\n[${issue.severity.toUpperCase()}] ${issue.type}`);
-  console.log(`Description: ${issue.description}`);
-  console.log(`Impact: ${issue.impact}`);
-  console.log(`Solution: ${issue.solution}`);
+const inbox = new Inbox();
+const session = query({
+  prompt: inbox,
+  options: {
+    cwd: process.cwd(),
+    systemPrompt: { type: 'preset', preset: 'claude_code', append: 'You are reviewing, not editing.' },
+    allowedTools: ['Read', 'Glob', 'Grep'],
+    disallowedTools: ['Write', 'Edit', 'Bash'],
+  },
 });
 
-const optimised = await perfAgent.suggestOptimisations('./src/data-processor.ts');
-fs.writeFileSync('./src/data-processor.optimised.ts', optimised);
+const followUps = [
+  'Review src/auth/ and list issues with file:line and severity.',
+  'Which of those would you fix first, and why?',
+  'Show the patch for the top issue.',
+];
+inbox.send(followUps.shift()!);
 
-const gains = await perfAgent.estimatePerformanceGain(
-  './src/data-processor.ts',
-  './src/data-processor.optimised.ts'
+for await (const message of session) {
+  if (message.type === 'assistant') {
+    for (const block of message.message.content) if (block.type === 'text') console.log(block.text);
+  }
+  if (message.type === 'result') {
+    const next = followUps.shift();
+    if (next) inbox.send(next);
+    else inbox.close();
+  }
+}
+```
+
+---
+
+## Recipe 2: Research pipeline
+
+Research with web tools, then a structured summary in a second, tool-free step.
+
+```typescript
+import { z } from 'zod';
+import { run, text } from './run.js';
+
+const Briefing = z.object({
+  headline: z.string(),
+  keyFindings: z.array(z.object({ claim: z.string(), source: z.string().url() })),
+  openQuestions: z.array(z.string()),
+});
+
+export async function research(topic: string) {
+  const notes = text(await run(`Research: ${topic}. Use several independent sources and cite URLs.`, {
+    model: '%%model=anthropic-flagship%%',
+    allowedTools: ['WebSearch', 'WebFetch'],
+    disallowedTools: ['Bash', 'Write', 'Edit'],
+    maxTurns: 25,
+    maxBudgetUsd: 1.5,
+  }));
+
+  const structured = await run(`Turn these notes into a briefing:\n\n${notes}`, {
+    model: '%%model=anthropic%%',
+    tools: [],
+    outputFormat: { type: 'json_schema', schema: z.toJSONSchema(Briefing) },
+  });
+  if (structured.subtype !== 'success' || structured.is_error) throw new Error(`briefing failed: ${structured.subtype}`);
+  return Briefing.parse(structured.structured_output);
+}
+
+console.log(await research('post-quantum TLS deployment'));
+```
+
+---
+
+## Recipe 3: Testing and QA agent
+
+Writes tests, runs them, and fixes them until they pass. Only the test runner is pre-approved for Bash.
+
+```typescript
+import { run, text } from './run.js';
+
+export async function addTests(repo: string, modulePath: string): Promise<string> {
+  const result = await run(`Add Vitest tests for ${modulePath}. Run them and fix failures.`, {
+    cwd: repo,
+    systemPrompt:
+      'Write focused, deterministic tests. Cover edge cases and error paths. ' +
+      'Never change production code to make a test pass without saying so.',
+    allowedTools: ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'Bash(npx vitest:*)'],
+    permissionMode: 'acceptEdits',
+    maxTurns: 40,
+  });
+  return text(result);
+}
+
+console.log(await addTests('/srv/repos/api', 'src/pagination.ts'));
+```
+
+---
+
+## Recipe 4: Documentation generator
+
+```typescript
+import { run, text } from './run.js';
+
+export async function documentModule(repo: string, dir: string): Promise<string> {
+  return text(await run(
+    `Write docs/${dir.replace(/\//g, '-')}.md describing the public API of ${dir}: ` +
+      'purpose, each exported function with a usage example, and error behaviour.',
+    {
+      cwd: repo,
+      allowedTools: ['Read', 'Glob', 'Grep', 'Write(./docs/**)'],
+      permissionMode: 'dontAsk',   // anything outside the allow list is refused
+      effort: 'medium',
+    },
+  ));
+}
+```
+
+---
+
+## Recipe 5: Performance analysis with a custom tool
+
+Expose your profiler output to the agent as an in-process MCP tool.
+
+```typescript
+import { readFile } from 'node:fs/promises';
+import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import { run, text } from './run.js';
+
+const hotspots = tool(
+  'get_hotspots',
+  'Return the top N functions by self time from the latest CPU profile',
+  { limit: z.number().int().min(1).max(50).describe('How many functions to return') },
+  async ({ limit }) => {
+    const profile = JSON.parse(await readFile('profile.json', 'utf8')) as {
+      functions: { name: string; file: string; selfMs: number }[];
+    };
+    const top = [...profile.functions].sort((a, b) => b.selfMs - a.selfMs).slice(0, limit);
+    return { content: [{ type: 'text', text: JSON.stringify(top, null, 2) }] };
+  },
+  { annotations: { readOnlyHint: true } },
 );
-console.log('\nEstimated Performance Gains:', gains);
+
+const profiler = createSdkMcpServer({ name: 'profiler', version: '1.0.0', tools: [hotspots] });
+
+console.log(text(await run('Find the three biggest hotspots and propose concrete fixes with code.', {
+  mcpServers: { profiler },
+  allowedTools: ['mcp__profiler__get_hotspots', 'Read', 'Grep'],
+  effort: 'high',
+})));
 ```
 
-### Recipe 6: Security Audit Agent
+---
+
+## Recipe 6: Security audit with specialist subagents
 
 ```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import fs from 'fs';
+import { run, text } from './run.js';
 
-interface SecurityFinding {
-  type: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  cwe: string;
-  description: string;
-  remediation: string;
-  references: string[];
+const result = await run(
+  'Audit this repository. Use the subagents, then give one prioritised list with fixes.',
+  {
+    model: '%%model=anthropic-flagship%%',
+    allowedTools: ['Read', 'Glob', 'Grep', 'Agent'],
+    agents: {
+      'dependency-auditor': {
+        description: 'Checks package.json and lockfiles for risky or outdated dependencies.',
+        prompt: 'You audit npm dependencies. Report package, issue and recommended version.',
+        tools: ['Read', 'Glob', 'Bash(npm audit:*)'],
+        model: 'haiku',
+      },
+      'code-auditor': {
+        description: 'Finds injection, authz and secret-handling flaws in source code.',
+        prompt: 'You are an application security reviewer. Report file:line, severity and fix.',
+        tools: ['Read', 'Glob', 'Grep'],
+        model: 'sonnet',
+      },
+    },
+  },
+);
+console.log(text(result));
+for (const [model, usage] of Object.entries(result.modelUsage)) {
+  console.log(model, usage.costUSD.toFixed(4));
 }
-
-class SecurityAuditAgent {
-  async auditCode(codeFile: string): Promise<SecurityFinding[]> {
-    const content = fs.readFileSync(codeFile, 'utf-8');
-
-    const prompt = `Perform comprehensive security audit of this code:
-
-\`\`\`typescript
-${content}
-\`\`\`
-
-Check for:
-1. Injection vulnerabilities (SQL, command, code)
-2. Broken authentication
-3. Sensitive data exposure
-4. XML external entity (XXE)
-5. Broken access control
-6. Security misconfiguration
-7. Cross-site scripting (XSS)
-8. Insecure deserialization
-9. Using components with known vulnerabilities
-10. Insufficient logging and monitoring
-
-For each finding: type, severity, CWE, description, remediation, references
-
-Format as JSON array.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5',
-        temperature: 0.3
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-    return jsonMatch ? JSON.parse(jsonMatch[1]) : [];
-  }
-
-  async auditDependencies(packageJsonFile: string): Promise<{
-    vulnerablePackages: Array<{ name: string; version: string; vulnerability: string; severity: string }>;
-    recommendations: string[];
-  }> {
-    const content = fs.readFileSync(packageJsonFile, 'utf-8');
-
-    const prompt = `Analyse this package.json for security vulnerabilities:
-
-\`\`\`json
-${content}
-\`\`\`
-
-Check for:
-1. Known vulnerable package versions
-2. Deprecated packages
-3. Packages with abandoned maintenance
-4. Packages with security issues
-5. Dependency conflicts
-6. Out-of-date packages
-
-Format as JSON with vulnerablePackages array and recommendations.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let output = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        output += message.content;
-      }
-    }
-
-    const jsonMatch = output.match(/```json\n([\s\S]*?)\n```/);
-
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[1]);
-    }
-
-    return {
-      vulnerablePackages: [],
-      recommendations: []
-    };
-  }
-
-  async generateSecurityReport(projectDir: string): Promise<string> {
-    const findings: SecurityFinding[] = [];
-
-    const tsFiles = this.findTypeScriptFiles(projectDir);
-
-    for (const file of tsFiles) {
-      const fileFindings = await this.auditCode(file);
-      findings.push(...fileFindings);
-    }
-
-    const packageJsonPath = `${projectDir}/package.json`;
-    const depVulnerabilities = fs.existsSync(packageJsonPath)
-      ? await this.auditDependencies(packageJsonPath)
-      : { vulnerablePackages: [], recommendations: [] };
-
-    const prompt = `Generate security audit report:
-
-Code Findings: ${JSON.stringify(findings, null, 2)}
-Dependency Issues: ${JSON.stringify(depVulnerabilities, null, 2)}
-
-Create executive summary with:
-1. Critical issues needing immediate attention
-2. High priority items
-3. Medium priority improvements
-4. Low priority recommendations
-5. Compliance considerations
-6. Action plan with timeline
-
-Format as detailed Markdown report.`;
-
-    const response = query({
-      prompt,
-      options: {
-        model: 'claude-sonnet-4-5'
-      }
-    });
-
-    let report = '';
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        report += message.content;
-      }
-    }
-
-    return report;
-  }
-
-  private findTypeScriptFiles(dir: string): string[] {
-    const files: string[] = [];
-
-    const traverse = (currentPath: string) => {
-      const entries = fs.readdirSync(currentPath);
-
-      for (const entry of entries) {
-        const fullPath = `${currentPath}/${entry}`;
-        const stat = fs.statSync(fullPath);
-
-        if (stat.isDirectory()) {
-          if (!['node_modules', 'dist', '.git'].includes(entry)) {
-            traverse(fullPath);
-          }
-        } else if (entry.endsWith('.ts')) {
-          files.push(fullPath);
-        }
-      }
-    };
-
-    traverse(dir);
-    return files;
-  }
-}
-
-// Usage
-const securityAudit = new SecurityAuditAgent();
-
-const findings = await securityAudit.auditCode('./src/api/endpoints.ts');
-console.log('Security Findings:', findings);
-
-const report = await securityAudit.generateSecurityReport('./src');
-fs.writeFileSync('./security-report.md', report);
-console.log('Security report generated');
 ```
 
-These recipes provide production-ready patterns for common agent use cases. Each can be customised and extended for specific requirements.
+---
 
+## Recipe 7: Human approval for risky commands
+
+```typescript
+import { createInterface } from 'node:readline/promises';
+import type { CanUseTool } from '@anthropic-ai/claude-agent-sdk';
+import { run, text } from './run.js';
+
+const READ_ONLY = ['kubectl get', 'kubectl describe', 'kubectl logs', 'df ', 'uptime'];
+const FORBIDDEN = ['kubectl delete', 'rm -rf', 'shutdown', 'reboot'];
+const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+const guard: CanUseTool = async (toolName, input) => {
+  if (toolName !== 'Bash') return { behavior: 'allow', updatedInput: input };
+  const command = String(input.command ?? '');
+  if (FORBIDDEN.some((f) => command.includes(f))) {
+    return { behavior: 'deny', message: 'Destructive command refused', interrupt: true };
+  }
+  if (READ_ONLY.some((p) => command.startsWith(p))) return { behavior: 'allow', updatedInput: input };
+  const answer = await rl.question(`Allow \`${command}\`? [y/N] `);
+  return answer.trim().toLowerCase() === 'y'
+    ? { behavior: 'allow', updatedInput: input }
+    : { behavior: 'deny', message: 'Operator declined' };
+};
+
+console.log(text(await run('The checkout pods keep restarting. Find out why.', {
+  systemPrompt: 'You are an SRE. Diagnose before acting and explain each command.',
+  allowedTools: ['Read', 'Grep'],
+  canUseTool: guard,
+  maxTurns: 30,
+})));
+rl.close();
+```
+
+---
+
+## Recipe 8: Testing agents
+
+Three layers, cheapest first:
+
+1. **Your own functions.** `canUseTool` policies, hooks and `tool()` handlers are plain async functions; call them directly.
+2. **Your message handling, offline.** Point `pathToClaudeCodeExecutable` at a stub that speaks Claude Code's stream-json protocol and replays a canned result. This tests the success and failure paths (including the throw after an error result) without an API key.
+3. **A few end-to-end runs** against the real model, cheap and tolerant of wording.
+
+The stub answers the SDK's control requests and ends every run with the result in `$STUB_RESULT`:
+
+```javascript
+#!/usr/bin/env node
+// stub-claude.mjs — make it executable: chmod +x stub-claude.mjs
+import { createInterface } from 'node:readline';
+
+const send = (obj) => process.stdout.write(JSON.stringify(obj) + '\n');
+const result = {
+  type: 'result', subtype: 'success', is_error: false, result: 'stub answer', session_id: 'stub',
+  num_turns: 1, duration_ms: 1, duration_api_ms: 1, total_cost_usd: 0, usage: {}, modelUsage: {},
+  permission_denials: [], ...JSON.parse(process.env.STUB_RESULT ?? '{}'),
+};
+
+for await (const line of createInterface({ input: process.stdin })) {
+  const message = JSON.parse(line);
+  if (message.type === 'control_request') {          // initialize and other control calls
+    send({ type: 'control_response', response: { subtype: 'success', request_id: message.request_id, response: {} } });
+  } else if (message.type === 'user') {
+    send(result);
+    process.exit(result.is_error ? 1 : 0);           // Claude Code exits non-zero after an error result
+  }
+}
+```
+
+```typescript
+// agent.test.ts — run with: npx tsx --test agent.test.ts
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { fileURLToPath } from 'node:url';
+import { tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+import { run, text } from './run.js';
+import { canUseTool } from './permissions.js';   // the policy from the comprehensive guide
+import { isTransient } from './resilient.js';    // from the production guide
+
+const STUB = fileURLToPath(new URL('./stub-claude.mjs', import.meta.url));
+
+test('destructive commands are refused', async () => {
+  const decision = await canUseTool('Bash', { command: 'rm -rf /' }, {
+    signal: new AbortController().signal,
+    toolUseID: 'toolu_test',
+    requestId: 'req_test',
+  });
+  assert.equal(decision?.behavior, 'deny');
+});
+
+test('tool handlers can be called directly', async () => {
+  const lookup = tool('lookup_order', 'Fetch an order', { id: z.string() }, async ({ id }) => ({
+    content: [{ type: 'text', text: id === 'ORD-1' ? 'shipped' : 'not found' }],
+  }));
+  const output = await lookup.handler({ id: 'ORD-1' }, {});
+  assert.deepEqual(output.content[0], { type: 'text', text: 'shipped' });
+});
+
+test('a successful run returns its text', async () => {
+  assert.equal(text(await run('hi', { pathToClaudeCodeExecutable: STUB })), 'stub answer');
+});
+
+test('a turn limit comes back as a non-retryable error result', async (t) => {
+  process.env.STUB_RESULT = JSON.stringify({
+    subtype: 'error_max_turns', is_error: true, errors: ['Reached maximum number of turns'], terminal_reason: 'max_turns',
+  });
+  t.after(() => { delete process.env.STUB_RESULT; });
+  const result = await run('hi', { pathToClaudeCodeExecutable: STUB });
+  assert.equal(result.subtype, 'error_max_turns');
+  assert.equal(isTransient(result), false);
+  assert.throws(() => text(result), /error_max_turns/);
+});
+
+test('end to end', { skip: !process.env.ANTHROPIC_API_KEY }, async () => {
+  const result = await run('What is 17 * 3? Reply with the number only.', {
+    model: '%%model=anthropic-small%%', tools: [], maxTurns: 1,
+  });
+  assert.match(text(result), /51/);
+});
+```
+
+The stub covers the protocol only as far as these tests need. To exercise tool calls or hooks offline, extend it to emit `assistant` messages and `control_request`s of its own.

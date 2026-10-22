@@ -1,13 +1,14 @@
 ---
 title: "MCP and A2A"
 description: "Consume MCP tools, expose agents as A2A servers, and call remote A2A agents from ADK."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 70
+  label: "MCP and A2A"
+  order: 75
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted; `to_mcp_server` needs 2.5.0+. MCP and A2A are optional extras: `pip install "google-adk[mcp,a2a]"`.
 
 ADK supports both **Model Context Protocol** (Anthropic's tool-server protocol) and **Agent-to-Agent** (Google's cross-framework agent-handoff protocol). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
 
@@ -33,7 +34,7 @@ fs_toolset = McpToolset(
 
 agent = LlmAgent(
     name="fs_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user browse the filesystem.",
     tools=[fs_toolset],
 )
@@ -73,10 +74,10 @@ toolset = McpToolset(
 )
 ```
 
-All args are keyword-only (see `mcp_toolset.py:97-160`). Key behaviours:
+All args are keyword-only (see `mcp_toolset.py`). Key behaviours:
 
 - **Filtering** — `tool_filter=["name1", "name2"]` or a `ToolPredicate` `(tool, ctx) -> bool`.
-- **Auth** — `auth_scheme` + `auth_credential` drive ADK's auth flow; exchanged tokens are injected as `Authorization` headers on each MCP request (`mcp_toolset.py:206-245`).
+- **Auth** — `auth_scheme` + `auth_credential` drive ADK's auth flow; exchanged tokens are injected as `Authorization` headers on each MCP request (`mcp_toolset.py`).
 - **Progress** — `progress_callback` can be a single `ProgressFnT(progress, total, message)` or a factory that returns per-tool callbacks.
 - **Resources** — set `use_mcp_resources=True` to expose MCP resources via a `load_mcp_resource` tool that the model can call.
 - **Credential key** — `credential_key` is a user-specified string used to load and save this toolset's credential in a credential service. When two toolsets share the same `credential_key`, they share the same exchanged token, avoiding duplicate OAuth flows.
@@ -104,7 +105,7 @@ toolset = McpToolset(
 from google.adk.agents import LlmAgent
 from google.adk.a2a.utils.agent_to_a2a import to_a2a
 
-agent = LlmAgent(name="solver", model="gemini-2.5-flash", instruction="Solve math problems.")
+agent = LlmAgent(name="solver", model="%%model=gemini%%", instruction="Solve math problems.")
 app = to_a2a(agent, host="0.0.0.0", port=8000, protocol="http")
 
 # Run with:  uvicorn module_name:app --host 0.0.0.0 --port 8000
@@ -119,17 +120,22 @@ app = to_a2a(agent, host="0.0.0.0", port=8000, protocol="http")
 
 Signature:
 
-```python
+```text
 to_a2a(
-    agent: BaseAgent,
+    agent: BaseAgent | Workflow,
     *,
     host: str = "localhost",
     port: int = 8000,
     protocol: str = "http",
-    agent_card: AgentCard | str | None = None,    # or path to JSON
+    rpc_path: str = "",
+    agent_card: AgentCard | str | None = None,    # or a path to a JSON card
     push_config_store: PushNotificationConfigStore | None = None,
+    task_store: TaskStore | None = None,
     runner: Runner | None = None,
-    lifespan: Callable | None = None,
+    lifespan: Callable[[Starlette], AbstractAsyncContextManager[None]] | None = None,
+    agent_executor_factory: Callable[[Runner], A2aAgentExecutor] | None = None,
+    security_schemes: dict[str, SecurityScheme] | None = None,
+    default_skill_security: list[dict[str, list[str]]] | None = None,
 ) -> Starlette
 ```
 
@@ -152,7 +158,7 @@ remote_solver = RemoteA2aAgent(
 # Compose into a larger system
 root = LlmAgent(
     name="dispatcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="For maths, transfer_to_agent('remote_solver').",
     sub_agents=[remote_solver],
 )
@@ -164,7 +170,42 @@ Agent card sources:
 - `str` starting with `http://` / `https://` — fetched via `A2ACardResolver`.
 - Any other `str` — treated as a local file path.
 
-Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_request_meta_provider`, `full_history_when_stateless`, `config: A2aRemoteAgentConfig`, and `use_legacy: bool = True`. `use_legacy=False` emits the new-integration extension header (`remote_a2a_agent.py:108-212`).
+Constructor accepts `httpx_client`, `timeout`, `a2a_client_factory`, `a2a_request_meta_provider`, `full_history_when_stateless`, `config: A2aRemoteAgentConfig`, and `use_legacy: bool = True`. `use_legacy=False` emits the new-integration extension header (`remote_a2a_agent.py`). `timeout` defaults to 600 s. `description` is filled from the card when left empty, and `context_builder` lets you control how the outgoing message is assembled.
+
+**Auth.** `auth_scheme`, `auth_credential` and `credential_key` apply to every request, including the card fetch:
+
+```python
+from fastapi.openapi.models import HTTPBearer
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes, HttpAuth, HttpCredentials
+
+secure_peer = RemoteA2aAgent(
+    name="secure_peer",
+    agent_card="https://secure-agent.example.com/.well-known/agent.json",
+    auth_scheme=HTTPBearer(scheme="bearer"),
+    auth_credential=AuthCredential(
+        auth_type=AuthCredentialTypes.HTTP,
+        http=HttpAuth(scheme="bearer", credentials=HttpCredentials(token="MY_API_KEY")),
+    ),
+    credential_key="secure_peer_key",
+)
+```
+
+**Task-mode delegation.** `mode="task"` makes the peer a task sub-agent that must finish with `finish_task`; set `output_schema` on the `RemoteA2aAgent` so ADK can turn the `finish_task` arguments into your typed result:
+
+```python
+from pydantic import BaseModel
+
+class ResearchOutput(BaseModel):
+    summary: str
+    sources: list[str]
+
+researcher = RemoteA2aAgent(
+    name="researcher",
+    agent_card="https://research.example.com/.well-known/agent.json",
+    mode="task",
+    output_schema=ResearchOutput,
+)
+```
 
 ## `A2aRemoteAgentConfig`
 
@@ -195,12 +236,22 @@ agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-kn
 
 ## MCP server from ADK agent
 
-To expose an ADK toolset (not a whole agent) as an MCP server, ADK includes helpers in `google.adk.tools.mcp_tool.conversion_utils`:
+Since 2.5.0, `to_mcp_server` (in `google.adk.tools.mcp_tool`) exposes a whole agent as an MCP server — the MCP counterpart of `to_a2a`. It returns a `FastMCP` server with a single tool that runs the agent; one ADK session is kept per MCP connection, so successive calls on the same connection form one conversation. Requires the `mcp` extra.
 
-- `adk_to_mcp_tool_type(tool: BaseTool)` — convert a `BaseTool` to an MCP tool definition.
-- `gemini_to_json_schema(schema)` — normalise Gemini schemas.
+```python
+from google.adk.agents import LlmAgent
+from google.adk.tools.mcp_tool import to_mcp_server
 
-Wire these into a standard `mcp` server implementation. (There's no one-line `to_mcp` helper yet — the pattern is to run an `mcp.Server`, register tool definitions produced from your ADK tools, and dispatch tool calls back through `BaseTool.run_async`.)
+agent = LlmAgent(name="assistant", model="%%model=gemini%%", instruction="Be helpful.")
+
+server = to_mcp_server(agent, instructions="Ask the assistant anything.")
+server.run(transport="stdio")              # local hosts (IDEs, CLI agents)
+# server.run(transport="streamable-http")  # networked hosts
+```
+
+Pass `runner=` to reuse a `Runner` with persistent services; otherwise in-memory services are created.
+
+To expose individual ADK tools rather than an agent, `google.adk.tools.mcp_tool.conversion_utils` has `adk_to_mcp_tool_type(tool)` (a `BaseTool` to an MCP tool definition) and `gemini_to_json_schema(schema)`. Register those definitions on your own `mcp` server and dispatch calls back through `BaseTool.run_async`.
 
 ## Patterns
 
@@ -251,7 +302,7 @@ async def main():
 
     agent = LlmAgent(
         name="file_assistant",
-        model="gemini-2.0-flash",
+        model="%%model=gemini%%",
         instruction=(
             "Help the user navigate and read files. "
             "Use fs_list_directory to explore and fs_read_file to read content."
@@ -303,7 +354,7 @@ async def main():
 
     agent = LlmAgent(
         name="kb_agent",
-        model="gemini-2.0-flash",
+        model="%%model=gemini%%",
         instruction="Search and retrieve documents from the knowledge base.",
         tools=[toolset],
     )
@@ -338,7 +389,7 @@ from google.adk.apps import App
 
 agent = LlmAgent(
     name="weather_agent",
-    model="gemini-2.0-flash",
+    model="%%model=gemini%%",
     description="Provides weather information for any city.",
     instruction=(
         "You are a weather specialist. "
@@ -383,7 +434,7 @@ async def main():
     # Orchestrator routes questions to the remote agent via A2A protocol
     orchestrator = LlmAgent(
         name="orchestrator",
-        model="gemini-2.0-flash",
+        model="%%model=gemini%%",
         instruction=(
             "Route weather questions to weather_specialist. "
             "Handle other questions yourself."
@@ -443,7 +494,7 @@ async def main():
 
     agent = LlmAgent(
         name="api_agent",
-        model="gemini-2.0-flash",
+        model="%%model=gemini%%",
         instruction="Help users interact with the API.",
         tools=[toolset],
     )
@@ -531,7 +582,7 @@ async def main():
 
     agent = LlmAgent(
         name="secure_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Use the private tools to retrieve company data.",
         tools=[toolset],
     )

@@ -8,12 +8,18 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "check:versions": "node scripts/check-versions.mjs",
+    "check:latest": "node scripts/check-versions.mjs --latest",
+    "check:links": "node scripts/check-links.mjs && node scripts/check-built-links.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^4.3.0",
     "@astrojs/starlight": "^0.37.7",
     "@astrojs/starlight-tailwind": "^4.0.2",
+    "@fontsource/hanken-grotesk": "5.3.0",
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/newsreader": "5.3.0",
     "@tailwindcss/vite": "^4.0.0",
     "@types/react": "^19.0.1",
     "@types/react-dom": "^19.0.1",
@@ -26,5 +32,8 @@
   },
   "overrides": {
     "@astrojs/sitemap": "3.7.0"
+  },
+  "devDependencies": {
+    "js-yaml": "4.1.1"
   }
 }

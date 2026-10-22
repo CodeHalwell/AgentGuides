@@ -1,13 +1,14 @@
 ---
 title: "Google ADK Advanced (Python)"
-description: "Planners (BuiltInPlanner, PlanReActPlanner), custom BaseTool / BaseToolset, authenticated tools, and deployment."
-framework: google-adk
-language: python
+description: "Planners (BuiltInPlanner, PlanReActPlanner), custom BaseTool / BaseToolset, authenticated tools, multi-agent coordination, OpenTelemetry and alternative model providers."
+framework: "google-adk"
+language: "python"
 sidebar:
+  label: "Advanced"
   order: 80
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 ## Planners
 
@@ -25,12 +26,12 @@ from google.genai import types
 # Thinking with a token budget
 agent = LlmAgent(
     name="analyst",
-    model="gemini-2.5-pro",           # thinking is a Gemini 2.5 feature
+    model="%%model=gemini-flagship%%",
     instruction="Analyse the dataset step-by-step and produce a concise summary.",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(
-            include_thoughts=True,      # thoughts appear as Part(thought=True) in events
-            thinking_budget=8192,       # max tokens dedicated to reasoning
+            include_thoughts=True,                  # thoughts appear as Part(thought=True) in events
+            thinking_level=types.ThinkingLevel.HIGH,  # Gemini 3 models; 2.5 models use thinking_budget
         )
     ),
 )
@@ -68,7 +69,7 @@ from google.adk.agents import LlmAgent
 
 agent = LlmAgent(
     name="planner_bot",
-    model="gemini-2.5-flash",          # works with any model — no native thinking needed
+    model="%%model=gemini%%",          # works with any model — no native thinking needed
     instruction="You are a research assistant.",
     tools=[my_search_tool, my_db_tool],
     planner=PlanReActPlanner(),
@@ -132,7 +133,7 @@ class BudgetPlanner(BasePlanner):
 
 agent = LlmAgent(
     name="budget_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     planner=BudgetPlanner(max_steps=3),
     tools=[...],
 )
@@ -194,7 +195,7 @@ class DatabaseLookupTool(BaseTool):
 db_tool = DatabaseLookupTool(db_pool=my_pool)
 agent = LlmAgent(
     name="catalog",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use lookup_product to answer product questions.",
     tools=[db_tool],
 )
@@ -298,7 +299,7 @@ class TenantToolset(BaseToolset):
 # Usage — toolset is resolved fresh on every invocation
 agent = LlmAgent(
     name="tenant_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[TenantToolset(permission_service=svc)],
 )
 ```
@@ -338,8 +339,8 @@ agent = LlmAgent(name="root", tools=[fs_a, fs_b])
 
 ```python
 import httpx
+from fastapi.openapi.models import APIKey, APIKeyIn
 from google.adk.auth.auth_tool import AuthConfig
-from google.adk.auth.auth_schemes import APIKeyScheme
 from google.adk.tools.function_tool import FunctionTool
 from google.adk.tools.tool_context import ToolContext
 
@@ -351,13 +352,13 @@ async def call_external_api(endpoint: str, tool_context: ToolContext) -> dict:
     Returns:
       A dict with the API response data.
     """
-    auth_config = AuthConfig(auth_scheme=APIKeyScheme(name="X-Api-Key"))
+    auth_config = AuthConfig(auth_scheme=APIKey(**{"in": APIKeyIn.header}, name="X-Api-Key"))
     cred = tool_context.get_auth_response(auth_config)
     if cred is None:
         # First call — trigger the credential collection flow
         tool_context.request_credential(auth_config)
         return {"status": "auth_required"}
-    api_key = cred.api_key.value
+    api_key = cred.api_key  # AuthCredential.api_key is a plain str
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"https://analytics.example.com{endpoint}",
@@ -436,7 +437,7 @@ class CodeQuery(BaseModel):
 
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Research the query and cite sources.",
     input_schema=ResearchQuery,
     tools=[google_search],
@@ -444,14 +445,14 @@ researcher = LlmAgent(
 
 coder = LlmAgent(
     name="coder",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Answer the coding question with a minimal Python example.",
     input_schema=CodeQuery,
 )
 
 coordinator = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "For factual questions use `researcher`. "
         "For coding questions use `coder`. "
@@ -469,14 +470,14 @@ coordinator = LlmAgent(
 ```python
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write a 3-sentence press release about {topic}.",
     output_key="draft",           # writes the reply to session.state["draft"]
 )
 
 editor = LlmAgent(
     name="editor",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Polish the following draft:\n\n{draft}\n\nReturn only the final text.",
     include_contents="none",      # ignore history; read only from state
 )
@@ -522,7 +523,7 @@ approval_tool = LongRunningFunctionTool(func=request_approval)
 
 agent = LlmAgent(
     name="expense_bot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user submit expense reports.",
     tools=[approval_tool],
 )
@@ -559,100 +560,9 @@ async for event in runner.run_async(
         print("Agent:", "".join(p.text or "" for p in event.content.parts or []))
 ```
 
-## Deployment — Cloud Run (FastAPI)
+## Deployment
 
-```python
-# main.py — FastAPI wrapper for Cloud Run
-import os
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from google.adk.agents import LlmAgent
-from google.adk.apps import App
-from google.adk.runners import Runner
-from google.adk.sessions import DatabaseSessionService
-from google.adk.plugins import LoggingPlugin
-from google.genai import types
-
-SESSION_DB = os.environ["SESSION_DB_URL"]
-
-agent = LlmAgent(
-    name="assistant",
-    model="gemini-2.5-flash",
-    instruction="You are a helpful assistant.",
-)
-
-app_container = App(
-    name="assistant_app",
-    root_agent=agent,
-    plugins=[LoggingPlugin()],
-)
-
-runner: Runner | None = None
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global runner
-    runner = Runner(
-        app=app_container,
-        session_service=DatabaseSessionService(db_url=SESSION_DB),
-    )
-    yield
-    await runner.close()
-
-
-web_app = FastAPI(lifespan=lifespan)
-
-
-@web_app.post("/chat/{session_id}")
-async def chat(session_id: str, body: dict):
-    if runner is None:
-        raise HTTPException(status_code=503, detail="Service not ready")
-    user_id = body.get("user_id", "anonymous")
-    text = body.get("message", "")
-    if not text:
-        raise HTTPException(status_code=400, detail="message is required")
-
-    # Ensure session exists
-    svc = runner.session_service
-    if not await svc.get_session(app_name="assistant_app", user_id=user_id, session_id=session_id):
-        await svc.create_session(
-            app_name="assistant_app", user_id=user_id, session_id=session_id
-        )
-
-    response_text = ""
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session_id,
-        new_message=types.Content(role="user", parts=[types.Part(text=text)]),
-    ):
-        if event.is_final_response() and event.content:
-            response_text = "".join(p.text or "" for p in event.content.parts or [])
-    return {"reply": response_text}
-```
-
-**Cloud Run Dockerfile:**
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
-EXPOSE 8080
-CMD ["uvicorn", "main:web_app", "--host", "0.0.0.0", "--port", "8080"]
-```
-
-**Deploy:**
-
-```bash
-gcloud run deploy adk-assistant \
-  --source . \
-  --region us-central1 \
-  --set-env-vars SESSION_DB_URL=postgresql+asyncpg://user:pass@host/db \
-  --set-secrets GOOGLE_API_KEY=adk-api-key:latest \
-  --allow-unauthenticated
-```
+Deployment (`adk deploy agent_engine | cloud_run | gke`, the Agent Platform SDK's `AdkApp`, and serving `get_fast_api_app()` behind your own authentication) is covered in the [production guide](/google-adk-guide/python/google_adk_production_guide/).
 
 ## Observability — OpenTelemetry
 
@@ -707,6 +617,32 @@ maybe_set_otel_providers([gcp_hooks])
 pip install opentelemetry-exporter-gcp-trace opentelemetry-exporter-gcp-monitoring opentelemetry-exporter-gcp-logging
 ```
 
+### Per-request overrides with `TelemetryConfig`
+
+`RunConfig.telemetry` takes a `TelemetryConfig` (`google.adk.telemetry.context`) so one process can serve tenants with different capture rules. Every field left `None` falls back to its env var, read once when the config is built; the model is frozen, so one instance can be shared across concurrent runs.
+
+| Field | Env-var fallback | Purpose |
+|---|---|---|
+| `capture_message_content` | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | A `ContentCapturingMode`: `NO_CONTENT`, `EVENT_ONLY`, `SPAN_ONLY` or `SPAN_AND_EVENT` |
+| `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | `"experimental"` opts in to the GenAI semconv attributes; `"stable"` keeps the legacy path |
+| `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY` | `StrictBool`: pass `True`/`False`, not `"true"` |
+| `experimental_features_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY_FEATURES` | `frozenset[str]` of experimental telemetry features |
+
+```python
+from google.adk.agents.run_config import RunConfig
+from google.adk.telemetry.context import ContentCapturingMode, TelemetryConfig
+
+TENANT_TELEMETRY = {
+    "tenant_a": TelemetryConfig(capture_message_content=ContentCapturingMode.SPAN_AND_EVENT),
+    "tenant_b": TelemetryConfig(capture_message_content=ContentCapturingMode.NO_CONTENT),  # PII-sensitive
+}
+
+def run_config_for(tenant_id: str) -> RunConfig:
+    return RunConfig(telemetry=TENANT_TELEMETRY.get(tenant_id))
+```
+
+Operators can lock this down: with `ADK_TELEMETRY_IGNORE_RUN_CONFIG=1` the per-request fields are ignored and the env vars always win. If `opentelemetry-instrumentation-google-genai` wraps `generate_content`, that library creates the inference span from its own env vars, so per-request overrides apply only to ADK-owned spans.
+
 ### Wiring telemetry in a FastAPI app
 
 Call `maybe_set_otel_providers` inside `lifespan` so it runs before the first ADK invocation:
@@ -745,12 +681,12 @@ from google.adk.models.lite_llm import LiteLlm
 from google.adk.agents import LlmAgent
 import os
 
-# ── OpenAI GPT-4o ─────────────────────────────────────────────────────────────
+# ── OpenAI ────────────────────────────────────────────────────────────────────
 os.environ["OPENAI_API_KEY"] = "sk-..."
 
 agent = LlmAgent(
     name="gpt_agent",
-    model=LiteLlm(model="openai/gpt-4o"),
+    model=LiteLlm(model="openai/%%model=openai%%"),
     instruction="You are a helpful assistant.",
 )
 
@@ -759,7 +695,7 @@ os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
 
 agent = LlmAgent(
     name="claude_litellm",
-    model=LiteLlm(model="anthropic/claude-opus-4-5"),
+    model=LiteLlm(model="anthropic/%%model=anthropic-flagship%%"),
     instruction="You are a thoughtful assistant.",
 )
 
@@ -770,7 +706,7 @@ os.environ["AZURE_API_VERSION"] = "2024-02-01"
 
 agent = LlmAgent(
     name="azure_agent",
-    model=LiteLlm(model="azure/gpt-4o"),
+    model=LiteLlm(model="azure/%%model=openai%%"),
     instruction="Answer questions concisely.",
 )
 
@@ -784,28 +720,49 @@ agent = LlmAgent(
 
 `LiteLlm` constructor args: `model` (LiteLLM model string), `api_base` (custom endpoint), plus any LiteLLM kwarg (`temperature`, `timeout`, `num_retries`, etc.).
 
-### Anthropic Claude via `AnthropicLlm` (direct)
+### Anthropic Claude: `AnthropicLlm` (Anthropic API) and `Claude` (Vertex AI)
 
-`AnthropicLlm` is a direct Anthropic SDK integration (no LiteLLM proxy). Requires `pip install google-adk[extensions]`.
+`google.adk.models.anthropic_llm` has two classes. Both need the `anthropic` package (`pip install "google-adk[extensions]"`).
+
+- `AnthropicLlm` calls the Anthropic API directly and reads `ANTHROPIC_API_KEY`.
+- `Claude` is a subclass that calls Claude **on Vertex AI**. It needs `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` and raises without them.
 
 ```python
-from google.adk.models.anthropic_llm import Claude
 from google.adk.agents import LlmAgent
-import os
+from google.adk.models.anthropic_llm import AnthropicLlm, Claude
 
-os.environ["ANTHROPIC_API_KEY"] = "sk-ant-..."
-
-agent = LlmAgent(
+# Anthropic API (ANTHROPIC_API_KEY)
+direct = LlmAgent(
     name="claude_direct",
-    model=Claude(model="claude-opus-4-5"),   # or "claude-sonnet-4-6" / "claude-haiku-4-5-20251001"
+    model=AnthropicLlm(model="%%model=anthropic%%", max_tokens=4096),
+    instruction="You are a helpful assistant.",
+)
+
+# Claude on Vertex AI (GOOGLE_CLOUD_PROJECT / GOOGLE_CLOUD_LOCATION)
+on_vertex = LlmAgent(
+    name="claude_vertex",
+    model=Claude(model="%%model=anthropic%%"),
     instruction="You are a helpful assistant.",
 )
 ```
 
-The `"claude-"` prefix is registered in `LLMRegistry`, so a bare string also works:
+A bare `"claude-…"` model string resolves to `Claude` in `LLMRegistry`, so `model="%%model=anthropic%%"` means the Vertex AI route. Pass an `AnthropicLlm` instance when you want the Anthropic API.
+
+### OpenAI: `OpenAILlm` and `OpenAIResponsesLlm`
+
+Since 2.10.0 the OpenAI model classes live in `google.adk.integrations.openai` (`pip install "google-adk[openai]"`): `OpenAILlm` (Chat Completions), `OpenAIResponsesLlm` (Responses API) and `AzureOpenAIResponsesLlm`. `OpenAILlm` is registered for `gpt-*` and `o<N>-*` names, so a bare model string works. The old `google.adk.labs.openai` path only re-exports these classes.
 
 ```python
-agent = LlmAgent(name="a", model="claude-opus-4-5")
+from google.adk.agents import LlmAgent
+from google.adk.integrations.openai import OpenAIResponsesLlm
+
+chat = LlmAgent(name="gpt_chat", model="%%model=openai%%")     # resolves to OpenAILlm; reads OPENAI_API_KEY
+
+responses = LlmAgent(
+    name="gpt_responses",
+    model=OpenAIResponsesLlm(model="%%model=openai%%"),
+    instruction="Answer concisely.",
+)
 ```
 
 ### Mixing models in a multi-agent system
@@ -815,31 +772,31 @@ Each agent can use a different model — route expensive reasoning to a powerful
 ```python
 from google.adk.agents import LlmAgent
 from google.adk.models.lite_llm import LiteLlm
-from google.adk.models.anthropic_llm import Claude
+from google.adk.models.anthropic_llm import AnthropicLlm
 
 triage = LlmAgent(
     name="triage",
-    model="gemini-2.5-flash",                 # fast and cheap
+    model="%%model=gemini%%",                 # fast and cheap
     instruction="Classify the request as 'technical' or 'billing'.",
 )
 
 technical = LlmAgent(
     name="technical",
-    model=Claude(model="claude-opus-4-5"),    # deep reasoning
+    model=AnthropicLlm(model="%%model=anthropic-flagship%%"),  # deep reasoning
     description="Handles complex technical questions.",
     instruction="Provide a detailed technical answer with code examples.",
 )
 
 billing = LlmAgent(
     name="billing",
-    model=LiteLlm(model="openai/gpt-4o-mini"),   # cost-optimised
+    model=LiteLlm(model="openai/%%model=openai-small%%"),   # cost-optimised
     description="Handles billing enquiries.",
     instruction="Look up the user's account and answer billing questions.",
 )
 
 root = LlmAgent(
     name="router",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Route requests to the right specialist.",
     sub_agents=[technical, billing],
 )

@@ -4,63 +4,674 @@
 @import 'tailwindcss/theme.css' layer(theme);
 @import 'tailwindcss/utilities.css' layer(utilities);
 
-/* Custom theme: Agent Guides brand */
+/*
+ * Brand: "Atoms to agents" (Daniel Halwell), tokens from the UI mockups.
+ * Flat Paper or Ink ground; structure from hairline rules and 2px axes, never
+ * textured fills. One oxide accent; verdigris, sulfur, cobalt and permanganate code
+ * the periodic groups and carry data (series: ink, oxide, cobalt, verdigris, sulfur, permanganate).
+ * Newsreader (display) · Hanken Grotesk (body) · JetBrains Mono (code, labels).
+ */
 :root {
-  /* Accent — friendly blue/violet blend */
-  --sl-color-accent-low: #1e1b4b;
-  --sl-color-accent: #6366f1;
-  --sl-color-accent-high: #c7d2fe;
+  --brand-paper: #f4f1ea;
+  --brand-ink: #16181d;
+  --brand-oxide: #c4471c;
+  --brand-verdigris: #2f7f75;
+  --brand-sulfur: #e3b23c;
 
-  /* Neutral greys */
-  --sl-color-white: #ffffff;
-  --sl-color-gray-1: #eceef2;
-  --sl-color-gray-2: #c0c2c7;
-  --sl-color-gray-3: #888b96;
-  --sl-color-gray-4: #545861;
-  --sl-color-gray-5: #353841;
-  --sl-color-gray-6: #24272f;
-  --sl-color-black: #17181c;
-
-  --sl-font: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --brand-font-display: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --sl-font: 'Hanken Grotesk', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --sl-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --sl-line-height: 1.65;
+  --sl-line-height-headings: 1.1;
+
+  /* Dark (1b/1d/1f): paper on ink. */
+  --bg: #16181d;
+  --sf: #1d2026;
+  --tx: #f4f1ea;
+  --mu: #a9acb2;
+  --rl: #33363d;
+  --ac: #e0602f;
+  --onac: #16181d;
+  --vd: #5fb3a7;
+  --onvd: #16181d;
+  --su: #e3b23c;
+  --su-tx: #e3b23c;
+  --co: #7d9be8;
+  --onco: #16181d;
+  --pm: #d27ab6;
+  --onpm: #16181d;
+  --code: #0f1114;
+  --link: #e0602f;
+
+  /* Starlight's dark scale runs white (text) → black (ground). */
+  --sl-color-white: var(--tx);
+  --sl-color-gray-1: #e6e1d6;
+  --sl-color-gray-2: #d4cfc4;
+  --sl-color-gray-3: var(--mu);
+  --sl-color-gray-4: #6b6e75;
+  --sl-color-gray-5: var(--rl);
+  --sl-color-gray-6: var(--sf);
+  --sl-color-black: var(--bg);
+
+  --sl-color-accent-low: #3a1d12;
+  --sl-color-accent: var(--ac);
+  --sl-color-accent-high: var(--link);
+
+  --sl-color-text: var(--tx);
+  --sl-color-text-accent: var(--link);
+  --sl-color-text-invert: var(--onac);
+  --sl-color-bg-accent: var(--ac);
+  --sl-color-bg-nav: var(--bg);
+  --sl-color-bg-sidebar: var(--bg);
+  --sl-color-bg-inline-code: var(--sf);
+  --sl-color-hairline-light: var(--rl);
+  --sl-color-hairline: var(--rl);
+  --sl-color-hairline-shade: var(--rl);
+
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: none;
 }
 
 :root[data-theme='light'] {
-  --sl-color-accent-low: #dde0ff;
-  --sl-color-accent: #4f46e5;
-  --sl-color-accent-high: #1e1b4b;
+  /* Light (1a/1c/1e): ink on paper. */
+  --bg: #f4f1ea;
+  --sf: #fbf9f4;
+  --tx: #16181d;
+  --mu: #4a4e55;
+  --rl: #cfc8ba;
+  --ac: #c4471c;
+  --onac: #f4f1ea;
+  --vd: #2f7f75;
+  --onvd: #f4f1ea;
+  --su: #e3b23c;
+  --su-tx: #b8860b; /* sulfur as text on paper */
+  --co: #2d4fa0;
+  --onco: #f4f1ea;
+  --pm: #8e2c6b;
+  --onpm: #f4f1ea;
+  --code: #16181d;
+  /* Oxide deepened a touch for running-text links only: 5.9:1 on paper (4.36:1 at #C4471C). */
+  --link: #a8401a;
+
+  --sl-color-gray-1: #24272e;
+  --sl-color-gray-2: #2e3138;
+  --sl-color-gray-4: #8a877f;
+  --sl-color-gray-6: #ede8de;
+  --sl-color-gray-7: var(--sf);
+  --sl-color-accent-low: #f2dcd0;
+  --sl-color-accent-high: #7d2f12;
+  --sl-color-bg-inline-code: var(--sf);
 }
 
-/* Smooth anchor scroll */
 html {
   scroll-behavior: smooth;
 }
-
-/* Make code blocks feel premium */
-.expressive-code {
-  --ec-frm-edBg: var(--sl-color-gray-6);
-  --ec-frm-edTabBarBg: var(--sl-color-gray-6);
+body {
+  background: var(--bg);
+  color: var(--tx);
 }
 
-/* Homepage hero polish */
-.hero-gradient {
-  background: radial-gradient(
-      1200px circle at 0% 0%,
-      color-mix(in oklab, var(--sl-color-accent) 25%, transparent) 0%,
-      transparent 40%
-    ),
-    radial-gradient(
-      1200px circle at 100% 0%,
-      color-mix(in oklab, #8b5cf6 20%, transparent) 0%,
-      transparent 45%
-    );
+/* ---------- Chrome: header, sidebar, contents ---------- */
+header.header {
+  border-bottom: 1px solid var(--rl);
+}
+.sidebar-pane {
+  border-inline-end: 1px solid var(--rl);
+}
+.right-sidebar {
+  border-inline-start: 1px solid var(--rl) !important;
 }
 
-/* Utility: subtle card ring */
-.ag-card {
-  @apply rounded-xl border border-[var(--sl-color-gray-5)] bg-[var(--sl-color-gray-6)] p-5 transition-all hover:border-[var(--sl-color-accent)] hover:shadow-lg hover:shadow-indigo-500/10;
+/* Instrument voice: mono, uppercase, tracked. */
+.sidebar-content .group-label,
+.sidebar-content summary .large,
+starlight-toc h2,
+mobile-starlight-toc .toggle,
+.brand-label {
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--mu);
 }
 
-.ag-tag {
-  @apply inline-flex items-center gap-1 rounded-full border border-[var(--sl-color-gray-5)] bg-[var(--sl-color-gray-6)] px-2 py-0.5 text-xs font-medium text-[var(--sl-color-gray-2)];
+/* Sidebar: current page as an ink block (the console nav pattern). */
+.sidebar-content a {
+  border-radius: 0 !important;
+}
+.sidebar-content a[aria-current='page'],
+.sidebar-content a[aria-current='page']:hover,
+.sidebar-content a[aria-current='page']:focus {
+  background: var(--tx) !important;
+  color: var(--bg) !important;
+  font-weight: 500;
+}
+
+/* Contents: muted list, current item in accent with a 2px left axis. */
+starlight-toc a {
+  color: var(--mu);
+}
+starlight-toc a[aria-current='true'],
+starlight-toc a[aria-current='true']:hover {
+  color: var(--ac) !important;
+  box-shadow: inset 2px 0 0 var(--ac);
+}
+
+/* Reading progress, 3px, under the header (see the head script in astro.config.mjs). */
+#reading-progress {
+  position: fixed;
+  top: var(--sl-nav-height);
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--rl);
+  z-index: var(--sl-z-index-navbar);
+  pointer-events: none;
+}
+#reading-progress > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--ac);
+}
+
+/* ---------- Article ---------- */
+.sl-markdown-content {
+  font-size: 1.0625rem;
+}
+.sl-markdown-content :is(h2, h3),
+.hero h1,
+.card .title {
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--tx);
+}
+.sl-markdown-content h2 {
+  font-size: clamp(1.7rem, 3vw, 2.25rem);
+  line-height: 1.1;
+}
+.sl-markdown-content h3 {
+  font-size: 1.45rem;
+}
+.sl-markdown-content :is(h4, h5, h6) {
+  font-weight: 600;
+}
+.sl-markdown-content :is(em, i) {
+  font-family: var(--brand-font-display);
+  font-size: 1.06em;
+}
+.sl-markdown-content strong {
+  font-weight: 600;
+}
+.sl-markdown-content hr {
+  border: 0;
+  border-top: 1px solid var(--rl);
+}
+
+.sl-markdown-content a:not(:where(.not-content *)) {
+  color: var(--link);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+.sl-markdown-content a:not(:where(.not-content *)):hover {
+  color: var(--tx);
+}
+
+/* Inline code: surface fill, hairline. */
+.sl-markdown-content :not(pre) > code {
+  background: var(--sf);
+  border: 1px solid var(--rl);
+  border-radius: 0;
+  padding: 0.05em 0.35em;
+}
+
+/* Tables: 2px axis under the header row, hairlines between rows. */
+.sl-markdown-content table {
+  border-collapse: collapse;
+}
+.sl-markdown-content th {
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--mu);
+  border-bottom: 2px solid var(--tx);
+}
+.sl-markdown-content td {
+  border-bottom: 1px solid var(--rl);
+}
+
+/* Asides as margin notes: a 2px top rule in the note's colour, mono label, surface fill. */
+.starlight-aside {
+  border: 1px solid var(--rl) !important;
+  border-top: 2px solid var(--sl-color-asides-border) !important;
+  background: var(--sf) !important;
+  border-radius: 0 !important;
+}
+.starlight-aside--note { --sl-color-asides-border: var(--tx); }
+.starlight-aside--tip { --sl-color-asides-border: var(--vd); }
+.starlight-aside--caution { --sl-color-asides-border: var(--su); }
+.starlight-aside--danger { --sl-color-asides-border: var(--ac); }
+.starlight-aside__title {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem !important;
+  font-weight: 500 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sl-color-asides-border) !important;
+}
+.starlight-aside__icon {
+  display: none;
+}
+
+/* Code: an ink panel in both themes (theme in src/styles/code-theme.json). */
+
+/* ---------- Components ---------- */
+.sl-markdown-content :is(img, video, iframe),
+.sl-badge,
+button,
+input,
+select,
+kbd {
+  border-radius: 0 !important;
+}
+
+/* Starlight cards as ruled cells: hairline border, surface fill, accent icon square. */
+.card-grid {
+  gap: 0 !important;
+  border-top: 1px solid var(--rl);
+  border-left: 1px solid var(--rl);
+}
+.card {
+  --sl-card-border: var(--rl) !important;
+  --sl-card-bg: var(--sf) !important;
+  border: 0 !important;
+  border-right: 1px solid var(--rl) !important;
+  border-bottom: 1px solid var(--rl) !important;
+  border-radius: 0 !important;
+  background: var(--sf) !important;
+}
+.card .icon {
+  border-radius: 0 !important;
+  border: 0 !important;
+  background: var(--ac) !important;
+  color: var(--onac) !important;
+}
+.sl-link-card {
+  border: 1px solid var(--rl) !important;
+  border-radius: 0 !important;
+  background: var(--sf);
+  box-shadow: none !important;
+}
+.sl-link-card:hover {
+  border-color: var(--tx) !important;
+}
+
+/* Pagination as two ruled cells. */
+.pagination-links a {
+  border: 1px solid var(--rl) !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: var(--sf);
+}
+.pagination-links a:hover {
+  border-color: var(--tx) !important;
+}
+
+/* Buttons: mono 13px; primary filled accent, secondary hairline. */
+.sl-link-button {
+  border-radius: 0 !important;
+  font-family: var(--sl-font-mono);
+  font-size: 0.82rem !important;
+  font-weight: 500;
+  padding: 0.7rem 1.1rem !important;
+}
+.sl-link-button.primary {
+  background: var(--ac) !important;
+  border: 1px solid var(--ac) !important;
+  color: var(--onac) !important;
+}
+.sl-link-button.secondary {
+  background: transparent !important;
+  border: 1px solid var(--rl) !important;
+  color: var(--tx) !important;
+}
+.sl-link-button.secondary:hover {
+  border-color: var(--tx) !important;
+}
+
+/* Element chips: small filled mono labels, coloured by group. */
+.chip {
+  display: inline-block;
+  padding: 3px 7px;
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  line-height: 1.3;
+}
+.chip[data-group='oxide'] { background: var(--ac); color: var(--onac); }
+.chip[data-group='verdigris'] { background: var(--vd); color: var(--onvd); }
+.chip[data-group='sulfur'] { background: var(--su); color: var(--brand-ink); }
+.chip[data-group='ink'] { background: var(--tx); color: var(--bg); }
+.chip[data-group='cobalt'] { background: var(--co); color: var(--onco); }
+.chip[data-group='permanganate'] { background: var(--pm); color: var(--onpm); }
+
+/* ---------- Home: the periodic table of frameworks ---------- */
+/* The home page renders its own h1, so Starlight's title panel is empty there. */
+.content-panel:has(> .sl-container:empty) {
+  display: none;
+}
+.content-panel:has(.pt) {
+  border-top: 0;
+}
+
+.pt-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+  gap: 3rem;
+  padding: 3rem 0 1.5rem;
+}
+@media (max-width: 60rem) {
+  .pt-hero {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+.pt-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+.pt-eyebrow {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ac);
+}
+.pt-title {
+  margin: 0;
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  font-size: clamp(3rem, 6vw, 4.5rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--tx);
+}
+.pt-lead {
+  margin: 0;
+  font-size: 1.1rem;
+  line-height: 1.55;
+  color: var(--mu);
+}
+.pt-formula {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.2rem;
+  border: 2px solid var(--tx);
+  background: var(--sf);
+  box-shadow: 8px 8px 0 var(--ac);
+}
+.pt-formula-label,
+.pt-formula-note {
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  color: var(--mu);
+}
+.pt-formula-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pt-formula-value {
+  font-family: var(--brand-font-display);
+  font-size: 2.2rem;
+  line-height: 1.1;
+  color: var(--tx);
+  overflow-wrap: anywhere;
+}
+.pt-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+  align-content: start;
+}
+@media (max-width: 80rem) {
+  .pt-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+@media (max-width: 34rem) {
+  .pt-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.pt-tile {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  min-width: 0;
+  padding: 0.5rem 0.55rem;
+  border: 2px solid var(--rl);
+  background: transparent;
+  color: var(--tx);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 100ms ease,
+    box-shadow 100ms ease;
+}
+.pt-tile:hover {
+  border-color: var(--tx);
+}
+.pt-tile:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+.pt-n,
+.pt-label {
+  font-family: var(--sl-font-mono);
+  font-size: 0.62rem;
+  line-height: 1.2;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pt-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pt-sym {
+  font-family: var(--brand-font-display);
+  font-size: clamp(1.8rem, 3.6vw, 2.9rem);
+  line-height: 0.85;
+}
+.pt-key {
+  margin: 0.5rem 0 2rem;
+}
+.pt-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 1.5rem 1.5rem;
+  padding-bottom: 1rem;
+}
+.pt-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 2px solid var(--tx);
+  color: var(--tx);
+  text-decoration: none;
+}
+.pt-result:hover .pt-result-title {
+  color: var(--ac);
+}
+.pt-result-eyebrow {
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  color: var(--ac);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.pt-result-title {
+  font-family: var(--brand-font-display);
+  font-size: 1.6rem;
+  line-height: 1.1;
+}
+.pt-result-text {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--mu);
+}
+.pt-result-meta {
+  margin-top: auto;
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  color: var(--mu);
+}
+
+/* Numbered rows, the notebook list pattern. */
+.start-rows {
+  display: flex;
+  flex-direction: column;
+  border-top: 2px solid var(--tx);
+}
+.start-rows a {
+  display: grid;
+  grid-template-columns: 3rem 1fr auto;
+  gap: 1.25rem;
+  align-items: baseline;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--rl);
+  color: var(--tx);
+  text-decoration: none;
+}
+.start-rows a:hover .t {
+  color: var(--ac);
+}
+.start-rows .n {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  color: var(--ac);
+}
+.start-rows .t {
+  font-family: var(--brand-font-display);
+  font-size: 1.3rem;
+  line-height: 1.25;
+}
+.start-rows .m {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--mu);
+}
+@media (max-width: 40rem) {
+  .start-rows a {
+    grid-template-columns: 2.2rem 1fr;
+  }
+  .start-rows .m {
+    display: none;
+  }
+}
+
+/* ---------- Framework grid and use-case picker (ruled cells) ---------- */
+.ag-cells {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  border-top: 1px solid var(--rl);
+  border-left: 1px solid var(--rl);
+  background: var(--sf);
+}
+.ag-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  border-right: 1px solid var(--rl);
+  border-bottom: 1px solid var(--rl);
+  color: var(--tx);
+  text-decoration: none;
+}
+.ag-cell:hover {
+  background: var(--bg);
+}
+.ag-cell:hover h3,
+.ag-cell:hover h4 {
+  color: var(--ac);
+}
+.ag-cell h3,
+.ag-cell h4 {
+  margin: 0;
+  font-family: var(--brand-font-display);
+  font-weight: 400;
+  line-height: 1.1;
+  color: var(--tx);
+}
+.ag-cell h3 {
+  font-size: 1.6rem;
+}
+.ag-cell h4 {
+  font-size: 1.3rem;
+}
+.ag-cell p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--mu);
+}
+.ag-metric {
+  margin-top: auto;
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--mu);
+}
+
+.ag-input {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rl);
+  background: var(--sf);
+  color: var(--tx);
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+}
+.ag-input:focus {
+  outline: 2px solid var(--ac);
+  outline-offset: 1px;
+}
+
+.ag-chip {
+  padding: 6px 10px;
+  border: 1px solid var(--rl);
+  background: transparent;
+  color: var(--tx);
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.ag-chip:hover {
+  border-color: var(--tx);
+}
+.ag-chip[aria-pressed='true'] {
+  background: var(--tx);
+  border-color: var(--tx);
+  color: var(--bg);
+}
+
+/* Annotation: conditions beside the number, small mono, muted. */
+.brand-annotation {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--mu);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }

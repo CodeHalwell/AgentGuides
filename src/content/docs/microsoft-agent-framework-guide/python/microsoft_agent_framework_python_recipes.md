@@ -1,23 +1,23 @@
 ---
-title: "Microsoft Agent Framework Python - Recipes and Code Patterns"
-description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework. Verified against agent-framework 1.10.0 — covers chat, tools, sessions, MCP, middleware, skills, evaluation, workflow checkpointing, compaction, long-term memory, and todo tracking."
-framework: microsoft-agent-framework
-language: python
+title: "Microsoft Agent Framework (Python) — Recipes"
+description: "Copy-paste-ready Python recipes for the Microsoft Agent Framework — covers chat, tools, sessions, MCP, middleware, skills, evaluation, workflow checkpointing, compaction, long-term memory, and todo tracking."
+framework: "microsoft-agent-framework"
+language: "python"
+sidebar:
+  label: "Recipes"
 ---
-
-# Microsoft Agent Framework Python — Recipes and Code Patterns
 
 Practical, runnable patterns for the real `agent_framework` package. Every recipe targets the public surface of the latest release; nothing here relies on private modules.
 
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.
-- **Pinned version:** `agent-framework==1.10.0`. Check the latest with `pip index versions agent-framework`.
+- **Pinned version:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; the recipes were first written for 1.10.0). Check the latest with `pip index versions agent-framework`.
 - **Python:** 3.10+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
 - **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`, `CompactionProvider`, `ToolResultCompactionStrategy`, `SelectiveToolCallCompactionStrategy`, `TokenBudgetComposedStrategy`, `TodoProvider`, `TodoFileStore`, `MemoryContextProvider`, `MemoryFileStore`.
 
 ```bash
 pip install agent-framework
 # Or pin explicitly:
-pip install 'agent-framework==1.10.0'
+pip install 'agent-framework==%%version=agent-framework%%'
 ```
 
 ---
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Swap `OpenAIChatClient` for `AzureOpenAIChatClient`, `FoundryChatClient`, `AnthropicClient`, `OllamaChatClient`, or `BedrockChatClient` to switch providers — every chat client implements the same `SupportsChatGetResponse` protocol so the rest of your code is identical.
+Swap `OpenAIChatClient` for `FoundryChatClient`, `AnthropicClient`, `OllamaChatClient`, or `BedrockChatClient` to switch providers (for Azure OpenAI, keep `OpenAIChatClient` and pass `azure_endpoint=` plus `credential=`) — every chat client implements the same `SupportsChatGetResponse` protocol so the rest of your code is identical.
 
 ### Recipe 2 — Streaming responses
 
@@ -78,16 +78,16 @@ async def main() -> None:
             print(update.text, end="", flush=True)
     print()
 
-    # The assembled final response — finish_reason, full text, tool calls.
+    # The assembled final response: full text, finish reason, usage.
     final = await stream.get_final_response()
-    print(f"\nfinish_reason={final.finish_reasons}")
+    print(f"\nfinish_reason={final.finish_reason} usage={final.usage_details}")
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`stream.get_final_response()` waits until consumption finishes and returns the joined `AgentResponse`. For HITL approvals mid-stream use `await stream.send_response(approval)` instead of starting a new run.
+`stream.get_final_response()` waits until consumption finishes and returns the joined `AgentResponse`. Tool-approval requests can't be answered mid-stream: they arrive in `final.user_input_requests`, and you reply on the same session with the approval responses (see [Human in the loop](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/)).
 
 ### Recipe 3 — A tool with typed arguments and error handling
 
@@ -403,19 +403,21 @@ For LLM-as-judge or weighted scoring patterns see the [evaluation guide](./micro
 
 ### Recipe 10 — Skills for progressive-disclosure knowledge
 
-A `Skill` is advertised by name + description. Only when the model decides to use it is the full body or a resource fetched — keeping context lean for rarely-used domain knowledge.
+A skill is advertised by name + description. Only when the model decides to use it is the full body or a resource fetched — keeping context lean for rarely-used domain knowledge.
 
 ```python
 # pricing_skill.py
 import asyncio
-from agent_framework import Agent, Skill, SkillsProvider
+from agent_framework import Agent, InlineSkill, SkillFrontmatter, SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
-pricing = Skill(
-    name="tenant-pricing",
-    description="Look up the per-SKU pricing matrix for the active tenant.",
-    content=(
+pricing = InlineSkill(
+    frontmatter=SkillFrontmatter(
+        name="tenant-pricing",
+        description="Look up the per-SKU pricing matrix for the active tenant.",
+    ),
+    instructions=(
         "Use `read_skill_resource('tenant-pricing', 'matrix')` to fetch the current "
         "matrix. Quote prices in USD unless the user specifies otherwise."
     ),
@@ -438,7 +440,12 @@ async def main() -> None:
     agent = Agent(
         client=OpenAIChatClient(),
         instructions="You answer pricing questions for the active tenant.",
-        context_providers=[SkillsProvider(skills=[pricing])],
+        # Trusted, in-process skill: let the model load and read it without approval.
+        context_providers=[SkillsProvider(
+            pricing,
+            disable_load_skill_approval=True,
+            disable_read_skill_resource_approval=True,
+        )],
     )
 
     response = await agent.run(
@@ -717,13 +724,12 @@ class BudgetGuard(AgentMiddleware):
     async def process(self, context: AgentContext, call_next) -> None:
         tenant = context.kwargs.get("tenant_id", "default")
         if self.quotas.get(tenant, 0) <= 0:
-            raise MiddlewareTermination(
-                f"tenant={tenant} over quota",
-                result=AgentResponse(
-                    messages=[Message(role="assistant",
-                                      contents=[Content.from_text("Quota exhausted.")])],
-                ),
+            # The agent pipeline returns context.result; set it before raising.
+            context.result = AgentResponse(
+                messages=[Message(role="assistant",
+                                  contents=[Content.from_text("Quota exhausted.")])],
             )
+            raise MiddlewareTermination(f"tenant={tenant} over quota")
         self.quotas[tenant] -= 1
         await call_next()
 
@@ -747,7 +753,7 @@ agent = Agent(
 )
 ```
 
-`MiddlewareTermination(result=...)` lets you return a fully-formed synthetic response without invoking the model. See the [middleware guide](./microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
+Setting `context.result` and raising `MiddlewareTermination` returns a synthetic response without invoking the model. In agent middleware the exception's own `result=` argument is ignored, so set `context.result` first. See the [middleware guide](./microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
 
 ### Recipe 16 — Expose an agent over MCP
 
@@ -922,7 +928,7 @@ async def sse(stream) -> AsyncIterator[bytes]:
             payload = json.dumps({"text": update.text}).encode()
             yield b"data: " + payload + b"\n\n"
     final = await stream.get_final_response()
-    yield b"data: " + json.dumps({"done": True, "finish_reasons": list(final.finish_reasons or [])}).encode() + b"\n\n"
+    yield b"data: " + json.dumps({"done": True, "finish_reason": final.finish_reason}).encode() + b"\n\n"
 
 
 @app.post("/chat/stream")
@@ -931,7 +937,7 @@ async def chat_stream(req: ChatRequest) -> StreamingResponse:
     return StreamingResponse(sse(stream), media_type="text/event-stream")
 ```
 
-`stream.get_final_response()` after iteration completes is the canonical place to access the joined response, finish reasons, and any HITL approval requests. For approval mid-stream, drop into `await stream.send_response(...)` before the loop returns.
+`stream.get_final_response()` after iteration is where you read the joined response, the finish reason and any approval requests (`final.user_input_requests`). To approve a tool call, send the approval responses back on the same session in a new request; the stream itself can't be answered.
 
 ---
 
@@ -978,7 +984,7 @@ async def main() -> None:
 
     print()
     final = await stream.get_final_response()
-    print(f"\nfinish_reasons={final.finish_reasons}")
+    print(f"\nfinish_reason={final.finish_reason}")
 
 
 if __name__ == "__main__":
@@ -1025,9 +1031,9 @@ if __name__ == "__main__":
 
 For custom types in `session.state`, register them once at module import via `register_state_type(...)` so cold-starts work even before the model is serialised. See the [sessions guide](./microsoft_agent_framework_python_sessions/) for the full contract.
 
-### Recipe 22 — Agent todo list with `TodoProvider` (Experimental)
+### Recipe 22 — Agent todo list with `TodoProvider`
 
-Give the agent a persistent task list. The provider exposes `add_todos`, `complete_todos`, `get_remaining_todos`, and `remove_todos` tools and injects usage instructions into the system prompt automatically.
+Give the agent a persistent task list. The provider exposes `todos_add`, `todos_complete`, `todos_get_remaining`, and `todos_remove` tools and injects usage instructions into the system prompt automatically.
 
 ```python
 # todo_agent.py
@@ -1082,7 +1088,7 @@ Use `TodoProvider()` (no `store=`) for in-session todos that vanish at process e
 
 ---
 
-### Recipe 23 — Plan / execute mode with `AgentModeProvider` (Experimental)
+### Recipe 23 — Plan / execute mode with `AgentModeProvider`
 
 `AgentModeProvider` lets the agent switch between named operating modes. The default modes are **plan** (interactive, ask questions) and **execute** (autonomous, minimise interruptions). You can define any modes you need.
 
@@ -1100,7 +1106,7 @@ async def main() -> None:
         context_providers=[
             AgentModeProvider(
                 default_mode="plan",
-                mode_descriptions={
+                mode_instructions={
                     "plan":    "Analyse the requirements and ask clarifying questions. Do not write code yet.",
                     "execute": "Implement the approved plan autonomously. Do not ask questions mid-task.",
                     "review":  "Review the completed implementation for correctness and style.",
@@ -1148,7 +1154,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-The agent can also switch modes itself by calling `set_mode` — useful when the agent decides it has enough information to start executing without waiting for the user. Combine with `TodoProvider` (Recipe 22) so the agent tracks its own tasks across the mode transitions.
+The agent can also switch modes itself by calling `mode_set` — useful when the agent decides it has enough information to start executing without waiting for the user. Combine with `TodoProvider` (Recipe 22) so the agent tracks its own tasks across the mode transitions.
 
 ### Recipe 24 — Prompt injection defense with `SecureAgentConfig` (Experimental)
 
@@ -1224,7 +1230,7 @@ Key points:
 - It also registers two built-in security tools: `quarantined_llm` (runs a sub-prompt through an isolated model without privileged tool access) and `inspect_variable` (lets the agent examine labelled variables before acting).
 - This feature is `ExperimentalFeature.FIDES` — the API is functional but may change between minor releases.
 
-See the [comprehensive guide's SecureAgentConfig section](./microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defense--secureagentconfig-experimental) for the full constructor reference table.
+See the [comprehensive guide's FIDES section](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides) for the constructor reference table.
 
 ### Recipe 25 — `FunctionExecutor` data pipeline
 
@@ -1506,7 +1512,7 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Drop old tool-call groups | `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Summarise old tool results | `ToolResultCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Token-budget composition | `TokenBudgetComposedStrategy(token_budget=N, tokenizer=..., strategies=[...])` |
-| Plan / execute modes (exp.) | `AgentModeProvider(mode_descriptions={...})` |
+| Plan / execute modes (exp.) | `AgentModeProvider(mode_instructions={...})` |
 | Prompt injection defense (exp.) | `SecureAgentConfig(...)` from `agent_framework.security` |
 | Function-based workflow nodes | `@executor` / `FunctionExecutor(func, id=)` |
 | Visualise a workflow | `WorkflowViz(workflow).to_mermaid()` / `.to_digraph()` / `.export(format="svg")` |
@@ -1518,4 +1524,4 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Intercept tool calls | Subclass `FunctionMiddleware`, override `async process(context, call_next)` |
 | Early-exit from middleware | `raise MiddlewareTermination(result=AgentResponse(...))` |
 
-For deep dives see the framework's other Python guides: [tools](./microsoft_agent_framework_python_tools/), [sessions](./microsoft_agent_framework_python_sessions/), [middleware](./microsoft_agent_framework_python_middleware/), [MCP](./microsoft_agent_framework_python_mcp/), [skills](./microsoft_agent_framework_python_skills/), [evaluation](./microsoft_agent_framework_python_evaluation/), [checkpointing](./microsoft_agent_framework_python_checkpointing/), and [orchestration](./microsoft_agent_framework_python_orchestration/).
+For more detail see the framework's other Python guides: [agent harness](./microsoft_agent_framework_python_harness/), [tools](./microsoft_agent_framework_python_tools/), [sessions](./microsoft_agent_framework_python_sessions/), [middleware](./microsoft_agent_framework_python_middleware/), [MCP](./microsoft_agent_framework_python_mcp/), [skills](./microsoft_agent_framework_python_skills/), [evaluation](./microsoft_agent_framework_python_evaluation/), [checkpointing](./microsoft_agent_framework_python_checkpointing/), and [orchestration](./microsoft_agent_framework_python_orchestration/).

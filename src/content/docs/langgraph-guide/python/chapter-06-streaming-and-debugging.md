@@ -1,18 +1,16 @@
 ---
 title: "Chapter 6 — Streaming & Debugging"
 description: "All 7 stream modes, typed StreamPart v2 API, GraphOutput, token-level message streaming, custom StreamWriter, UI streaming with push_ui_message/UIMessage, experimental v3 stream_events API, graph visualization, and checkpoint inspection."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "6 · Streaming & debugging"
   order: 6
 ---
 
-# Chapter 6 — Streaming & Debugging
+**What you'll learn:** every streaming mode, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, the new experimental v3 `stream_events` API with `GraphRunStream` / `SubgraphRunStream` / `LifecyclePayload` / `StreamChannel`, **UI streaming** with `push_ui_message` / `UIMessage` / `delete_ui_message` for live front-end component updates, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
 
-**What you'll learn:** every streaming mode in langgraph 1.2.x, how to get typed output from the v2 API, streaming tokens from LLMs token-by-token, writing custom events from inside nodes, combining multiple stream modes, the new experimental v3 `stream_events` API with `GraphRunStream` / `SubgraphRunStream` / `LifecyclePayload` / `StreamChannel`, **UI streaming** with `push_ui_message` / `UIMessage` / `delete_ui_message` for live front-end component updates, visualizing your graph, and inspecting / modifying checkpoints for time-travel debugging.
-
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.types`, `langgraph.stream`, `langgraph.graph.ui`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.stream`, `langgraph.graph.ui`).
 
 **Time:** ~30 minutes.
 
@@ -22,7 +20,7 @@ Verified against **`langgraph==1.2.12`** (modules: `langgraph.types`, `langgraph
 
 ## The 7 Stream Modes
 
-`graph.stream()` and `graph.astream()` accept a `stream_mode` parameter (string or list of strings). There are seven modes:
+`graph.stream()` and `graph.astream()` accept a `stream_mode` parameter (string or list of strings). The `StreamMode` type lists seven modes; an eighth, `"tools"` (per-tool-call events), is accepted at runtime but is not in the type. See the [streaming modes reference](/langgraph-guide/python/reference-streaming-modes/).
 
 | Mode | What it emits | Best for |
 |---|---|---|
@@ -111,7 +109,7 @@ from langgraph.graph.message import add_messages
 class ChatState(TypedDict):
     messages: Annotated[list, add_messages]
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 def call_model(state: ChatState) -> dict:
     response = model.invoke(state["messages"])
@@ -152,7 +150,7 @@ async for chunk, metadata in graph.astream(
 
 ## Mode 4: `"custom"` — write your own events
 
-Declare `writer: StreamWriter` as a keyword argument in any node — LangGraph injects the writer automatically. Call `writer(data)` to push any JSON-serializable value downstream.
+Declare `writer: StreamWriter` as a keyword argument in any node — LangGraph injects the writer automatically. Call `writer(data)` to push any JSON-serialisable value downstream.
 
 ```python
 from langgraph.types import StreamWriter
@@ -494,7 +492,7 @@ print(type(result))   # dict
 
 ## Experimental v3 Streaming — `stream_events(version="v3")`
 
-LangGraph 1.2.11 introduces an experimental v3 streaming protocol built on typed `StreamChannel` projections. Instead of iterating a flat event stream, you drive the graph by consuming named projections on a `GraphRunStream` context object. Each projection is a **single-consumer drainable queue** — there is no background thread; your `for` loop is the pump.
+LangGraph 1.2.0 introduced an experimental v3 streaming protocol (still experimental in %%version=langgraph%%) built on typed `StreamChannel` projections. Instead of iterating a flat event stream, you drive the graph by consuming named projections on a `GraphRunStream` context object. Each projection is a **single-consumer drainable queue** — there is no background thread; your `for` loop is the pump.
 
 > **Warning:** `version="v3"` is experimental and may change in future releases. Gate it behind a feature flag in production.
 
@@ -528,7 +526,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 class ChatState(TypedDict):
     messages: Annotated[list, add_messages]
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 def call_model(state: ChatState) -> dict:
     return {"messages": [model.invoke(state["messages"])]}
@@ -597,7 +595,7 @@ asyncio.run(main())
 
 > **Multi-projection consumption.** `StreamChannel` uses **lazy-subscribe** — items are only buffered on a channel after something has subscribed to it. If you drain `run.values` fully before touching `run.messages`, the graph pumps to completion while `run.messages` has no subscriber, and every token pushed to it is silently discarded.
 >
-> Use `run.interleave("values", "messages", ...)` on `GraphRunStream` for the sync case; it yields `(name, item)` tuples in arrival order across the named projections and locks each channel for the duration. For async, subscribe every projection **before** starting the pump (e.g. `asyncio.gather` over per-projection consumer tasks) — `AsyncGraphRunStream` does not expose an `ainterleave` helper in 1.2.12.
+> Use `run.interleave("values", "messages", ...)` on `GraphRunStream` for the sync case; it yields `(name, item)` tuples in arrival order across the named projections and locks each channel for the duration. For async, subscribe every projection **before** starting the pump (e.g. `asyncio.gather` over per-projection consumer tasks) — `AsyncGraphRunStream` does not expose an `ainterleave` helper (checked against %%version=langgraph%%).
 
 ```python
 # Sync multi-projection consumption — arrival-ordered, no dropped events.
@@ -782,9 +780,9 @@ Use **v1/v2** for production today. Experiment with **v3** when you need per-sub
 
 ## UI Streaming — `push_ui_message`, `UIMessage`, and `delete_ui_message`
 
-LangGraph 1.2.12 ships a first-class UI streaming layer under `langgraph.graph.ui`. Nodes call `push_ui_message()` from inside their body and the event is forwarded to every consumer watching `stream_mode="custom"`. This lets a React / Vue / Svelte front-end render named components from live graph state without polling.
+LangGraph ships a UI streaming layer under `langgraph.graph.ui`. Nodes call `push_ui_message()` from inside their body and the event is forwarded to every consumer watching `stream_mode="custom"`. This lets a React / Vue / Svelte front-end render named components from live graph state without polling.
 
-Verified against **`langgraph==1.2.12`** (module: `langgraph.graph.ui`).
+Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.graph.ui`).
 
 ### Primitives at a glance
 
@@ -799,7 +797,7 @@ Verified against **`langgraph==1.2.12`** (module: `langgraph.graph.ui`).
 ### `UIMessage` TypedDict (source-verified)
 
 ```python
-# langgraph.graph.ui (source-verified, langgraph 1.2.12)
+# langgraph.graph.ui (source-verified, langgraph %%version=langgraph%%)
 class UIMessage(TypedDict):
     type: Literal["ui"]         # always "ui"
     id: str                     # unique identifier (UUID if not provided)

@@ -1,16 +1,14 @@
 ---
 title: "StateGraph — API reference"
 description: "Exhaustive reference for the StateGraph builder and CompiledStateGraph runtime — constructor, add_node, add_edge, add_conditional_edges, add_sequence, compile, plus retry/cache/defer/destinations options."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · StateGraph"
   order: 30
 ---
 
-# StateGraph — API reference
-
-Verified against **`langgraph==1.2.14`** (modules: `langgraph.graph.state`, `langgraph.types`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.graph.state`, `langgraph.types`).
 
 `StateGraph` is the primary graph builder. You declare a state schema, add nodes and edges, then call `.compile()` to get a `CompiledStateGraph` that implements the LangChain `Runnable` protocol (`invoke` / `stream` / `ainvoke` / `astream`).
 
@@ -59,7 +57,7 @@ The top-level `langgraph.graph.__init__` only re-exports `START`, `END`, `StateG
 
 ## Constructor
 
-```python
+```text
 StateGraph(
     state_schema: type[StateT],
     context_schema: type[ContextT] | None = None,
@@ -122,13 +120,14 @@ All overloads accept the same keyword options:
 
 | Option | Type | Effect |
 |---|---|---|
-| `defer` | `bool` | Run this node **only when the graph is about to finish** (after all other tasks drain). Useful for summarization/finalization. |
+| `defer` | `bool` | Run this node **only when the graph is about to finish** (after all other tasks drain). Useful for summarisation/finalization. |
 | `metadata` | `dict` | Attached to the node; surfaces in tracing/streaming metadata. |
 | `input_schema` | `type` | Node receives a narrower shape. Channels outside this schema are not visible. |
 | `retry_policy` | `RetryPolicy \| Sequence[RetryPolicy]` | Controls retries on exceptions. First matching policy in a sequence wins. |
 | `cache_policy` | `CachePolicy` | Cache the node's output by input hash. Requires a `cache=` backend on `.compile()`. |
 | `timeout` | `float \| timedelta \| TimeoutPolicy \| None` | Per-attempt timeout. A plain `float`/`timedelta` is the wall-clock limit; `TimeoutPolicy` adds idle-timeout and heartbeat support. |
-| `destinations` | `dict[str, str] \| tuple[str, ...]` | Visualization hint for edgeless nodes that return `Command(goto=...)`. Does **not** affect execution. |
+| `error_handler` | callable | Runs when the node fails after retries; receives a `NodeError`. See [Error handlers](#error-handlers). |
+| `destinations` | `dict[str, str] \| tuple[str, ...]` | Declares where a node that returns `Command(goto=...)` can go, so the diagram shows those edges. It does not route, but the targets are checked at compile time: each must be a node in the **same** graph (use `Command(graph=Command.PARENT)` for parent targets and leave them out). |
 | `trace_policy` | `TracePolicy \| None` | Control how this node's run is traced in LangSmith (omit inputs, outputs, or both). See [TracePolicy reference](/langgraph-guide/python/reference-trace-policy/). |
 
 A node's callable signature can be any of:
@@ -143,6 +142,19 @@ async def node(state: State, runtime: Runtime[Context]): ...
 
 Return types: `dict`, the state schema instance, `None`, or a `Command`. Returning `None` is a no-op on all channels.
 
+## Node policies
+
+This is the guide's canonical write-up of the per-node policies. Other pages link here rather than repeating it.
+
+| Policy | `add_node` keyword | What it does |
+|---|---|---|
+| `RetryPolicy` | `retry_policy=` | Re-runs a failed attempt with exponential backoff |
+| `TimeoutPolicy` (or a number) | `timeout=` | Cancels an attempt that runs too long or goes quiet. **Async nodes only.** |
+| `CachePolicy` | `cache_policy=` | Skips the node when it has seen the same input before. Needs `compile(cache=...)`. |
+| error handler | `error_handler=` | A function that runs instead of failing the graph once retries are exhausted (sequential nodes only) |
+
+`set_node_defaults(...)` applies any of these to every node; per-node values override the defaults. The order on failure is: timeout fires (raising `NodeTimeoutError`) → `retry_policy` decides whether to retry → when retries are exhausted, the error handler runs, if there is one; otherwise the exception propagates out of `invoke`.
+
 ### `RetryPolicy`
 
 ```python
@@ -155,14 +167,27 @@ builder.add_node(
         initial_interval=0.5,   # seconds before first retry
         backoff_factor=2.0,     # exponential multiplier
         max_interval=128.0,
-        max_attempts=3,
+        max_attempts=3,         # counts the first attempt
         jitter=True,
-        retry_on=ConnectionError,   # type, tuple, or Callable[[Exception], bool]
+        retry_on=ConnectionError,   # type, tuple of types, or Callable[[Exception], bool]
     ),
 )
 ```
 
-`retry_on` accepts an exception type, a tuple of types, or a predicate. Default is `langgraph._internal._retry.default_retry_on` (retries on `httpx.HTTPStatusError` 5xx, `httpx.TransportError`, `ConnectionError`, and request timeouts).
+The default `retry_on` (`langgraph.types.default_retry_on`) is a block-list, not an allow-list. It does **not** retry `ValueError`, `TypeError`, `ArithmeticError`, `ImportError`, `LookupError`, `NameError`, `SyntaxError`, `RuntimeError`, `ReferenceError`, `StopIteration`/`StopAsyncIteration` or any `OSError` (which includes the built-in `TimeoutError`). For `httpx.HTTPStatusError` and `requests.HTTPError` it retries only 5xx responses (so not HTTP 429). Everything else is retried, including `ConnectionError` and LangGraph's `NodeTimeoutError`. Pass your own predicate when that doesn't fit, for example `retry_on=lambda e: isinstance(e, (ConnectionError, NodeTimeoutError))`.
+
+`retry_policy=` also takes a **list**. LangGraph uses the **first policy whose `retry_on` matches** the exception; the policies don't combine:
+
+```python
+builder.add_node(
+    "unreliable",
+    unreliable_fn,
+    retry_policy=[
+        RetryPolicy(initial_interval=0.01, max_attempts=5, retry_on=ConnectionError),  # quick retries
+        RetryPolicy(initial_interval=0.5, max_attempts=2, retry_on=ValueError),        # fewer, slower
+    ],
+)
+```
 
 ### `CachePolicy`
 
@@ -170,71 +195,176 @@ builder.add_node(
 from langgraph.types import CachePolicy
 from langgraph.cache.memory import InMemoryCache
 
-builder.add_node("lookup", lookup, cache_policy=CachePolicy(ttl=300))
+builder.add_node("lookup", lookup, cache_policy=CachePolicy(ttl=300))   # seconds; None = no expiry
 graph = builder.compile(cache=InMemoryCache())
 ```
 
-`key_func` defaults to pickle-hashing the input. Pass a custom `(input) -> str | bytes` for deterministic cache keys.
+`key_func` defaults to hashing the pickled node input. Pass a `(input) -> str | bytes` function for deterministic keys. Clear entries with `graph.clear_cache()` or `graph.clear_cache(nodes=["lookup"])`. Backends are covered in the [cache backends reference](/langgraph-guide/python/reference-cache-backends/).
 
 ### `TimeoutPolicy`
 
-`TimeoutPolicy` (from `langgraph.types`) controls per-attempt cancellation for **async** nodes. A plain `float` or `timedelta` on the `timeout=` kwarg is a shorthand for `TimeoutPolicy(run_timeout=...)`.
+A plain `float` or `timedelta` on `timeout=` is shorthand for `TimeoutPolicy(run_timeout=...)`. The dataclass fields:
 
-```python
-from datetime import timedelta
-from langgraph.types import TimeoutPolicy
-
-@dataclass(**_DC_KWARGS)
-class TimeoutPolicy:
-    run_timeout:  float | timedelta | None = None   # hard wall-clock cap
-    idle_timeout: float | timedelta | None = None   # max time between progress signals
-    refresh_on:   Literal["auto", "heartbeat"] = "auto"
-```
-
-**`run_timeout`** — hard cap for a single attempt. Never refreshed, even by heartbeats.
-
-**`idle_timeout`** — cap on how long the attempt may sit without a progress signal. Progress signals under `"auto"` mode include:
-- Any LangChain callback event inside the node or its descendants.
-- Explicit `runtime.heartbeat()` calls.
-- Stream writer writes.
-
-Under `"heartbeat"` mode, **only** `runtime.heartbeat()` resets the clock.
-
-When the timeout fires, `NodeTimeoutError` is raised. The node's `retry_policy` (if set) then decides whether to retry.
-
-```python
-from langgraph.types import TimeoutPolicy, RetryPolicy
-
-# Hard cap: abort after 30 seconds regardless of progress
-builder.add_node(
-    "llm_call",
-    llm_node,
-    timeout=30.0,   # same as TimeoutPolicy(run_timeout=30.0)
-)
-
-# Idle cap: reset on every LLM callback token, abort if silent for 10 s
-builder.add_node(
-    "streaming_llm",
-    streaming_node,
-    timeout=TimeoutPolicy(idle_timeout=10.0),
-)
-
-# Explicit heartbeat mode: node must call runtime.heartbeat() every 60 s
-async def long_download(state: State, runtime: Runtime) -> dict:
-    for chunk in download_chunks(state["url"]):
-        runtime.heartbeat()          # prevents idle-timeout eviction
-        process(chunk)
-    return {"done": True}
-
-builder.add_node(
-    "download",
-    long_download,
-    timeout=TimeoutPolicy(idle_timeout=60.0, refresh_on="heartbeat"),
-    retry_policy=RetryPolicy(max_attempts=3),
+```text
+TimeoutPolicy(
+    run_timeout:  float | timedelta | None = None,   # hard cap per attempt, never refreshed
+    idle_timeout: float | timedelta | None = None,   # cap on time without a progress signal
+    refresh_on:   "auto" | "heartbeat" = "auto",
 )
 ```
 
-> **Sync nodes are not supported.** `timeout=` on a sync node raises `ValueError` at compile time. Use `asyncio.to_thread` or wrap the node in an async wrapper if you need timeouts on CPU-bound code.
+Under `refresh_on="auto"`, any LangChain callback event inside the node (for example streamed model tokens), a stream-writer write or a `runtime.heartbeat()` call resets the idle clock. Under `"heartbeat"`, only `runtime.heartbeat()` does. When a timeout fires, `NodeTimeoutError` (from `langgraph.errors`) is raised; it is not a subclass of the built-in `TimeoutError`, so the default `retry_on` retries it.
+
+```python
+import asyncio
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START
+from langgraph.runtime import Runtime
+from langgraph.types import RetryPolicy, TimeoutPolicy
+
+
+class State(TypedDict, total=False):
+    items: list[str]
+    done: int
+
+
+async def process(state: State, runtime: Runtime) -> dict:
+    for _ in state["items"]:
+        await asyncio.sleep(0.01)     # real work here
+        runtime.heartbeat()           # progress signal
+    return {"done": len(state["items"])}
+
+
+graph = (
+    StateGraph(State)
+    .add_node(
+        "process",
+        process,
+        timeout=TimeoutPolicy(run_timeout=60, idle_timeout=5, refresh_on="heartbeat"),
+        retry_policy=RetryPolicy(max_attempts=2),
+    )
+    .add_edge(START, "process")
+    .compile()
+)
+print(asyncio.run(graph.ainvoke({"items": ["a", "b", "c"]})))   # {'items': [...], 'done': 3}
+```
+
+**Sync nodes cannot have timeouts.** `add_node(..., timeout=...)` accepts a sync function, but `compile()` raises `ValueError: Node timeouts are only supported for async nodes`. This includes sync error handlers when `set_node_defaults(timeout=...)` is set, because the default timeout applies to handler nodes too. Make the node `async def`; for blocking code, call it with `await asyncio.to_thread(...)`.
+
+### Error handlers
+
+An error handler is a function registered with `add_node(..., error_handler=fn)` (or as a default with `set_node_defaults`). It runs when the node has failed and retries are exhausted. LangGraph injects the failure into the parameter annotated `NodeError`; the annotation is what matters, so `error: Exception` does not work (the call fails with `TypeError: missing 1 required positional argument`).
+
+`NodeError` has two fields: `node` (the failed node's name) and `error` (the exception). Two behaviours to know, both checked against %%version=langgraph%%:
+
+- **The failed node's edges are not followed.** If the handler returns a plain state update, the update is applied and that branch stops there. To carry on, return a `Command`: `Command(update={...}, goto="next_node")`.
+- **Parallel failures are not caught.** When the failing node runs in the same super-step as other tasks (parallel branches, or several `Send` tasks), the exception propagates and fails the run even though a handler is set. In a fan-out, catch exceptions inside the worker and write them to state instead.
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START
+from langgraph.errors import NodeError
+from langgraph.types import Command
+
+
+class State(TypedDict, total=False):
+    result: str
+    error: str
+
+
+def charge_card(state: State) -> dict:
+    raise ConnectionError("payment provider unavailable")
+
+
+def recover(state: State, error: NodeError) -> Command:
+    return Command(update={"error": f"{error.node}: {error.error}"}, goto="queue_for_retry")
+
+
+graph = (
+    StateGraph(State)
+    .add_node("charge_card", charge_card, error_handler=recover)
+    .add_node("send_receipt", lambda s: {"result": "receipt sent"})
+    .add_node("queue_for_retry", lambda s: {"result": "queued"})
+    .add_edge(START, "charge_card")
+    .add_edge("charge_card", "send_receipt")
+    .compile()
+)
+print(graph.invoke({}))   # {'result': 'queued', 'error': 'charge_card: payment provider unavailable'}
+```
+
+### `set_node_defaults`
+
+```text
+builder.set_node_defaults(
+    *,
+    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
+    cache_policy: CachePolicy | None = None,
+    error_handler: StateNode | None = None,
+    timeout: float | timedelta | TimeoutPolicy | None = None,
+) -> Self
+```
+
+| Parameter | Applies to |
+|---|---|
+| `retry_policy` | All nodes, including error-handler nodes |
+| `cache_policy` | Regular nodes only (handler results are never cached) |
+| `error_handler` | Regular nodes that have no handler of their own |
+| `timeout` | All nodes, including error-handler nodes |
+
+Defaults are resolved at compile time and are not inherited by subgraphs. Here are all four together:
+
+```python
+import asyncio
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.errors import NodeError
+from langgraph.types import RetryPolicy, CachePolicy
+from langgraph.cache.memory import InMemoryCache
+
+
+class State(TypedDict, total=False):
+    query: str
+    answer: str
+    last_error: str
+
+
+calls = {"fetch": 0}
+
+
+async def fetch(state: State) -> dict:
+    calls["fetch"] += 1
+    if calls["fetch"] < 3:
+        raise ConnectionError("upstream reset")      # retried by the policy
+    return {"answer": f"result for {state['query']}"}
+
+
+async def summarise(state: State) -> dict:
+    raise ValueError("bad payload")                  # not retried; goes to the handler
+
+
+async def on_error(state: State, error: NodeError) -> dict:   # async: the default timeout applies to it
+    return {"last_error": f"{error.node}: {type(error.error).__name__}: {error.error}"}
+
+
+graph = (
+    StateGraph(State)
+    .set_node_defaults(timeout=30.0, error_handler=on_error)       # every node
+    .add_node("fetch", fetch,
+              retry_policy=RetryPolicy(max_attempts=3, initial_interval=0.01),
+              cache_policy=CachePolicy(ttl=300))
+    .add_node("summarise", summarise)
+    .add_edge(START, "fetch")
+    .add_edge("fetch", "summarise")
+    .add_edge("summarise", END)
+    .compile(cache=InMemoryCache())
+)
+
+print(asyncio.run(graph.ainvoke({"query": "weather"})))
+# {'query': 'weather', 'answer': 'result for weather', 'last_error': 'summarise: ValueError: bad payload'}
+print("fetch attempts:", calls["fetch"])   # 3
+```
+
+The same policies apply to Functional API tasks: `@task(retry_policy=..., cache_policy=..., timeout=...)`. See the [Functional API reference](/langgraph-guide/python/reference-functional-api/).
 
 ## `add_edge`
 
@@ -249,7 +379,7 @@ Raises `ValueError` if the start is `END`, the end is `START`, or a named node i
 
 ## `add_conditional_edges`
 
-```python
+```text
 builder.add_conditional_edges(
     source: str,
     path: Callable[..., Hashable | Sequence[Hashable]],
@@ -262,7 +392,7 @@ builder.add_conditional_edges(
 - a single node name → routes there,
 - a list of node names → fan-out to all,
 - one or more `Send(node, arg)` instances → map-reduce with custom per-destination state,
-- the string `"END"` or `END` → stop.
+- `END` (the string `"__end__"`) → stop. The literal string `"END"` is treated as a node name and fails.
 
 If your `path` returns arbitrary labels, map them to node names with `path_map`. Adding a `Literal[...]` return annotation or passing `path_map` keeps the Mermaid diagram accurate — without either, the visualizer assumes every node is reachable.
 
@@ -289,99 +419,9 @@ builder.set_conditional_entry_point(
 )
 ```
 
-## `set_node_defaults`
-
-```python
-builder.set_node_defaults(
-    *,
-    retry_policy: RetryPolicy | Sequence[RetryPolicy] | None = None,
-    cache_policy: CachePolicy | None = None,
-    error_handler: StateNode | None = None,
-    timeout: float | timedelta | TimeoutPolicy | None = None,
-) -> Self
-```
-
-Set default policies that apply to **every node** in the graph. Per-node values on `add_node(...)` always override these defaults. Defaults are resolved at compile time. They are **not** inherited by subgraphs.
-
-| Parameter | Applies to | Notes |
-|---|---|---|
-| `retry_policy` | All nodes (including error-handler nodes) | Same as `add_node(..., retry_policy=...)` |
-| `cache_policy` | Regular nodes only | Caching error-handler results is unsafe — skipped automatically |
-| `error_handler` | Regular nodes (not error-handler nodes) | Default error handler when a regular node raises and no per-node handler is set |
-| `timeout` | All nodes (including error-handler nodes) | Accepts `float` (seconds), `timedelta`, or `TimeoutPolicy` |
-
-```python
-from langgraph.graph import StateGraph, START, END
-from langgraph.types import RetryPolicy, TimeoutPolicy
-from langgraph.checkpoint.memory import InMemorySaver
-from typing_extensions import TypedDict
-
-
-class State(TypedDict):
-    count: int
-    last_error: str
-
-
-# Graph-wide fallback handler for unhandled exceptions
-def global_error_handler(state: State, error: Exception) -> dict:
-    return {"last_error": f"{type(error).__name__}: {error}"}
-
-
-def flaky_node(state: State) -> dict:
-    if state["count"] % 3 == 0:
-        raise ConnectionError("simulated transient failure")
-    return {"count": state["count"] + 1}
-
-
-def finalize(state: State) -> dict:
-    return {}
-
-
-builder = (
-    StateGraph(State)
-    # Apply defaults to every node: 3 retries on any exception, 10 s timeout,
-    # and a global error handler for unhandled failures.
-    .set_node_defaults(
-        retry_policy=RetryPolicy(max_attempts=3),
-        timeout=10.0,
-        error_handler=global_error_handler,
-    )
-    .add_node("flaky", flaky_node)
-    .add_node("finalize", finalize,
-              retry_policy=RetryPolicy(max_attempts=1))  # overrides the graph default
-    .add_edge(START, "flaky")
-    .add_edge("flaky", "finalize")
-    .add_edge("finalize", END)
-)
-
-graph = builder.compile(checkpointer=InMemorySaver())
-result = graph.invoke({"count": 0, "last_error": ""}, {"configurable": {"thread_id": "t1"}})
-print(result)
-```
-
-Per-node `retry_policy=RetryPolicy(max_attempts=1)` on `"finalize"` **overrides** the graph-level `max_attempts=3`. The `error_handler` and `timeout` from `set_node_defaults` still apply to `"finalize"` because no per-node override was given for those.
-
-`set_node_defaults` returns `Self` for method chaining:
-
-```python
-builder = (
-    StateGraph(State)
-    .set_node_defaults(
-        retry_policy=RetryPolicy(max_attempts=3, retry_on=ConnectionError),
-        error_handler=my_fallback,
-    )
-    .add_node("a", node_a)
-    .add_node("b", node_b, retry_policy=RetryPolicy(max_attempts=1))  # overrides
-    .add_edge(START, "a")
-    .add_edge("a", "b")
-    .add_edge("b", END)
-)
-graph = builder.compile()
-```
-
 ## `compile(...)`
 
-```python
+```text
 graph = builder.compile(
     checkpointer=None,       # BaseCheckpointSaver | True | False | None
     *,
@@ -391,6 +431,7 @@ graph = builder.compile(
     interrupt_after=None,    # list[str] | "*" | None
     debug=False,
     name=None,
+    transformers=None,       # stream transformers for the v3 streaming API
 )
 ```
 
@@ -404,7 +445,7 @@ Returns a `CompiledStateGraph`, which exposes (all inherited from `Pregel`):
 | Method | Purpose |
 |---|---|
 | `invoke(input, config=None, *, context=None, stream_mode=None, interrupt_before=None, interrupt_after=None, durability=None, version="v1")` | Run to completion, return final state. |
-| `stream(...)` | Yield per-step events (see the [Streaming modes reference](./reference-streaming-modes/)). |
+| `stream(...)` | Yield per-step events (see the [Streaming modes reference](/langgraph-guide/python/reference-streaming-modes/)). |
 | `ainvoke` / `astream` | Async variants. |
 | `get_state(config, *, subgraphs=False)` | Return the current `StateSnapshot` for a thread. Requires a checkpointer. |
 | `get_state_history(config, *, filter=None, before=None, limit=None)` | Iterate historical snapshots (newest first). |
@@ -431,20 +472,37 @@ Pass `durability="sync" | "async" | "exit"` on `invoke`/`stream`. Semantics:
 
 ```python
 from dataclasses import dataclass
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START
 from langgraph.runtime import Runtime
+from langgraph.store.memory import InMemoryStore
+
 
 @dataclass
 class Ctx:
     user_id: str
 
+
+class State(TypedDict, total=False):
+    greeting: str
+
+
 def node(state: State, runtime: Runtime[Ctx]) -> dict:
     uid = runtime.context.user_id
-    if runtime.store:
-        memory = runtime.store.get(("users",), uid)
-    return {...}
+    item = runtime.store.get(("users",), uid) if runtime.store else None
+    name = item.value["name"] if item else uid
+    return {"greeting": f"Hello, {name}"}
 
-graph = StateGraph(State, context_schema=Ctx).add_node(node).compile()
-graph.invoke({...}, context=Ctx(user_id="alice"))
+
+store = InMemoryStore()
+store.put(("users",), "alice", {"name": "Alice"})
+graph = (
+    StateGraph(State, context_schema=Ctx)
+    .add_node(node)
+    .add_edge(START, "node")
+    .compile(store=store)
+)
+print(graph.invoke({}, context=Ctx(user_id="alice")))   # {'greeting': 'Hello, Alice'}
 ```
 
 Runtime fields:
@@ -457,7 +515,7 @@ Runtime fields:
 | `heartbeat` | `() -> None` | Signals progress to reset an idle timeout (see `TimeoutPolicy`). No-op outside an idle-timed attempt. |
 | `previous` | `Any` | Functional API only — the last saved return value for this thread. |
 | `execution_info` | `ExecutionInfo \| None` | Read-only metadata for the current node run (see below). |
-| `server_info` | `ServerInfo \| None` | Set by LangGraph Platform only; `None` when running open-source. |
+| `server_info` | `ServerInfo \| None` | Set only in the LangGraph Agent Server; `None` otherwise. |
 | `control` | `RunControl \| None` | Run-scoped cooperative draining handle (see below). |
 
 To get the config instead, add `config: RunnableConfig` as a parameter or call `get_config()` from `langgraph.config`.
@@ -575,11 +633,12 @@ def dispatch(state: State) -> list[Send]:
 
 builder.add_conditional_edges("planner", dispatch)
 builder.add_node("worker", worker_fn)
-builder.add_edge("worker", "aggregate")
-builder.add_edge(["planner", "worker"], "aggregate")   # barrier: wait for all workers
+builder.add_edge("worker", "aggregate")   # aggregate runs once, after every worker in the step has finished
 ```
 
 ### 2. Deferred finalization
+
+Retry, cache and timeout patterns are in [Node policies](#node-policies).
 
 ```python
 builder.add_node("summarize", summarize_fn, defer=True)
@@ -589,33 +648,7 @@ builder.add_edge("write", "summarize")
 # `summarize` runs last, after every other task in the run has drained.
 ```
 
-### 3. Per-node retry on transient HTTP errors
-
-```python
-import httpx
-from langgraph.types import RetryPolicy
-
-builder.add_node(
-    "fetch",
-    fetch_fn,
-    retry_policy=RetryPolicy(
-        max_attempts=5,
-        retry_on=(httpx.TransportError, httpx.HTTPStatusError),
-    ),
-)
-```
-
-### 4. Cached expensive step
-
-```python
-from langgraph.cache.memory import InMemoryCache
-from langgraph.types import CachePolicy
-
-builder.add_node("embed", embed_fn, cache_policy=CachePolicy(ttl=3600))
-graph = builder.compile(cache=InMemoryCache(), checkpointer=InMemorySaver())
-```
-
-### 5. Narrow node input with `input_schema`
+### 3. Narrow node input with `input_schema`
 
 ```python
 class QueryOnly(TypedDict):
@@ -629,43 +662,7 @@ builder.add_node("classify", classify, input_schema=QueryOnly)
 
 The node cannot read unrelated channels and stays cheap to trace.
 
-### 6. Async node with idle timeout + heartbeat
-
-For nodes that stream from an LLM or process long lists, use `idle_timeout` so stalled attempts are cancelled before the hard wall-clock cap fires:
-
-```python
-import asyncio
-from langgraph.types import TimeoutPolicy, RetryPolicy
-from langgraph.runtime import Runtime
-from typing_extensions import TypedDict
-
-
-class BatchState(TypedDict):
-    items: list[str]
-    results: list[str]
-
-
-async def process_batch(state: BatchState, runtime: Runtime) -> dict:
-    results = []
-    for item in state["items"]:
-        # Expensive per-item work
-        result = await asyncio.to_thread(expensive_cpu_work, item)
-        results.append(result)
-        # Reset the idle clock after each item
-        runtime.heartbeat()
-    return {"results": results}
-
-
-builder.add_node(
-    "process",
-    process_batch,
-    # Abort if no progress for 20 s; retry up to 3 times
-    timeout=TimeoutPolicy(idle_timeout=20.0, refresh_on="heartbeat"),
-    retry_policy=RetryPolicy(max_attempts=3, retry_on=asyncio.TimeoutError),
-)
-```
-
-### 7. Reading `ExecutionInfo` for per-node tracing
+### 4. Reading `ExecutionInfo` for per-node tracing
 
 Correlate a node's LangSmith run with your own observability system using `execution_info`:
 
@@ -695,7 +692,7 @@ def traced_node(state: State, runtime: Runtime) -> dict:
     return {"answer": answer}
 ```
 
-### 8. Pydantic state schema
+### 5. Pydantic state schema
 
 `StateGraph` accepts a Pydantic `BaseModel` as its state schema. Since v1.1, `invoke()` coerces dict inputs to the model before nodes run, so nodes receive a typed instance.
 
@@ -737,7 +734,7 @@ result = graph.invoke({"text": "LangGraph builds stateful multi-actor apps with 
 print(result)  # {'text': '...', 'word_count': 8, 'tags': ['short']}
 ```
 
-### 9. Narrowing I/O with `input_schema` and `output_schema`
+### 6. Narrowing I/O with `input_schema` and `output_schema`
 
 `input_schema` restricts what callers must pass; `output_schema` restricts what the graph returns. Internal channels that are not in `output_schema` are stripped from the final result.
 
@@ -788,7 +785,7 @@ print(result)   # {'cleaned_text': 'hello world', 'word_count': 2}
 # '_internal_flag' is NOT present — stripped by output_schema
 ```
 
-### 10. Chaining nodes with `add_sequence`
+### 7. Chaining nodes with `add_sequence`
 
 `add_sequence` wires a list of nodes sequentially: node[0] → node[1] → … → node[n]. It uses each callable's `__name__` as the node name; pass `(name, fn)` tuples for explicit names.
 
@@ -837,7 +834,7 @@ builder.add_sequence([
 ])
 ```
 
-### 11. Streaming custom events with `StreamWriter`
+### 8. Streaming custom events with `StreamWriter`
 
 Nodes can push arbitrary values to `stream_mode="custom"` by declaring a `writer: StreamWriter` parameter:
 
@@ -891,8 +888,8 @@ for mode, data in graph.stream(
 - **`config_schema=` is deprecated**, but still accepted. Rename to `context_schema=` before v2.0.
 - **`AgentState` / `AgentStatePydantic`** in `langgraph.prebuilt` are **deprecated** as of v1.0 — their top-level re-export was removed from `langgraph.prebuilt.__init__`, but both are still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled for removal in v2.0.0. Use `MessagesState` (built-in) or a custom `TypedDict` with an `add_messages`-annotated field for new code.
 - **Root graphs cannot have `checkpointer=True`.** That value is only for subgraphs inheriting from the parent.
-- **`destinations=` does not route** — it only labels edges in the rendered diagram for nodes that return `Command(goto=...)`.
-- **`TimeoutPolicy` only works on async nodes.** Setting `timeout=` on a synchronous node raises `ValueError` at node registration. Convert the node to `async` or wrap it with `asyncio.to_thread`.
+- **`destinations=` does not route**, but its targets must exist in the same graph: `compile()` raises `Found edge ending at unknown node` otherwise.
+- **`TimeoutPolicy` only works on async nodes.** `add_node` accepts a timeout on a sync node; `compile()` then raises `ValueError`. Convert the node to `async` and use `asyncio.to_thread` for blocking work.
 - **`runtime.heartbeat()` is a no-op without `refresh_on="heartbeat"`.** Under `refresh_on="auto"` (default), progress is detected automatically from callbacks and stream writes; calling `heartbeat()` is still valid but redundant.
 - **`runtime.execution_info` is `None` briefly during startup.** Don't access it in lifecycle hooks that run before task preparation.
 - **`RunControl` can be pre-created and injected.** Pass `control=RunControl()` to `graph.invoke()` so external code (e.g. a SIGTERM handler) can call `control.request_drain()` before the run begins. If omitted, the executor creates one internally.

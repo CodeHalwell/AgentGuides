@@ -1,23 +1,23 @@
 ---
 title: "LlamaIndex Recipes and Practical Examples"
-description: "Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems."
-framework: llamaindex
-language: python
+description: "Worked LlamaIndex examples, from a basic RAG chatbot to document comparison, SQL, extraction and multi-step agents."
+sidebar:
+  label: "Recipes"
+framework: "llamaindex"
+language: "python"
 ---
 
-# LlamaIndex Recipes and Practical Examples
-
-Real-world recipes for building LlamaIndex applications: from simple RAG chatbots to complex multi-agent systems.
+> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). Agents use the workflow-based `FunctionAgent`, whose `run()` is asynchronous — each recipe exposes an `async` entry point and calls it with `asyncio.run(...)`. Model names are examples.
 
 ---
 
 ## Table of Contents
 
 1. [Basic RAG Chatbot](#basic-rag-chatbot)
-2. [Research Paper Analyzer](#research-paper-analyzer)
+2. [Research paper analyser](#research-paper-analyser)
 3. [Code Documentation Assistant](#code-documentation-assistant)
 4. [Multi-Document Comparison Engine](#multi-document-comparison-engine)
-5. [Real-time News Analysis Agent](#real-time-news-analysis-agent)
+5. [Real-time news analysis agent](#real-time-news-analysis-agent)
 6. [Data Extraction Pipeline](#data-extraction-pipeline)
 7. [Conversational SQL Agent](#conversational-sql-agent)
 8. [Knowledge Graph Builder](#knowledge-graph-builder)
@@ -44,10 +44,8 @@ from llama_index.core import (
 )
 from llama_index.llms.openai import OpenAI
 from llama_index.embeddings.openai import OpenAIEmbedding
-from llama_index.core.memory import ChatMemoryBuffer
-
 def setup_rag_chatbot(documents_dir: str = "./documents"):
-    """Setup RAG chatbot with memory."""
+    """Set up a RAG chatbot with conversation memory."""
     
     # Load documents
     documents = SimpleDirectoryReader(
@@ -63,7 +61,7 @@ def setup_rag_chatbot(documents_dir: str = "./documents"):
     embed_model = OpenAIEmbedding(
         model="text-embedding-3-large"
     )
-    llm = OpenAI(model="gpt-4", temperature=0.7)
+    llm = OpenAI(model="%%model=openai-small%%")
     
     # Create index
     index = VectorStoreIndex.from_documents(
@@ -72,21 +70,19 @@ def setup_rag_chatbot(documents_dir: str = "./documents"):
         show_progress=True,
     )
     
-    # Setup memory
-    memory = ChatMemoryBuffer.from_defaults(token_limit=4096)
-    
-    # Create query engine
-    query_engine = index.as_query_engine(
+    # A chat engine keeps the conversation history and condenses
+    # follow-up questions before retrieving (query engines are stateless)
+    chat_engine = index.as_chat_engine(
+        chat_mode="condense_plus_context",
         llm=llm,
-        memory=memory,
         similarity_top_k=3,
     )
     
-    return query_engine
+    return chat_engine
 
 def run_chatbot():
     """Run interactive chatbot."""
-    query_engine = setup_rag_chatbot()
+    chat_engine = setup_rag_chatbot()
     
     print("=" * 50)
     print("RAG Chatbot Ready! Type 'exit' to quit.")
@@ -102,12 +98,12 @@ def run_chatbot():
         if not user_input:
             continue
         
-        response = query_engine.query(user_input)
+        response = chat_engine.chat(user_input)
         
         print(f"\nAssistant: {response.response}")
         print("\nSources:")
         for node in response.source_nodes:
-            print(f"  - {node.text[:100]}...")
+            print(f"  - {node.node.get_content()[:100]}...")
 
 if __name__ == "__main__":
     run_chatbot()
@@ -117,8 +113,6 @@ if __name__ == "__main__":
 
 ```yaml
 # docker-compose.yml for RAG chatbot
-version: '3.8'
-
 services:
   chatbot:
     build: .
@@ -133,7 +127,7 @@ services:
 
 ---
 
-## Research Paper Analyzer
+## Research paper analyser
 
 ### Analysing Academic Papers
 
@@ -147,9 +141,10 @@ from llama_index.core import (
     VectorStoreIndex,
     Document,
 )
-from llama_index.readers.file.pdf import PDFReader
+from llama_index.readers.file import PDFReader  # pip install llama-index-readers-file
 from llama_index.core.tools import QueryEngineTool, FunctionTool
-from llama_index.core.workflow import AgentWorkflow
+from llama_index.core.agent.workflow import FunctionAgent
+import asyncio
 from llama_index.llms.openai import OpenAI
 import os
 from pathlib import Path
@@ -159,7 +154,7 @@ class ResearchPaperAnalyzer:
     
     def __init__(self, papers_dir: str):
         self.papers_dir = papers_dir
-        self.llm = OpenAI(model="gpt-4")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.indexes = {}
         self.query_engines = {}
     
@@ -204,8 +199,8 @@ class ResearchPaperAnalyzer:
             tools.append(tool)
         
         # Analysis tool
-        def compare_papers(aspect: str, paper_names: list) -> str:
-            """Compare papers on specific aspect."""
+        def compare_papers(aspect: str, paper_names: list[str]) -> dict:
+            """Compare the named papers on a specific aspect."""
             results = {}
             for paper_name in paper_names:
                 if paper_name in self.query_engines:
@@ -222,19 +217,18 @@ class ResearchPaperAnalyzer:
         ))
         
         # Create agent
-        agent = AgentWorkflow.from_tools(
+        agent = FunctionAgent(
             tools=tools,
             llm=self.llm,
-            verbose=True,
         )
         
         return agent
     
-    def analyze(self, query: str):
+    async def analyze(self, query: str) -> str:
         """Analyse query across papers."""
         agent = self.create_agent()
-        response = agent.run(query)
-        return response
+        response = await agent.run(user_msg=query)
+        return str(response)
 
 # Usage
 if __name__ == "__main__":
@@ -242,9 +236,9 @@ if __name__ == "__main__":
     analyzer.load_papers()
     
     # Analyse
-    result = analyzer.analyze(
+    result = asyncio.run(analyzer.analyze(
         "Compare the methodology across papers"
-    )
+    ))
     print(f"\nAnalysis Result:\n{result}")
 ```
 
@@ -365,6 +359,7 @@ from llama_index.core import (
 from llama_index.core.query_engine import (
     SubQuestionQueryEngine,
 )
+from llama_index.core.question_gen import LLMQuestionGenerator
 from llama_index.core.tools import QueryEngineTool
 from llama_index.llms.openai import OpenAI
 
@@ -379,7 +374,7 @@ class MultiDocumentComparison:
         self.documents_dict = documents_dict
         self.indexes = {}
         self.query_engines = {}
-        self.llm = OpenAI(model="gpt-4")
+        self.llm = OpenAI(model="%%model=openai-small%%")
     
     def create_indexes(self):
         """Create indexes for each document group."""
@@ -408,6 +403,9 @@ class MultiDocumentComparison:
         
         self.comparison_engine = SubQuestionQueryEngine.from_defaults(
             query_engine_tools=tools,
+            # explicit: the default generator needs llama-index-question-gen-openai,
+            # which cannot be installed alongside current releases
+            question_gen=LLMQuestionGenerator.from_defaults(llm=self.llm),
             llm=self.llm,
         )
     
@@ -451,9 +449,9 @@ if __name__ == "__main__":
 
 ---
 
-## Real-time News Analysis Agent
+## Real-time news analysis agent
 
-### Analyzing News with External Tools
+### Analysing news with external tools
 
 ```python
 """
@@ -461,7 +459,8 @@ news_analysis_agent.py
 Analyze news in real-time with agent
 """
 
-from llama_index.core.workflow import AgentWorkflow
+from llama_index.core.agent.workflow import FunctionAgent
+import asyncio
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import feedparser
@@ -470,7 +469,7 @@ class NewsAnalysisAgent:
     """Analyse news using agents."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-4")
+        self.llm = OpenAI(model="%%model=openai-small%%")
     
     def fetch_rss_feed(self, feed_url: str, limit: int = 5) -> str:
         """Fetch latest articles from RSS feed."""
@@ -522,27 +521,26 @@ class NewsAnalysisAgent:
             ),
         ]
         
-        agent = AgentWorkflow.from_tools(
+        agent = FunctionAgent(
             tools=tools,
             llm=self.llm,
-            verbose=True,
         )
         
         return agent
     
-    def analyze_news(self, query: str) -> str:
+    async def analyze_news(self, query: str) -> str:
         """Analyse news based on query."""
         agent = self.create_agent()
-        response = agent.run(query)
-        return response
+        response = await agent.run(user_msg=query)
+        return str(response)
 
 # Usage
 if __name__ == "__main__":
     analyzer = NewsAnalysisAgent()
     
-    result = analyzer.analyze_news(
+    result = asyncio.run(analyzer.analyze_news(
         "Fetch the latest tech news and analyse the sentiment"
-    )
+    ))
     print(f"\nAnalysis:\n{result}")
 ```
 
@@ -575,15 +573,15 @@ class ExtractionPipeline:
     """Extract structured data from documents."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-4")
-        self.parser = PydanticOutputParser(output_class=Person)
+        self.llm = OpenAI(model="%%model=openai-small%%")
+        self.parser = PydanticOutputParser(output_cls=Person)
     
     def extract_from_text(self, text: str) -> Person:
         """Extract person information from text."""
         prompt = f"""Extract person information from this text:
 {text}
 
-{self.parser.format_instructions()}"""
+{self.parser.get_format_string()}"""
         
         response = self.llm.complete(prompt)
         parsed = self.parser.parse(str(response))
@@ -637,6 +635,8 @@ if __name__ == "__main__":
     print(f"Extracted: {result}")
 ```
 
+With a tool-calling model, `llm.structured_predict(Person, PromptTemplate("Extract the person from: {text}"), text=text)` does the same job without hand-written format instructions and is more reliable.
+
 ---
 
 ## Conversational SQL Agent
@@ -649,7 +649,8 @@ sql_agent.py
 Query databases using natural language
 """
 
-from llama_index.core.workflow import AgentWorkflow
+from llama_index.core.agent.workflow import FunctionAgent
+import asyncio
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 import sqlite3
@@ -660,8 +661,12 @@ class SQLAgent:
     
     def __init__(self, db_path: str):
         self.db_path = db_path
-        self.llm = OpenAI(model="gpt-4")
-        self.connection = sqlite3.connect(db_path)
+        self.llm = OpenAI(model="%%model=openai-small%%")
+        # Open read-only: the keyword filter below is a convenience, not a security boundary.
+        # check_same_thread=False because the agent runs sync tools in a worker thread.
+        self.connection = sqlite3.connect(
+            f"file:{db_path}?mode=ro", uri=True, check_same_thread=False
+        )
         self.cursor = self.connection.cursor()
     
     def get_schema(self) -> str:
@@ -737,28 +742,29 @@ Return only the SQL query."""
             ),
         ]
         
-        agent = AgentWorkflow.from_tools(
+        agent = FunctionAgent(
             tools=tools,
             llm=self.llm,
             system_prompt="You are a helpful database assistant. Help users query the database.",
-            verbose=True,
         )
         
         return agent
     
-    def query(self, question: str) -> str:
+    async def query(self, question: str) -> str:
         """Query database conversationally."""
         agent = self.create_agent()
-        response = agent.run(question)
-        return response
+        response = await agent.run(user_msg=question)
+        return str(response)
 
 # Usage
 if __name__ == "__main__":
     agent = SQLAgent("./database.db")
     
-    result = agent.query("How many users registered last month?")
+    result = asyncio.run(agent.query("How many users registered last month?"))
     print(f"Result: {result}")
 ```
+
+For a ready-made alternative, `NLSQLTableQueryEngine` (with `SQLDatabase` from `llama_index.core`) does schema-aware text-to-SQL and can be wrapped in a `QueryEngineTool`.
 
 ---
 
@@ -766,19 +772,16 @@ if __name__ == "__main__":
 
 ### Building Knowledge Graphs from Documents
 
-
 ```python
-
 """
 knowledge_graph_builder.py
 Extract and build knowledge graphs from documents
 """
 
-from llama_index.core import Document
+from llama_index.core import Document, PromptTemplate
 from llama_index.llms.openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from typing import List
-import json
 
 class Entity(BaseModel):
     name: str
@@ -797,7 +800,7 @@ class KnowledgeGraphBuilder:
     """Build knowledge graphs from text."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-4")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.graph = {
             "entities": {},
             "relationships": []
@@ -805,37 +808,17 @@ class KnowledgeGraphBuilder:
     
     def extract_entities_and_relations(self, text: str) -> KnowledgeGraph:
         """Extract entities and relationships from text."""
-        
-        prompt = f"""Extract entities and relationships from this text:
-{text}
-
-Return as JSON with this structure:
-{{
-  "entities": [
-    {{"name": "Entity Name", "entity_type": "type"}},
-    ...
-  ],
-  "relationships": [
-    {{"source": "Entity1", "target": "Entity2", "relationship_type": "type"}},
-    ...
-  ]
-}}"""
-        
-        response = self.llm.complete(prompt)
-        
         try:
-            # Parse JSON from response
-            import json
-            json_str = str(response)
-            # Extract JSON from response
-            start = json_str.find('{')
-            end = json_str.rfind('}') + 1
-            data = json.loads(json_str[start:end])
-            
-            return KnowledgeGraph(**data)
-        
+            return self.llm.structured_predict(
+                KnowledgeGraph,
+                PromptTemplate(
+                    "Extract the entities (people, organisations, places, concepts) "
+                    "and the relationships between them from this text:\n{text}"
+                ),
+                text=text,
+            )
         except Exception as e:
-            print(f"Error parsing: {e}")
+            print(f"Extraction failed: {e}")
             return KnowledgeGraph(entities=[], relationships=[])
     
     def add_documents(self, documents: List[Document]):
@@ -897,8 +880,9 @@ if __name__ == "__main__":
     
     # Save
     builder.save_graph("knowledge_graph.dot")
-
 ```
+
+To query the graph rather than just draw it, use `PropertyGraphIndex`, which runs similar extraction during ingestion and supports graph-aware retrieval; see [property graphs](/llamaindex-guide/python/llamaindex_comprehensive_guide/#39-property-graphs).
 
 
 ---
@@ -913,7 +897,8 @@ multi_step_reasoning_agent.py
 Agent that can reason through complex problems
 """
 
-from llama_index.core.workflow import AgentWorkflow
+from llama_index.core.agent.workflow import FunctionAgent
+import asyncio
 from llama_index.core.tools import FunctionTool
 from llama_index.llms.openai import OpenAI
 
@@ -921,7 +906,7 @@ class MultiStepReasoningAgent:
     """Agent for multi-step reasoning."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-4")
+        self.llm = OpenAI(model="%%model=openai-small%%")
         self.reasoning_steps = []
     
     # Step 1: Information gathering
@@ -978,27 +963,26 @@ class MultiStepReasoningAgent:
 
 Use the tools in this order and explain your reasoning at each step."""
         
-        agent = AgentWorkflow.from_tools(
+        agent = FunctionAgent(
             tools=tools,
             llm=self.llm,
             system_prompt=system_prompt,
-            verbose=True,
         )
         
         return agent
     
-    def solve(self, problem: str) -> str:
+    async def solve(self, problem: str) -> str:
         """Solve complex problem with multi-step reasoning."""
         agent = self.create_agent()
-        response = agent.run(problem)
-        return response
+        response = await agent.run(user_msg=problem)
+        return str(response)
 
 # Usage
 if __name__ == "__main__":
     agent = MultiStepReasoningAgent()
     
     problem = "How should a startup enter the AI market?"
-    result = agent.solve(problem)
+    result = asyncio.run(agent.solve(problem))
     
     print(f"Solution:\n{result}")
 ```
@@ -1009,14 +993,15 @@ if __name__ == "__main__":
 
 ### Intelligent Support Ticket Routing
 
+Triage is a fixed sequence of three independent classifications, so it does not need an agent loop at all: run the three LLM calls concurrently. (Earlier versions of this recipe ran an agent and then repeated every call by hand.)
+
 ```python
 """
 support_triage_agent.py
 Triage customer support tickets
 """
 
-from llama_index.core.workflow import AgentWorkflow
-from llama_index.core.tools import FunctionTool
+import asyncio
 from llama_index.llms.openai import OpenAI
 from enum import Enum
 from dataclasses import dataclass
@@ -1044,103 +1029,50 @@ class SupportTriageAgent:
     """Triage support tickets using AI."""
     
     def __init__(self):
-        self.llm = OpenAI(model="gpt-4")
+        self.llm = OpenAI(model="%%model=openai-small%%")
     
-    def assess_urgency(self, ticket: str) -> str:
+    async def assess_urgency(self, ticket: str) -> str:
         """Assess urgency of ticket."""
         prompt = f"""Assess the urgency of this support ticket:
 {ticket}
 
 Return: LOW, MEDIUM, HIGH, or CRITICAL"""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip().upper()
     
-    def categorize_issue(self, ticket: str) -> str:
+    async def categorize_issue(self, ticket: str) -> str:
         """Categorize issue type."""
         prompt = f"""Categorize this support issue:
 {ticket}
 
 Return one of: BILLING, TECHNICAL, SALES, GENERAL"""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip().upper()
     
-    def draft_response(self, ticket: str) -> str:
+    async def draft_response(self, ticket: str) -> str:
         """Draft initial response to customer."""
         prompt = f"""Write a professional initial response to this support ticket:
 {ticket}
 
 Keep it brief (2-3 sentences) and empathetic."""
         
-        response = self.llm.complete(prompt)
+        response = await self.llm.acomplete(prompt)
         return str(response).strip()
     
-    def create_agent(self):
-        """Create triage agent."""
-        
-        tools = [
-            FunctionTool.from_defaults(
-                fn=self.assess_urgency,
-                name="assess_urgency",
-                description="Assess ticket urgency",
-            ),
-            FunctionTool.from_defaults(
-                fn=self.categorize_issue,
-                name=" categorize_issue",
-                description="Categorize issue type",
-            ),
-            FunctionTool.from_defaults(
-                fn=self.draft_response,
-                name="draft_response",
-                description="Draft response to customer",
-            ),
-        ]
-        
-        system_prompt = """You are a support ticket triage agent. For each ticket:
-1. Assess urgency
-2. Categorize the issue
-3. Draft an appropriate response
-
-Be thorough but efficient."""
-        
-        agent = AgentWorkflow.from_tools(
-            tools=tools,
-            llm=self.llm,
-            system_prompt=system_prompt,
-            verbose=True,
+    async def triage(self, ticket_id: str, ticket_text: str) -> TriagedTicket:
+        """Triage a support ticket: classify urgency and department, then draft a reply."""
+        urgency, category, suggestion = await asyncio.gather(
+            self.assess_urgency(ticket_text),
+            self.categorize_issue(ticket_text),
+            self.draft_response(ticket_text),
         )
-        
-        return agent
-    
-    def triage(self, ticket_id: str, ticket_text: str) -> TriagedTicket:
-        """Triage a support ticket."""
-        agent = self.create_agent()
-        response = agent.run(f"Triage this ticket:\n{ticket_text}")
-        
-        # Parse response (simplified)
-        urgency = self.assess_urgency(ticket_text)
-        category = self.categorize_issue(ticket_text)
-        suggestion = self.draft_response(ticket_text)
-        
-        priority_map = {
-            "CRITICAL": Priority.CRITICAL,
-            "HIGH": Priority.HIGH,
-            "MEDIUM": Priority.MEDIUM,
-            "LOW": Priority.LOW,
-        }
-        
-        dept_map = {
-            "BILLING": Department.BILLING,
-            "TECHNICAL": Department.TECHNICAL,
-            "SALES": Department.SALES,
-            "GENERAL": Department.GENERAL,
-        }
         
         return TriagedTicket(
             ticket_id=ticket_id,
-            priority=priority_map.get(urgency, Priority.MEDIUM),
-            department=dept_map.get(category, Department.GENERAL),
+            priority=Priority.__members__.get(urgency, Priority.MEDIUM),
+            department=Department.__members__.get(category, Department.GENERAL),
             suggested_response=suggestion,
         )
 
@@ -1153,7 +1085,7 @@ if __name__ == "__main__":
     This is affecting my work. Please help ASAP!
     """
     
-    result = agent.triage("TICKET-001", ticket)
+    result = asyncio.run(agent.triage("TICKET-001", ticket))
     
     print(f"Ticket ID: {result.ticket_id}")
     print(f"Priority: {result.priority.name}")
@@ -1163,6 +1095,6 @@ if __name__ == "__main__":
 
 ---
 
-These recipes provide ready-to-use implementations for common LlamaIndex use cases. Each can be customised and extended based on specific requirements.
+These recipes are starting points; adapt the prompts, models and storage to your data.
 
 

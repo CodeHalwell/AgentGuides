@@ -1,11 +1,9 @@
 ---
 title: "Microsoft Agent Framework (Python) — Sessions & history"
-description: "AgentSession, HistoryProvider, InMemoryHistoryProvider, FileHistoryProvider, register_state_type, multi-provider audit logs, and serializing sessions across processes. APIs stable from agent-framework-core 1.5.0; verified against 1.5.0."
-framework: microsoft-agent-framework
-language: python
+description: "AgentSession, HistoryProvider, InMemoryHistoryProvider, FileHistoryProvider, VectorStoreHistoryProvider, FileSessionStore, register_state_type, multi-provider audit logs, and serializing sessions across processes."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Sessions & history — Python
 
 A **session** is one logical conversation with an agent. The framework splits responsibilities cleanly:
 
@@ -15,7 +13,7 @@ A **session** is one logical conversation with an agent. The framework splits re
 | `HistoryProvider` (subclass) | The actual messages — read/write to disk, Redis, in-memory, … | Process-long, attached to the agent |
 | `Agent` | Orchestrates providers, threads `state` through them on every run | Process-long |
 
-This page walks the moving parts in `agent_framework._sessions` and the patterns that fall out of them. The public surface (`AgentSession`, `HistoryProvider`, `InMemoryHistoryProvider`, `FileHistoryProvider`, `register_state_type`) is stable as of `agent-framework-core==1.6.0`, which matches what the rest of this guide targets unless a section explicitly says otherwise.
+This page walks the moving parts in `agent_framework._sessions` and the patterns that fall out of them. `AgentSession`, `HistoryProvider`, `InMemoryHistoryProvider` and `register_state_type` are stable. `FileHistoryProvider` is experimental (`ExperimentalFeature.FILE_HISTORY`) and emits an `ExperimentalWarning` on first use, as do `FileSessionStore` (`SESSION_STORE`) and `VectorStoreHistoryProvider` (`VECTOR_STORES`). Examples are checked against `agent-framework` %%version=agent-framework%% (%%versions-checked%%).
 
 ## TL;DR
 
@@ -275,6 +273,36 @@ Two operational notes:
 - `dumps` **must** return a single-line `str` or `bytes` (no `\n` / `\r`) — the provider validates this and raises if you violate it. The output does not have to be JSON; any single-line representation that round-trips through `loads` to a mapping is accepted, which is what makes this encrypted-token pattern work.
 - Both callables must round-trip cleanly. Test with `loads(dumps(x)) == x` for a representative payload.
 
+## `VectorStoreHistoryProvider` — history in a vector store
+
+`VectorStoreHistoryProvider` (experimental, added in 1.19.0) keeps the transcript in a vector collection that the provider owns, on any `BaseVectorStore`: [`InMemoryStore`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#vector-stores) for tests, or a connector package in production. It works like the other history providers (load before the run, save after), and it can optionally embed every message and give the agent a `search_history` tool over the *full* transcript, even when compaction keeps only a slice in context.
+
+```python
+from agent_framework import Agent, InMemoryStore, SlidingWindowStrategy, VectorStoreHistoryProvider
+from agent_framework.openai import OpenAIChatClient, OpenAIEmbeddingClient
+
+history = VectorStoreHistoryProvider(
+    InMemoryStore(),
+    application_id="support-app",          # required; isolates this app's records
+    agent_id="support-bot",                # optional tenant_id= / agent_id= narrow the scope further
+    collection_name="chat-history-v1",     # required when embedding_generator is set
+    embedding_generator=OpenAIEmbeddingClient(model="text-embedding-3-small"),
+    embedding_options={"dimensions": 1536},  # required with an embedding generator
+    include_search_tool=True,              # adds search_history (needs embeddings)
+    compaction_strategy=SlidingWindowStrategy(keep_last_groups=20),  # only affects what is loaded
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Use search_history to recall anything older than the recent turns.",
+    context_providers=[history],
+)
+# await history.get_messages(session.session_id)  -> full scoped transcript
+# await history.clear(session.session_id)         -> delete it
+```
+
+Records are scoped by `application_id` + `tenant_id` + `agent_id` + `source_id` + session id. That stops accidental overlap but is **not** an authorization boundary, so use store credentials scoped to the tenant. `contents_format="msgpack"` stores message bodies compactly, and the `store_inputs` / `store_outputs` / `store_context_messages` / `store_context_from` flags work as they do on the other history providers. To let an agent search *your* domain data (not its own history), use `VectorCollectionContextProvider` instead.
+
 ## Agent lifecycle helpers
 
 ```python
@@ -449,6 +477,27 @@ async def chat(payload: dict) -> dict:
 ```
 
 Apply auth checks in the handler so users can only access sessions they own — `FileHistoryProvider` only protects you from path traversal, not authorisation.
+
+### Pattern 3 — persist whole session snapshots with `FileSessionStore`
+
+`FileSessionStore` (experimental) saves the complete `AgentSession`, including `state` and the messages an `InMemoryHistoryProvider` keeps there, as one file per session id. It's a single-host alternative to pattern 1 when you don't want to ship the blob to the client.
+
+```python
+from agent_framework import Agent, AgentSession, FileSessionStore, InMemoryHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+store = FileSessionStore("./session_snapshots", serialization_format="json")  # or "msgpack"
+agent = Agent(client=OpenAIChatClient(), context_providers=[InMemoryHistoryProvider()])
+
+
+async def chat(session_id: str, message: str) -> str:
+    session = await store.get(session_id) or AgentSession(session_id=session_id)
+    response = await agent.run(message, session=session)
+    await store.set(session_id, session)
+    return response.text
+```
+
+`get` returns `None` for an unknown id, and `delete` is a no-op when the file is missing. Session ids are validated (non-empty, at most 128 characters) and mapped to safe file names, so a hostile id can't escape `storage_path`. Writes are atomic (temp file + `os.replace`), but concurrent writers on different hosts are last-writer-wins and files aren't encrypted. Custom `state` types still need `register_state_type`.
 
 ## Common pitfalls
 

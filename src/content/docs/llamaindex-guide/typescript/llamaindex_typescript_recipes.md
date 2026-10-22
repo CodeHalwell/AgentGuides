@@ -1,24 +1,26 @@
 ---
 title: "LlamaIndex TypeScript Recipes"
-description: "Practical, production-ready recipes for @llamaindex/workflow 1.1.25 — RAG, multi-agent, streaming, analysis pipelines."
-framework: llamaindex
-language: typescript
+description: "Practical recipes for the LlamaIndex.TS workflow API — RAG, multi-agent, streaming and analysis pipelines (project now deprecated upstream)."
+framework: "llamaindex"
+language: "typescript"
+sidebar:
+  label: "Recipes"
 ---
 
-# LlamaIndex TypeScript Recipes
+**Practical patterns for the final LlamaIndex.TS releases** ([versions](/llamaindex-guide/typescript/#final-releases), checked %%versions-checked%%). All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.
 
-**Practical patterns for `@llamaindex/workflow` 1.1.25.** All code uses the functional API — `createWorkflow`, `workflowEvent`, `handle`, `run`. No class-based `extends Workflow` or `@step()` decorators.
+> **Deprecated upstream.** LlamaIndex.TS is no longer maintained and its npm packages are marked deprecated. These recipes still work with the final releases; see the [overview](/llamaindex-guide/typescript/) before starting a new project on it.
 
 **Install:**
 ```bash
-npm install @llamaindex/workflow @llamaindex/core zod
+npm install @llamaindex/workflow @llamaindex/core @llamaindex/openai zod     # Recipe 1 has its own install line
 ```
 
 ---
 
 ## Table of Contents
 
-1. [Basic RAG Chatbot](#recipe-1-basic-rag-chatbot)
+1. [RAG with VectorStoreIndex](#recipe-1-rag-with-vectorstoreindex)
 2. [Research Paper Analyser](#recipe-2-research-paper-analyser)
 3. [Code Documentation Generator](#recipe-3-code-documentation-generator)
 4. [Multi-Step Analysis Pipeline](#recipe-4-multi-step-analysis-pipeline)
@@ -31,65 +33,60 @@ npm install @llamaindex/workflow @llamaindex/core zod
 
 ---
 
-## Recipe 1: Basic RAG Chatbot
+## Recipe 1: RAG with VectorStoreIndex
 
-A minimal RAG pipeline using `createWorkflow` and `@llamaindex/openai`.
+Retrieval, answer synthesis and an agent tool from the `llamaindex` package. Because `llamaindex` pins its own versions of the scoped packages, install the matching `@llamaindex/workflow` (see [final releases](/llamaindex-guide/typescript/#final-releases)):
+
+```bash
+npm install llamaindex @llamaindex/openai @llamaindex/workflow@1.1.24
+```
 
 ```typescript
-import {
-  createWorkflow,
-  workflowEvent,
-  run,
-} from '@llamaindex/workflow';
-import { OpenAI } from '@llamaindex/openai';
+import { Document, Settings, VectorStoreIndex, storageContextFromDefaults } from 'llamaindex';
+import { OpenAI, OpenAIEmbedding } from '@llamaindex/openai';
+import { agent } from '@llamaindex/workflow';
 
-// Events
-const queryEv     = workflowEvent<{ query: string; topK?: number }>();
-const retrievedEv = workflowEvent<{ docs: string[]; scores: number[] }>();
-const stopEv      = workflowEvent<{ answer: string; docsUsed: number }>();
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
+Settings.llm = llm;
+Settings.embedModel = new OpenAIEmbedding({ model: 'text-embedding-3-small' });
 
-const llm = new OpenAI({ model: 'gpt-4o-mini', temperature: 0.2 });
+// Build once and persist; later runs load the same directory instead of re-embedding
+const storageContext = await storageContextFromDefaults({ persistDir: './storage' });
+const index = await VectorStoreIndex.fromDocuments(
+  [
+    new Document({ text: 'Holiday allowance is 25 days a year.', metadata: { file: 'leave.md' } }),
+    new Document({ text: 'Expenses are reimbursed within 30 days.', metadata: { file: 'expenses.md' } }),
+  ],
+  { storageContext },
+);
 
-// Build workflow
-const ragWorkflow = createWorkflow();
-
-ragWorkflow.handle([queryEv], async (ctx, ev) => {
-  // Replace with your vector store retriever
-  const docs = await retrieveDocuments(ev.data.query, ev.data.topK ?? 5);
-  return retrievedEv.with({ docs: docs.texts, scores: docs.scores });
-});
-
-ragWorkflow.handle([retrievedEv], async (ctx, ev) => {
-  const context = ev.data.docs
-    .map((d, i) => `[${i + 1}] ${d}`)
-    .join('\n');
-
-  const resp = await llm.complete({
-    prompt: `Answer using only the context below.\n\nContext:\n${context}\n\nQuestion: (from upstream event)`,
-  });
-
-  return stopEv.with({ answer: resp.text, docsUsed: ev.data.docs.length });
-});
-
-// Usage
-export async function askQuestion(query: string): Promise<string> {
-  const events = await run(ragWorkflow, queryEv.with({ query }))
-    .until(stopEv)
-    .toArray();
-  return events.find(e => stopEv.include(e))?.data.answer ?? '';
+// Retrieval only
+const retriever = index.asRetriever({ similarityTopK: 2 });
+for (const hit of await retriever.retrieve({ query: 'How much holiday do I get?' })) {
+  console.log(hit.score?.toFixed(3), hit.node.metadata.file);
 }
 
-// Stub
-async function retrieveDocuments(
-  query: string,
-  topK: number,
-): Promise<{ texts: string[]; scores: number[] }> {
-  return {
-    texts: [`Result for: ${query}`],
-    scores: [0.9],
-  };
-}
+// Retrieval + answer synthesis
+const queryEngine = index.asQueryEngine({ similarityTopK: 2 });
+const response = await queryEngine.query({ query: 'How much holiday do I get?' });
+console.log(response.toString(), response.sourceNodes?.length);
+
+// As a tool for a workflow agent
+const handbookAgent = agent({
+  llm,
+  tools: [
+    index.queryTool({
+      metadata: { name: 'handbook', description: 'Answers questions about the staff handbook.' },
+    }),
+  ],
+});
+const result = await handbookAgent.run('How long do expense claims take?');
+console.log(result.data.result);
 ```
+
+`storageContextFromDefaults({ persistDir })` writes the docstore, index store and vectors to JSON files. On later runs, build the same storage context and call `VectorStoreIndex.init({ storageContext })` to load the index without re-embedding. For larger corpora use one of the vector store integrations instead of the file store.
+
+The other recipes use only `@llamaindex/workflow`; replace their placeholder retrieval functions with `retriever.retrieve(...)` from this recipe.
 
 ---
 
@@ -118,7 +115,7 @@ const textEv     = workflowEvent<{ text: string }>();
 const parsedEv   = workflowEvent<{ paper: Paper }>();
 const reportEv   = workflowEvent<{ report: Paper & { analysedAt: string; wordCount: number } }>();
 
-const llm = new OpenAI({ model: 'gpt-4o' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const analyserWorkflow = createWorkflow();
 
@@ -160,7 +157,7 @@ export async function analysePaper(text: string) {
 
 ## Recipe 3: Code Documentation Generator
 
-Reads TypeScript source files and generates JSDoc-style documentation.
+Reads TypeScript source files and generates JSDoc-style documentation. It parses the files with the TypeScript compiler API, which is in `typescript` 5.x (`npm install typescript@5`); TypeScript 7 does not ship that JavaScript API.
 
 ```typescript
 import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
@@ -178,7 +175,7 @@ const sourceEv = workflowEvent<{ filePath: string }>();
 const funcsEv  = workflowEvent<{ functions: FunctionSignature[] }>();
 const docsEv   = workflowEvent<{ markdown: string }>();
 
-const llm = new OpenAI({ model: 'gpt-4o-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const docGenWorkflow = createWorkflow();
 
@@ -251,14 +248,14 @@ const enrichedEv  = workflowEvent<{
   sentiment: string;
 }>();
 
-// State to track processing stats
+// Per-run state (each run() gets a fresh copy; aggregate across runs yourself)
 const { withState } = createStatefulMiddleware<{ processed: number; failedIds: string[] }>(
   () => ({ processed: 0, failedIds: [] }),
 );
 
 const base     = createWorkflow();
 const pipeline = withState(base);
-const llm      = new OpenAI({ model: 'gpt-4o-mini' });
+const llm      = new OpenAI({ model: '%%model=openai-small%%' });
 
 // Step 1 — clean text
 pipeline.handle([rawEv], async (ctx, ev) => {
@@ -381,7 +378,6 @@ import {
   createWorkflow,
   workflowEvent,
   run,
-  or,
 } from '@llamaindex/workflow';
 import { createHash } from 'node:crypto';
 
@@ -446,38 +442,26 @@ export async function queryWithCache(cache: Cache, query: string) {
 Two `FunctionAgent` specialists that hand off between each other.
 
 ```typescript
-import {
-  FunctionAgent,
-  multiAgent,
-  startAgentEvent,
-  stopAgentEvent,
-} from '@llamaindex/workflow';
+import { FunctionAgent, multiAgent } from '@llamaindex/workflow';
 import { OpenAI } from '@llamaindex/openai';
 import { tool } from '@llamaindex/core/tools';
+import { z } from 'zod';
 
-const llm = new OpenAI({ model: 'gpt-4o' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 // Tool definitions
 const searchTool = tool({
   name: 'search',
   description: 'Search for information on a topic',
-  parameters: {
-    type: 'object' as const,
-    properties: { query: { type: 'string' } },
-    required: ['query'],
-  },
-  execute: async ({ query }: { query: string }) => `Search result: ${query}`,
+  parameters: z.object({ query: z.string() }),
+  execute: async ({ query }) => `Search result: ${query}`,
 });
 
 const summariseTool = tool({
   name: 'summarise',
   description: 'Summarise a block of text',
-  parameters: {
-    type: 'object' as const,
-    properties: { text: { type: 'string' } },
-    required: ['text'],
-  },
-  execute: async ({ text }: { text: string }) => `Summary of: ${text.substring(0, 80)}...`,
+  parameters: z.object({ text: z.string() }),
+  execute: async ({ text }) => `Summary of: ${text.substring(0, 80)}...`,
 });
 
 // Agents
@@ -506,11 +490,8 @@ const researchPipeline = multiAgent({
 });
 
 export async function runResearch(question: string) {
-  const events = await researchPipeline.run(question)
-    .until(stopAgentEvent)
-    .toArray();
-
-  return events.find(e => stopAgentEvent.include(e))?.data.result;
+  const stop = await researchPipeline.run(question);   // resolves to the stop event
+  return stop.data.result;
 }
 
 // runResearch('Latest developments in RAG pipelines?').then(console.log);
@@ -520,47 +501,37 @@ export async function runResearch(question: string) {
 
 ## Recipe 8: Stateful Conversation Workflow
 
-Maintains per-session message history across multiple turns.
+Maintains per-session message history across multiple turns. Each `run()` creates a fresh workflow context, so state set up with `createStatefulMiddleware` lasts for **one** run only; conversation history that must survive between turns belongs in your own session store (here a `Map`; in production Redis or a database), passed in with each turn.
 
 ```typescript
-import {
-  createWorkflow,
-  workflowEvent,
-  run,
-  createStatefulMiddleware,
-} from '@llamaindex/workflow';
-import { OpenAI, type ChatMessage } from '@llamaindex/openai';
-
-type ConvState = { history: ChatMessage[] };
-const { withState } = createStatefulMiddleware<ConvState>(() => ({ history: [] }));
+import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
+import { OpenAI } from '@llamaindex/openai';
+import type { ChatMessage } from '@llamaindex/core/llms';
 
 // Events
-const turnEv   = workflowEvent<{ userMessage: string }>();
-const replyEv  = workflowEvent<{ assistant: string; turn: number }>();
+const turnEv  = workflowEvent<{ history: ChatMessage[]; userMessage: string }>();
+const replyEv = workflowEvent<{ assistant: string; history: ChatMessage[] }>();
 
-const base     = createWorkflow();
-const convWf   = withState(base);
-const llm      = new OpenAI({ model: 'gpt-4o-mini' });
+const convWf = createWorkflow();
+const llm    = new OpenAI({ model: '%%model=openai-small%%' });
 
 convWf.handle([turnEv], async (ctx, ev) => {
-  ctx.state.history.push({ role: 'user', content: ev.data.userMessage });
-
-  const resp = await llm.chat({ messages: ctx.state.history });
-  const reply = resp.message.content as string;
-
-  ctx.state.history.push({ role: 'assistant', content: reply });
-
-  return replyEv.with({
-    assistant: reply,
-    turn: ctx.state.history.filter(m => m.role === 'assistant').length,
-  });
+  const history: ChatMessage[] = [...ev.data.history, { role: 'user', content: ev.data.userMessage }];
+  const resp = await llm.chat({ messages: history });
+  const reply = String(resp.message.content);
+  return replyEv.with({ assistant: reply, history: [...history, { role: 'assistant', content: reply }] });
 });
 
-export async function chat(userMessage: string): Promise<string> {
-  const events = await run(convWf, turnEv.with({ userMessage }))
+const sessions = new Map<string, ChatMessage[]>();
+
+export async function chat(sessionId: string, userMessage: string): Promise<string> {
+  const events = await run(convWf, turnEv.with({ history: sessions.get(sessionId) ?? [], userMessage }))
     .until(replyEv)
     .toArray();
-  return events.find(e => replyEv.include(e))?.data.assistant ?? '';
+  const reply = events.find(e => replyEv.include(e));
+  if (!reply || !replyEv.include(reply)) return '';
+  sessions.set(sessionId, reply.data.history);
+  return reply.data.assistant;
 }
 ```
 
@@ -614,7 +585,6 @@ import {
   createWorkflow,
   workflowEvent,
   run,
-  or,
 } from '@llamaindex/workflow';
 import { OpenAI } from '@llamaindex/openai';
 
@@ -627,7 +597,7 @@ const technicalEv = workflowEvent<{ id: string; body: string }>();
 const otherEv     = workflowEvent<{ id: string; body: string }>();
 const resolvedEv  = workflowEvent<{ id: string; category: Category; response: string }>();
 
-const llm = new OpenAI({ model: 'gpt-4o-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const triageWorkflow = createWorkflow();
 
@@ -683,5 +653,7 @@ export async function triageTicket(id: string, body: string) {
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous recipes used `llama-index-workflows` (non-existent package), `extends Workflow`, `@step()`, `new StartEvent`, `new StopEvent`, `workflow.run()`. All replaced with functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`. 10 recipes rewritten, API verified against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node`. | Claude routine |
+| 2026-10-21 | final releases | Recipe 1 replaced: it stubbed retrieval; it now builds a real `VectorStoreIndex` with a retriever, a query engine and an agent tool (run with fake models). Unused `or` imports removed. |
+| 2026-10-21 | @llamaindex/workflow 1.1.25 | Deprecation notice added. Recipe 7 tools switched to Zod schemas and `run()` usage corrected; Recipe 8 rewritten (state middleware does not persist between runs, and `ChatMessage` is exported from `@llamaindex/core/llms`, not `@llamaindex/openai`). Model names updated. |
+| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous recipes used `llama-index-workflows` (non-existent package), `extends Workflow`, `@step()`, `new StartEvent`, `new StopEvent`, `workflow.run()`. All replaced with functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`. 10 recipes rewritten, API verified against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node`. |
 | April 2026 | 1.1.24 | Initial recipes using incorrect class-based API. |

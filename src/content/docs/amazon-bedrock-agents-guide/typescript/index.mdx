@@ -1,0 +1,118 @@
+---
+title: "Amazon Bedrock Agents (TypeScript)"
+description: "Build agents on AWS in TypeScript: the Strands Agents TypeScript SDK for the agent loop and the bedrock-agentcore npm package for AgentCore Runtime, Memory, tools and Identity."
+framework: "amazon-bedrock-agents"
+language: "typescript"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**AWS-native agents in Node.js.** Write the agent with the **Strands Agents TypeScript SDK** (`@strands-agents/sdk`) and host it on **AgentCore Runtime** with the **AgentCore TypeScript SDK** (`bedrock-agentcore`). The split is the same as in Python: Strands is the agent loop, AgentCore is where it runs and the managed services around it.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @strands-agents/sdk bedrock-agentcore zod
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    `@strands-agents/sdk` %%version=@strands-agents/sdk%% · `bedrock-agentcore` %%version=bedrock-agentcore-ts%% · Node.js 22+ (checked %%versions-checked%%)
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    TypeScript teams on AWS who want Bedrock models, typed tools and session-isolated hosting.
+  </Card>
+</CardGrid>
+
+<Aside type="caution" title="AgentCore TypeScript SDK is pre-1.0">
+  `bedrock-agentcore` for TypeScript is at 0.x and its Strands tool integrations for Code Interpreter and Browser are published under `experimental/` import paths. It has no Gateway or Observability module yet. Strands for TypeScript is 1.x.
+</Aside>
+
+## Minimal example
+
+A Strands agent on Claude, served with the AgentCore Runtime HTTP contract (`GET /ping`, `POST /invocations` on port 8080):
+
+```typescript
+import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
+import { Agent, BedrockModel, tool } from '@strands-agents/sdk'
+import { z } from 'zod'
+
+const getWeather = tool({
+  name: 'get_weather',
+  description: 'Get the current weather for a city.',
+  inputSchema: z.object({ city: z.string() }),
+  callback: ({ city }) => `It is 18°C and cloudy in ${city}.`,
+})
+
+const agent = new Agent({
+  model: new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic%%', region: 'us-west-2' }),
+  systemPrompt: 'You are a concise assistant.',
+  tools: [getWeather],
+  printer: false,
+})
+
+const app = new BedrockAgentCoreApp({
+  invocationHandler: {
+    requestSchema: z.object({ prompt: z.string() }),
+    process: async (request, context) => {
+      const result = await agent.invoke(request.prompt)
+      return { result: result.toString(), sessionId: context.sessionId }
+    },
+  },
+})
+
+app.run()
+```
+
+```bash
+npx tsx main.ts &
+curl -s -X POST http://localhost:8080/invocations \
+  -H 'Content-Type: application/json' \
+  -H 'X-Amzn-Bedrock-AgentCore-Runtime-Session-Id: local-session-0000000000000000000001' \
+  -d '{"prompt": "What is the weather in Leeds?"}'
+```
+
+Deploy it with the AgentCore CLI (`agentcore create --name MyAgent --language TypeScript --framework Strands --model-provider Bedrock --memory none`, then `agentcore deploy`); see the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
+
+## Key concepts
+
+- **Agent** (`@strands-agents/sdk`): model + system prompt + tools; `invoke()` returns an `AgentResult`, `stream()` yields typed events.
+- **Tools**: `tool()` with a Zod schema gives typed, validated inputs. Agents, MCP clients and vended tools all go in the same `tools` array.
+- **BedrockModel**: Bedrock Converse API with any Bedrock model or inference profile, such as `us.anthropic.%%model=anthropic%%`; guardrails and prompt caching are options on the model.
+- **BedrockAgentCoreApp** (`bedrock-agentcore/runtime`): the Runtime server; a Zod `requestSchema` types the payload, and an async generator handler streams Server-Sent Events.
+- **AgentCore Memory**: plugged into Strands as a `MemoryStore` via `createAgentCoreMemoryStores()`.
+- **Code Interpreter and Browser**: managed sandboxes exposed as Strands tools (`CodeInterpreterTools`, `BrowserTools`) or used through their clients.
+- **Identity**: `withApiKey` and `withAccessToken` fetch outbound credentials from AgentCore Identity inside a handler.
+
+## Guides
+
+<CardGrid>
+  <LinkCard title="Strands Agents TypeScript SDK" href="/amazon-bedrock-agents-guide/typescript/strands_typescript_guide/" description="Agents, Zod tools, providers, structured output, streaming, hooks, sessions, Graph, Swarm, MCP." />
+  <LinkCard title="AgentCore TypeScript SDK" href="/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/" description="Runtime app, Memory, Code Interpreter, Browser, Identity, and what is not covered yet." />
+  <LinkCard title="Deploying to AgentCore Runtime" href="/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/" description="AgentCore CLI, container images, NODE_22 code bundles, invoking from Node, checklist." />
+  <LinkCard title="Python overview" href="/amazon-bedrock-agents-guide/python/" description="The Python guides: AgentCore, Strands, A2A, Agents Classic." />
+</CardGrid>
+
+## Coverage compared with the Python guides
+
+| Topic | TypeScript | Notes |
+|-------|-----------|-------|
+| Strands agents, tools, streaming, hooks | Yes | Same concepts; `invoke()` instead of calling the agent |
+| Strands multi-agent | `Graph`, `Swarm`, agents as tools | No `Workflow` pattern |
+| AgentCore Runtime app | Yes | `invocationHandler.process` instead of `@app.entrypoint` |
+| AgentCore Memory | Strands `MemoryStore` only | No `MemoryClient`; use `@aws-sdk/client-bedrock-agentcore` for raw calls |
+| Code Interpreter, Browser | Yes | Strands tool wrappers are experimental |
+| Identity | Yes | Wrapper functions instead of decorators |
+| Gateway | No SDK module | Use Gateway as an MCP server via Strands `McpClient` |
+| Observability | No SDK module | Strands OpenTelemetry via `@strands-agents/sdk/telemetry` |
+| Bedrock Agents (Classic) | Not covered | Use `@aws-sdk/client-bedrock-agent-runtime` directly; the service is in maintenance mode |
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | Strands TS 1.21.0 · AgentCore TS 0.4.6 | New TypeScript section: overview, Strands guide, AgentCore guide and deployment page, all examples compiled with `tsc --strict`. |

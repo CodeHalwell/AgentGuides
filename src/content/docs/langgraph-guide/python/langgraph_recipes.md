@@ -1,34 +1,30 @@
 ---
 title: "LangGraph: Advanced Recipes & Real-World Patterns"
-description: "Updated for LangGraph 1.2.12 (September 2026)"
-framework: langgraph
-language: python
+description: "Real-world LangGraph recipes: RAG with quality control, support routing, research fan-out, memory, map-reduce, tool interceptors, channels, the Functional API, tracing and per-tool streaming."
+framework: "langgraph"
+language: "python"
+sidebar:
+  label: "Recipes"
 ---
 
-# LangGraph: Advanced Recipes & Real-World Patterns
+Checked against `langgraph` %%version=langgraph%% and `langchain` %%version=langchain%% (%%versions-checked%%). Each recipe is a complete program unless it says otherwise. Recipes 1–6 share the setup block below; the later recipes define their own imports.
 
-**Updated for LangGraph 1.2.12 (September 2026)**
+Retry, timeout and cache policies are not repeated here; see [Node policies](/langgraph-guide/python/reference-state-graph/#node-policies).
 
-This guide includes recipes demonstrating the latest v1.2.12 features:
-- Node Caching for performance
-- Deferred Nodes for fan-in patterns
-- Pre/Post Model Hooks for LLM customization
-- Cross-Thread Memory for persistent context
-- Tools State Updates for dynamic behavior
-- Command Tool for edgeless flows
-- `InjectedState` + `InjectedStore` for context-aware tools (Recipe 9)
-- `Overwrite` for resetting accumulated channels (Recipe 10)
-- `CheckpointTuple` for checkpoint history browsing and time-travel (Recipe 11)
-- `update_state` / `StateUpdate` for human-in-the-loop approval flows (Recipe 12)
-- Functional API (`@entrypoint` + `@task`) for workflow-without-StateGraph (Recipe 13)
-- `RetryPolicy` + `TimeoutPolicy` + `CachePolicy` for resilient, cached nodes (Recipe 14)
-- `BinaryOperatorAggregate` custom reducer patterns (Recipe 15)
-- `Send` with per-instance timeout for safe parallel map-reduce (Recipe 16)
-- `Command` with `Command.PARENT` for subgraph-to-parent signalling (Recipe 17)
-- `TracePolicy` + `omit_payload` for trimming a node's payload in LangSmith traces (Recipe 18)
-- `ToolNode` with `ToolRuntime.emit_output_delta` for incremental tool streaming (Recipe 19)
-- `entrypoint.final` for separating return value from checkpoint state (Recipe 20)
-- `GraphOutput` + `Durability` for the v2 invoke API (Recipe 21)
+```python
+# Shared setup for recipes 1–6
+import json
+import operator
+from typing import Annotated
+
+from typing_extensions import TypedDict
+from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
+
+model = init_chat_model("anthropic:%%model=anthropic%%")
+```
 
 ---
 
@@ -43,6 +39,14 @@ from typing_extensions import TypedDict
 from typing import Annotated
 from langgraph.graph.message import add_messages
 import json
+
+
+def semantic_search(query: str, index: str, top_k: int = 5) -> list[dict]:
+    """Stand-in for your vector store (for example a Store with an index, or a retriever)."""
+    corpus = [{"id": "doc-1", "content": "Install LangGraph with pip install langgraph."},
+              {"id": "doc-2", "content": "Compile a StateGraph before invoking it."}]
+    return corpus[:top_k]
+
 
 class RAGState(TypedDict):
     question: str
@@ -188,6 +192,7 @@ def escalate(state: RAGState) -> dict:
     
     return {
         "final_answer": "Unable to find relevant information. Escalating to human support.",
+        "source_citations": [],
         "messages": [{
             "role": "assistant",
             "content": "This question requires human expert review."
@@ -222,10 +227,10 @@ rag_builder.add_edge("refine", "retrieve")  # Loop back
 rag_graph = rag_builder.compile(checkpointer=InMemorySaver())
 
 # Usage
-result = rag_graph.invoke({
-    "question": "How do I set up LangGraph?",
-    "generation_attempt": 0
-})
+result = rag_graph.invoke(
+    {"question": "How do I set up LangGraph?", "generation_attempt": 0},
+    {"configurable": {"thread_id": "rag-1"}},
+)
 
 print(f"Answer: {result['final_answer']}")
 print(f"Sources: {result['source_citations']}")
@@ -439,12 +444,15 @@ support_builder.add_edge("escalate", END)
 support_graph = support_builder.compile(checkpointer=InMemorySaver())
 
 # Usage
-result = support_graph.invoke({
-    "ticket_id": "TKT-001",
-    "customer_email": "user@example.com",
-    "subject": "Billing charge issue",
-    "description": "I was charged twice this month. Please help!"
-})
+result = support_graph.invoke(
+    {
+        "ticket_id": "TKT-001",
+        "customer_email": "user@example.com",
+        "subject": "Billing charge issue",
+        "description": "I was charged twice this month. Please help!",
+    },
+    {"configurable": {"thread_id": "TKT-001"}},
+)
 
 print(f"Priority: {result['priority'].value}")
 print(f"Category: {result['category'].value}")
@@ -488,10 +496,10 @@ def generate_queries(state: ResearchState) -> dict:
     """
     
     response = model.invoke(prompt)
-    
-    import json
-    queries = json.loads(response.content)
-    
+    try:
+        queries = json.loads(response.content)
+    except json.JSONDecodeError:            # models sometimes wrap JSON in prose
+        queries = [state["topic"]]
     return {"research_queries": queries}
 
 def parallel_search(state: ResearchState) -> list[Send]:
@@ -653,8 +661,9 @@ from langchain_core.tools import tool
 @tool
 def search_knowledge_base(query: str) -> str:
     """Search internal knowledge base."""
-    results = db.search_documents(query, limit=3)
-    return "\n".join([r["content"] for r in results])
+    # Replace with your search backend
+    docs = {"returns": "Items can be returned within 30 days.", "shipping": "Orders ship in 2 days."}
+    return "\n".join(text for key, text in docs.items() if key in query.lower()) or "No matching articles."
 
 @tool
 def check_inventory(product_id: str) -> dict:
@@ -688,8 +697,8 @@ tools = [
     send_email
 ]
 
-# Create agent
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+# The model must be bound to the tools, or it can never call them
+model_with_tools = model.bind_tools(tools)
 
 # Build custom agent for more control
 class AgentState(TypedDict):
@@ -701,11 +710,11 @@ class AgentState(TypedDict):
 def agent_reasoning_node(state: AgentState) -> dict:
     """Agent reasons about what to do."""
     
-    system_prompt = """You are a helpful shopping assistant. 
-    Analyze user requests and decide what actions to take.
-    Use available tools to help the customer."""
-    
-    response = model.invoke(state["messages"])
+    system_prompt = (
+        "You are a helpful shopping assistant. Analyse user requests, decide what "
+        "actions to take, and use the available tools to help the customer."
+    )
+    response = model_with_tools.invoke([("system", system_prompt), *state["messages"]])
     
     # Capture reasoning
     reasoning = response.content
@@ -961,7 +970,7 @@ async def retrieve_memories(
     namespace = ("users", user_id, "memories")
     
     memories = await store.asearch(
-        namespace_prefix=namespace,
+        namespace,  # namespace prefix is positional-only
         query=current_message,
         limit=5
     )
@@ -1006,7 +1015,7 @@ def chat_node(state: ConversationState) -> dict:
         {"role": "user", "content": state["message"]}
     ]
     
-    response = model.invoke(messages, system_prompt=system_prompt)
+    response = model.invoke([{"role": "system", "content": system_prompt}, *messages])
     
     return {
         "response": response.content,
@@ -1080,60 +1089,12 @@ print(result["response"])
 
 ---
 
-## Performance Optimization Tips
-
-### Tip 1: Lazy Evaluation
-
-```python
-# Bad - eager evaluation
-def slow_node(state):
-    all_results = [expensive_operation(i) for i in range(1000)]
-    return {"results": all_results}
-
-# Good - lazy evaluation
-def fast_node(state):
-    def results_generator():
-        for i in range(1000):
-            yield expensive_operation(i)
-    
-    return {"results": results_generator()}
-```
-
-### Tip 2: Efficient State Updates
-
-```python
-# Bad - rebuilds entire list
-return {"items": state["items"] + [new_item]}
-
-# Good - append reducer
-class State(TypedDict):
-    items: Annotated[list, lambda x, y: x + y]
-
-return {"items": [new_item]}  # Automatically appended
-```
-
-### Tip 3: Streaming for Real-Time Feedback
-
-```python
-# Stream intermediate results to client
-async def stream_processing():
-    async for event in graph.astream(
-        {"query": "Process this"},
-        stream_mode="updates"
-    ):
-        # Send each update to client via WebSocket
-        await websocket.send_json(event)
-        yield event
-```
-
----
-
-## Recipe 7: Cached Multi-Agent Research System (v1.2.1)
+## Recipe 7: Cached Multi-Agent Research System
 
 **Uses:** `CachePolicy`, `InMemoryCache`, `InMemoryStore`, parallel `Send` fan-out
 
 ```python
-# Correct imports — all verified against langgraph==1.2.1
+# Imports verified against langgraph==%%version=langgraph%%
 import operator
 from typing import Annotated
 from typing_extensions import TypedDict
@@ -1281,187 +1242,117 @@ print(result2["final_report"])  # same content, returned from cache
 
 ---
 
-## Recipe 8: Smart Shopping Assistant with Pre/Post Model Hooks (v1.2.1)
+## Recipe 8: Smart Shopping Assistant with agent middleware
 
-**Uses:** `create_react_agent` with `pre_model_hook` / `post_model_hook`, `Command`-returning tools, custom state schema
+**Uses:** `create_agent` with a custom state schema, `@dynamic_prompt` and `@after_model` middleware, tools that read state through `ToolRuntime` and update it with `Command`.
 
 ```python
-# Correct imports — verified against langgraph==1.2.1 / langgraph-prebuilt==1.1.0
-import operator
-from typing import Annotated, Any
-from typing_extensions import TypedDict
-from langchain_core.messages import AnyMessage, SystemMessage
-from langchain_core.tools import tool
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import create_react_agent, InjectedState
+from typing import Any
+from typing_extensions import NotRequired
+
+from langchain.agents import create_agent, AgentState
+from langchain.agents.middleware import after_model, dynamic_prompt, ModelRequest
+from langchain.messages import ToolMessage
+from langchain.tools import tool, ToolRuntime
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 
-# ---------------------------------------------------------------------------
-# State schema — extends the default MessagesState with shopping fields
-# ---------------------------------------------------------------------------
-
-class ShoppingState(TypedDict):
-    messages:    Annotated[list[AnyMessage], add_messages]
-    user_id:     str
-    cart:        list[dict]
-    total:       float
-    tokens_used: int
-
-
-# ---------------------------------------------------------------------------
-# Tools — use InjectedState to read the graph state directly
-#         Return Command to update state alongside the tool message
-# ---------------------------------------------------------------------------
-
-@tool
-def add_to_cart(
-    product_id: str,
-    product_name: str,
-    price: float,
-    quantity: int,
-    state: Annotated[ShoppingState, InjectedState],
-) -> Command:
-    """Add a product to the shopping cart and update the total."""
-    item = {"product_id": product_id, "name": product_name, "price": price, "qty": quantity}
-    new_cart = state.get("cart", []) + [item]
-    new_total = state.get("total", 0.0) + price * quantity
-    return Command(
-        update={
-            "cart": new_cart,
-            "total": new_total,
-        },
-        goto="agent",  # return control to the agent node
-    )
+class ShoppingState(AgentState):
+    user_id: NotRequired[str]
+    cart: NotRequired[list[dict]]
+    total: NotRequired[float]
+    tokens_used: NotRequired[int]
 
 
 @tool
-def view_cart(state: Annotated[ShoppingState, InjectedState]) -> str:
-    """Return a human-readable summary of the current cart."""
-    cart = state.get("cart", [])
+def add_to_cart(product_name: str, price: float, quantity: int, runtime: ToolRuntime) -> Command:
+    """Add a product to the shopping cart."""
+    state = runtime.state
+    item = {"name": product_name, "price": price, "qty": quantity}
+    return Command(update={
+        "cart": [*state.get("cart", []), item],
+        "total": state.get("total", 0.0) + price * quantity,
+        # A tool that returns a Command must include the ToolMessage itself
+        "messages": [ToolMessage(f"Added {quantity} x {product_name}", tool_call_id=runtime.tool_call_id)],
+    })
+
+
+@tool
+def view_cart(runtime: ToolRuntime) -> str:
+    """Show the current cart."""
+    cart = runtime.state.get("cart", [])
     if not cart:
         return "Your cart is empty."
-    lines = [f"- {item['name']} x{item['qty']}  ${item['price'] * item['qty']:.2f}" for item in cart]
-    total = state.get("total", 0.0)
-    return "Cart:\n" + "\n".join(lines) + f"\n\nTotal: ${total:.2f}"
+    lines = [f"- {i['name']} x{i['qty']}  ${i['price'] * i['qty']:.2f}" for i in cart]
+    return "\n".join(lines) + f"\nTotal: ${runtime.state.get('total', 0.0):.2f}"
 
 
 @tool
 def search_products(category: str) -> list[dict]:
-    """Search available products in a category (stub)."""
+    """Search products in a category."""
     catalogue = {
-        "laptop": [
-            {"id": "mbp-16",  "name": "MacBook Pro 16",   "price": 2499.0},
-            {"id": "xps-15",  "name": "Dell XPS 15",       "price": 1799.0},
-        ],
-        "monitor": [
-            {"id": "lg-27",   "name": "LG 27\" 4K",        "price": 499.0},
-        ],
+        "laptop": [{"name": "MacBook Pro 16", "price": 2499.0}, {"name": "Dell XPS 15", "price": 1799.0}],
+        "monitor": [{"name": "LG 27in 4K", "price": 499.0}],
     }
     return catalogue.get(category.lower(), [])
 
 
-# ---------------------------------------------------------------------------
-# Pre-model hook — inject cart context as a system message before every LLM call
-# ---------------------------------------------------------------------------
-
-def shopping_context_hook(state: ShoppingState) -> dict:
-    """Prepend a system message summarising the current cart state.
-
-    pre_model_hook receives the full state and returns a dict to merge
-    into state before the LLM call.  We prepend a SystemMessage to
-    'messages' — add_messages will handle the merge correctly.
-    """
-    cart = state.get("cart", [])
-    total = state.get("total", 0.0)
-    summary = (
-        f"User {state.get('user_id', 'unknown')} | "
-        f"Cart: {len(cart)} item(s), total ${total:.2f}. "
-        "Help them find and add the best products for their needs."
-    )
-    return {"messages": [SystemMessage(content=summary)]}
+@dynamic_prompt
+def cart_context(request: ModelRequest) -> str:
+    """Put the cart summary in the system prompt for every model call."""
+    s = request.state
+    return (f"You are a shopping assistant for user {s.get('user_id', 'unknown')}. "
+            f"Cart: {len(s.get('cart', []))} item(s), total ${s.get('total', 0.0):.2f}.")
 
 
-# ---------------------------------------------------------------------------
-# Post-model hook — accumulate token usage after every LLM call
-# ---------------------------------------------------------------------------
-
-def track_tokens(state: ShoppingState) -> dict:
-    """After the LLM responds, read usage_metadata from the latest AI message
-    and accumulate the token count.
-
-    post_model_hook receives the state (already updated with the new AI
-    message) and returns a dict to merge into state.
-    """
-    last = state["messages"][-1]
-    usage = getattr(last, "usage_metadata", None) or {}
-    new_tokens = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
-    return {"tokens_used": state.get("tokens_used", 0) + new_tokens}
+@after_model(state_schema=ShoppingState)
+def track_tokens(state: ShoppingState, runtime: Runtime) -> dict[str, Any]:
+    usage = getattr(state["messages"][-1], "usage_metadata", None) or {}
+    return {"tokens_used": state.get("tokens_used", 0) + usage.get("total_tokens", 0)}
 
 
-# ---------------------------------------------------------------------------
-# Build the agent
-# ---------------------------------------------------------------------------
-
-tools = [add_to_cart, view_cart, search_products]
-
-# Replace with a real LLM in production:
-# from langchain_anthropic import ChatAnthropic
-# llm = ChatAnthropic(model="claude-3-5-sonnet-20241022")
-from unittest.mock import MagicMock
-from langchain_core.messages import AIMessage
-llm = MagicMock()
-llm.bind_tools.return_value = llm
-llm.invoke.return_value = AIMessage(content="Here are some laptop options for you.", tool_calls=[])
-
-shopping_agent = create_react_agent(
-    model=llm,
-    tools=tools,
+shopping_agent = create_agent(
+    "anthropic:%%model=anthropic%%",
+    tools=[add_to_cart, view_cart, search_products],
     state_schema=ShoppingState,
-    pre_model_hook=shopping_context_hook,   # inject cart context
-    post_model_hook=track_tokens,           # record token usage
+    middleware=[cart_context, track_tokens],
     checkpointer=InMemorySaver(),
 )
 
-# ---------------------------------------------------------------------------
-# Usage
-# ---------------------------------------------------------------------------
-
-cfg = {"configurable": {"thread_id": "shopper-123"}}
-
+cfg = {"configurable": {"thread_id": "shopper-123"}, "recursion_limit": 25}
 result = shopping_agent.invoke(
-    {
-        "messages": [("user", "I need a good laptop for programming. Show me options and add the best one.")],
-        "user_id": "shopper-123",
-        "cart": [],
-        "total": 0.0,
-        "tokens_used": 0,
-    },
+    {"messages": [{"role": "user", "content": "Find me a laptop for programming and add the best one."}],
+     "user_id": "shopper-123"},
     cfg,
 )
-
-print(f"Cart: {result['cart']}")
-print(f"Total: ${result['total']:.2f}")
-print(f"Tokens used: {result['tokens_used']}")
-print(f"Last reply: {result['messages'][-1].content}")
+print("Cart:", result.get("cart", []))
+print(f"Total: ${result.get('total', 0.0):.2f}")
+print("Tokens used:", result.get("tokens_used", 0))
+print("Reply:", result["messages"][-1].content)
 ```
+
+Notes:
+
+- The state schema subclasses `langchain.agents.AgentState`, which already has `messages`. (The older `create_react_agent` needed a `remaining_steps` key in a custom schema; `create_agent` does not.)
+- A tool that returns a `Command` must include a `ToolMessage` for its own call in `update["messages"]`; otherwise the model sees a tool call with no result.
+- `@dynamic_prompt` rebuilds the system prompt on every model call, so it always reflects the current cart without adding messages to the history.
 
 ---
 
-## Recipe 9: Intelligent Workflow Coordinator (v1.2.1)
+## Recipe 9: Intelligent Workflow Coordinator
 
 **Uses:** `Command` routing, `Send` fan-out, `defer=True` node, `RetryPolicy`
 
 ```python
-# Correct imports — all verified against langgraph==1.2.1
+# Imports verified against langgraph==%%version=langgraph%%
 import operator
 from typing import Annotated, Literal
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import Command, Send, RetryPolicy
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.cache.memory import InMemoryCache
 
 
 # ---------------------------------------------------------------------------
@@ -1489,10 +1380,10 @@ class TaskState(TypedDict):
 # Nodes
 # ---------------------------------------------------------------------------
 
-def coordinator(state: WorkflowState) -> Command[Literal["fan_out", "__end__"]]:
+def coordinator(state: WorkflowState) -> Command[Literal["run_task", "__end__"]]:
     """Decide whether to launch tasks or finish.
 
-    Returns Command(goto="fan_out") while there are pending tasks,
+    Returns Command(goto=[Send(...), ...]) while there are pending tasks,
     or Command(goto=END, update={"workflow_status": "complete"}) when done.
     """
     completed = state.get("completed", [])
@@ -1506,19 +1397,8 @@ def coordinator(state: WorkflowState) -> Command[Literal["fan_out", "__end__"]]:
             update={"workflow_status": f"done — {len(completed)} ok, {len(failed)} failed"},
         )
 
-    return Command(goto="fan_out")
-
-
-def fan_out(state: WorkflowState) -> list[Send]:
-    """Launch all pending tasks in parallel using Send."""
-    completed = state.get("completed", [])
-    failed = state.get("failed", [])
-    done = set(completed + failed)
-    return [
-        Send("run_task", {"task_id": t["id"], "task_type": t["type"]})
-        for t in state["tasks"]
-        if t["id"] not in done
-    ]
+    # goto accepts a list of Send objects: one parallel run_task per pending task
+    return Command(goto=[Send("run_task", {"task_id": t["id"], "task_type": t["type"]}) for t in pending])
 
 
 def run_task(state: TaskState) -> dict:
@@ -1531,8 +1411,7 @@ def run_task(state: TaskState) -> dict:
     task_type = state["task_type"]
 
     # Simulate work — replace with real logic
-    import random
-    success = random.random() > 0.1   # 10% artificial failure rate
+    success = task_type != "validation"   # pretend validation fails
 
     if success:
         print(f"  [task] {task_id} ({task_type}) OK")
@@ -1547,7 +1426,7 @@ def run_task(state: TaskState) -> dict:
 #
 # Key features demonstrated:
 #  - coordinator uses Command for dynamic routing (no static edges from it)
-#  - fan_out returns list[Send] for variable-width parallelism
+#  - coordinator returns Command(goto=[Send, ...]) for variable-width parallelism
 #  - run_task uses retry_policy so transient failures are retried automatically
 #  - defer=True on the aggregate node means it runs AFTER all parallel run_task
 #    instances in the same super-step finish
@@ -1567,7 +1446,6 @@ def aggregate(state: WorkflowState) -> dict:
 
 builder = StateGraph(WorkflowState)
 builder.add_node("coordinator", coordinator)
-builder.add_node("fan_out",     fan_out)
 builder.add_node(
     "run_task",
     run_task,
@@ -1580,8 +1458,7 @@ builder.add_node(
 )
 
 builder.add_edge(START, "coordinator")
-# fan_out and run_task edges come from coordinator's Command / fan_out's Sends
-builder.add_edge("fan_out",   "run_task")
+# coordinator -> run_task edges come from its Command(goto=[Send(...)])
 builder.add_edge("run_task",  "aggregate")
 builder.add_edge("aggregate", "coordinator")   # loop back — coordinator will exit via END
 
@@ -1589,11 +1466,7 @@ builder.add_edge("aggregate", "coordinator")   # loop back — coordinator will 
 # Usage
 # ---------------------------------------------------------------------------
 
-cache = InMemoryCache()
-graph = builder.compile(
-    checkpointer=InMemorySaver(),
-    cache=cache,
-)
+graph = builder.compile(checkpointer=InMemorySaver())
 
 cfg = {"configurable": {"thread_id": "workflow-001"}}
 result = graph.invoke(
@@ -1608,24 +1481,18 @@ result = graph.invoke(
         "failed": [],
         "workflow_status": "pending",
     },
-    cfg,
-    {"recursion_limit": 50},
+    {**cfg, "recursion_limit": 50},   # recursion_limit goes in the same config dict
 )
 
 print(f"Workflow Status: {result['workflow_status']}")
 print(f"Completed tasks: {result['completed']}")
 print(f"Failed tasks:    {result['failed']}")
+# Workflow Status: done — 2 ok, 1 failed
 ```
 
 ---
 
-This collection of recipes covers real-world patterns you'll encounter building production AI systems with LangGraph 1.2.1.
-
-Adapt and combine them for your specific use cases!
-
----
-
-## Recipe 10: Long-Term Memory with Vector Search and InMemoryStore (v1.2.1)
+## Recipe 10: Long-Term Memory with Vector Search and InMemoryStore
 
 **Uses:** `InMemoryStore` with vector index, `Runtime` context injection, per-user memory namespaces
 
@@ -1641,14 +1508,14 @@ from typing import Annotated
 from typing_extensions import TypedDict
 from dataclasses import dataclass
 
-# Store with optional vector search
-store = InMemoryStore(
-    index={
-        "dims": 1536,
-        "embed": embed_fn,  # your embedding function
-        "fields": ["content"]
-    }
-)
+# Store with vector search. In production pass an embedding model, for example
+# {"dims": 1536, "embed": "openai:text-embedding-3-small"}. A toy embedding keeps
+# this example offline.
+def embed_fn(texts: list[str]) -> list[list[float]]:
+    return [[float(len(t)), float(t.count(" ")), 1.0] for t in texts]
+
+
+store = InMemoryStore(index={"dims": 3, "embed": embed_fn, "fields": ["content"]})
 
 # Typed context carried through the run
 @dataclass
@@ -1709,10 +1576,10 @@ builder.add_edge("save", END)
 
 graph = builder.compile(store=store)
 
-# Pass context via configurable
+# Pass run context with the context= keyword (not inside "configurable")
 result = graph.invoke(
     {"messages": [HumanMessage("I prefer dark mode")]},
-    {"configurable": {"context": UserContext(user_id="alice")}}
+    context=UserContext(user_id="alice"),
 )
 
 print(result["messages"][-1].content)
@@ -1725,11 +1592,11 @@ print(result["messages"][-1].content)
 Key points:
 - `InMemoryStore` accepts an `index` dict to enable semantic (vector) search via `store.search(..., query=...)`. Omit it for key-only lookup.
 - `Runtime[UserContext]` is injected automatically by LangGraph when declared as a node parameter; it exposes `.context`, `.store`, and `.stream_writer`.
-- `context_schema=UserContext` on `StateGraph` tells the compiler which dataclass to deserialise from `configurable["context"]`.
+- `context_schema=UserContext` on `StateGraph` declares the type of `runtime.context`; pass the value with `invoke(..., context=UserContext(...))`.
 
 ---
 
-## Recipe 11: Parallel Map-Reduce with Send and BinaryOperatorAggregate (v1.2.1)
+## Recipe 11: Parallel Map-Reduce with Send and BinaryOperatorAggregate
 
 **Uses:** `Send` for fan-out, `Annotated[list, operator.add]` reducer for fan-in, `ToolRuntime` inside a tool
 
@@ -1851,101 +1718,7 @@ Key points:
 
 ---
 
-## Recipe 12: ToolRuntime All-In-One (v1.2.1)
-
-**Uses:** `ToolRuntime` for store access, streaming progress events, and `tool_call_id` correlation
-
-A single tool that demonstrates every capability exposed by `ToolRuntime`: reading graph state, writing to the long-term store, emitting streaming progress, and tagging output with the originating tool call ID.
-
-```python
-from langgraph.prebuilt.tool_node import ToolRuntime
-from langgraph.store.base import BaseStore
-from langgraph.prebuilt import ToolNode, create_react_agent
-from langchain_core.tools import tool
-from typing import Annotated
-import uuid
-
-@tool
-def research_and_remember(
-    topic: str,
-    runtime: ToolRuntime,
-) -> str:
-    """Research a topic and save findings to memory.
-
-    Demonstrates all four ToolRuntime capabilities:
-      1. runtime.state         — read current graph state
-      2. runtime.store         — write to long-term cross-thread store
-      3. runtime.stream_writer — emit custom streaming events
-      4. runtime.tool_call_id  — correlate results to the originating call
-    """
-    # 1. Read state (optional — may be None if store injection is disabled)
-    user_id = runtime.state.get("user_id", "anon") if runtime.state else "anon"
-
-    # 2. Emit streaming progress so the client can show a spinner / log
-    if runtime.stream_writer:
-        runtime.stream_writer({"status": "researching", "topic": topic})
-
-    # 3. Perform the work (simulated — replace with real API calls)
-    findings = f"Key findings about {topic}: [placeholder — add real research logic]"
-
-    # 4. Persist findings to long-term store under a per-user namespace
-    if runtime.store:
-        runtime.store.put(
-            ("research", user_id),
-            str(uuid.uuid4()),
-            {"topic": topic, "findings": findings}
-        )
-
-    # 5. Include the tool_call_id in the streaming event so the client can
-    #    match progress updates back to the specific tool invocation
-    if runtime.stream_writer:
-        runtime.stream_writer({
-            "status": "saved",
-            "tool_call_id": runtime.tool_call_id
-        })
-
-    return findings
-
-# ── Wire the tool into a ReAct agent ─────────────────────────────────────────
-
-from langgraph.store.memory import InMemoryStore
-from typing_extensions import TypedDict
-from langgraph.graph.message import add_messages
-
-store = InMemoryStore()
-
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    user_id: str
-
-agent = create_react_agent(
-    model=model,                          # your ChatAnthropic / ChatOpenAI etc.
-    tools=[research_and_remember],
-    state_schema=AgentState,
-)
-
-# Stream the run — custom events emitted by stream_writer appear in the
-# "custom" stream mode alongside the standard message events.
-for event in agent.stream(
-    {
-        "messages": [{"role": "user", "content": "Research quantum computing"}],
-        "user_id": "alice",
-    },
-    stream_mode=["updates", "custom"],
-    config={"store": store},
-):
-    print(event)
-```
-
-Key points:
-- `ToolRuntime` is **automatically injected** by `ToolNode`/`create_react_agent` — declare it as a parameter typed `ToolRuntime` and LangGraph wires it up; never pass it manually from your own code.
-- `runtime.stream_writer` accepts any JSON-serialisable dict. These are surfaced when the caller uses `stream_mode="custom"` (or a list that includes `"custom"`).
-- `runtime.store` is the same store instance passed to `compile(store=...)` or the `config` dict, so tools share the same persistent memory as graph nodes.
-- `runtime.tool_call_id` matches the `id` field on the `ToolCall` that triggered this invocation — useful for correlating streaming progress events to a specific call when multiple tool calls fire in parallel.
-
----
-
-## Recipe 9: State-Aware Shopping Agent with `InjectedState` + `InjectedStore`
+## Recipe 12: State-Aware Shopping Agent with `InjectedState` + `InjectedStore`
 
 This recipe demonstrates how `InjectedState` and `InjectedStore` let tools access graph state and persistent storage **without exposing internal details to the LLM**.
 
@@ -1953,7 +1726,7 @@ This recipe demonstrates how `InjectedState` and `InjectedStore` let tools acces
 from typing import Any, Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END, MessagesState
-from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore, tools_condition, create_react_agent
+from langgraph.prebuilt import ToolNode, InjectedState, InjectedStore, tools_condition
 from langgraph.store.memory import InMemoryStore
 from langchain_core.tools import tool
 from langchain_anthropic import ChatAnthropic
@@ -2023,7 +1796,7 @@ def get_preference(
 # ── Agent setup ───────────────────────────────────────────────────────────────
 
 tools = [add_to_cart, view_cart, save_preference, get_preference]
-model = ChatAnthropic(model="claude-3-5-haiku-20241022").bind_tools(tools)
+model = ChatAnthropic(model="%%model=anthropic-small%%").bind_tools(tools)
 persistent_store = InMemoryStore()
 
 def agent_node(state: ShopState) -> dict:
@@ -2054,7 +1827,7 @@ print(result["messages"][-1].content)
 
 ---
 
-## Recipe 10: Resetting Accumulated State with `Overwrite`
+## Recipe 13: Resetting Accumulated State with `Overwrite`
 
 When a node needs to **replace** an accumulator channel rather than append to it, use `Overwrite` to bypass the reducer entirely.
 
@@ -2116,12 +1889,13 @@ graph = builder.compile(checkpointer=InMemorySaver())
 
 # Run with a batch that will have an error, then reset
 # In practice you'd trigger the error condition via routing logic
+cfg = {"configurable": {"thread_id": "batch-007"}}   # required with a checkpointer
 result = graph.invoke({
     "batch_id": "batch-007",
     "events": ["initial"],
     "errors": [],
     "phase": "pending",
-})
+}, cfg)
 print(result["events"])   # depends on routing; after reset → ["reset:batch-007"]
 print(result["errors"])   # [] — overwritten by reset_state
 ```
@@ -2132,7 +1906,7 @@ Only one node may `Overwrite` a given channel per super-step. If two concurrent 
 
 ---
 
-## Recipe 11: Checkpoint History Browser with `CheckpointTuple`
+## Recipe 14: Checkpoint History Browser with `CheckpointTuple`
 
 Use `CheckpointTuple` to build a debugging tool that inspects every state the graph passed through, and supports rewinding to any historical step.
 
@@ -2201,7 +1975,7 @@ print(f"\nLoop checkpoints: {len(loop_checkpoints)}")
 
 ---
 
-## Recipe 12: Human-in-the-Loop Approval with `update_state` and `StateUpdate`
+## Recipe 15: Human-in-the-Loop Approval with `update_state` and `StateUpdate`
 
 Pause the graph at a sensitive step, let a human review and modify state, then resume:
 
@@ -2289,7 +2063,7 @@ graph.bulk_update_state(
 
 ---
 
-## Recipe 13: `ToolRuntime` — unified runtime injection
+## Recipe 16: `ToolRuntime` — unified runtime injection
 
 `ToolRuntime` is the single dataclass injected into any tool that declares `runtime: ToolRuntime`. It replaces the older `InjectedState` / `InjectedStore` annotations with one unified parameter, and additionally exposes `tool_call_id`, `config`, `stream_writer`, and the full `tools` list.
 
@@ -2354,7 +2128,7 @@ def list_notes(runtime: ToolRuntime) -> str:
 
 
 tools = [save_research_note, list_notes]
-model = ChatAnthropic(model="claude-opus-4-8").bind_tools(tools)
+model = ChatAnthropic(model="%%model=anthropic-flagship%%").bind_tools(tools)
 store = InMemoryStore()
 
 
@@ -2383,7 +2157,7 @@ result = app.invoke(
 
 ---
 
-## Recipe 14: `ToolNode.wrap_tool_call` — interceptor for retries, caching, and auditing
+## Recipe 17: `ToolNode.wrap_tool_call` — interceptor for retries, caching, and auditing
 
 `wrap_tool_call` is a sync interceptor that wraps every tool execution inside a `ToolNode`. Use it for cross-cutting concerns — rate-limiting, audit logging, result caching — without modifying each tool individually.
 
@@ -2440,7 +2214,7 @@ def observability_wrapper(request: ToolCallRequest, execute) -> ToolMessage:
             return ToolMessage(content=cached_content, tool_call_id=call_id)
 
     # ── 3. Execute and cache result ──────────────────────────────────────────
-    result: ToolMessage = execute()
+    result: ToolMessage = execute(request)   # the handler takes the (possibly modified) request
     _result_cache[cache_key] = (result.content, now)
     _call_log.append({
         "call_id": call_id,
@@ -2479,7 +2253,7 @@ class AgentState(TypedDict):
 
 
 tools = [get_exchange_rate, get_country_info]
-model = ChatAnthropic(model="claude-opus-4-8").bind_tools(tools)
+model = ChatAnthropic(model="%%model=anthropic-flagship%%").bind_tools(tools)
 tool_node = ToolNode(tools, wrap_tool_call=observability_wrapper)
 
 
@@ -2504,7 +2278,7 @@ print(f"Audit log entries: {len(_call_log)}")
 
 ---
 
-## Recipe 15: Custom channels — `BinaryOperatorAggregate`, `Topic`, and `EphemeralValue`
+## Recipe 18: Custom channels — `BinaryOperatorAggregate`, `Topic`, and `EphemeralValue`
 
 Custom channels give you precise control over how state fields merge when multiple nodes write to them in the same step.
 
@@ -2634,7 +2408,7 @@ print(f"All labels accumulated: {result['all_labels']}")
 
 ---
 
-## Recipe 16: `NamedBarrierValue` — fan-in that waits for named contributors
+## Recipe 19: `NamedBarrierValue` — fan-in that waits for named contributors
 
 `NamedBarrierValue` blocks a node from running until every named token has been written. This is stronger than a standard fan-in edge because it is declared in the state schema and enforced by the channel runtime, not by graph topology alone.
 
@@ -2722,7 +2496,6 @@ app = graph.compile()
 result = app.invoke({
     "request_body": {"action": "create_order", "payload": {"item": "widget"}},
     "user_id": "alice",
-    "validation_barrier": "",
     "response_status": 0,
     "response_body": "",
 })
@@ -2732,7 +2505,7 @@ print(result["response_status"], result["response_body"])
 
 ---
 
-## Recipe 13: Functional API — `@entrypoint` + `@task` Workflow
+## Recipe 20: Functional API — `@entrypoint` + `@task` Workflow
 
 Use the Functional API when you want a plain-Python workflow with full LangGraph checkpoint/interrupt support, without declaring a `StateGraph`:
 
@@ -2814,172 +2587,7 @@ asyncio.run(run())
 
 ---
 
-## Recipe 14: Resilient Nodes — `RetryPolicy`, `TimeoutPolicy`, `CachePolicy`
-
-Attach policies at the node level (or task level) to get automatic retries, timeouts, and memoisation without wrapping every function in try/except:
-
-```python
-import asyncio
-import hashlib
-from typing import TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.types import RetryPolicy, TimeoutPolicy, CachePolicy
-from langgraph.errors import NodeTimeoutError
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.cache.memory import InMemoryCache
-from langgraph.runtime import get_runtime
-
-class PipelineState(TypedDict):
-    query: str
-    raw_data: str
-    enriched: str
-
-# --- Cache policy: skip re-fetching identical queries ---
-def query_cache_key(state: PipelineState) -> str:
-    return hashlib.sha256(state["query"].encode()).hexdigest()
-
-fetch_cache = CachePolicy(key_func=query_cache_key, ttl=120)  # 2 min TTL
-
-# --- Retry policy: up to 4 attempts, exponential backoff ---
-fetch_retry = RetryPolicy(
-    max_attempts=4,
-    initial_interval=0.1,
-    backoff_factor=2.0,
-    jitter=True,
-    retry_on=lambda e: isinstance(e, (ConnectionError, TimeoutError, NodeTimeoutError)),
-)
-
-# --- Timeout: 10 s total, 3 s idle (refreshed by heartbeat) ---
-fetch_timeout = TimeoutPolicy(run_timeout=10.0, idle_timeout=3.0, refresh_on="heartbeat")
-
-fetch_attempts = 0
-
-async def fetch_data(state: PipelineState) -> dict:
-    global fetch_attempts
-    fetch_attempts += 1
-    runtime = get_runtime()
-
-    for chunk_idx in range(3):
-        await asyncio.sleep(0.05)
-        runtime.heartbeat()   # reset idle_timeout every chunk
-
-    if fetch_attempts < 2:
-        raise ConnectionError("Simulated transient failure")
-
-    return {"raw_data": f"data for '{state['query']}'"}
-
-async def enrich(state: PipelineState) -> dict:
-    return {"enriched": state["raw_data"].upper()}
-
-cache = InMemoryCache()
-checkpointer = InMemorySaver()
-
-builder = StateGraph(PipelineState)
-builder.add_node(
-    "fetch",
-    fetch_data,
-    retry_policy=fetch_retry,
-    cache_policy=fetch_cache,
-    timeout=fetch_timeout,
-)
-builder.add_node("enrich", enrich)
-builder.add_edge(START, "fetch")
-builder.add_edge("fetch", "enrich")
-builder.add_edge("enrich", END)
-
-graph = builder.compile(checkpointer=checkpointer, cache=cache)
-
-async def main():
-    cfg1 = {"configurable": {"thread_id": "pipe-1"}}
-    cfg2 = {"configurable": {"thread_id": "pipe-2"}}
-
-    r1 = await graph.ainvoke({"query": "langgraph", "raw_data": "", "enriched": ""}, cfg1)
-    print(r1["enriched"])         # "DATA FOR 'LANGGRAPH'"
-    print("Attempts so far:", fetch_attempts)  # 2 (retried once)
-
-    # Same query on a different thread — served from cache, fetch_attempts stays 2
-    r2 = await graph.ainvoke({"query": "langgraph", "raw_data": "", "enriched": ""}, cfg2)
-    print(r2["enriched"])         # "DATA FOR 'LANGGRAPH'"
-    print("Attempts after cache hit:", fetch_attempts)  # still 2
-
-asyncio.run(main())
-```
-
----
-
-## Recipe 15: Custom Reducer Channels with `BinaryOperatorAggregate` and `Overwrite`
-
-`Annotated[T, fn]` state fields compile to `BinaryOperatorAggregate` channels. Use `Overwrite` to bypass the accumulator when you need a force-set:
-
-```python
-import operator
-from typing import Annotated, TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.types import Send, Overwrite
-
-class ScoreboardState(TypedDict):
-    # Accumulated metrics — each parallel worker contributes a delta
-    total_tokens: Annotated[int, operator.add]
-    errors: Annotated[int, operator.add]
-    tags: Annotated[set[str], lambda a, b: a | b]
-    # Also a reducing field — concatenates phase labels; Overwrite bypasses the concat
-    phase: Annotated[str, lambda a, b: f"{a}>{b}"]
-
-class WorkerInput(TypedDict):
-    task_id: str
-    tokens: int
-    tags: set[str]
-
-def run_worker(state: WorkerInput) -> dict:
-    # Simulate some work that may fail
-    failed = state["tokens"] > 1000
-    return {
-        "total_tokens": state["tokens"],
-        "errors": 1 if failed else 0,
-        "tags": state["tags"],
-    }
-
-def dispatch(state: ScoreboardState):
-    tasks = [
-        {"task_id": "t1", "tokens": 800, "tags": {"nlp", "summarise"}},
-        {"task_id": "t2", "tokens": 1200, "tags": {"nlp", "classify"}},  # will error
-        {"task_id": "t3", "tokens": 300, "tags": {"search"}},
-    ]
-    return [Send("worker", t) for t in tasks]
-
-def finalise(state: ScoreboardState) -> dict:
-    print(f"Tokens: {state['total_tokens']}, Errors: {state['errors']}, Tags: {state['tags']}")
-    # Overwrite bypasses the concat reducer and force-sets phase to "complete"
-    # Without Overwrite, returning "complete" would concat: "running>complete"
-    return {"phase": Overwrite("complete")}
-
-# Demonstrate: without Overwrite the reducer would concat phases
-# e.g. returning {"phase": "complete"} → "running>complete"
-# With Overwrite → "complete" (reducer bypassed)
-
-builder = StateGraph(ScoreboardState)
-builder.add_node("worker", run_worker)
-builder.add_node("finalise", finalise)
-builder.add_conditional_edges(START, dispatch)
-builder.add_edge("worker", "finalise")
-builder.add_edge("finalise", END)
-
-graph = builder.compile()
-result = graph.invoke({
-    "total_tokens": 0,
-    "errors": 0,
-    "tags": set(),
-    "phase": "running",
-})
-print(result)
-# Tokens: 2300, Errors: 1, Tags: {'nlp', 'summarise', 'classify', 'search'}
-# {'total_tokens': 2300, 'errors': 1, 'tags': {...}, 'phase': 'complete'}
-# Note: phase is 'complete' (not 'running>complete') because Overwrite bypassed the concat reducer
-```
-
----
-
-## Recipe 16: Safe Parallel Map-Reduce with `Send` + Per-Instance Timeout
+## Recipe 21: Safe Parallel Map-Reduce with `Send` + Per-Instance Timeout
 
 `Send` supports a `timeout` kwarg so you can give individual tasks different time budgets based on their priority or expected cost:
 
@@ -3040,7 +2648,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 17: `Command.PARENT` — Subgraph Writing to Parent State
+## Recipe 22: `Command.PARENT` — Subgraph Writing to Parent State
 
 When a subgraph needs to update the parent graph's state (not its own), return `Command(update=..., graph=Command.PARENT)`. Omit `goto` to let the parent's defined edges handle routing — setting `goto=END` would terminate the parent immediately and bypass any downstream nodes. Adding `goto="some_node"` in a `Command.PARENT` schedules that node in the parent alongside any static edges already defined there:
 
@@ -3110,7 +2718,7 @@ print(result)
 - Omit `goto` (or set `goto` to a specific parent node name) — `goto=END` terminates the parent immediately, skipping all downstream nodes.
 - Avoid it for deeply nested subgraphs — it only bubbles to the **nearest** parent; use regular state fields for deeper hierarchies.
 
-## Recipe 18: `TracePolicy` — Controlling a Node's Trace Payload (v1.2.11)
+## Recipe 23: `TracePolicy` — Controlling a Node's Trace Payload
 
 **Goal:** Keep one node's inputs and outputs out of its LangSmith span (here, a node that handles PII) while every other node is traced normally. For real secrets/PII redaction, see the note at the end of this recipe.
 
@@ -3210,14 +2818,14 @@ print(result2["result"])   # Processed: [REDACTED]
 
 **When to use `TracePolicy`:**
 - High-volume nodes where storing full payloads in LangSmith is expensive (e.g. long message histories).
-- Keeping a single node's span readable by summarizing or omitting bulky inputs/outputs.
+- Keeping a single node's span readable by summarising or omitting bulky inputs/outputs.
 - As a defence-in-depth measure on nodes that touch PII — **not** as your redaction mechanism.
 
 > **Not a secrets/PII redaction tool.** Per the `TracePolicy` docstring in 1.2.11, it only transforms the annotated node's own run and is "not intended to redact secrets". To redact inputs/outputs across every run (root graph run and child runs included), configure the LangSmith client instead — `Client(hide_inputs=..., hide_outputs=..., anonymizer=...)` (or the `LANGSMITH_HIDE_INPUTS` / `LANGSMITH_HIDE_OUTPUTS` environment variables).
 
 ---
 
-## Recipe 19: `ToolCallTransformer` — Structured Per-Tool Streaming (v1.2.11)
+## Recipe 24: `ToolCallTransformer` — Structured Per-Tool Streaming
 
 **Goal:** Stream a tool-calling agent and consume each tool's output incrementally as it arrives, using the structured `ToolCallStream` API rather than parsing raw event dicts.
 
@@ -3230,7 +2838,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
-from langgraph.prebuilt._tool_call_transformer import ToolCallTransformer
+from langgraph.prebuilt import ToolCallTransformer
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -3258,7 +2866,7 @@ def summarize_news(ticker: str) -> str:
 # --- Graph ---
 
 tools = [fetch_price, summarize_news]
-llm = ChatOpenAI(model="gpt-4o-mini").bind_tools(tools)
+llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(tools)
 
 
 def call_model(state: MessagesState) -> dict:
@@ -3299,7 +2907,7 @@ with graph.stream_events(
             print(f"  ERROR: {tc_stream.error}")
         else:
             # output is the ToolMessage produced by the tool call
-            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output.content}")
+            print(f"[tool] {tc_stream.tool_name} => {tc_stream.output}")
 
 # To also see state-update events, stream separately with "updates" mode:
 for update in graph.stream(
@@ -3330,7 +2938,7 @@ async def main():
             if tc_stream.error:
                 print(f"  ERROR: {tc_stream.error}")
             else:
-                print(f"  Final output: {tc_stream.output.content}")
+                print(f"  Final output: {tc_stream.output}")
 
 
 asyncio.run(main())
@@ -3340,11 +2948,11 @@ asyncio.run(main())
 - `run.tool_calls` exists only on the `GraphRunStream` returned by `stream_events(..., version="v3")` (async: `await graph.astream_events(..., version="v3")`), and only when `ToolCallTransformer` is registered — via `compile(transformers=[...])` or `stream_events(..., transformers=[...])`. The v3 protocol is marked experimental in 1.2.11.
 - Plain `graph.stream(..., stream_mode="tools")` (alone or in a list such as `["updates", "tools"]`) always yields raw event dicts (`{"event": "tool-started" | "tool-output-delta" | "tool-finished" | "tool-error", ...}`), whether or not a transformer is registered.
 - `ToolCallStream` `__iter__` / `__aiter__` (or `.output_deltas`) iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
-- `ToolCallStream.output` is the `ToolMessage` returned by the tool call (use `.content` for the text); it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
+- `ToolCallStream.output` is the value the tool returned; it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
 
 ---
 
-## Recipe 20: `entrypoint.final` — Decoupled Return and Checkpoint Value (v1.2.11)
+## Recipe 25: `entrypoint.final` — Decoupled Return and Checkpoint Value
 
 **Goal:** Build a conversation workflow where the agent returns a rich result to the caller but feeds only a compact state forward to the next turn via `previous`.
 
@@ -3451,11 +3059,11 @@ print(type(snap.values))   # TurnResult — the value= output from the last entr
 - `value=` controls what `invoke`/`stream` returns to the caller. It is **also checkpointed** — it is the entrypoint's output (`__end__` channel) and what `get_state().values` returns.
 - `save=` controls what is stored in the `__previous__` channel and surfaced as `previous` on the next call.
 - The two can be completely different types. `entrypoint.final` does **not** shrink the checkpoint — both values are persisted — so keep large or sensitive data out of `value=` if checkpoint size matters.
-- Both values go through the checkpointer's serializer. Custom classes defined in `__main__` (like the dataclasses above) currently log a "Deserializing unregistered type" warning on reload, which a future release will turn into an error. Use plain dicts / TypedDicts, define the classes in an importable module, or allow them explicitly via the serializer's `allowed_msgpack_modules`.
+- Both values go through the checkpointer's serialiser. Custom classes defined in `__main__` (like the dataclasses above) currently log a "Deserializing unregistered type" warning on reload, which a future release will turn into an error. Use plain dicts / TypedDicts, define the classes in an importable module, or allow them explicitly via the serialiser's `allowed_msgpack_modules`.
 
 ---
 
-## Recipe 21: `GraphOutput` and `Durability` — v2 Invoke API (v1.2.11)
+## Recipe 26: `GraphOutput` and `Durability` — v2 Invoke API
 
 **Goal:** Use the v2 invoke API to get a typed `GraphOutput` wrapper that includes both the final state and any interrupts that occurred, while controlling when checkpoints are persisted with `Durability` modes.
 
@@ -3559,271 +3167,3 @@ Use `version="v2"` to opt into the typed `GraphOutput` wrapper. The v1 API (defa
 
 ---
 
-## Recipe 22: `set_node_defaults()` — Graph-Wide Node Policies (v1.2.11+)
-
-**Goal:** Apply consistent retry, cache, timeout, and error-handler policies to every node in a graph without repeating the same arguments on each `add_node` call. Override for specific nodes when needed.
-
-**Uses:** `StateGraph.set_node_defaults`, `RetryPolicy`, `CachePolicy`, `TimeoutPolicy`
-
-```python
-import asyncio
-import httpx
-from datetime import timedelta
-from typing_extensions import TypedDict
-
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.cache.memory import InMemoryCache
-from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy, Command
-from langgraph.errors import NodeError
-
-
-class PipelineState(TypedDict):
-    query: str
-    raw: str
-    enriched: str
-    result: str
-    error_msg: str
-
-
-# --- Nodes ---
-
-async def fetch_node(state: PipelineState) -> dict:
-    """Simulates a potentially flaky external API call."""
-    if state["query"] == "fail":
-        raise httpx.TransportError("Simulated network failure")
-    return {"raw": f"raw_data:{state['query']}"}
-
-
-async def enrich_node(state: PipelineState) -> dict:
-    return {"enriched": f"enriched:{state['raw']}"}
-
-
-async def format_node(state: PipelineState) -> dict:
-    return {"result": f"formatted:{state['enriched']}"}
-
-
-# --- Global error fallback ---
-
-async def global_error_handler(state: PipelineState, error: NodeError) -> Command:
-    """Runs for any node that exhausts its retries without a per-node handler.
-    Returns Command(goto=END) to short-circuit the remaining pipeline."""
-    return Command(
-        update={"error_msg": f"pipeline failed at query={state['query']!r}", "result": "error"},
-        goto=END,
-    )
-
-
-# --- Wire up the graph ---
-
-cache = InMemoryCache()
-
-# Retry transient network errors only
-def _is_transient(exc: Exception) -> bool:
-    return isinstance(exc, (httpx.TransportError, httpx.TimeoutException, ConnectionError))
-
-
-graph = (
-    StateGraph(PipelineState)
-    .set_node_defaults(
-        # All nodes get 3 retry attempts with exponential backoff on transient errors.
-        retry_policy=RetryPolicy(
-            max_attempts=3,
-            initial_interval=0.5,
-            backoff_factor=2.0,
-            retry_on=_is_transient,
-        ),
-        # Hard 30-second cap on any single node execution (requires async nodes).
-        timeout=TimeoutPolicy(run_timeout=timedelta(seconds=30)),
-        # Global fallback — runs if a node raises and exhausts all retries.
-        error_handler=global_error_handler,
-    )
-    # Cache only the nodes whose output is worth storing; set explicitly per node.
-    .add_node("fetch", fetch_node, cache_policy=CachePolicy(ttl=600))
-    .add_node("enrich", enrich_node, cache_policy=CachePolicy(ttl=600))
-    .add_node(
-        "format",
-        format_node,
-        # format_node is cheap and non-deterministic enough that caching adds no value.
-        retry_policy=RetryPolicy(max_attempts=1),
-    )
-    .add_edge(START, "fetch")
-    .add_edge("fetch", "enrich")
-    .add_edge("enrich", "format")
-    .add_edge("format", END)
-    .compile(checkpointer=InMemorySaver(), cache=cache)
-)
-
-# Normal run
-result = asyncio.run(graph.ainvoke(
-    {"query": "langgraph", "raw": "", "enriched": "", "result": "", "error_msg": ""},
-    config={"configurable": {"thread_id": "pipe-1"}},
-))
-print(result["result"])   # formatted:enriched:raw_data:langgraph
-print(result["error_msg"])  # ""  (empty — no error)
-
-# Failing run — error handler takes over after retries are exhausted
-failed = asyncio.run(graph.ainvoke(
-    {"query": "fail", "raw": "", "enriched": "", "result": "", "error_msg": ""},
-    config={"configurable": {"thread_id": "pipe-2"}},
-))
-print(failed["error_msg"])  # pipeline failed at query='fail'
-print(failed["result"])     # error
-```
-
-**Policy resolution rules:**
-
-| Policy | Default scope | Per-node override |
-|---|---|---|
-| `retry_policy` | All nodes (regular + error-handler) | `add_node(..., retry_policy=RetryPolicy(...))` |
-| `cache_policy` | Regular nodes only (handlers excluded) | `add_node(..., cache_policy=CachePolicy(...))` |
-| `timeout` | All nodes (regular + error-handler) | `add_node(..., timeout=10.0)` |
-| `error_handler` | Regular nodes only | `add_node(..., error_handler=my_fn)` |
-
-`set_node_defaults` returns `Self` so it can be chained fluently with `add_node` and `add_edge`.
-When no graph-wide `cache_policy` default is set, assign `cache_policy=CachePolicy(...)` selectively per `add_node` call to choose which nodes are cached.
-
----
-
-## Recipe 23: `ToolRuntime` — All-in-One Tool Injection
-
-**Goal:** Access graph state, the long-term store, the tool call ID, and the stream writer from inside a tool without stacking multiple `Annotated` parameters.
-
-**Uses:** `ToolRuntime` (from `langgraph.prebuilt`), `ToolNode`, `InjectedStore` (comparison)
-
-```python
-from dataclasses import dataclass
-from typing import Annotated
-from typing_extensions import TypedDict
-
-from langchain_core.tools import tool
-from langchain_anthropic import ChatAnthropic
-
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from langgraph.prebuilt import ToolNode, tools_condition, ToolRuntime
-from langgraph.store.memory import InMemoryStore
-from langgraph.runtime import ExecutionInfo
-
-
-@dataclass
-class TenantCtx:
-    tenant_id: str
-
-
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-    user_id: str
-    session_id: str
-
-
-@tool
-def intelligent_search(
-    query: str,
-    runtime: ToolRuntime[TenantCtx, AgentState],  # injected — hidden from the LLM
-) -> str:
-    """Search project documents and stream progress back to the client."""
-    # ── Access current graph state ──────────────────────────────────────
-    state: AgentState | None = runtime.state
-    user_id = state["user_id"] if state else "anonymous"
-    session = state["session_id"] if state else "unknown"
-
-    # ── Access run-scoped context ────────────────────────────────────────
-    tenant_id = runtime.context.tenant_id if runtime.context else "default"
-
-    # ── Stream a progress token mid-tool ────────────────────────────────
-    if runtime.stream_writer:
-        runtime.stream_writer({"event": "search_start", "query": query})
-
-    # ── Query the long-term store ────────────────────────────────────────
-    results: list[str] = []
-    if runtime.store:
-        # Plain namespace search (no index configured).
-        # Paginate through all documents before filtering so that matching
-        # documents beyond the first page are not silently omitted.
-        # For semantic/vector search, initialise InMemoryStore with an embeddings index.
-        all_hits, offset, page_size = [], 0, 50
-        while True:
-            page = runtime.store.search(("docs", tenant_id), limit=page_size, offset=offset)
-            all_hits.extend(page)
-            if len(page) < page_size:
-                break
-            offset += page_size
-        matches = [h.value.get("text", "") for h in all_hits if query.lower() in h.value.get("text", "").lower()]
-        results = matches[:5]   # return at most 5 matching documents
-
-    # ── Audit log with the exact tool call ID ────────────────────────────
-    print(
-        f"[AUDIT] tool_call_id={runtime.tool_call_id!r} "
-        f"user={user_id} session={session} query={query!r}"
-    )
-
-    if not results:
-        return "No documents found."
-    return "\n".join(f"• {r}" for r in results)
-
-
-# ── Populate the store ──────────────────────────────────────────────────────
-
-store = InMemoryStore()
-store.put(("docs", "acme"), "doc1", {"text": "LangGraph orchestration guide"})
-store.put(("docs", "acme"), "doc2", {"text": "LangGraph checkpointing reference"})
-
-# ── Build the graph ─────────────────────────────────────────────────────────
-
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([intelligent_search])
-
-
-def agent_node(state: AgentState) -> dict:
-    return {"messages": [model.invoke(state["messages"])]}
-
-
-builder = StateGraph(AgentState, context_schema=TenantCtx)
-builder.add_node("agent", agent_node)
-builder.add_node("tools", ToolNode([intelligent_search]))
-builder.add_edge(START, "agent")
-builder.add_conditional_edges("agent", tools_condition)
-builder.add_edge("tools", "agent")
-
-graph = builder.compile(store=store)
-
-last_state = None
-for kind, data in graph.stream(
-    {
-        "messages": [{"role": "user", "content": "Search for LangGraph checkpointing"}],
-        "user_id": "alice",
-        "session_id": "sess-42",
-    },
-    context=TenantCtx(tenant_id="acme"),
-    stream_mode=["custom", "values"],
-):
-    if kind == "custom":
-        # {'event': 'search_start', 'query': 'Search for LangGraph checkpointing'}
-        print(f"[stream] {data}")
-    elif kind == "values":
-        last_state = data
-
-print(last_state["messages"][-1].content)
-```
-
-**`ToolRuntime` field summary (from `langgraph-prebuilt==1.1.0`):**
-
-| Field | Type | Source |
-|---|---|---|
-| `state` | `StateT \| None` | Current graph state dict |
-| `context` | `ContextT \| None` | Context passed as `context=` at invoke time |
-| `config` | `RunnableConfig \| None` | LangChain runnable config for this run |
-| `stream_writer` | `StreamWriter \| None` | Write to `stream_mode="custom"` |
-| `tool_call_id` | `str \| None` | ID of the triggering tool call (for audit/tracing) |
-| `store` | `BaseStore \| None` | Store passed to `compile(store=...)` |
-| `tools` | `list[BaseTool]` | All tools registered with this `ToolNode` |
-
-Use `ToolRuntime[ContextT, StateT]` to get typed `context` and `state`. With no generics, both default to `Any`.
-
-**When to use `ToolRuntime` vs individual annotations:**
-
-| Scenario | Recommendation |
-|---|---|
-| Only state | `Annotated[MyState, InjectedState]` |
-| Only store | `Annotated[BaseStore, InjectedStore()]` |
-| State + store + streaming + audit | `runtime: ToolRuntime` — fewer parameters, cleaner signature |

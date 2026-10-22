@@ -1,16 +1,14 @@
 ---
 title: "Store (long-term memory) — API reference"
 description: "BaseStore, InMemoryStore, IndexConfig, TTLConfig — the cross-thread key-value-plus-vector-search layer LangGraph uses for durable memory across conversations."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Store"
   order: 32
 ---
 
-# Store (long-term memory) — API reference
-
-Verified against **`langgraph==1.2.14`** (modules: `langgraph.store.base`, `langgraph.store.memory`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.store.base`, `langgraph.store.memory`).
 
 Checkpointers give you **short-term** memory tied to a single `thread_id`. A `Store` gives you **long-term** memory that lives outside any thread — shared across conversations, users, and graph runs. Same backend pattern as checkpointers: one abstract base, multiple implementations.
 
@@ -50,7 +48,7 @@ graph = (
 
 | Backend | Import | Persists? | Vector search | TTL |
 |---|---|---|---|---|
-| `InMemoryStore` | `langgraph.store.memory` | No | Yes (numpy if installed) | Optional |
+| `InMemoryStore` | `langgraph.store.memory` | No | Yes (numpy if installed) | No (`supports_ttl` is `False`) |
 | `PostgresStore` | `langgraph.store.postgres`<sup>1</sup> | Yes | Yes (pgvector) | Yes |
 | `AsyncPostgresStore` | `langgraph.store.postgres.aio`<sup>1</sup> | Yes | Yes (pgvector) | Yes |
 | `AsyncBatchedBaseStore` | `langgraph.store.base.batch` | Adapter | Same as wrapped | Same as wrapped |
@@ -61,7 +59,7 @@ graph = (
 
 - **`namespace: tuple[str, ...]`** — hierarchical path (e.g., `("users", "123", "memories")`). The prefix is used for listing and scoped searches.
 - **`key: str`** — unique within a namespace.
-- **`value: dict[str, Any]`** — JSON-serializable payload. Keys are filterable.
+- **`value: dict[str, Any]`** — JSON-serialisable payload. Keys are filterable.
 - **`Item`** — returned by `get` / `list_namespaces`. Fields: `value`, `key`, `namespace`, `created_at`, `updated_at`.
 - **`SearchItem(Item)`** — returned by `search`. Adds `score: float | None`.
 
@@ -71,7 +69,7 @@ Any of these operations can raise `InvalidNamespaceError` (e.g., empty tuple, em
 
 All methods have sync and `a`-prefixed async variants.
 
-```python
+```text
 # Sync
 store.get(namespace, key, *, refresh_ttl=None) -> Item | None
 store.put(namespace, key, value, index=None, *, ttl=NOT_PROVIDED) -> None
@@ -99,7 +97,7 @@ Under the hood, every single-item method funnels through `batch`/`abatch`. Submi
 
 ## `put()` — details
 
-```python
+```text
 store.put(
     namespace: tuple[str, ...],
     key: str,
@@ -122,7 +120,7 @@ store.put(
 # Store a regular item (uses store's default index config)
 store.put(("docs",), "d1", {"text": "Python tutorial", "lang": "python"})
 
-# TTL: item expires after 30 minutes of inactivity
+# TTL (PostgresStore only): item expires after 30 minutes of inactivity
 store.put(("cache",), "result-xyz", {"data": "..."}, ttl=30)
 
 # Skip embedding for this item even if the store has vector search
@@ -139,7 +137,7 @@ await store.aput(("docs",), "draft", {"text": "WIP..."}, index=False)
 
 ## `get()` — details
 
-```python
+```text
 store.get(
     namespace: tuple[str, ...],
     key: str,
@@ -213,7 +211,7 @@ results = store.search(
 | `$lt` | Less than | `{"age": {"$lt": 30}}` |
 | `$lte` | Less than or equal | `{"age": {"$lte": 30}}` |
 
-Numeric comparisons use `float()` coercion internally, matching PostgreSQL JSONB behavior. Nested dict filters require the stored value to also be a dict with matching keys. Filtering is applied before semantic ranking, so `filter=` does not require an index.
+Numeric comparisons use `float()` coercion internally, matching PostgreSQL JSONB behaviour. Nested dict filters require the stored value to also be a dict with matching keys. Filtering is applied before semantic ranking, so `filter=` does not require an index.
 
 ### Semantic (vector) search
 
@@ -330,7 +328,6 @@ Common model dimensions (from source docstring):
 |---|---|
 | `openai:text-embedding-3-large` | 3072 |
 | `openai:text-embedding-3-small` | 1536 |
-| `openai:text-embedding-ada-002` | 1536 |
 | `cohere:embed-english-v3.0` | 1024 |
 | `cohere:embed-english-light-v3.0` | 384 |
 | `cohere:embed-multilingual-v3.0` | 1024 |
@@ -347,13 +344,13 @@ class TTLConfig(TypedDict, total=False):
 
 - `refresh_on_read` — if `True`, every `get()` or `search()` that returns an item resets its TTL. Can be overridden per-call with `refresh_ttl=` on `get`/`search`.
 - `default_ttl` — applied to all `put()` calls that do not specify their own `ttl=`.
-- `sweep_interval_minutes` — how often the backend actively deletes expired items. `InMemoryStore` evicts lazily (no background sweeper).
+- `sweep_interval_minutes` — how often `start_ttl_sweeper()` deletes expired items (`PostgresStore`; call `sweep_ttl()` for a single pass).
 
-Only set `ttl=...` on `put()` if the backend supports TTL. `InMemoryStore` accepts the kwarg (`supports_ttl = True`) but does not run a background sweeper.
+Only set `ttl=...` on `put()` if the backend supports TTL. `InMemoryStore` does not (`supports_ttl` is `False`, and `put(..., ttl=...)` raises `NotImplementedError`).
 
 ## `InMemoryStore`
 
-```python
+```text
 from langgraph.store.memory import InMemoryStore
 
 store = InMemoryStore(*, index: IndexConfig | None = None)
@@ -595,6 +592,7 @@ def remember(
     text: str,
     store: Annotated[BaseStore, InjectedStore()],
 ) -> str:
+    """Save a note for the user."""
     store.put(("mem", user_id), f"note-{text[:16]}", {"text": text})
     return "ok"
 
@@ -604,10 +602,13 @@ def recall(
     topic: str,
     store: Annotated[BaseStore, InjectedStore()],
 ) -> list[str]:
+    """Find the user's notes about a topic."""
     return [i.value["text"] for i in store.search(("mem", user_id), query=topic, limit=5)]
 ```
 
 ### 5. TTL-bounded cache
+
+Needs a store with TTL support (`PostgresStore` with a `ttl` config); `InMemoryStore.put(..., ttl=...)` raises `NotImplementedError`.
 
 ```python
 # Store result with a 30-minute TTL
@@ -623,7 +624,7 @@ hit = await store.aget(("cache", "bing"), query, refresh_ttl=True)
 
 ### 6. Filter operators — comparison-based search
 
-`filter=` on `search()` supports exact equality and six comparison operators, matching PostgreSQL JSONB behavior. No index required — filtering is applied before semantic ranking.
+`filter=` on `search()` supports exact equality and six comparison operators, matching PostgreSQL JSONB behaviour. No index required — filtering is applied before semantic ranking.
 
 ```python
 from langgraph.store.memory import InMemoryStore
@@ -817,7 +818,7 @@ Supported path selector syntax (from `PutOp.index` source):
 - **Namespace rules.** Each segment must be a non-empty string and must not contain `"."`. `("", "x")` raises `InvalidNamespaceError`. The root segment `"langgraph"` is reserved and also raises.
 - **`query=` is ignored without an index.** You will get filter-only results without any warning — always assert `store` was built with `index=IndexConfig(...)` when you rely on semantic search.
 - **`fields=["$"]`** means the entire value is stringified and embedded. Pick explicit fields for better recall and smaller embedding costs.
-- **`InMemoryStore` is not Platform-safe.** LangGraph Platform provides a managed store — don't pass one when deploying there.
+- **Don't pass a store when deploying to the Agent Server.** LangSmith Deployment and `langgraph dev`/`up` provide a managed store.
 - **TTL is in minutes, not seconds.** `ttl=30` means 30 minutes, not 30 seconds.
 - **`store.search` returns `list[SearchItem]`, not an iterator.** Always bounded by `limit` (default 10). Paginate with `offset`.
 - **`delete` uses `PutOp(...value=None)` internally.** If you subclass `BaseStore`, `PutOp.value is None` is the delete signal.

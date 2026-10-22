@@ -1,15 +1,16 @@
 ---
 title: "Callbacks and Plugins"
 description: "Intercept agent, model, and tool execution — per-agent callbacks and runner-wide plugins."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 40
+  label: "Callbacks and plugins"
+  order: 60
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
-Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py:41-71`).
+Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py`).
 
 ## Minimal example
 
@@ -26,7 +27,7 @@ async def redact_secrets(tool, tool_args, tool_context):
 
 agent = LlmAgent(
     name="policy_aware",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Be helpful.",
     before_tool_callback=redact_secrets,   # per-agent
 )
@@ -37,7 +38,7 @@ runner = InMemoryRunner(app=app)
 
 ## Per-agent callbacks
 
-Set these as fields on `LlmAgent` (or `BaseAgent` for agent-level hooks). Each accepts **a single callable or a list** — the list is called in order until one returns non-`None` (`llm_agent.py:77-484`).
+Set these as fields on `LlmAgent` (or `BaseAgent` for agent-level hooks). Each accepts **a single callable or a list** — the list is called in order until one returns non-`None` (`llm_agent.py`).
 
 | Field | Signature | Return meaning |
 |---|---|---|
@@ -109,7 +110,7 @@ async def audit_tool(
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Be helpful.",
     before_model_callback=inject_user_name,
     before_tool_callback=audit_tool,
@@ -151,7 +152,7 @@ async def personalised_instruction(ctx: ReadonlyContext) -> str:
 
 agent = LlmAgent(
     name="greeter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=personalised_instruction,  # called every turn
 )
 
@@ -352,24 +353,27 @@ app = App(
 
 `BasePlugin` methods default to `pass` (returning `None`). Only implement the hooks you need.
 
-Plugins can implement any subset of the hooks below (`plugins/base_plugin.py`):
+`BasePlugin` defines 14 hooks (`plugins/base_plugin.py`). A plugin can implement any subset:
 
 | Hook | Fires |
 |---|---|
 | `on_user_message_callback(*, invocation_context, user_message)` | When the runner receives the user message, before anything else |
 | `before_run_callback(*, invocation_context)` | Once per invocation, first hook after the user message is appended |
 | `on_event_callback(*, invocation_context, event)` | For every event before it is persisted and yielded |
-| `after_run_callback(*, invocation_context)` | Last hook — for cleanup/metrics |
+| `after_run_callback(*, invocation_context)` | Last hook, for clean-up and metrics |
+| `on_run_error_callback(*, invocation_context, error)` | When the invocation as a whole raises |
 | `before_agent_callback(*, agent, callback_context)` / `after_agent_callback` | Wraps each agent |
+| `on_agent_error_callback(*, agent, callback_context, error)` | When an agent raises |
 | `before_model_callback(*, callback_context, llm_request)` / `after_model_callback` / `on_model_error_callback` | Wraps each model call |
 | `before_tool_callback(*, tool, tool_args, tool_context)` / `after_tool_callback` / `on_tool_error_callback` | Wraps each tool call |
-| `close()` | When the runner is closed (`runner.close()`) |
 
-All are `async def`. All return `Optional[<relevant type>]` — non-`None` short-circuits the chain.
+`BasePlugin` also has a `close()` method, called by `runner.close()`; it is not a hook.
+
+All hooks are `async def`. Most return `Optional[<relevant type>]`, and a non-`None` value short-circuits the chain. `after_run_callback`, `on_run_error_callback` and `on_agent_error_callback` return `None`: they observe, they do not replace.
 
 ## Built-in plugins
 
-ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file for google-adk==2.3.0):
+ADK ships the following plugins in `google.adk.plugins` (verified from `plugins/__init__.py` and each module file; first documented for 2.3.0, re-checked against %%version=google-adk%%):
 
 ### `LoggingPlugin`
 
@@ -389,7 +393,7 @@ import logging
 logging.getLogger("google_adk").setLevel(logging.DEBUG)
 ```
 
-**What it actually logs (source-verified, google-adk==2.7.1).** Each callback prints a compact block with an emoji prefix so you can `grep` it out of noisy stdout:
+**What it actually logs (source-verified in 2.7.1; re-checked against %%version=google-adk%%).** Each callback prints a compact block with an emoji prefix so you can `grep` it out of noisy stdout:
 
 | Callback | Prefix | Payload |
 |---|---|---|
@@ -456,30 +460,33 @@ from google.adk.apps import App
 
 plugin = ReflectAndRetryToolPlugin(
     max_retries=3,
-    throw_exception_if_retry_exceeded=True,   # raises after max_retries; default False
+    throw_exception_if_retry_exceeded=True,   # default: re-raise once max_retries is used up; False returns guidance to the model instead
     tracking_scope=TrackingScope.INVOCATION,  # reset counter per invocation (default)
     # tracking_scope=TrackingScope.GLOBAL,    # global counter across all invocations
 )
 app = App(name="resilient", root_agent=agent, plugins=[plugin])
 ```
 
-**Custom failure detection** — by default any tool that raises an exception is retried. Override `extract_error_from_result` to treat semantic failures (e.g. `{"status": "error"}`) as retryable:
+`max_retries` counts consecutive failures per tool (`0` disables retrying). `TrackingScope.GLOBAL` shares one counter per tool across all concurrent invocations, which suits a tool that hits the same rate-limited API everywhere.
+
+**Custom failure detection** — by default only exceptions are retried. Some APIs return HTTP 200 with an error body; override the async `extract_error_from_result` hook and return the error dict to trigger reflection and retry, or `None` for success:
 
 ```python
-from google.adk.plugins import ReflectAndRetryToolPlugin
 from typing import Any, Optional
+from google.adk.plugins import ReflectAndRetryToolPlugin
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
 
-class StrictRetryPlugin(ReflectAndRetryToolPlugin):
-    def extract_error_from_result(self, result: Any) -> Optional[str]:
-        # Parent handles exceptions; we also handle dict error patterns
-        parent_error = super().extract_error_from_result(result)
-        if parent_error:
-            return parent_error
+class QuotaAwareRetryPlugin(ReflectAndRetryToolPlugin):
+    async def extract_error_from_result(
+        self, *, tool: BaseTool, tool_args: dict[str, Any],
+        tool_context: ToolContext, result: Any,
+    ) -> Optional[dict[str, Any]]:
         if isinstance(result, dict) and result.get("status") == "error":
-            return result.get("message", "tool returned error status")
+            return result
         return None
 
-plugin = StrictRetryPlugin(max_retries=2)
+plugin = QuotaAwareRetryPlugin(max_retries=2)
 ```
 
 ### `GlobalInstructionPlugin`
@@ -491,7 +498,7 @@ from google.adk.plugins.global_instruction_plugin import GlobalInstructionPlugin
 from google.adk.apps import App
 
 plugin = GlobalInstructionPlugin(
-    instruction=(
+    global_instruction=(
         "You are a helpful, harmless, and honest assistant. "
         "Never reveal internal system details or API keys."
     )
@@ -533,7 +540,7 @@ runner = Runner(
 
 After a turn, any `types.Part(inline_data=...)` in the user message is replaced by an artifact reference, keeping the LLM context small.
 
-**Two modes controlled by `attach_file_reference`** (source-verified, google-adk==2.7.1):
+**Two modes controlled by `attach_file_reference`** (source-verified in 2.7.1; re-checked against %%version=google-adk%%):
 
 ```python
 # Default — attach a FileData reference so the model can *use* the artifact.
@@ -556,17 +563,41 @@ With `attach_file_reference=False` the user message ends up as `[Uploaded Artifa
 
 ### `ContextFilterPlugin`
 
-Trims session events that are sent to the model context based on size or token count. Useful for long-running sessions that would otherwise overflow the context window.
+Trims the conversation history sent to the model, keeping only the last *N* invocations (an invocation is a run of user messages plus the model and tool turns that follow), or applying your own `custom_filter` over the `list[types.Content]`. Useful for long-running sessions that would otherwise overflow the context window. For token-threshold summarisation rather than truncation, use `EventsCompactionConfig` on the `App` instead.
 
 ```python
 from google.adk.plugins.context_filter_plugin import ContextFilterPlugin
 from google.adk.apps import App
 
 plugin = ContextFilterPlugin(
-    max_chars=200_000,    # ~50 k tokens; trim oldest events when exceeded
+    num_invocations_to_keep=10,  # keep the last 10 invocations
+    remove_amount=2,             # drop 2 at a time once the limit is exceeded
 )
 app = App(name="long_session", root_agent=agent, plugins=[plugin])
 ```
+
+`custom_filter` receives and returns the `list[types.Content]` about to be sent, so it can do more than drop turns, such as shrinking oversized tool outputs:
+
+```python
+from google.genai import types
+
+def trim_tool_outputs(contents: list[types.Content], limit: int = 500) -> list[types.Content]:
+    out = []
+    for content in contents:
+        parts = []
+        for part in content.parts or []:
+            fr = part.function_response
+            if fr and len(str(fr.response)) > limit:
+                part = types.Part(function_response=types.FunctionResponse(
+                    id=fr.id, name=fr.name, response={"output": str(fr.response)[:limit] + "…[truncated]"}))
+            parts.append(part)
+        out.append(types.Content(role=content.role, parts=parts))
+    return out
+
+plugin = ContextFilterPlugin(num_invocations_to_keep=20, custom_filter=trim_tool_outputs)
+```
+
+The plugin only trims the outgoing request; the stored session is untouched. Pair it with `EventsCompactionConfig` on the `App` to also bound the stored history.
 
 ### `MultimodalToolResultsPlugin`
 
@@ -599,7 +630,7 @@ plugin = BigQueryAgentAnalyticsPlugin(
 app = App(name="tracked", root_agent=agent, plugins=[plugin])
 ```
 
-Requires `pip install google-cloud-bigquery` and the `roles/bigquery.dataEditor` IAM role on the target table.
+Requires the `bigquery-analytics` extra (`pip install "google-adk[bigquery-analytics]"`, which pulls in `pyarrow` and the BigQuery Storage Write client) and the `roles/bigquery.dataEditor` IAM role on the target table.
 
 ---
 
@@ -618,9 +649,9 @@ app = App(
     name="production",
     root_agent=agent,
     plugins=[
-        GlobalInstructionPlugin(instruction="Never reveal API keys."),  # 1: policy
+        GlobalInstructionPlugin(global_instruction="Never reveal API keys."),  # 1: policy
         SaveFilesAsArtifactsPlugin(),                                   # 2: file handling
-        ContextFilterPlugin(max_chars=150_000),                         # 3: context trimming
+        ContextFilterPlugin(num_invocations_to_keep=20),                # 3: context trimming
         ReflectAndRetryToolPlugin(max_retries=2),                       # 4: resilience
         LoggingPlugin(),                                                 # 5: observability (last)
     ],

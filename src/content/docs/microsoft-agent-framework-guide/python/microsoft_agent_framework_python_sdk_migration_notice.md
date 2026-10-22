@@ -1,11 +1,11 @@
 ---
-title: "azure-ai-agents — Integration Add-on Reference"
+title: "Microsoft Agent Framework (Python) — azure-ai-agents Add-on"
 description: "azure-ai-agents is an optional Microsoft add-on for the Azure AI Agents service, not a replacement for agent-framework. This page explains when to use it alongside the framework."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
+sidebar:
+  label: "azure-ai-agents add-on"
 ---
-
-# `azure-ai-agents` — Integration Add-on Reference
 
 > **Clarification:** `azure-ai-agents` is **not** a replacement for `agent-framework`. It is an optional Microsoft SDK for direct access to the Azure AI Agents service REST API. Use it alongside `agent-framework` when you need low-level control over Azure AI Agents service resources (threads, runs, vector stores). For everyday agent development, use `agent-framework` directly.
 
@@ -44,11 +44,13 @@ For everything else — tool decoration, middleware, sessions, MCP, A2A, declara
 import asyncio
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from azure.identity import AzureCliCredential
 
 async def main():
     client = FoundryChatClient(
-        endpoint="https://myresource.services.ai.azure.com",
-        subscription_id="...",
+        project_endpoint="https://myresource.services.ai.azure.com/api/projects/my-project",
+        model="%%model=openai-small%%",
+        credential=AzureCliCredential(),
     )
     agent = Agent(client=client, instructions="You are a helpful assistant.")
     response = await agent.run("hello")
@@ -70,7 +72,7 @@ client = AgentsClient(
 )
 
 agent = client.create_agent(
-    model="gpt-4o",
+    model="%%model=openai%%",
     name="my-assistant",
     instructions="You are a helpful assistant.",
 )
@@ -104,17 +106,17 @@ pip install azure-ai-agents azure-identity
 Provider-specific `agent-framework` sub-packages:
 
 ```bash
-pip install agent-framework-azure-ai       # Azure AI Foundry chat client
+pip install agent-framework-foundry        # Microsoft Foundry chat client (FoundryChatClient)
 pip install agent-framework-openai         # OpenAI / Azure OpenAI chat clients
-pip install agent-framework-a2a --pre      # A2A protocol (pre-release)
-pip install agent-framework-declarative --pre  # Declarative workflows (pre-release)
+pip install agent-framework-a2a --pre      # A2A protocol (beta)
+pip install agent-framework-declarative    # Declarative YAML agents and workflows
 ```
 
 ---
 
 ## Further Reading
 
-- [Comprehensive Python guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — full `agent-framework` API reference
+- [Comprehensive Python guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — the `agent-framework` core, with an API map
 - [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) — `FoundryChatClient`, `OpenAIChatClient`, `AnthropicClient`
-- [azure-ai-agents class reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#appendix-azure-ai-agents-add-on-separate-package) — `AgentsClient`, `FunctionTool`, `ToolSet`, and more (now consolidated into the comprehensive guide's appendix)
+- [`azure-ai-agents` reference on Microsoft Learn](https://learn.microsoft.com/python/api/overview/azure/ai-agents-readme) — `AgentsClient`, threads, runs, tool sets and vector stores
 - [Official `azure-ai-agents` PyPI page](https://pypi.org/project/azure-ai-agents/)

@@ -1,18 +1,16 @@
 ---
 title: "Chapter 2 — Your First Agent"
-description: "Build linear pipelines, conditional routers, looping agents, ReAct tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads. Verified against langgraph==1.2.12."
-framework: langgraph
-language: python
+description: "Build linear pipelines, conditional routers, looping agents, tool-calling agents, and streaming outputs — six concrete patterns that cover most single-agent workloads."
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "2 · Your first agent"
   order: 2
 ---
 
-# Chapter 2 — Your First Agent
+**What you'll learn:** six concrete agent patterns you can copy-paste and adapt — a linear chat pipeline, conditional routing, looping with a safeguard counter, a tool-calling agent with `create_agent`, `tools_condition` for routing, and streaming execution.
 
-**What you'll learn:** six concrete agent patterns you can copy-paste and adapt — a linear chat pipeline, conditional routing, looping with a safeguard counter, a ReAct tool-calling agent with `create_react_agent`, `tools_condition` for routing, and streaming execution.
-
-Verified against **`langgraph==1.2.12`**.
+Verified against **`langgraph==%%version=langgraph%%`**.
 
 **Time:** ~25 minutes.
 
@@ -32,7 +30,7 @@ from langchain_core.messages import SystemMessage
 
 # Construct the model ONCE at module scope — reusing across node calls avoids
 # unnecessary client-creation overhead in production.
-model = ChatAnthropic(model="claude-sonnet-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 def call_model(state: MessagesState) -> dict:
     """Call the LLM with the full message history."""
@@ -94,7 +92,7 @@ class State(TypedDict):
     query_type: str
     result: str
 
-model = ChatAnthropic(model="claude-sonnet-5")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 def classify_query(state: State) -> dict:
@@ -191,15 +189,14 @@ print(result)
 
 ---
 
-## Example 4: ReAct Agent with `create_react_agent`
+## Example 4: Tool-calling agent with `create_agent`
 
-`create_react_agent` from `langgraph.prebuilt` builds a full tool-calling loop for you — no boilerplate. It uses an agent state that extends `MessagesState` with an internal `remaining_steps` counter, and adds a `tools` node wired with `tools_condition`.
+`create_agent` from the `langchain` package (`pip install langchain`) builds the whole tool-calling loop: a model node, a tools node, and the routing between them. It returns a compiled LangGraph graph, so `invoke`, `stream`, checkpointers and interrupts work as in the examples above.
 
 ```python
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
+from langchain.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
-from langchain_anthropic import ChatAnthropic
-from langchain_core.tools import tool
 
 
 @tool
@@ -219,14 +216,14 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
     return f"{amount} {from_currency} = {amount * rates[key]:.2f} {to_currency}"
 
 
-agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
+agent = create_agent(
+    "anthropic:%%model=anthropic%%",
     tools=[get_weather, convert_currency],
+    system_prompt="You are a helpful travel assistant. Answer concisely.",
     checkpointer=InMemorySaver(),
-    prompt="You are a helpful travel assistant. Answer concisely.",
 )
 
-cfg = {"configurable": {"thread_id": "travel-1"}}
+cfg = {"configurable": {"thread_id": "travel-1"}, "recursion_limit": 25}
 
 # The agent decides which tools to call and loops until it has an answer.
 result = agent.invoke(
@@ -236,25 +233,27 @@ result = agent.invoke(
 print(result["messages"][-1].content)
 ```
 
-Key parameters on `create_react_agent`:
+`recursion_limit` caps the number of graph steps (each model call and each tools step counts). The default is 10007, which is far too high to stop a model that keeps calling tools, so set it for agent loops.
 
-| Parameter | Type | Purpose |
-|---|---|---|
-| `model` | `str \| BaseChatModel \| Callable` | The LLM to use (static or dynamic) |
-| `tools` | `list[BaseTool \| Callable]` | Tools the model may invoke |
-| `prompt` | `str \| SystemMessage \| Callable` | System prompt (string shorthand or callable) |
-| `checkpointer` | `BaseCheckpointSaver \| None` | Persistence for multi-turn threads |
-| `store` | `BaseStore \| None` | Cross-thread long-term memory |
-| `pre_model_hook` | `Callable \| Runnable \| None` | Transform state before each model call |
-| `post_model_hook` | `Callable \| Runnable \| None` | Transform/inspect state after each model call |
-| `response_format` | `dict \| type[BaseModel] \| None` | Force structured output on the final response |
-| `interrupt_before` / `interrupt_after` | `list[str]` | Pause for human approval before/after named nodes |
+Main `create_agent` parameters:
+
+| Parameter | Purpose |
+|---|---|
+| `model` | A `"provider:model"` string or a chat model instance |
+| `tools` | Tools the model may call (`@tool` functions, `BaseTool`s, or provider tool dicts) |
+| `system_prompt` | System prompt string or `SystemMessage` |
+| `middleware` | Hooks around model and tool calls, and built-ins for approvals, summarisation, limits and retries ([Chapter 8](/langgraph-guide/python/chapter-08-middleware-hooks/)) |
+| `response_format` | A Pydantic model or JSON schema for structured output; the result is in `result["structured_response"]` |
+| `state_schema`, `context_schema` | Extra state fields (subclass `langchain.agents.AgentState`); typed run context passed as `invoke(..., context=...)` |
+| `checkpointer`, `store` | Thread persistence and long-term memory ([Chapter 5](/langgraph-guide/python/chapter-05-memory/)) |
+
+> **`create_react_agent` is deprecated.** Older code uses `langgraph.prebuilt.create_react_agent(model, tools, prompt=...)`. It still runs, with a `LangGraphDeprecatedSinceV10` warning, and is due for removal in LangGraph 2.0. Change `prompt=` to `system_prompt=` and move `pre_model_hook`/`post_model_hook` to middleware; [Chapter 8](/langgraph-guide/python/chapter-08-middleware-hooks/#migrating-from-create_react_agent-hooks) has the full mapping.
 
 ---
 
 ## Example 5: Custom agent loop with `tools_condition`
 
-When you need more control than `create_react_agent` gives you, build the agent graph manually. `tools_condition` is the standard routing function that checks whether the last `AIMessage` contains tool calls.
+When you need more control than `create_agent` gives you, build the agent graph manually. `tools_condition` is the standard routing function that checks whether the last `AIMessage` contains tool calls.
 
 ```python
 from langgraph.graph import StateGraph, MessagesState, START, END
@@ -295,7 +294,7 @@ def calculator(expression: str) -> str:
         return f"Error: {e}"
 
 
-model = ChatAnthropic(model="claude-sonnet-5").bind_tools([search, calculator])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([search, calculator])
 
 
 def agent_node(state: MessagesState) -> dict:
@@ -342,10 +341,8 @@ def tools_condition(state):
 All LangGraph graphs expose a `.stream()` method. Choose the mode that fits your use case.
 
 ```python
-from langgraph.graph import StateGraph, MessagesState, START, END
-from langgraph.prebuilt import create_react_agent
-from langchain_anthropic import ChatAnthropic
-from langchain_core.tools import tool
+from langchain.agents import create_agent
+from langchain.tools import tool
 
 
 @tool
@@ -354,10 +351,7 @@ def multiply(a: float, b: float) -> float:
     return a * b
 
 
-agent = create_react_agent(
-    model=ChatAnthropic(model="claude-sonnet-5"),
-    tools=[multiply],
-)
+agent = create_agent("anthropic:%%model=anthropic%%", tools=[multiply])
 
 # --- Mode 1: "updates" (default) — only what each node changed ---
 print("=== updates ===")
@@ -400,20 +394,7 @@ for stream_mode, data in agent.stream(
 print()
 ```
 
-**Streaming modes summary:**
-
-| Mode | What you get | Best for |
-|---|---|---|
-| `"updates"` | Dict of `{node_name: state_changes}` after each node | Watching graph progress |
-| `"values"` | Full state snapshot after each node | Inspecting the whole state at each step |
-| `"messages"` | `(chunk, metadata)` tuples — one per LLM token | Token-level streaming to a UI |
-| `"debug"` | Detailed execution trace with timing | Debugging and profiling |
-| `"tasks"` | `(TasksStreamPart, ...)` — task-level events | Monitoring subgraph tasks |
-| `"custom"` | Values written via `runtime.stream_writer(...)` | Custom progress signals from nodes |
-| `"checkpoints"` | Checkpoint metadata after each step | Inspecting saved state for time-travel |
-| `"tools"` | Tool-call start and result events | Monitoring individual tool executions |
-
-Pass a list to receive multiple modes simultaneously; the first element of each yielded tuple identifies the mode.
+`stream()` defaults to `"updates"`. Pass a list of modes to get several at once; each item is then a `(mode, data)` tuple. [Chapter 6](/langgraph-guide/python/chapter-06-streaming-and-debugging/) covers every mode, including `"custom"`, `"debug"` and the typed `version="v2"` output.
 
 ---
 
@@ -422,7 +403,7 @@ Pass a list to receive multiple modes simultaneously; the first element of each 
 | You need | Use |
 |---|---|
 | A simple chat loop | `StateGraph(MessagesState)` with one `call_model` node |
-| Tool-calling without boilerplate | `create_react_agent(model, tools)` |
+| Tool-calling without boilerplate | `create_agent(model, tools)` |
 | Custom routing between tool-calling nodes | `ToolNode` + `tools_condition` + manual `StateGraph` |
 | Branch on message content | `add_conditional_edges(source, path_fn, path_map)` |
 | Retry / refine in a loop | Loop back with `add_conditional_edges("process", ..., {"continue": "process"})` |

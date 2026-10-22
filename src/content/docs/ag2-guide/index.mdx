@@ -1,8 +1,8 @@
 ---
-title: "AG2 (formerly AutoGen)"
-description: "Community-driven continuation of AutoGen — event-driven architecture, A2A protocol, quick research tools."
-framework: ag2
-language: python
+title: "AG2"
+description: "AG2 1.x, the async agent framework from the community fork of AutoGen 0.2: Agent, tools, structured output, the Network hub, MCP and A2A. Plus the AG2 Classic (import autogen) API in maintenance mode."
+framework: "ag2"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,104 +10,94 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**AG2 is the community fork of AutoGen.** Same multi-agent DNA, plus a new event-driven architecture (`autogen.beta`), A2A protocol support, and a first-class CLI.
+**AG2 is a community fork of AutoGen 0.2**, started in November 2024 by AutoGen's original authors and developed independently of Microsoft's AutoGen. With **AG2 1.0 (July 2026)** the project replaced its AutoGen-era API: `pip install ag2` now gives you an async, protocol-driven framework imported as `ag2`, built around `Agent`, `@tool`, typed events and a multi-agent **Network**. The old `autogen.*` API lives on as **AG2 Classic**.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install ag2
+    pip install "ag2[openai]"
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.13.3** · June 2026 · Python 3.10+
+    **ag2 v%%version=ag2%%** · checked %%versions-checked%% · Python 3.10+
   </Card>
   <Card title="Best for" icon="puzzle">
-    Research-grade multi-agent systems, GroupChat, event-driven conversations.
+    Async agents with typed events, hub-and-channel multi-agent systems, MCP and A2A interop.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Migrating from AutoGen?">
-  AG2 is drop-in compatible for most AutoGen 0.2/0.3 code. See the [AutoGen → AG2 migration guide](/autogen-guide/python/autogen_to_ag2_migration_guide/) for the full list of renames.
+<Aside type="caution" title="ag2 1.x is not a drop-in upgrade from 0.x">
+  If your code says `import autogen` or `from autogen import ConversableAgent, GroupChat`, you are on **AG2 Classic**. Upgrading to `ag2>=1.0` removes that namespace entirely. Either stay on Classic — published on PyPI as `autogen` (or pin `ag2<1.0`), in maintenance mode with security and critical fixes only, covered in the [AG2 Classic section](/ag2-guide/classic/) — or port to the new API with the [migration guide](/ag2-guide/classic/ag2_classic_migration_guide/). (`pip install ag2-classic`, mentioned upstream, is not a PyPI package; install `autogen`.)
+</Aside>
+
+<Aside type="note" title="AG2 is not Microsoft AutoGen">
+  Microsoft's own AutoGen (`autogen-agentchat` / `autogen-core`, the 0.4+ actor-model rewrite) is a separate project covered in the [AutoGen guide](/autogen-guide/). Note that the `pyautogen` name on PyPI now installs Microsoft's `autogen-agentchat`, not AG2.
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Overview & key features" href="./ag2_comprehensive_guide/#overview" description="What AG2 is, what changed from AutoGen · 10 min" />
-  <LinkCard title="2 · Installation" href="./ag2_comprehensive_guide/#installation" description="Install, LLM config · 10 min" />
-  <LinkCard title="3 · Basic usage" href="./ag2_comprehensive_guide/#basic-usage" description="ConversableAgent, GroupChat · 20 min" />
-  <LinkCard title="4 · Advanced concepts" href="./ag2_comprehensive_guide/#advanced-concepts" description="Tool use, human proxy, caching · 20 min" />
-  <LinkCard title="5 · Migration from legacy AutoGen" href="./ag2_comprehensive_guide/#migration-from-legacy-autogen" description="Renames, breaking changes · 15 min" />
-  <LinkCard title="6 · autogen.beta (event-driven)" href="./ag2_comprehensive_guide/#autogenbeta-event-driven-architecture-v011x" description="New event-driven API · 20 min" />
-  <LinkCard title="7 · A2A protocol" href="./ag2_comprehensive_guide/#a2a-protocol-support-v011x" description="Cross-framework agent interop · 15 min" />
-  <LinkCard title="8 · AG2 CLI" href="./ag2_comprehensive_guide/#ag2-cli-v011x" description="Project scaffolding, run, deploy · 10 min" />
-  <LinkCard title="9 · QuickResearchTool" href="./ag2_comprehensive_guide/#quickresearchtool-v011x" description="Built-in research workflow · 10 min" />
-  <LinkCard title="10 · Production" href="./ag2_production_guide/" description="Deployment, monitoring · 25 min" />
-</CardGrid>
-
-## Jump to a topic
-
-<CardGrid>
-  <LinkCard title="GroupChat" href="./ag2_comprehensive_guide/#basic-usage" />
-  <LinkCard title="Event-driven (beta)" href="./ag2_comprehensive_guide/#autogenbeta-event-driven-architecture-v011x" />
-  <LinkCard title="A2A protocol" href="./ag2_comprehensive_guide/#a2a-protocol-support-v011x" />
-  <LinkCard title="AG2 CLI" href="./ag2_comprehensive_guide/#ag2-cli-v011x" />
-  <LinkCard title="QuickResearchTool" href="./ag2_comprehensive_guide/#quickresearchtool-v011x" />
-  <LinkCard title="Migration from AutoGen" href="./ag2_comprehensive_guide/#migration-from-legacy-autogen" />
+  <LinkCard title="1 · What changed in 1.0" href="./ag2_comprehensive_guide/#what-changed-in-10" description="Classic vs 1.x at a glance · 5 min" />
+  <LinkCard title="2 · Install & model config" href="./ag2_comprehensive_guide/#installation-and-model-configuration" description="Provider extras, config classes · 10 min" />
+  <LinkCard title="3 · Your first agent" href="./ag2_comprehensive_guide/#your-first-agent" description="Agent, ask, continue a conversation · 10 min" />
+  <LinkCard title="4 · Tools" href="./ag2_comprehensive_guide/#tools" description="@tool, Context, built-in toolkits · 15 min" />
+  <LinkCard title="5 · Structured output" href="./ag2_comprehensive_guide/#structured-output" description="response_schema and reply.content() · 10 min" />
+  <LinkCard title="6 · Human in the loop" href="./ag2_comprehensive_guide/#human-in-the-loop" description="context.input and hitl_hook · 10 min" />
+  <LinkCard title="7 · Events & streams" href="./ag2_comprehensive_guide/#observing-a-turn-with-memorystream" description="MemoryStream subscriptions · 10 min" />
+  <LinkCard title="8 · Multi-agent Network" href="./ag2_comprehensive_guide/#multi-agent-the-network" description="Hub, channels, TransitionGraph · 25 min" />
+  <LinkCard title="9 · Middleware, knowledge, DI" href="./ag2_comprehensive_guide/#middleware-and-observers" description="Retry, limits, observers, compaction, Inject/Variable · 15 min" />
+  <LinkCard title="10 · MCP and A2A" href="./ag2_comprehensive_guide/#mcp-servers" description="MCPToolkit, A2AServer, A2AConfig · 15 min" />
+  <LinkCard title="11 · Production" href="./ag2_production_guide/" description="Testing, deployment, observability · 20 min" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./ag2_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Recipes" href="./ag2_recipes/" />
+  <LinkCard title="Comprehensive guide" href="./ag2_comprehensive_guide/" description="Single-page technical reference for ag2 1.x." />
+  <LinkCard title="Recipes" href="./ag2_recipes/" description="Copy-pasteable 1.x examples." />
   <LinkCard title="Diagrams" href="./ag2_diagrams/" />
   <LinkCard title="Production guide" href="./ag2_production_guide/" />
 </CardGrid>
 
-## What's new in v0.13.3 (June 2026)
+## AG2 Classic (`import autogen`)
 
-- **v0.13.3 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.3` (`.routine-envs/refresh-py`, 2026-06-07) with upstream `jsonschema` warning suppressed (known upstream issue); 57 top-level exports confirmed. No `DeprecationWarning` emissions from ag2 itself.
-- **v0.13.2 (May 2026)** — Patch release; stability and dependency updates. All core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.2` (`.routine-envs/check-0529-ag2`) with warnings suppressed (upstream `jsonschema` issue); 57 top-level exports confirmed.
-- **v0.13.1 (May 2026)** — Patch release; stability and dependency updates. All core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.1` (`.routine-envs/check-0523-ag2`) with `-W error::DeprecationWarning` (warnings suppressed for upstream issues); 57 top-level exports confirmed.
-- **v0.13.0 (May 2026)** — Minor release. **Swarm API refactored:** `SwarmAgent` and `initiate_swarm_chat` have been removed from the top-level `autogen` namespace. The canonical path is now `from autogen.agentchat.contrib.swarm_agent import SwarmAgent, initiate_swarm_chat`. Three new top-level swarm functions added: `run_swarm(initial_agent, messages, agents, ...)`, `a_run_swarm(...)` (async), and `a_initiate_swarm_chat(...)` (async). All previously-verified core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `LLMConfig`) confirmed present in installed `ag2==0.13.0` (`.routine-envs/check-0520-ag2`).
-- **v0.12.3 (May 9)** — Patch release; stability and dependency updates. Note: `autogen` imports emit `DeprecationWarning` via `jsonschema.RefResolver` (upstream issue in `jsonschema>=4.18.0`; does not affect ag2 API behaviour).
-- **v0.12.2 (May 1)** — Patch release; stability improvements.
+<CardGrid>
+  <LinkCard title="AG2 Classic overview" href="/ag2-guide/classic/" description="The ConversableAgent / GroupChat API, published as autogen, in maintenance mode." />
+  <LinkCard title="Migration guide" href="/ag2-guide/classic/ag2_classic_migration_guide/" description="AutoGen 0.2 → Classic, Classic → 1.x, Microsoft AutoGen → Agent Framework or AG2." />
+</CardGrid>
 
-## Earlier highlights (v0.11.5, April 2026)
+## Release timeline
 
-- **`autogen.beta`** — new event-driven architecture for complex conversations.
-- **A2A protocol** — interop with OpenAI SDK, Claude SDK, LangGraph, Google ADK.
-- **AG2 CLI** — project scaffolding, run, deploy.
-- **QuickResearchTool** — built-in research workflow helper.
+- **1.2.x (October 2026)** — current line. Additive: A2A servers on several replicas, push-notification URL validation and input media-type checks, `reasoning` option on `OpenAIResponsesConfig`, Firecrawl and Keenable search toolkits, Mistral live/speech configs, plus provider and knowledge-store fixes. No changes needed to 1.1 code on this site.
+- **1.1.x (September–October 2026)** — patch releases on top of 1.0.
+- **1.0.0 (27 July 2026)** — the protocol-driven framework (previously previewed as `autogen.beta` in 0.11–0.14) becomes the top-level `ag2` package. Classic agent classes, `GroupChat`, swarms and the `autogen` import name are removed from `ag2`; Classic continues in the [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic) repository.
+- **0.14.0 (June 2026)** — last `ag2` release with the Classic `autogen.*` API; the swarm API (`autogen.agentchat.contrib.swarm_agent`) was removed.
+- **0.11–0.13 (spring 2026)** — `autogen.beta` event-driven preview; swarm functions moved under `autogen.agentchat.contrib.swarm_agent` in 0.13.0.
 
 ## Install, minimal example
 
 ```python
-from autogen import ConversableAgent, LLMConfig
+import asyncio
 
-# Option A — inline config
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4o"})
+from ag2 import Agent
+from ag2.config import OpenAIConfig
 
-# Option B — load from OAI_CONFIG_LIST env var or file
-# llm_config = LLMConfig.from_json(env="OAI_CONFIG_LIST")
-# llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST.json")
-
-agent = ConversableAgent(
-    name="assistant",
-    llm_config=llm_config,
-    system_message="You are a helpful assistant.",
+agent = Agent(
+    "assistant",
+    prompt="You are a helpful assistant.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),  # reads OPENAI_API_KEY
 )
 
-reply = agent.generate_reply(
-    messages=[{"role": "user", "content": "Hello!"}]
-)
-print(reply)
+
+async def main() -> None:
+    reply = await agent.ask("Hello!")
+    print(reply.body)
+
+
+asyncio.run(main())
 ```
 
-> `config_list_from_json` is **not** re-exported at the top of `autogen` in v0.11+. Use `LLMConfig` / `LLMConfig.from_json` (preferred) or the deep path `from autogen.llm_config.config import config_list_from_json`.
-
-Ready? **[Start Zero → Hero Step 1 →](./ag2_comprehensive_guide/#overview)**
+Ready? **[Start with what changed in 1.0 →](./ag2_comprehensive_guide/#what-changed-in-10)**
 
 ---
 
@@ -115,13 +105,9 @@ Ready? **[Start Zero → Hero Step 1 →](./ag2_comprehensive_guide/#overview)**
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
-| 2026-06-07 | 0.13.3 | Patch release bump 0.13.2 → 0.13.3; version card updated to v0.13.3; "What's new" heading updated; v0.13.3 bullet added; comprehensive guide description updated; revision history entry added. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.3` (`.routine-envs/refresh-py`, 2026-06-07) with upstream `jsonschema` warning suppressed; 57 top-level exports confirmed. | Claude routine |
-| 2026-05-29 | 0.13.2 | Patch release bump 0.13.1 → 0.13.2; "What's new" heading updated to v0.13.2; v0.13.2 bullet added; comprehensive guide header updated; revision history entry added. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.2` (`.routine-envs/check-0529-ag2`) with warnings suppressed (upstream issue); 57 top-level exports confirmed. | Claude routine |
-| 2026-05-23 | 0.13.1 | Patch release bump 0.13.0 → 0.13.1; "What's new" heading updated to v0.13.1; v0.13.1 bullet added; comprehensive guide header updated; revision history entry added. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `register_function`, `runtime_logging`) verified against installed `ag2==0.13.1` (`.routine-envs/check-0523-ag2`) with warnings suppressed (upstream issue); 57 top-level exports confirmed. | Claude routine |
-| 2026-05-20 | 0.13.0 | Version bumped 0.12.3 → 0.13.0; "What's new" heading updated to v0.13.0; v0.13.0 bullet added documenting swarm API refactor (`SwarmAgent`/`initiate_swarm_chat` moved to `autogen.agentchat.contrib.swarm_agent`; new top-level `run_swarm`, `a_run_swarm`, `a_initiate_swarm_chat`); comprehensive guide header updated; revision history entry added. Core symbols (`ConversableAgent`, `AssistantAgent`, `UserProxyAgent`, `GroupChat`, `GroupChatManager`, `LLMConfig`) verified against installed `ag2==0.13.0` (`.routine-envs/check-0520-ag2`) with `-W error::DeprecationWarning`; all PASS. | Claude routine |
-| 2026-05-09 | 0.12.3 | Version bumped 0.12.2 → 0.12.3 (patch release); "What's new" updated; comprehensive guide header updated; revision history entry added. `autogen.ConversableAgent`, `GroupChat`, `GroupChatManager`, `AssistantAgent`, `UserProxyAgent` verified against installed `ag2 0.12.3` (`.routine-envs/check-0509-py`). Upstream DeprecationWarning via `jsonschema.RefResolver` noted as ag2 upstream issue. | Claude routine |
-| 2026-05-01 | 0.12.2 | Version bumped 0.12.1 → 0.12.2; comprehensive guide header updated; revision history entry added. `autogen.ConversableAgent` import verified against installed 0.12.2 (`.routine-envs/check-ag2-0501`). | Claude routine |
-| 2026-04-25 | 0.12.1 | Version bumped 0.12.0 → 0.12.1; comprehensive guide header updated; revision history entry added. Snippets verified against installed 0.12.1. | Claude routine |
-| 2026-04-21 | 0.11.5 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
-| April 5, 2026 | 0.11.5 | event-driven architecture; A2A; CLI; QuickResearchTool. | — |
-| November 2025 | 0.3.2 | Initial AG2 rebrand after AutoGen → AG2 community continuation. | — |
+| 2026-10-21 | 1.2.1 | Retitled "AG2" (it is a fork, not a rename). AG2 Classic pages moved here from the AutoGen guide into `/ag2-guide/classic/`, with a single migration page. Added sections on dependency injection, code execution (local sandbox vs provider-hosted tools), multimodal input, middleware and observers, knowledge and compaction, sub-tasks and eval, and an OpenTelemetry/usage example in production. |
+| 2026-10-21 | 1.2.1 | Guide rewritten for the ag2 1.x API (`import ag2`); every example run offline with `ag2.testing.TestConfig` against 1.1.2 and re-run against 1.2.1 (1.1.2 → 1.2.1 changelog reviewed: additive only). Removed examples that never matched a released API (`ag2 init`/`ag2 ui` CLI, `QuickResearchTool`, `autogen.interop.A2AServer`, `Agent(system_message=...)` from `autogen`). Classic material condensed into a Classic/migration section verified against `autogen` 0.14.1. | Claude |
+| 2026-06-07 | 0.13.3 | Patch release; core Classic symbols verified. | Claude routine |
+| 2026-05-20 | 0.13.0 | Swarm API moved to `autogen.agentchat.contrib.swarm_agent`. | Claude routine |
+| 2026-04-21 | 0.11.5 | Index redesigned with Zero → Hero grid. | — |
+| November 2025 | 0.3.2 | Initial AG2 guide. | — |

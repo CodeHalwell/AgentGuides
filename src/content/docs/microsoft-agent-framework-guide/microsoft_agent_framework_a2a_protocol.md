@@ -1,119 +1,170 @@
 ---
 title: "Microsoft Agent Framework — A2A Protocol"
-description: "The real A2AAgent in agent-framework-a2a — connect to any A2A-compliant external agent via HTTP/JSON-RPC."
-framework: microsoft-agent-framework
+description: "Call remote Agent2Agent (A2A) agents with A2AAgent and serve your own agents over A2A with A2AExecutor, in Python and .NET."
+framework: "microsoft-agent-framework"
+sidebar:
+  label: "A2A protocol"
 ---
 
-# A2A Protocol
+[Agent2Agent (A2A)](https://a2a-protocol.org/) is an open protocol that lets agents built on different frameworks call each other over HTTP (JSON-RPC, HTTP+JSON or gRPC bindings). Microsoft Agent Framework supports both directions:
 
-> **Errata (April 2026).** An earlier draft of this page described a sprawling `agent_framework.a2a` submodule with classes like `A2AProtocolAdapter`, `A2AClient`, `A2AMessage`, `OAuth2Authentication`, `EntraIdAuthentication`, `MutualTLSAuthentication`, `ApiKeyAuthentication`, `AccessPolicy`, `SigningConfig`, `RateLimitConfig`, `CircuitBreakerConfig`, and `EncryptionConfig`. **None of those classes exist.** The `agent_framework.a2a` package exports exactly one class: `A2AAgent`. This page was rewritten after direct introspection of `agent-framework-a2a==1.0.0b260421`.
+- **Client:** a remote A2A agent becomes a local agent (`A2AAgent` in Python, an `AIAgent` from `A2ACardResolver` in .NET), so it can be run, streamed, placed in a workflow or exposed as a tool.
+- **Server:** any framework agent (or a workflow wrapped with `as_agent()`) can be published as an A2A endpoint (`A2AExecutor` in Python, `MapA2AJsonRpc` in .NET).
 
-## What A2A actually is
+Protocol-level concerns (the wire format, task lifecycle, agent cards, auth schemes) come from the A2A SDKs. The framework adds the adapter between its agent abstraction and those SDKs.
 
-[Agent2Agent (A2A)](https://github.com/google/A2A) is an open protocol for agents built on different frameworks to talk to each other over HTTP/JSON-RPC. The Agent Framework integration is a thin wrapper: `A2AAgent` makes any A2A-compliant remote agent look like a native framework `Agent`.
-
-All the security, auth, transport, and rate-limiting concerns the old draft invented as bespoke classes are actually handled by:
-
-- **HTTP client** — you pass an `httpx.AsyncClient` with whatever TLS / auth / timeout config you need.
-- **A2A auth** — the underlying [`a2a-sdk`](https://pypi.org/project/a2a-sdk/) package provides `AuthInterceptor` which you configure yourself and hand in.
-- **Upstream protocol behaviours** — retries, circuit breakers, encryption, message signing — are the A2A **protocol's** concerns, not framework-specific classes. Use the `a2a-sdk` docs.
-
-## Install
+## Python
 
 ```bash
-pip install agent-framework-a2a --pre
+pip install agent-framework-a2a --pre    # pulls in a2a-sdk
 ```
 
-This pulls in the meta package dependencies and `a2a-sdk`.
+`agent_framework.a2a` exports four names:
 
-## Verified signature (April 2026)
+| Name | Purpose |
+|---|---|
+| `A2AAgent` | Client: wraps a remote A2A agent as a local agent. |
+| `A2AAgentSession` | Session type for `A2AAgent`; carries the A2A `context_id`, `task_id` and `task_state` between turns. |
+| `A2AExecutor` | Server: an `a2a-sdk` `AgentExecutor` that runs a framework `Agent` or `WorkflowAgent`. |
+| `A2AServiceSessionId` | The service-side session id `A2AAgentSession` stores. |
+
+### Serving an agent with `A2AExecutor`
+
+`A2AExecutor(agent, stream=False, run_kwargs=None)` plugs into the `a2a-sdk` server stack: a `DefaultRequestHandler` with a task store, plus Starlette routes for the agent card and the JSON-RPC endpoint. With `stream=True` the agent's updates are sent as A2A artifact updates as they arrive. `run_kwargs` is forwarded to every `agent.run(...)` call (for example `{"client_kwargs": {...}}`).
 
 ```python
-A2AAgent(
-    *,
-    name: str | None = None,
-    id: str | None = None,
-    description: str | None = None,
-    agent_card: AgentCard | None = None,
-    url: str | None = None,
-    client: a2a.client.Client | None = None,
-    http_client: httpx.AsyncClient | None = None,
-    auth_interceptor: AuthInterceptor | None = None,
-    timeout: float | httpx.Timeout | None = None,
-    **kwargs: Any,
+import uvicorn
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.tasks import InMemoryTaskStore
+from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
+from starlette.applications import Starlette
+
+from agent_framework import Agent
+from agent_framework.a2a import A2AExecutor
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    name="analyst",
+    instructions="You summarise sales figures.",
 )
+
+card = AgentCard(
+    name="Sales analyst",
+    description="Summarises sales figures.",
+    version="1.0.0",
+    default_input_modes=["text"],
+    default_output_modes=["text"],
+    capabilities=AgentCapabilities(streaming=True),
+    supported_interfaces=[
+        AgentInterface(url="http://localhost:9999/", protocol_binding="JSONRPC", protocol_version="1.0"),
+    ],
+    skills=[AgentSkill(id="summarise", name="Summarise", description="Summarise sales data.", tags=["sales"])],
+)
+
+handler = DefaultRequestHandler(
+    agent_executor=A2AExecutor(agent, stream=True),
+    task_store=InMemoryTaskStore(),
+    agent_card=card,
+)
+
+app = Starlette(routes=[*create_agent_card_routes(card), *create_jsonrpc_routes(handler, "/")])
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=9999)
 ```
 
-Key methods (verified):
-- `.run(query)` — standard `Agent.run` surface; returns an `AgentResponse`.
-- `.poll_task(...)` — poll a long-running A2A task.
-- `.as_tool()` — expose the remote agent as a local tool.
-- `.create_session()` / `.get_session()` — session management like any other agent.
+The card is served at `/.well-known/agent-card.json`. Points to settle before production:
 
-## Minimum viable client
+- **Task store.** `InMemoryTaskStore` loses tasks on restart and is per-process; `a2a-sdk` ships database-backed task stores for multi-instance deployments.
+- **Authentication.** Declare the scheme in the card (`security_schemes` / `security_requirements`) and enforce it in Starlette middleware or at your gateway. The executor does not authenticate callers.
+- **History.** For each task the executor creates a fresh session whose `session_id` is the A2A context id. The default in-memory history lives on that session object and is discarded after the task, so give the agent a history provider keyed by `session_id` (`FileHistoryProvider`, or the Redis and Cosmos DB providers) if callers hold multi-turn conversations.
 
-Connect to an A2A-hosted agent by URL:
+To publish a workflow instead of a single agent, pass `workflow.as_agent(name=...)` to `A2AExecutor`.
+
+### Calling a remote agent with `A2AAgent`
 
 ```python
 import asyncio
 from agent_framework.a2a import A2AAgent
 
-async def main():
-    remote = A2AAgent(
-        name="RemoteAnalyst",
-        url="https://analyst.example.com/a2a",
-    )
+
+async def main() -> None:
+    remote = A2AAgent(name="analyst", url="http://localhost:9999/")
     response = await remote.run("Summarise Q3 sales")
     print(response.text)
+
 
 asyncio.run(main())
 ```
 
-Connect using a discovered `AgentCard`:
+`A2AAgent` takes either `url=` (the card is resolved for you) or a pre-fetched `agent_card=`. Other keyword arguments: `http_client=` (your own `httpx.AsyncClient`), `auth_interceptor=`, `timeout=`, `supported_protocol_bindings=` (`"JSONRPC"`, `"GRPC"`, `"HTTP+JSON"`) and `forwarded_kwargs=` (names of keys from the `function_invocation_kwargs` / `client_kwargs` you pass to `run()` that should be sent to the server in the request metadata).
+
+To inspect the card first, for example to check its skills, use `A2ACardResolver` from `a2a-sdk`:
 
 ```python
+import asyncio
+import httpx
+from a2a.client import A2ACardResolver
 from agent_framework.a2a import A2AAgent
-from a2a.types import AgentCard
 
-card = AgentCard.from_url("https://analyst.example.com/a2a/.well-known/agent.json")
 
-remote = A2AAgent(name="RemoteAnalyst", agent_card=card)
+async def main() -> None:
+    async with httpx.AsyncClient(timeout=30) as http:
+        resolver = A2ACardResolver(httpx_client=http, base_url="http://localhost:9999")
+        card = await resolver.get_agent_card()        # GET /.well-known/agent-card.json
+        print(card.name, [s.name for s in card.skills])
+
+        remote = A2AAgent(name=card.name, agent_card=card, http_client=http)
+        print((await remote.run("Hello")).text)
+
+
+asyncio.run(main())
 ```
 
-## Authentication
+A remote agent behaves like any other agent: keep a session (`remote.create_session()`) for multi-turn conversations, use `stream=True`, add it to a `WorkflowBuilder`, or give it to another agent with `remote.as_tool()`. When the remote task ends in `input-required`, the next `run()` on the same session continues that task. Long-running tasks surface an `A2AContinuationToken` on `response.continuation_token`; pass it back with `remote.run(None, session=session, continuation_token=token)` until it is `None`.
 
-Pass an `AuthInterceptor` from `a2a-sdk`. The framework itself does not define auth classes; use the A2A SDK's:
+### Authentication
+
+`AuthInterceptor` (from `a2a-sdk`) reads the security schemes the remote agent's card declares and asks a `CredentialService` for each credential. It adds a bearer token for HTTP-bearer, OAuth2 and OpenID Connect schemes, and an API-key header for API-key schemes:
 
 ```python
+import os
+from a2a.client import AuthInterceptor, CredentialService
 from agent_framework.a2a import A2AAgent
-from a2a.client import AuthInterceptor, BearerTokenCredentials
+
+
+class StaticToken(CredentialService):
+    """Returns one token for every scheme the agent card declares."""
+
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    async def get_credentials(self, security_scheme_name, context):
+        return self._token
+
 
 remote = A2AAgent(
-    url="https://analyst.example.com/a2a",
-    auth_interceptor=AuthInterceptor(
-        credentials=BearerTokenCredentials(token="..."),
-    ),
+    name="analyst",
+    url="https://analyst.example.com/a2a/",
+    auth_interceptor=AuthInterceptor(credential_service=StaticToken(os.environ["ANALYST_TOKEN"])),
 )
 ```
 
-For production-grade auth (OAuth2 / Entra ID / mTLS / API keys), configure them at the `httpx.AsyncClient` transport level or via `a2a-sdk`'s auth plumbing — the Agent Framework just passes your client through.
+For per-user tokens, `a2a-sdk`'s `InMemoryContextCredentialStore` keys credentials by session. For mTLS, or headers the card doesn't declare, configure them on the `httpx.AsyncClient` you pass as `http_client=`.
 
-## Exposing a local agent over A2A
+## .NET
 
-Serving a framework `Agent` *as* an A2A endpoint is out of scope for the `agent-framework-a2a` package. Use the [Azure AI Agent Server](https://pypi.org/project/azure-ai-agentserver-agentframework/) or host your own A2A server per the [A2A specification](https://github.com/google/A2A). The framework provides `agent.run` / `agent.as_tool()`; the HTTP surface is your server's responsibility.
+```bash
+dotnet add package Microsoft.Agents.AI.A2A --prerelease
+dotnet add package Microsoft.Agents.AI.Hosting.A2A.AspNetCore --prerelease
+```
 
-## What was removed from this page
-
-All of the following appeared in earlier drafts and are not real:
-
-- `from agent_framework.a2a import A2AProtocolAdapter` — no such class.
-- `from agent_framework.a2a import A2AClient, A2AMessage` — not in this module (the real A2A client is `a2a.client.Client` from the `a2a-sdk` package).
-- `OAuth2Authentication`, `EntraIdAuthentication`, `MutualTLSAuthentication`, `ApiKeyAuthentication` — not framework classes. Auth is handled via `httpx` / `a2a-sdk`'s `AuthInterceptor`.
-- `AccessPolicy`, `SigningConfig`, `RateLimitConfig`, `CircuitBreakerConfig`, `EncryptionConfig` — not real classes. Those concerns live in the transport layer (your `httpx.AsyncClient` or API gateway).
-- Framework-defined cross-framework "protocol adapters" for OpenAI SDK / Claude SDK / LangGraph / Google ADK — A2A itself is the protocol; no framework-specific adapter is needed because each participant just implements A2A.
+`A2ACardResolver.GetAIAgentAsync()` turns a remote card into an `AIAgent`, and `builder.AddA2AServer(agent)` plus `app.MapA2AJsonRpc(agent, "/path")` (or `MapA2AHttpJson`) publish a local agent. Worked examples are in the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#agent2agent-a2a-protocol---net).
 
 ## Further reading
 
-- [A2A protocol spec](https://github.com/google/A2A)
+- [A2A specification](https://a2a-protocol.org/latest/specification/)
 - [`a2a-sdk` on PyPI](https://pypi.org/project/a2a-sdk/)
-- Source: <https://github.com/microsoft/agent-framework>
+- [Microsoft Agent Framework source](https://github.com/microsoft/agent-framework) (`python/packages/a2a`)

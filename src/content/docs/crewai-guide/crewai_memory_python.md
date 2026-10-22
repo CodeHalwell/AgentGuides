@@ -1,14 +1,14 @@
 ---
 title: "Unified Memory"
 description: "Standalone Memory class — remember/recall/forget, scope and slice views, LanceDB vs Qdrant Edge storage, and how crew-level memory wires in."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Memory"
   order: 22
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/memory/unified_memory.py`, `crewai/memory/memory_scope.py`, `crewai/memory/storage/*.py`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/memory/unified_memory.py`, `crewai/memory/memory_scope.py`, `crewai/memory/storage/*.py`).
 
 CrewAI's memory system centres on a single class — `Memory` — that works either attached to a crew or on its own. Older docs mention "short-term", "long-term", and "entity" memory; in 1.14 those collapse into scoped views over the unified store.
 
@@ -17,7 +17,7 @@ CrewAI's memory system centres on a single class — `Memory` — that works eit
 ```python
 from crewai import Memory
 
-mem = Memory()  # lancedb under ./memory by default
+mem = Memory()  # LanceDB under $CREWAI_STORAGE_DIR/memory, else the platform data dir
 
 mem.remember(
     "Ada prefers Postgres over MongoDB for transactional workloads.",
@@ -31,13 +31,15 @@ for m in matches:
     print(f"{m.score:.2f}  {m.record.content}")
 ```
 
-The default configuration picks up `OPENAI_API_KEY` for both analysis (`gpt-4o-mini`) and embedding (`text-embedding-3-small`). Both are pluggable — see below.
+The default configuration picks up `OPENAI_API_KEY` for both analysis (`gpt-5.4-mini`) and embedding (`text-embedding-3-large`, 3072 dimensions). Both are pluggable — see below.
+
+> **Upgrading an old local store?** The default embedder used to be `text-embedding-3-small` (1536 dimensions). A LanceDB store written with the old default raises `EmbeddingDimensionMismatchError` under the new one. Either run `crewai reset-memories --memory`, or keep the old vectors by pinning `embedder={"provider": "openai", "config": {"model_name": "text-embedding-3-small"}}`. The key is `model_name`; `model` raises `TypeError`.
 
 ## Constructor fields
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `llm` | `str \| BaseLLM` | `"gpt-4o-mini"` | Used for query analysis and consolidation (deep-recall flow only). |
+| `llm` | `str \| BaseLLM` | `"gpt-5.4-mini"` | Used for query analysis and consolidation (deep-recall flow only). |
 | `storage` | `StorageBackend \| str` | `"lancedb"` | `"lancedb"`, `"qdrant-edge"`, a path string (becomes a LanceDB path), or a custom backend. |
 | `embedder` | `callable \| dict \| None` | `None` | Embedder callable, provider-config dict (e.g. `{"provider": "google", "config": {...}}`), or `None` for default OpenAI. |
 | `recency_weight` | `float` | `0.3` | Composite score weighting. Must sum with the other two weights to ~1.0. |
@@ -59,7 +61,7 @@ The default configuration picks up `OPENAI_API_KEY` for both analysis (`gpt-4o-m
 |---|---|---|---|
 | LanceDB (default) | `"lancedb"` | included | File-backed; fast for up to ~100k records. |
 | LanceDB at a path | `"./some/dir"` | included | Any string without the special markers becomes a LanceDB path. |
-| Qdrant Edge | `"qdrant-edge"` | `pip install qdrant-client` | In-process Qdrant with payload indexing, better filtering. |
+| Qdrant Edge | `"qdrant-edge"` | `pip install "crewai[qdrant-edge]"` | In-process Qdrant Edge (`qdrant-edge-py`) with payload indexing, better filtering. |
 | Custom | `MyBackend()` | — | Any class implementing the `StorageBackend` protocol from `crewai.memory.storage.backend`. |
 
 ```python
@@ -202,13 +204,13 @@ for rec in prod.list_records(limit=5000):
 ### 3. Memory as a tool for an agent
 
 ```python
-from crewai.tools.memory_tools import memory_tools_for
+from crewai.tools.memory_tools import create_memory_tools
 
-tools = memory_tools_for(memory=mem)
+tools = create_memory_tools(mem)
 agent = Agent(role="Analyst", goal="...", backstory="...", tools=tools)
 ```
 
-`crewai.tools.memory_tools` wraps `remember` / `recall` as agent-callable tools.
+`create_memory_tools` returns a `RememberTool` and a `RecallMemoryTool` wrapping `remember` / `recall` as agent-callable tools.
 
 ### 4. Read-only prod, writable staging
 
@@ -223,10 +225,10 @@ Safer to pass to untrusted agents; writes silently succeed as no-ops so you can 
 ```python
 from crewai.rag.embeddings.types import EmbedderConfig
 
-mem = Memory(embedder={"provider": "google", "config": {"model": "text-embedding-004"}})
+mem = Memory(embedder={"provider": "google-generativeai", "config": {"model_name": "gemini-embedding-001"}})
 ```
 
-Any provider config that `build_embedder` accepts works here.
+Any provider config that `build_embedder` accepts works here; provider SDKs are not installed by default (this one needs `google-generativeai`).
 
 ## Gotchas
 

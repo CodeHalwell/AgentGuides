@@ -1,13 +1,14 @@
 ---
 title: "PydanticAI: Output Types & Validators"
 description: "Typed outputs with ToolOutput, NativeOutput, PromptedOutput, TextOutput, StructuredDict, multi-type unions, and agent.output_validator."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Output types"
+  order: 2
 ---
 
-# Output Types & Validators
-
-Verified against **pydantic-ai==2.43.0** — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
 
 The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. PydanticAI ships five "marker" wrappers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — plus a plain type / union shortcut. The right one depends on what the model natively supports.
 
@@ -21,7 +22,7 @@ class Answer(BaseModel):
     value: int
     reasoning: str
 
-agent = Agent('openai:gpt-5.2', output_type=Answer)
+agent = Agent('openai:%%model=openai%%', output_type=Answer)
 result = agent.run_sync('What is 15 + 27?')
 print(result.output)
 #> value=42 reasoning='...'
@@ -59,7 +60,7 @@ class Vehicle(BaseModel):
     wheels: int
 
 agent = Agent(
-    'openai:gpt-5.2',
+    'openai:%%model=openai%%',
     output_type=[
         ToolOutput(Fruit, name='return_fruit'),
         ToolOutput(Vehicle, name='return_vehicle'),
@@ -70,14 +71,14 @@ print(repr(result.output))
 #> Fruit(name='banana', color='yellow')
 ```
 
-Arguments (`output.py` — verified against pydantic-ai 2.43.0):
+Arguments (`output.py`):
 
 | Arg | Type | Default | Notes |
 |-----|------|---------|-------|
 | `output` | `type \| callable` | required | Pydantic model, dataclass, or async callable |
 | `name` | `str \| None` | `None` | Tool name sent to the model; auto-derived if unset |
 | `description` | `str \| None` | `None` | Overrides the type's docstring as the tool description |
-| `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level `retries` / `output_retries` |
+| `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level output budget (`Agent(retries={'output': N})`) |
 | `strict` | `bool \| None` | `None` | Forwarded to providers that support strict JSON schema (OpenAI, Anthropic, Google) |
 | `sequential` | `bool` | `False` | Act as a barrier — run alone, not overlapping with other tool calls (only meaningful under `end_strategy='exhaustive'`) |
 
@@ -114,7 +115,7 @@ class DetailedReport(BaseModel):
         return v
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[
         ToolOutput(QuickAnswer,     name='quick',  max_retries=3),   # more forgiving
         ToolOutput(DetailedReport,  name='report', max_retries=1),   # expensive, fail fast
@@ -134,7 +135,7 @@ print(repr(result2.output))  # DetailedReport(title=..., sections=[...], citatio
 When `end_strategy='exhaustive'` the agent runs **all** tool calls the model emitted in a turn before stopping,
 including multiple output tools. Setting `sequential=True` on a `ToolOutput` makes it act as a
 barrier: function tools emitted before it finish first, then this output tool runs alone, then
-tools emitted after it start. Under `'early'` (the default) or `'graceful'`, output tools already run
+tools emitted after it start. Under `'graceful'` (the default since 2.0) or `'early'`, output tools already run
 sequentially, so `sequential=True` has no effect there.
 
 ```python
@@ -158,7 +159,7 @@ class AnalysisResult(BaseModel):
 
 # AuditRecord must run alone (barrier); AnalysisResult can overlap with others.
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[
         ToolOutput(AuditRecord, name='audit',    sequential=True),   # barrier
         ToolOutput(AnalysisResult, name='analysis', sequential=False),
@@ -192,14 +193,14 @@ class Vehicle(BaseModel):
     wheels: int
 
 # Single type — returns Fruit directly
-agent_single = Agent('openai:gpt-4o', output_type=NativeOutput(Fruit))
+agent_single = Agent('openai:%%model=openai%%', output_type=NativeOutput(Fruit))
 result = agent_single.run_sync('What is a banana?')
 print(repr(result.output))
 # Fruit(name='banana', color='yellow')
 
 # Multiple types — provider builds a tagged union
 agent_union = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=NativeOutput(
         [Fruit, Vehicle],
         name='fruit_or_vehicle',
@@ -231,7 +232,7 @@ class VehicleResult(BaseModel):
     wheels: int
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=NativeOutput([FruitResult, VehicleResult], strict=True),
 )
 ```
@@ -249,14 +250,14 @@ agent = Agent(
 )
 ```
 
-Arguments (`output.py:141`):
+Arguments (`pydantic_ai.output.NativeOutput`):
 
 - `outputs` — a type or sequence of types. A list produces a tagged union.
 - `name`, `description` — override the schema name and description sent to the model.
 - `strict` — forwarded to providers supporting strict JSON schema (OpenAI).
 - `template` — overrides the schema-injection template; pass `False` to skip.
 
-Availability by provider (verified in `models/<provider>.py`): OpenAI, Google, Anthropic (via tool adapter), Mistral, Groq. Older/local providers usually fall through to `PromptedOutput`.
+Availability by provider: OpenAI, Google, Anthropic (via tool adapter), Mistral, Groq. Older/local providers usually fall through to `PromptedOutput`.
 
 ## `PromptedOutput` — schema-in-prompt fallback
 
@@ -284,7 +285,7 @@ from pydantic_ai import Agent, TextOutput
 def split_words(text: str) -> list[str]:
     return text.split()
 
-agent = Agent('openai:gpt-5.2', output_type=TextOutput(split_words))
+agent = Agent('openai:%%model=openai%%', output_type=TextOutput(split_words))
 result = agent.run_sync('Who was Albert Einstein?')
 print(result.output)
 #> ['Albert', 'Einstein', 'was', 'a', 'German-born', 'theoretical', 'physicist.']
@@ -308,7 +309,7 @@ schema = {
 
 DynamicForm = StructuredDict(schema, name='form_response', description='Fill this form.')
 
-agent = Agent('openai:gpt-5.2', output_type=DynamicForm)
+agent = Agent('openai:%%model=openai%%', output_type=DynamicForm)
 result = agent.run_sync('Make up a blog post.')
 print(result.output)
 #> {'title': '...', 'tags': [...]}
@@ -323,10 +324,10 @@ Run arbitrary code after the model produces an output, potentially asking the mo
 ```python
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-agent = Agent('openai:gpt-5.2', output_type=str)
+agent = Agent('openai:%%model=openai%%', output_type=str)
 
 @agent.output_validator
-async def no_profanity(ctx: RunContext[None], output: str) -> str:
+async def no_profanity(ctx: RunContext[object], output: str) -> str:
     if 'damn' in output.lower():
         raise ModelRetry('Please respond without profanity.')
     return output
@@ -338,18 +339,18 @@ The validator may:
 - Raise `ModelRetry(msg)` to feed a retry prompt back to the model.
 - Raise `UnexpectedModelBehavior` to terminate the run.
 
-Up to `output_retries` (defaults to the agent `retries`) validator-triggered retries are allowed before the run fails.
+Up to the agent's output retry budget (`retries={'output': N}`; a bare `retries=N` sets both the tool and output budgets, default 1) validator-triggered retries are allowed before the run fails. The separate `output_retries=` argument from V1 no longer exists.
 
 ## Output streaming
 
-See the [streaming guide](./pydantic_ai_streaming/). `StreamedRunResult.get_output()` validates the final assembled output using the same `output_type` pipeline.
+See the [streaming guide](/pydanticai-guide/pydantic_ai_streaming/). `StreamedRunResult.get_output()` validates the final assembled output using the same `output_type` pipeline.
 
 ## Gotchas
 
 - **Union of bare types**: `output_type=[Fruit, Vehicle]` works but you lose per-type tool naming. Use `ToolOutput(...)` per branch when the model gets confused about which to emit.
 - **`strict=True`** (OpenAI): the model rejects any schema with `anyOf`/`oneOf` at the root without a discriminator. If you see "strict mode schema rejected" errors, drop `strict` or use `PromptedOutput`.
 - **`NativeOutput` on older OpenAI models** (pre-`gpt-4o-2024-08-06`): silently falls back to prompted mode; check `result.response.model_name` and the raw messages if you need to confirm.
-- **`TextOutput` and tools**: when you combine `TextOutput` with function tools, set `end_strategy='graceful'` on the agent so tool calls still run before the text is finalised.
+- **`TextOutput` and tools**: function tools emitted alongside the final text still run under the default `end_strategy='graceful'` (since 2.0); only `'early'` would skip them.
 - **`output_type` on `run()`**: the per-run override is only allowed when the agent has no `output_validator` — the validator's type wouldn't match.
 
 ## Patterns
@@ -368,7 +369,7 @@ class Action(BaseModel):
     kind: Literal['action']
     name: str
 
-agent = Agent('openai:gpt-5.2', output_type=Search | Action)
+agent = Agent('openai:%%model=openai%%', output_type=Search | Action)
 ```
 
 PydanticAI generates a tagged union schema; the `kind` literal gives the model an unambiguous label to produce.
@@ -377,7 +378,7 @@ PydanticAI generates a tagged union schema; the `kind` literal gives the model a
 
 ```python
 @agent.output_validator
-async def must_contain_sources(ctx: RunContext[None], out: Answer) -> Answer:
+async def must_contain_sources(ctx: RunContext[object], out: Answer) -> Answer:
     if not out.reasoning:
         raise ModelRetry('Include a `reasoning` field citing at least one source.')
     return out
@@ -391,7 +392,7 @@ from datetime import date
 def parse_iso_date(text: str) -> date:
     return date.fromisoformat(text.strip())
 
-agent = Agent('openai:gpt-5.2', output_type=TextOutput(parse_iso_date))
+agent = Agent('openai:%%model=openai%%', output_type=TextOutput(parse_iso_date))
 ```
 
 ### 4. Hybrid: structured output _plus_ a free-text summary
@@ -412,7 +413,7 @@ def build_form_schema(fields: list[dict]) -> type:
     schema = {'type': 'object', 'properties': {f['name']: f['schema'] for f in fields}}
     return StructuredDict(schema, name='form_response')
 
-agent = Agent('openai:gpt-5.2', output_type=build_form_schema(user_fields))
+agent = Agent('openai:%%model=openai%%', output_type=build_form_schema(user_fields))
 ```
 
 ## Advanced `NativeOutput` patterns
@@ -458,7 +459,7 @@ class Report(BaseModel):
     word_count: int
 
 # OpenAI handles the schema natively — no text injection
-agent = Agent('openai:gpt-4o', output_type=NativeOutput(Report, template=False))
+agent = Agent('openai:%%model=openai%%', output_type=NativeOutput(Report, template=False))
 ```
 
 ### Per-call output type override with `NativeOutput`
@@ -478,7 +479,7 @@ class DetailedAnswer(BaseModel):
     reasoning: str
     confidence: float
 
-base_agent = Agent('openai:gpt-4o')
+base_agent = Agent('openai:%%model=openai%%')
 
 async def main():
     # Simple question
@@ -515,7 +516,7 @@ class SummaryResult(BaseModel):
     word_count: int
 
 # Works with ANY text-capable model
-model = os.getenv('MODEL', 'openai:gpt-4o')
+model = os.getenv('MODEL', 'openai:%%model=openai%%')
 agent = Agent(model, output_type=PromptedOutput(SummaryResult))
 result = agent.run_sync('Summarise: Python is a high-level language loved for its readability.')
 print(result.output)
@@ -578,7 +579,7 @@ def parse_price(ctx: RunContext[ParseDeps], text: str) -> float:
     return 0.0
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     deps_type=ParseDeps,
     output_type=TextOutput(parse_price),
     instructions='State prices numerically, e.g. "The cost is 1,499.99".',
@@ -609,7 +610,7 @@ async def translate_to_german(text: str) -> str:
         return resp.json().get('translated', text)
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=TextOutput(translate_to_german),
     instructions='Respond in English.',
 )
@@ -623,9 +624,9 @@ asyncio.run(main())
 
 ## Reference
 
-- `Agent.__init__(..., output_type=...)` — `agent/__init__.py:220`
-- `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — `output.py`
-- `output_validator` decorator — `agent/__init__.py:1911`
-- `OutputSpec` type alias — `output.py`
-- `TextOutputFunc` — `output.py` — `Callable[[str], T] | Callable[[RunContext, str], T]`
-- Advanced patterns with `AgentSpec` and output — see [Class & API Reference](./pydantic_ai_comprehensive_guide/#class--api-reference) in the comprehensive guide
+- `Agent(..., output_type=...)` — `pydantic_ai.Agent`
+- `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — `pydantic_ai.output` (all re-exported from `pydantic_ai`)
+- `@agent.output_validator` decorator — `pydantic_ai.Agent.output_validator`
+- `OutputSpec` type alias — `pydantic_ai.output`
+- `TextOutputFunc` — `pydantic_ai.output` — `Callable[[str], T] | Callable[[RunContext, str], T]`
+- Defining an agent, including its output, as data — see [Agents from a spec](/pydanticai-guide/pydantic_ai_comprehensive_guide/#agents-from-a-spec) in the comprehensive guide

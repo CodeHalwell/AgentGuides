@@ -1,17 +1,15 @@
 ---
 title: "Microsoft Agent Framework (Python) — Evaluation"
-description: "Quality gates for agents and workflows: evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator decorator, keyword_check and tool_call helpers — all from agent-framework-core 1.6.0."
-framework: microsoft-agent-framework
-language: python
+description: "Quality gates for agents and workflows: evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator decorator, keyword_check and tool_call helpers."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Evaluation — Python
 
 `agent_framework` ships a lightweight evaluation harness built into the core package. It runs a list of queries against an agent (or pre-recorded responses), extracts a normalised `EvalItem` per query, then applies a set of **checks** that produce pass/fail + score results. The same pattern scales to workflows via `evaluate_workflow`.
 
 Everything is in-process by default — no Azure AI Foundry / Microsoft Foundry dependency required. Plug a cloud evaluator in alongside `LocalEvaluator` when you want LLM-judge / risk / groundedness checks.
 
-Verified against `agent-framework-core==1.6.0` (`agent_framework._evaluation`). This module is marked `experimental` — API may evolve.
+Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._evaluation`, re-checked %%versions-checked%%; first written for 1.6.0). This module is marked `experimental` — API may evolve.
 
 ## The three building blocks
 
@@ -182,7 +180,7 @@ import asyncio
 from agent_framework import CheckResult, evaluator
 from agent_framework.openai import OpenAIChatClient
 
-judge_client = OpenAIChatClient(model="gpt-4o-mini")
+judge_client = OpenAIChatClient(model="%%model=openai-small%%")
 judge_semaphore = asyncio.Semaphore(8)        # cap concurrency to 8 in-flight judges
 
 JUDGE_PROMPT = """\
@@ -237,10 +235,14 @@ conversation = [
     Message(role="assistant", contents=["16"]),
 ]
 
-# Default strategy — last_turn. Query = everything up to the last user msg; response = after.
+# Default strategy, LAST_TURN: the query messages are everything up to and including the
+# last user message, the response is what follows. item.query joins the text of the
+# *user* messages in that prefix, so it contains both questions.
 item = EvalItem(conversation=conversation)
-assert item.query == "Square that."
+assert item.query == "What's 2+2? Square that."
 assert item.response == "16"
+query_msgs, response_msgs = item.split_messages()
+assert [m.text for m in response_msgs] == ["16"]
 
 # FULL strategy — evaluate the whole trajectory against the first user msg.
 item_full = EvalItem(conversation=conversation, split_strategy=ConversationSplit.FULL)
@@ -596,7 +598,7 @@ Microsoft Foundry ships a richer evaluator with groundedness, relevance, safety,
 ```python
 from agent_framework.foundry import FoundryEvals
 
-foundry_evals = FoundryEvals(project_client=project, model="gpt-4o-mini")
+foundry_evals = FoundryEvals(project_client=project, model="%%model=openai-small%%")
 
 all_results = await evaluate_agent(
     agent=agent,
@@ -938,7 +940,7 @@ for query in test_queries:
     responses.append(AgentEvalConverter.to_eval_item(query=query, response=r, agent=agent))
 
 # Score with Foundry (groundedness, relevance, safety, …)
-foundry = FoundryEvals(project_client=project, model="gpt-4o-mini")
+foundry = FoundryEvals(project_client=project, model="%%model=openai-small%%")
 [foundry_results] = await foundry.evaluate(responses, eval_name="order-agent-v2")
 foundry_results.raise_for_status()
 ```

@@ -1,605 +1,323 @@
 ---
 title: "Semantic Kernel Production Guide (Python)"
-description: "Production Deployment, Monitoring, and Best Practices for Python"
-framework: semantic-kernel
-language: python
+description: "A production-shaped FastAPI service for Semantic Kernel in Python: shared AI service with a kernel per request, OpenTelemetry and token accounting, retries and timeouts, a caching filter and offline tests."
+framework: "semantic-kernel"
+language: "python"
+sidebar:
+  label: "Production"
+  order: 6
 ---
 
-# Semantic Kernel Production Guide (Python)
+> Targets `semantic-kernel` %%version=semantic-kernel%% on Python 3.10+ (checked %%versions-checked%%). The modules below were run together: the tests pass against a stub chat service, and the token counters were read back from an in-memory OpenTelemetry reader.
 
-**Production Deployment, Monitoring, and Best Practices for Python**
-
-Last Updated: April 2026
-Python Version: 3.9+
-Semantic Kernel Python: 1.41.2+
-
----
-
-## Overview
-
-This guide covers production deployment of Semantic Kernel Python applications including Docker/Kubernetes deployment, monitoring, security, performance optimization, and operational best practices.
-
-**See Also:** [../semantic_kernel_production_guide.md](../semantic_kernel_production_guide/) for language-agnostic patterns.
-
----
-
-## Quick Start: Production Checklist
-
-- [ ] Containerize application (Docker)
-- [ ] Configure environment variables and secrets (Azure Key Vault)
-- [ ] Implement structured logging and OpenTelemetry
-- [ ] Add error handling, retries, and circuit breakers
-- [ ] Configure horizontal scaling (Kubernetes HPA)
-- [ ] Set up monitoring (Application Insights)
-- [ ] Implement rate limiting and throttling
-- [ ] Add health checks and readiness probes
-- [ ] Configure CI/CD pipeline
-- [ ] Perform load testing
-
----
-
-## Docker Containerization
-
-### Dockerfile
-
-```dockerfile
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements first (for caching)
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
-COPY . .
-
-# Create non-root user
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
-USER appuser
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
-
-EXPOSE 8000
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### requirements.txt
-
-```txt
-semantic-kernel[azure,openai]>=1.41.2
-fastapi==0.104.0
-uvicorn[standard]==0.24.0
-python-dotenv==1.0.0
-tenacity==8.2.3
-opentelemetry-api==1.21.0
-opentelemetry-sdk==1.21.0
-azure-monitor-opentelemetry==1.1.0
-azure-identity==1.15.0
-azure-keyvault-secrets==4.7.0
-pydantic==2.5.0
-```
-
-### Build and Run
+This page is the Python implementation of the [production guide](/semantic-kernel-guide/semantic_kernel_production_guide/), which covers the reasoning (deployment shape, security, scaling, cost) and the release checklist. Here: a small FastAPI service you can copy, with each Semantic Kernel-specific decision explained.
 
 ```bash
-# Build
-docker build -t sk-python-app:latest .
+pip install "semantic-kernel==%%version=semantic-kernel%%" fastapi "uvicorn[standard]" azure-monitor-opentelemetry
+pip install pytest httpx      # for the tests
+```
 
-# Run locally
-docker run -p 8000:8000 \
-  -e OPENAI_API_KEY=$OPENAI_API_KEY \
-  -e AZURE_KEY_VAULT_URL=$AZURE_KEY_VAULT_URL \
-  sk-python-app:latest
+Semantic Kernel already depends on `openai`, `pydantic`, `azure-identity` and the OpenTelemetry API and SDK; let it choose their versions and lock the result (`uv lock`, `pip-compile`).
 
-# Push to registry
-docker tag sk-python-app:latest myregistry.azurecr.io/sk-python-app:latest
-docker push myregistry.azurecr.io/sk-python-app:latest
+```
+app.py          FastAPI app: shared service, kernel per request
+settings.py     configuration from the environment
+telemetry.py    exporter set-up and a token-usage filter
+cache.py        optional exact-match cache filter
+tests/test_app.py
 ```
 
 ---
 
-## Kubernetes Deployment
-
-### Deployment Manifest
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sk-python-app
-  namespace: production
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: sk-python-app
-  template:
-    metadata:
-      labels:
-        app: sk-python-app
-        version: v1
-    spec:
-      containers:
-      - name: app
-        image: myregistry.azurecr.io/sk-python-app:latest
-        ports:
-        - containerPort: 8000
-          name: http
-        env:
-        - name: AZURE_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: azure-identity
-              key: client-id
-        - name: APPLICATIONINSIGHTS_CONNECTION_STRING
-          valueFrom:
-            secretKeyRef:
-              name: app-insights
-              key: connection-string
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-      serviceAccountName: sk-python-app
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: sk-python-app
-  namespace: production
-spec:
-  selector:
-    app: sk-python-app
-  ports:
-  - port: 80
-    targetPort: 8000
-    protocol: TCP
-  type: LoadBalancer
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: sk-python-app-hpa
-  namespace: production
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: sk-python-app
-  minReplicas: 3
-  maxReplicas: 20
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-```
-
-### Deploy
-
-```bash
-# Create namespace
-kubectl create namespace production
-
-# Create secrets
-kubectl create secret generic azure-identity \
-  --from-literal=client-id=$AZURE_CLIENT_ID \
-  -n production
-
-kubectl create secret generic app-insights \
-  --from-literal=connection-string=$APPLICATIONINSIGHTS_CONNECTION_STRING \
-  -n production
-
-# Deploy
-kubectl apply -f k8s/deployment.yaml
-
-# Check status
-kubectl get pods -n production
-kubectl logs -f deployment/sk-python-app -n production
-```
-
----
-
-## Production Application Structure
+## 1. Settings
 
 ```python
-# main.py
-from fastapi import FastAPI, HTTPException
+# settings.py
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Settings:
+    azure_openai_endpoint: str
+    azure_openai_deployment: str
+    appinsights_connection_string: str | None
+    request_timeout_s: float = 60.0
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            azure_openai_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+            azure_openai_deployment=os.environ["AZURE_OPENAI_CHAT_DEPLOYMENT_NAME"],
+            appinsights_connection_string=os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"),
+        )
+```
+
+Secrets do not appear here: the service authenticates to Azure OpenAI with managed identity, and the Application Insights connection string is injected by the platform (Container Apps, App Service or a Kubernetes secret).
+
+---
+
+## 2. The app: one service, one kernel per request
+
+```python
+# app.py
+import asyncio
+import logging
 from contextlib import asynccontextmanager
+from typing import Annotated
+
+from azure.identity.aio import DefaultAzureCredential, get_bearer_token_provider
+from fastapi import Depends, FastAPI, HTTPException, Request
+from openai import AsyncAzureOpenAI
+from pydantic import BaseModel
+
 from semantic_kernel import Kernel
-from config import Config
-from monitoring import setup_monitoring
-from health import HealthCheck
+from semantic_kernel.connectors.ai.open_ai import AzureChatCompletion
+from semantic_kernel.exceptions import KernelInvokeException
+from semantic_kernel.functions import KernelArguments, KernelFunctionFromPrompt
+
+from settings import Settings
+from telemetry import register_filters, setup_telemetry
+
+logger = logging.getLogger("app")
+
+# Prompt functions are immutable and can be shared; plugins and filters are added per kernel.
+REPLY = KernelFunctionFromPrompt(
+    function_name="reply",
+    plugin_name="chat",
+    prompt="You are a concise support assistant.\n\nCustomer: {{$input}}",
+)
+
+
+def create_chat_service(settings: Settings) -> AzureChatCompletion:
+    client = AsyncAzureOpenAI(
+        azure_endpoint=settings.azure_openai_endpoint,
+        azure_ad_token_provider=get_bearer_token_provider(   # managed identity in Azure, `az login` locally
+            DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"),
+        api_version="2024-10-21",
+        max_retries=2,      # the OpenAI SDK retries 429/5xx with back-off; don't add a second layer
+        timeout=30.0,       # per attempt
+    )
+    return AzureChatCompletion(deployment_name=settings.azure_openai_deployment, async_client=client)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
-    app.state.config = Config.from_env()
-    app.state.kernel = await create_kernel(app.state.config)
-    app.state.health = HealthCheck()
-
-    setup_monitoring(app.state.config)
-
+    settings = Settings.from_env()
+    setup_telemetry(settings.appinsights_connection_string)
+    app.state.settings = settings
+    # One AI service per process: it holds the HTTP connection pool and is safe to share.
+    app.state.chat_service = create_chat_service(settings)
     yield
 
-    # Shutdown
-    await app.state.kernel.dispose()
 
 app = FastAPI(lifespan=lifespan)
 
+
+def get_kernel(request: Request) -> Kernel:
+    """A fresh kernel per request, built around the shared service."""
+    kernel = Kernel()
+    kernel.add_service(request.app.state.chat_service)
+    register_filters(kernel)
+    return kernel
+
+
+class ChatRequest(BaseModel):
+    message: str
+    tenant: str = "default"
+
+
+class ChatResponse(BaseModel):
+    reply: str
+
+
 @app.get("/health")
-async def health():
-    return {"status": "healthy"}
+async def health() -> dict:
+    return {"status": "ok"}                           # liveness: never calls the model
 
-@app.get("/ready")
-async def ready():
-    # Check dependencies
-    if not app.state.health.check_openai():
-        raise HTTPException(status_code=503, detail="OpenAI unavailable")
-    return {"status": "ready"}
 
-@app.post("/chat")
-async def chat(request: ChatRequest):
+@app.post("/chat", response_model=ChatResponse)
+async def chat(body: ChatRequest, request: Request, kernel: Annotated[Kernel, Depends(get_kernel)]):
     try:
-        result = await app.state.kernel.invoke(
-            app.state.chat_function,
-            input=request.message
+        result = await asyncio.wait_for(
+            kernel.invoke(REPLY, KernelArguments(input=body.message, tenant=body.tenant)),
+            timeout=request.app.state.settings.request_timeout_s,
         )
-        return {"response": str(result)}
-    except Exception as e:
-        logger.error(f"Chat failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except (KernelInvokeException, asyncio.TimeoutError):
+        logger.exception("chat failed")
+        raise HTTPException(status_code=503, detail="The assistant is unavailable.")   # no exception text
+    return ChatResponse(reply=str(result))
 ```
 
-```python
-# config.py
-from dataclasses import dataclass
-from azure.keyvault.secrets import SecretClient
-from azure.identity import DefaultAzureCredential
-import os
+What matters here:
 
-@dataclass
-class Config:
-    openai_api_key: str
-    azure_openai_endpoint: str
-    azure_openai_deployment: str
-    app_insights_connection_string: str
-    max_retries: int = 3
-    timeout: float = 30.0
+- **The AI service is created once**, in the lifespan handler, and kept on `app.state`. It owns the HTTP connection pool and the token provider, and is safe to share.
+- **The kernel is built per request** in `get_kernel`. A `Kernel` is a cheap container; building one per request means plugins or filters that a request adds (a tenant's tools, a per-user approval filter) cannot leak into another request. This is the same rule as registering `Kernel` as transient in .NET.
+- **Retries happen once, in the OpenAI SDK.** `max_retries` and `timeout` on the `AsyncAzureOpenAI` client control them; the request-level `asyncio.wait_for` bounds the whole call, including any tool-calling round trips.
+- **Errors are logged, not returned.** `KernelInvokeException` wraps the connector's `ServiceResponseException`; the client sees a generic 503.
 
-    @classmethod
-    def from_env(cls):
-        # Use Key Vault in production
-        if os.getenv("AZURE_KEY_VAULT_URL"):
-            return cls.from_key_vault()
-        else:
-            return cls.from_environment()
-
-    @classmethod
-    def from_key_vault(cls):
-        vault_url = os.environ["AZURE_KEY_VAULT_URL"]
-        credential = DefaultAzureCredential()
-        client = SecretClient(vault_url=vault_url, credential=credential)
-
-        return cls(
-            openai_api_key=client.get_secret("openai-api-key").value,
-            azure_openai_endpoint=client.get_secret("azure-openai-endpoint").value,
-            azure_openai_deployment=client.get_secret("azure-openai-deployment").value,
-            app_insights_connection_string=client.get_secret("app-insights-connection-string").value,
-        )
-
-    @classmethod
-    def from_environment(cls):
-        return cls(
-            openai_api_key=os.environ["OPENAI_API_KEY"],
-            azure_openai_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-            azure_openai_deployment=os.environ["AZURE_OPENAI_DEPLOYMENT"],
-            app_insights_connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"],
-        )
-```
+For agents, build the `ChatCompletionAgent` inside the handler in the same way (`ChatCompletionAgent(kernel=kernel, ...)`): construction is cheap, and the conversation state belongs in a thread you load from a store, not in the agent object. The [streaming server](/semantic-kernel-guide/python/semantic_kernel_streaming_server_fastapi/) shows that shape with SSE.
 
 ---
 
-## Monitoring with OpenTelemetry
+## 3. Telemetry and token usage
 
 ```python
-# monitoring.py
-from opentelemetry import trace, metrics
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from azure.monitor.opentelemetry import configure_azure_monitor
-from azure.monitor.opentelemetry.exporter import AzureMonitorTraceExporter, AzureMonitorMetricExporter
-import logging
+# telemetry.py
+from opentelemetry import metrics
 
-def setup_monitoring(config: Config):
-    """Configure OpenTelemetry with Azure Monitor"""
+from semantic_kernel.filters import FilterTypes, FunctionInvocationContext
 
-    # Configure Azure Monitor
-    configure_azure_monitor(
-        connection_string=config.app_insights_connection_string,
-        logger_name="semantic_kernel"
-    )
+meter = metrics.get_meter("app.sk")
+prompt_tokens = meter.create_counter("app.llm.tokens.prompt", unit="{token}")
+completion_tokens = meter.create_counter("app.llm.tokens.completion", unit="{token}")
 
-    # Get tracer and meter
-    tracer = trace.get_tracer(__name__)
-    meter = metrics.get_meter(__name__)
 
-    # Create custom metrics
-    request_counter = meter.create_counter(
-        "sk.requests.total",
-        description="Total requests",
-        unit="1"
-    )
+def setup_telemetry(connection_string: str | None) -> None:
+    """Export SK's spans, metrics and logs. Call once, before the first request."""
+    if connection_string:
+        from azure.monitor.opentelemetry import configure_azure_monitor
 
-    token_counter = meter.create_counter(
-        "sk.tokens.used",
-        description="Tokens used",
-        unit="1"
-    )
+        configure_azure_monitor(connection_string=connection_string, logger_name="semantic_kernel")
 
-    latency_histogram = meter.create_histogram(
-        "sk.request.duration",
-        description="Request duration",
-        unit="ms"
-    )
 
-    return tracer, meter
+async def record_token_usage(context: FunctionInvocationContext, next) -> None:
+    """Function-invocation filter: count tokens per function and tenant.
+
+    Python SK has no token-usage metric of its own, so read the usage the
+    connector attaches to each completion's metadata.
+    """
+    await next(context)
+    if context.result is None:
+        return
+    tenant = str((context.arguments or {}).get("tenant", "unknown"))
+    attrs = {"function": context.function.fully_qualified_name, "tenant": tenant}
+    for completion in context.result.metadata.get("metadata", []):
+        usage = completion.get("usage")
+        if usage is not None:
+            prompt_tokens.add(usage.prompt_tokens or 0, attrs)
+            completion_tokens.add(usage.completion_tokens or 0, attrs)
+
+
+def register_filters(kernel) -> None:
+    kernel.add_filter(FilterTypes.FUNCTION_INVOCATION, record_token_usage)
 ```
 
-```python
-# Instrumented kernel invocation
-from opentelemetry import trace
-import time
+Semantic Kernel instruments itself with OpenTelemetry under the `semantic_kernel` namespace. In Python that means:
 
-tracer = trace.get_tracer(__name__)
+- **Spans** for each function invocation and, with `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true` set in the environment, GenAI semantic-convention spans for model calls, including the `gen_ai.usage.input_tokens` / `gen_ai.usage.output_tokens` attributes. The `..._SENSITIVE=true` variant also records prompts and completions; leave it off in production.
+- **Metrics**: only `semantic_kernel.function.invocation.duration` and `semantic_kernel.function.streaming.duration` histograms. The token-usage metrics (`semantic_kernel.function.invocation.token_usage.*`) exist only in the .NET SDK.
 
-async def invoke_with_monitoring(kernel, function, **kwargs):
-    with tracer.start_as_current_span("sk_invoke") as span:
-        span.set_attribute("sk.function", function.name)
-        span.set_attribute("sk.plugin", function.plugin_name)
-
-        start = time.time()
-
-        try:
-            result = await kernel.invoke(function, **kwargs)
-
-            duration_ms = (time.time() - start) * 1000
-            span.set_attribute("sk.duration_ms", duration_ms)
-            span.set_attribute("sk.status", "success")
-
-            # Record metrics
-            latency_histogram.record(duration_ms, {"function": function.name})
-
-            if hasattr(result, 'metadata'):
-                tokens = result.metadata.get("total_tokens", 0)
-                token_counter.add(tokens, {"function": function.name})
-                span.set_attribute("sk.tokens", tokens)
-
-            return result
-
-        except Exception as e:
-            span.set_attribute("sk.status", "error")
-            span.record_exception(e)
-            raise
-```
+So token accounting in Python is yours to record. The filter above reads the `usage` (a `CompletionUsage`) that the OpenAI connectors attach to every completion's metadata and adds it to counters with function and tenant attributes. Agents call the chat service directly, not through a kernel function, so for agent turns read `response.message.metadata["usage"]` instead (the [resilient agent recipe](/semantic-kernel-guide/python/semantic_kernel_recipes_python/#6-resilient-agent-with-monitoring) does).
 
 ---
 
-## Error Handling & Resilience
+## 4. Caching deterministic functions
 
 ```python
-# resilience.py
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from circuitbreaker import circuit
-import asyncio
-import logging
-
-logger = logging.getLogger(__name__)
-
-class ResilientKernel:
-    def __init__(self, kernel, max_retries=3, circuit_threshold=5):
-        self.kernel = kernel
-        self.max_retries = max_retries
-        self.circuit_threshold = circuit_threshold
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=2, max=10),
-        retry=retry_if_exception_type(Exception)
-    )
-    async def invoke_with_retry(self, function, **kwargs):
-        """Invoke with automatic retry"""
-        return await self.kernel.invoke(function, **kwargs)
-
-    async def invoke_with_timeout(self, function, timeout=30.0, **kwargs):
-        """Invoke with timeout"""
-        try:
-            return await asyncio.wait_for(
-                self.kernel.invoke(function, **kwargs),
-                timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            logger.error(f"Timeout after {timeout}s")
-            raise
-
-    @circuit(failure_threshold=5, recovery_timeout=60, expected_exception=Exception)
-    async def invoke_with_circuit_breaker(self, function, **kwargs):
-        """Invoke with circuit breaker"""
-        return await self.kernel.invoke(function, **kwargs)
-
-    async def invoke_safe(self, function, timeout=30.0, **kwargs):
-        """Invoke with all resilience patterns"""
-        return await self.invoke_with_timeout(
-            function,
-            timeout=timeout,
-            **kwargs
-        )
-```
-
----
-
-## Performance Optimization
-
-### Caching
-
-```python
-# caching.py
-from functools import lru_cache
-from typing import Dict, Any
+# cache.py
 import hashlib
 import json
 
-class SemanticCache:
-    def __init__(self, max_size=1000):
-        self.cache: Dict[str, Any] = {}
-        self.max_size = max_size
+from semantic_kernel.filters import FunctionInvocationContext
+from semantic_kernel.functions import FunctionResult
 
-    def _make_key(self, function_name: str, **kwargs) -> str:
-        """Generate cache key"""
-        content = json.dumps({"func": function_name, "args": kwargs}, sort_keys=True)
-        return hashlib.sha256(content.encode()).hexdigest()
+CACHEABLE = {"text-classify"}            # deterministic functions only
+_cache: dict[str, str] = {}              # use Redis or similar when you run several replicas
 
-    async def get_or_invoke(self, kernel, function, **kwargs):
-        """Get from cache or invoke"""
-        key = self._make_key(function.name, **kwargs)
 
-        if key in self.cache:
-            logger.info(f"Cache hit for {function.name}")
-            return self.cache[key]
-
-        result = await kernel.invoke(function, **kwargs)
-
-        # Evict oldest if at capacity
-        if len(self.cache) >= self.max_size:
-            self.cache.pop(next(iter(self.cache)))
-
-        self.cache[key] = result
-        return result
+async def cache_filter(context: FunctionInvocationContext, next) -> None:
+    name = context.function.fully_qualified_name
+    if name not in CACHEABLE:
+        await next(context)
+        return
+    args = {k: str(v) for k, v in (context.arguments or {}).items()}
+    key = hashlib.sha256(json.dumps([name, args], sort_keys=True).encode()).hexdigest()
+    if key in _cache:
+        context.result = FunctionResult(function=context.function.metadata, value=_cache[key])
+        return                            # skip the model call
+    await next(context)
+    if context.result is not None:
+        _cache[key] = str(context.result)
 ```
 
-### Batching
-
-```python
-# batching.py
-import asyncio
-from typing import List
-
-class BatchProcessor:
-    def __init__(self, kernel, function, batch_size=10):
-        self.kernel = kernel
-        self.function = function
-        self.batch_size = batch_size
-
-    async def process_batch(self, items: List[str]) -> List[Any]:
-        """Process items in parallel batches"""
-        results = []
-
-        for i in range(0, len(items), self.batch_size):
-            batch = items[i:i + self.batch_size]
-
-            # Process batch in parallel
-            tasks = [
-                self.kernel.invoke(self.function, input=item)
-                for item in batch
-            ]
-
-            batch_results = await asyncio.gather(*tasks)
-            results.extend(batch_results)
-
-        return results
-```
+Register it in `get_kernel` with `kernel.add_filter(FilterTypes.FUNCTION_INVOCATION, cache_filter)`. Setting `context.result` and returning without calling `next` skips the model call. Cache only functions whose output should not vary (classification, extraction) and include everything that changes the answer in the key; an exact-match cache misses near-duplicate questions by design.
 
 ---
 
-## Testing
+## 5. Tests
 
 ```python
-# tests/test_kernel.py
+# tests/test_app.py
+from types import SimpleNamespace
+
 import pytest
-from unittest.mock import Mock, AsyncMock
-from semantic_kernel import Kernel
+from fastapi.testclient import TestClient
+
+from semantic_kernel.connectors.ai.chat_completion_client_base import ChatCompletionClientBase
+from semantic_kernel.connectors.ai.completion_usage import CompletionUsage
+from semantic_kernel.contents import AuthorRole, ChatMessageContent
+
+import app as app_module
+
+
+class StubChat(ChatCompletionClientBase):
+    """Offline chat service: canned reply plus usage metadata, like a real connector."""
+
+    async def _inner_get_chat_message_contents(self, chat_history, settings):
+        return [ChatMessageContent(
+            role=AuthorRole.ASSISTANT,
+            content="Have you tried turning it off and on again?",
+            metadata={"usage": CompletionUsage(prompt_tokens=12, completion_tokens=9)},
+        )]
+
 
 @pytest.fixture
-async def mock_kernel():
-    kernel = Kernel()
-    # Mock AI service
-    mock_service = AsyncMock()
-    mock_service.complete_async.return_value = "Mocked response"
-    kernel.add_service(mock_service)
-    return kernel
+def client(monkeypatch):
+    monkeypatch.setenv("AZURE_OPENAI_ENDPOINT", "https://example.openai.azure.com/")
+    monkeypatch.setenv("AZURE_OPENAI_CHAT_DEPLOYMENT_NAME", "test")
+    monkeypatch.setattr(app_module, "create_chat_service", lambda settings: StubChat(ai_model_id="stub"))
+    with TestClient(app_module.app) as c:
+        yield c
 
-@pytest.mark.asyncio
-async def test_simple_invocation(mock_kernel):
-    function = mock_kernel.create_function_from_prompt("Test prompt")
-    result = await mock_kernel.invoke(function)
-    assert result is not None
 
-@pytest.mark.asyncio
-async def test_retry_on_failure():
-    kernel = ResilientKernel(mock_kernel, max_retries=3)
+def test_chat(client):
+    r = client.post("/chat", json={"message": "My router is broken", "tenant": "acme"})
+    assert r.status_code == 200
+    assert "turning it off" in r.json()["reply"]
 
-    # Should retry and eventually succeed
-    result = await kernel.invoke_with_retry(function, input="test")
-    assert result is not None
+
+def test_kernel_per_request(client):
+    request = SimpleNamespace(app=client.app)
+    k1, k2 = app_module.get_kernel(request), app_module.get_kernel(request)
+    assert k1 is not k2
+    assert k1.get_service() is k2.get_service()
 ```
 
----
-
-## Security Best Practices
-
-1. **Use Azure Key Vault for secrets**
-2. **Enable Managed Identity in production**
-3. **Implement rate limiting**
-4. **Validate all inputs**
-5. **Use HTTPS everywhere**
-6. **Enable audit logging**
-7. **Regular dependency updates**
-8. **Content filtering and guardrails**
-
-See: [Middleware Guide](./semantic_kernel_middleware_python/) for guardrails implementation.
+Subclassing `ChatCompletionClientBase` gives a service the kernel accepts anywhere a real one goes, including behind agents; `unittest.mock.AsyncMock` does not. Replacing `create_chat_service` keeps the test offline and avoids acquiring an Azure token. Add a `tests/conftest.py` that puts the project root on `sys.path` if you keep tests in a subfolder.
 
 ---
 
-## Additional Resources
+## 6. Container
 
-- [Comprehensive Guide](./semantic_kernel_comprehensive_python/) - Complete reference
-- [Recipes](./semantic_kernel_recipes_python/) - Code examples
-- [General Production Guide](../semantic_kernel_production_guide/) - Language-agnostic patterns
-- [Streaming Server Guide](./semantic_kernel_streaming_server_fastapi/) - FastAPI patterns
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+RUN useradd -m -u 1000 appuser
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+```
 
-**[Back to Python README](./)** | **[Overview](./)**
+The service needs `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT_NAME`, optionally `APPLICATIONINSIGHTS_CONNECTION_STRING` and `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS`, and an identity with the *Cognitive Services OpenAI User* role on the Azure OpenAI resource (on AKS, workload identity; `AZURE_CLIENT_ID` selects a user-assigned identity). Point liveness probes at `/health`, which never calls the model. Scale on concurrency and watch the provider's tokens-per-minute quota, which usually runs out before CPU does.
 
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | 1.45.0 | Rewritten. The previous modules did not import (`Config`, `ChatRequest`, `logger` and a `health` module were undefined), built one kernel for the whole app despite the kernel-per-request advice, and claimed Python SK emits token-usage metrics (only .NET does). Generic Kubernetes manifests and checklists replaced by a link to the language-neutral production guide. |

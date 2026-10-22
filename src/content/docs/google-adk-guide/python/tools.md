@@ -1,13 +1,14 @@
 ---
 title: "Tools (functions, agents, built-ins)"
 description: "FunctionTool, AgentTool, Google built-ins, long-running tools, and confirmation flows."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 30
+  label: "Tools"
+  order: 40
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`). As of 2026-09-28 the latest release was **2.10.0** — most examples are compatible with 2.3.0 and later; the `BigQueryToolset` section requires 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -23,7 +24,7 @@ def add(a: int, b: int) -> int:
 
 agent = LlmAgent(
     name="math_and_search",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use `add` for arithmetic. Use `google_search` for facts.",
     tools=[
         add,                       # callable → wrapped as FunctionTool
@@ -33,7 +34,7 @@ agent = LlmAgent(
 )
 ```
 
-`LlmAgent` wraps bare callables with `FunctionTool(func=...)` at registration time (`llm_agent.py:178-182`). Wrap manually only when you need `require_confirmation=`.
+`LlmAgent` wraps bare callables with `FunctionTool(func=...)` at registration time (`llm_agent.py`). Wrap manually only when you need `require_confirmation=`.
 
 ## Public surface
 
@@ -88,7 +89,7 @@ Signature rules (`function_tool.py`):
 
 - The tool **name** is `func.__name__` (or `func.__class__.__name__` for callable objects).
 - The tool **description** is the docstring — one sentence + Google-style `Args`/`Returns`. It's passed to the model verbatim, so keep it tight.
-- Parameters are introspected with `inspect.signature` + `get_type_hints`. Pydantic model params are auto-converted (`_preprocess_args`, `function_tool.py:106`).
+- Parameters are introspected with `inspect.signature` + `get_type_hints`. Pydantic model params are auto-converted (`_preprocess_args`, `function_tool.py`).
 - A parameter named `tool_context` (or typed as `ToolContext`) gets the `ToolContext` injected — it is **not** exposed to the model.
 - Sync and async callables both work.
 
@@ -141,7 +142,15 @@ async def save_and_return(
     return {"saved": filename}
 ```
 
-**Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py:219-224`).
+**Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py`).
+
+**Argument validation (2.10.0+, opt-in).** With the experimental `FUNCTION_TOOL_ARG_VALIDATION` feature on, `FunctionTool` validates and coerces arguments against the type hints before calling, so `{"base": "3"}` becomes `base=3` for an `int` parameter, and a value that can't be coerced goes back to the model as an error it can correct:
+
+```python
+from google.adk.features import FeatureName, override_feature_enabled
+
+override_feature_enabled(FeatureName.FUNCTION_TOOL_ARG_VALIDATION, True)   # or ADK_ENABLE_FUNCTION_TOOL_ARG_VALIDATION=1
+```
 
 ### `require_confirmation`
 
@@ -156,7 +165,7 @@ tool = FunctionTool(
 )
 ```
 
-Bool or predicate. When the callable returns truthy, the tool returns `{"error": "This tool call requires confirmation..."}` and sets `tool_context.actions.skip_summarization = True`. The user then sends back a `FunctionResponse` carrying a `ToolConfirmation` payload on the next turn.
+Bool or predicate. The predicate receives the same prepared arguments as `func` (including `tool_context` if `func` declares one), so give it a `**_` catch-all: `def needs_approval(amount: float, **_) -> bool: return amount > 1000`. When the callable returns truthy, the tool returns `{"error": "This tool call requires confirmation..."}` and sets `tool_context.actions.skip_summarization = True`. The user then sends back a `FunctionResponse` carrying a `ToolConfirmation` payload on the next turn.
 
 ## LongRunningFunctionTool
 
@@ -192,6 +201,8 @@ async def check_report_status(tool_context: ToolContext) -> dict:
 ```
 
 The key contract: the function **returns immediately** with a `{"status": "pending", ...}` dict. ADK delivers that response to the model, which then waits for the user to poll or for the next invocation to arrive. Do not block inside the function — that freezes the event loop.
+
+**What ADK does with the return value.** The function-call event carries `long_running_tool_ids` and is yielded before the tool runs, and `event.is_final_response()` is `True` for it, so a client can show a progress indicator straight away. If the function returns something truthy, ADK builds the `FunctionResponse` and the model continues. If it returns something falsy (`None`, `{}`), ADK builds **no** response: the call stays open until your client or a background worker sends a `FunctionResponse` with the same call `id` (see `get_user_choice` under [HITL tools](#hitl-tools)). ADK never re-calls the tool itself.
 
 ### Distinguishing `FunctionTool` vs `LongRunningFunctionTool`
 
@@ -514,7 +525,7 @@ bash_tool = ExecuteBashTool(
 
 agent = LlmAgent(
     name="code_runner",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You can run shell commands in /tmp/work. "
         "Always confirm before executing anything."
@@ -546,8 +557,8 @@ asyncio.run(main())
 
 Before spawning a subprocess, `ExecuteBashTool` runs `_validate_command`:
 
-1. **Prefix check** — if `allowed_command_prefixes != ("*",)`, the command must start with one of the listed prefixes (case-sensitive). Fails → `{"error": "Command not allowed..."}`.
-2. **Operator check** — if any `blocked_operators` token appears in the command string (simple substring match), fails → `{"error": "Operator ... is not allowed..."}`.
+1. **Prefix check** — if `allowed_command_prefixes != ("*",)`, the command must start with one of the listed prefixes (case-sensitive). Fails → `{"error": "Command blocked. Permitted prefixes are: ..."}`.
+2. **Operator check** — if any `blocked_operators` token appears in the command string (simple substring match), fails → `{"error": "Command contains blocked operator: ..."}`.
 3. **Confirmation** — `tool_context.request_confirmation(...)` is called on every valid command.
 
 After validation, the subprocess is launched with:
@@ -560,6 +571,8 @@ After validation, the subprocess is launched with:
 - `ExecuteBashTool` always requests confirmation (`request_confirmation` called before every run). In headless environments the confirmation callback must be handled by your `App` or a plugin.
 - Prefix matching is a **prefix** check, not a full command parser. `allowed_command_prefixes=("git",)` would permit `git-annex` as well. Use `blocked_operators` to prevent shell injection.
 - Use `workspace=` to confine the working directory; note that the process can still read/write absolute paths outside the workspace unless `RLIMIT_AS` / container isolation is also in place.
+- The policy is not a sandbox. `echo $(rm -rf /workspace)` passes an `echo` prefix check, so add `"$("`, `` "`" ``, `"\n"` and `"\r"` to `blocked_operators`, and even then a command that interprets its own flags can escape: `git -c alias.x='!rm -rf /' x` starts with `git` and contains no blocked token. Run security-sensitive agents inside a real OS-level sandbox (container, gVisor, Firecracker).
+- Other outcomes: a rejected confirmation returns `{"error": "This tool call is rejected."}`, a timeout returns an `error` plus whatever stdout/stderr was captured, and on non-POSIX systems the tool returns `{"error": "ExecuteBashTool is only supported on POSIX systems."}`. The process group is always killed when the call ends.
 
 ## AgentTool
 
@@ -575,7 +588,7 @@ class ResearchIn(BaseModel):
 
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Research the topic and return a citation-rich paragraph.",
     input_schema=ResearchIn,
     tools=[google_search],
@@ -583,13 +596,13 @@ researcher = LlmAgent(
 
 writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use the `researcher` tool, then write a crisp 150-word brief.",
     tools=[AgentTool(agent=researcher, skip_summarization=False)],
 )
 ```
 
-Constructor args (`agent_tool.py:111-122`):
+Constructor args (`agent_tool.py`):
 
 | Arg | Default | Purpose |
 |---|---|---|
@@ -600,7 +613,7 @@ Constructor args (`agent_tool.py:111-122`):
 
 ## Built-in Gemini tools
 
-These run **server-side inside Gemini** and cannot be combined freely. When mixed with custom tools, ADK wraps them automatically to stay within Gemini's single-built-in constraint (see `llm_agent.py:149-176`):
+These run **server-side inside Gemini** and cannot be combined freely. When mixed with custom tools, ADK wraps them automatically to stay within Gemini's single-built-in constraint (see `llm_agent.py`):
 
 | Tool | What it does | Multi-tool-safe |
 |---|---|---|
@@ -620,6 +633,27 @@ tool = VertexAiSearchTool(
 )
 ```
 
+`VertexAiSearchTool(*, data_store_id=None, data_store_specs=None, search_engine_id=None, filter=None, max_results=None, bypass_multi_tools_limit=False)` takes either a single `data_store_id` or a `search_engine_id` (with `data_store_specs=[types.VertexAISearchDataStoreSpec(data_store=...), ...]` for an engine over several stores). `filter` uses Discovery Engine syntax (`'lang: ANY("en")'`), not CEL equality. For a per-request filter, subclass and override `_build_vertex_ai_search_config(self, readonly_context) -> types.VertexAISearch`, validating any state value before you interpolate it:
+
+```python
+import re
+from google.genai import types
+from google.adk.tools import VertexAiSearchTool
+
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+
+class OrgScopedSearch(VertexAiSearchTool):
+    def _build_vertex_ai_search_config(self, readonly_context) -> types.VertexAISearch:
+        org_id = readonly_context.state.get("org_id", "")
+        if org_id and not _SAFE_ID.match(org_id):
+            raise ValueError(f"Invalid org_id: {org_id!r}")
+        return types.VertexAISearch(
+            datastore=self.data_store_id,
+            filter=f'org_id: ANY("{org_id}")' if org_id else None,
+            max_results=self.max_results,
+        )
+```
+
 ## Memory and artifact tools
 
 ```python
@@ -627,7 +661,7 @@ from google.adk.tools import load_memory, preload_memory, load_artifacts
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Use `load_memory` to recall past facts.",
     tools=[load_memory, preload_memory, load_artifacts],
 )
@@ -698,7 +732,7 @@ toolset = OpenAPIToolset(spec_dict=spec_dict)
 # --- Use all tools from the spec -----------------------------------------------
 agent = LlmAgent(
     name="petstore_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user browse and manage the Petstore catalogue.",
     tools=[toolset],
 )
@@ -707,7 +741,7 @@ agent = LlmAgent(
 list_pets_tool = toolset.get_tool("list_pets")   # by operationId (snake_case)
 agent2 = LlmAgent(
     name="lister",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[list_pets_tool],
 )
 ```
@@ -856,7 +890,7 @@ integration_toolset = ApplicationIntegrationToolset(
 
 agent = LlmAgent(
     name="order_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help users track and process orders.",
     tools=[integration_toolset],
 )
@@ -917,7 +951,7 @@ toolset = ToolboxToolset(
 
 agent = LlmAgent(
     name="db_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer database questions using the available tools.",
     tools=[toolset],
 )
@@ -947,7 +981,9 @@ toolset = ToolboxToolset(
 | `credentials` | `None` | `CredentialConfig` from `toolbox_adk` |
 | `additional_headers` | `None` | Static headers for every toolbox request |
 
-> When both `toolset_name` and `tool_names` are omitted, **all** registered tools are loaded.
+> When both `toolset_name` and `tool_names` are omitted, **all** registered tools are loaded; when both are set, you get the union.
+
+Callables in `bound_params` take no arguments and are evaluated on every call; bound parameters are hidden from the model's schema. Tools load lazily, so an unreachable server only fails at the first invocation. The runner closes the toolset on `runner.close()` (or `async with runner:`); call `await toolset.close()` yourself if you manage it outside a runner. Without the extra installed, construction raises `ImportError`.
 
 ## Custom `BaseTool`
 
@@ -1086,7 +1122,7 @@ class RoleBasedToolset(BaseToolset):
 
 agent = LlmAgent(
     name="data_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[RoleBasedToolset()],
 )
 ```
@@ -1247,7 +1283,7 @@ async def list_calendar_events(tool_context: ToolContext) -> dict:
 
 `request_credential` sets `actions.requested_auth_configs` on the current event. The framework pauses execution; when the user completes OAuth the runner resumes. On the next turn `get_auth_response` returns the exchanged token.
 
-Use `save_credential` / `load_credential` in **callback** contexts where `function_call_id` is not available.
+Use `save_credential` / `load_credential` in **callback** contexts where `function_call_id` is not available. `save_credential(auth_config)` persists `auth_config.exchanged_auth_credential`, and `get_auth_response()` doesn't fill that in on your config, so attach the token first: `await tool_context.save_credential(MY_AUTH.model_copy(update={"exchanged_auth_credential": cred}))`. On a later session, `await tool_context.load_credential(MY_AUTH)` restores it.
 
 ### Confirmation (HITL gate)
 
@@ -1303,7 +1339,7 @@ async def dynamic_instruction(ctx: ReadonlyContext) -> str:
 
 agent = LlmAgent(
     name="localised",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=dynamic_instruction,
 )
 ```
@@ -1325,7 +1361,7 @@ bq_tools = BigQueryToolset()
 
 analyst = LlmAgent(
     name="data_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=(
         "You are a data analyst with access to BigQuery. "
         "List tables first, inspect schemas before writing queries, "
@@ -1348,7 +1384,7 @@ bq_tools = BigQueryToolset(
 
 agent = LlmAgent(
     name="sales_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Run SQL against the sales dataset only.",
     tools=[bq_tools],
 )
@@ -1374,8 +1410,6 @@ bq_tools = BigQueryToolset(
 
 Pass `external_access_token_key="my_token"` to `BigQueryCredentialsConfig` instead of `credentials` if you want the agent to inject a short-lived token from session state at query time.
 
-> Full constructor reference and query result mode options → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
-
 ## PubSubToolset (experimental)
 
 `PubSubToolset` exposes three Google Cloud Pub/Sub operations as ADK tools: `publish_message`, `pull_messages`, and `acknowledge_messages`. Install prerequisite: `pip install google-cloud-pubsub`.
@@ -1392,13 +1426,19 @@ toolset = PubSubToolset(
 
 agent = LlmAgent(
     name="event_router",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Publish and consume messages on Pub/Sub topics as instructed.",
     tools=[toolset],
 )
 ```
 
-> Full constructor reference, message tool signatures, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
+| Tool | Key arguments | Returns |
+|---|---|---|
+| `publish_message` | `topic_name`, `message`, `attributes?`, `ordering_key?` | `{"message_id": ...}` |
+| `pull_messages` | `subscription_name`, `max_messages?` | `{"messages": [{"message_id", "data", "ack_id", ...}]}` |
+| `acknowledge_messages` | `subscription_name`, `ack_ids` | `{"status": "SUCCESS"}` |
+
+Failures come back as `{"status": "ERROR", ...}`. `tool_filter=None` exposes all three; `tool_filter=[]` exposes none. Credentials default to ADC; pass `credentials_config=PubSubCredentialsConfig(credentials=...)` (`google.adk.tools.pubsub.pubsub_credentials`) to override. Tell the model to acknowledge what it has processed, or messages are redelivered.
 
 ## SpannerToolset (experimental)
 
@@ -1418,7 +1458,7 @@ toolset = SpannerToolset(spanner_tool_settings=settings)
 
 agent = LlmAgent(
     name="sql_assistant",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=(
         "You are a Spanner SQL assistant. List tables first, then inspect schemas "
         "before writing queries. Cap all results at 50 rows."
@@ -1427,7 +1467,7 @@ agent = LlmAgent(
 )
 ```
 
-> Full constructor reference, vector similarity search setup, and more examples → the [Class & API Reference — Tools & Toolsets](./google_adk_comprehensive_guide/#tools--toolsets) section.
+The schema tools are always present. `spanner_execute_sql` and `spanner_similarity_search` are added only while `Capabilities.DATA_READ` is in `SpannerToolSettings.capabilities` (the default), and `spanner_vector_store_similarity_search` needs `vector_store_settings=SpannerVectorStoreSettings(...)` (table, content and embedding columns, vector length and the Vertex AI embedding model). `database_role` runs queries under a fine-grained access role. `SpannerAdminToolset` (same package) manages instances and databases; give it to an agent only if it should be able to change them.
 
 ## SkillToolset (experimental)
 
@@ -1435,16 +1475,15 @@ agent = LlmAgent(
 
 ```python
 from google.adk.tools.skill_toolset import SkillToolset
-from google.adk.skills import Skill, SkillFrontmatter
+from google.adk.skills import Frontmatter, Skill
 from google.adk.agents import LlmAgent
 
-# Build a skill from content in memory
+# Build a skill from content in memory (Skill.name comes from its frontmatter)
 python_skill = Skill(
-    name="python_helper",
-    frontmatter=SkillFrontmatter(
-        name="python_helper",
+    frontmatter=Frontmatter(
+        name="python-helper",
         description="Helps write and explain Python code.",
-        version="1.0.0",
+        metadata={"version": "1.0.0"},
     ),
     instructions="""
 # Python Helper
@@ -1462,7 +1501,7 @@ toolset = SkillToolset(skills=[python_skill])
 
 agent = LlmAgent(
     name="coder",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a coding assistant with access to skills.",
     tools=[toolset],
 )
@@ -1476,7 +1515,7 @@ agent = LlmAgent(
 | `load_skill(skill_name)` | Reads the full `SKILL.md` for a given skill |
 | `load_skill_resource(skill_name, file_path)` | Reads a file from `references/`, `assets/`, or `scripts/` |
 | `run_skill_script(skill_name, script_path, ...)` | Runs a script from `scripts/` (requires `code_executor`) |
-| `search_skills(query)` | Semantic search (requires `registry=`) |
+| `search_skills(query)` | Registry search — only added when `registry=` is set |
 
 **Constructor args:**
 
@@ -1485,21 +1524,61 @@ agent = LlmAgent(
 | `skills` | `list[Skill]` | `[]` | Statically-defined skills |
 | `registry` | `SkillRegistry \| None` | `None` | Dynamic skill registry (enables `search_skills`) |
 | `code_executor` | `BaseCodeExecutor \| None` | `None` | Executor for `run_skill_script` |
+| `environment` | `BaseEnvironment \| None` | `None` | Execution environment for scripts (alternative to `code_executor`) |
+| `skills_folder` | `Path \| str \| None` | `None` | Where skills are materialised **inside `environment`**; absolute path, requires `environment` (default `<environment.working_dir>/skills`) |
 | `script_timeout` | `int` | `300` | Shell-script timeout in seconds |
-| `additional_tools` | `list[ToolUnion] \| None` | `None` | Extra tools unlocked when a skill is activated |
+| `save_output_artifacts` | `bool` | `False` | Persist script outputs as artifacts (added in 2.12.0) |
+| `additional_tools` | `Sequence[ToolUnion \| BaseNode] \| None` | `None` | Extra tools unlocked when a skill is activated |
+| `tool_name_prefix`, `tool_filter` | | `None` | Prefix (`"coding"` → `coding_list_skills`) / filter the **management tools** above, not individual skills |
+| `discovery_mode`, `lifecycle_config` | | `LAZY`, `None` | How skills are surfaced and unloaded (lifecycle is experimental; `ADK_ENABLE_SKILL_LIFECYCLE=1`) |
 
-**Loading from disk:**
+`code_executor` and `environment` are mutually exclusive (passing both raises `ValueError`), and `skills_folder` without an `environment`, or a relative one, also raises. `run_skill_script` is only exposed when the toolset has a `code_executor` or `environment`, or the agent has a `code_executor`. `BuiltInCodeExecutor` can't run skill scripts; use `UnsafeLocalCodeExecutor` locally or a sandboxed executor in production. To choose which skills an agent sees, pass only those `Skill` objects; `tool_filter=["list_skills", "load_skill", "load_skill_resource"]` is how you make a toolset read-only.
 
-```python
-from google.adk.skills import Skill
-import pathlib
+**`additional_tools` is a pool, not a tool list.** A tool from it is surfaced only while an activated skill names it in its frontmatter:
 
-skill_dir = pathlib.Path("my_skills/python_helper")
-skill = Skill.from_directory(skill_dir)   # reads SKILL.md + subfolders
-toolset = SkillToolset(skills=[skill])
+```markdown
+---
+name: my-api-skill
+description: Calls the internal API to fetch live data.
+metadata:
+  adk_additional_tools:
+    - my_api_tool
+---
 ```
 
-> **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress the warning with `GOOGLE_ADK_IGNORE_WARNINGS=skill_toolset`.
+**Loading from disk:** a skill is a directory named after the skill, containing `SKILL.md` (YAML frontmatter with a kebab-case `name` of at most 64 chars, and `description`, then the instruction body; snake_case names need the experimental `SNAKE_CASE_SKILL_NAME` feature) plus optional `references/`, `assets/` and `scripts/`. The loaders parse and validate all of it into `Skill(frontmatter, instructions, resources)`:
+
+```python
+from google.adk.skills import load_skill_from_dir, load_skills_from_dir
+
+skill = load_skill_from_dir("my_skills/python-helper")   # dir name must equal frontmatter name
+all_skills = load_skills_from_dir("my_skills")            # every subdirectory with a SKILL.md
+toolset = SkillToolset(skills=all_skills)
+```
+
+Async (`*_async`) and GCS (`load_skill_from_gcs_dir`, `list_skills_in_gcs_dir`) variants are exported from `google.adk.skills` too.
+
+**Custom registries.** Implement `SkillRegistry` when skills live in a database or bucket. Both abstract methods are keyword-only; raising from `get_skill` reaches the model as `REGISTRY_ERROR`, a falsy return as `SKILL_NOT_FOUND`. Override `search_tool_description()` to describe your search to the model. (`GCPSkillRegistry`, in `google.adk.integrations.skill_registry`, is the built-in Vertex AI implementation.)
+
+```python
+from google.adk.skills import Frontmatter, Skill, SkillRegistry
+
+class InMemorySkillRegistry(SkillRegistry):
+    def __init__(self, skills: list[Skill]):
+        self._skills = {s.name: s for s in skills}
+
+    async def get_skill(self, *, name: str) -> Skill:
+        return self._skills[name]
+
+    async def search_skills(self, *, query: str) -> list[Frontmatter]:
+        q = query.lower()
+        return [s.frontmatter for s in self._skills.values()
+                if q in s.name.lower() or q in s.description.lower()]
+
+toolset = SkillToolset(registry=InMemorySkillRegistry([python_skill]))   # adds search_skills
+```
+
+> **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
 
 ## Agent transfer
 
@@ -1507,7 +1586,7 @@ toolset = SkillToolset(skills=[skill])
 
 ### `TransferToAgentTool` — enum-constrained transfer
 
-Source-verified against `google.adk.tools.transfer_to_agent_tool` (google-adk==2.7.1). Unlike the module-level `transfer_to_agent` singleton, the **class** is used when ADK auto-injects transfer into an `LlmAgent` with sub-agents. Its one job over `FunctionTool(transfer_to_agent)` is adding a JSON Schema `enum` constraint to `agent_name`, so the model cannot hallucinate a sub-agent that doesn't exist.
+Source-verified against `google.adk.tools.transfer_to_agent_tool` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Unlike the module-level `transfer_to_agent` singleton, the **class** is used when ADK auto-injects transfer into an `LlmAgent` with sub-agents. Its one job over `FunctionTool(transfer_to_agent)` is adding a JSON Schema `enum` constraint to `agent_name`, so the model cannot hallucinate a sub-agent that doesn't exist.
 
 ```python
 from google.adk.tools.transfer_to_agent_tool import TransferToAgentTool
@@ -1532,15 +1611,15 @@ else:
 
 ## `LoadMemoryTool` — memory search with auto instruction
 
-Source-verified against `google.adk.tools.load_memory_tool` (google-adk==2.7.1). The exported symbol `load_memory` is a module-level `LoadMemoryTool()` instance — you pass either interchangeably to `tools=[]`.
+Source-verified against `google.adk.tools.load_memory_tool` (first verified in 2.7.1; re-checked against %%version=google-adk%%). The exported symbol `load_memory` is a module-level `LoadMemoryTool()` instance — you pass either interchangeably to `tools=[]`.
 
 ```python
 from google.adk.tools.load_memory_tool import LoadMemoryTool, load_memory
 from google.adk.agents import LlmAgent
 
 # These two are equivalent:
-agent_a = LlmAgent(name="a", model="gemini-2.5-flash", tools=[load_memory])
-agent_b = LlmAgent(name="b", model="gemini-2.5-flash", tools=[LoadMemoryTool()])
+agent_a = LlmAgent(name="a", model="%%model=gemini%%", tools=[load_memory])
+agent_b = LlmAgent(name="b", model="%%model=gemini%%", tools=[LoadMemoryTool()])
 ```
 
 **Two things `LoadMemoryTool` does that a bare `FunctionTool(load_memory)` would not:**
@@ -1562,7 +1641,7 @@ from google.adk.sessions import InMemorySessionService
 
 agent = LlmAgent(
     name="recall",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user. Personalise from anything you remember.",
     tools=[load_memory],
 )
@@ -1579,8 +1658,34 @@ runner = Runner(
 
 ## HITL tools
 
-- `get_user_choice` — a `LongRunningFunctionTool` that prompts the user with a list; the LLM picks from the returned choice.
+- `get_user_choice_tool` (`google.adk.tools.get_user_choice_tool`) — a module-level `LongRunningFunctionTool` wrapping `get_user_choice(options: list[str], tool_context)`. It returns `None` straight away, so the call stays pending until the client answers it.
 - `request_input` via `ToolContext.request_confirmation()` — any tool can pause and solicit input.
+- `exit_loop` (`google.adk.tools.exit_loop_tool`) — sets `actions.escalate = True` and `skip_summarization = True`. Put it in the `tools=` of the agent *inside* the `LoopAgent`; on a parent it does nothing useful. In a `Workflow`, a cycle needs a conditional edge (an unconditional self-loop fails validation), so end loops by routing instead.
+
+To answer `get_user_choice`, capture the pending call's `id` and send a `FunctionResponse` with that id as the next message, not a plain text turn:
+
+```python
+from google.genai import types
+from google.adk.tools.get_user_choice_tool import get_user_choice_tool
+
+agent = LlmAgent(name="booking", model="%%model=gemini%%",
+                 instruction="When the user must pick, call get_user_choice with the options.",
+                 tools=[get_user_choice_tool])
+
+pending_id = None
+async for event in runner.run_async(user_id="u1", session_id="s1", new_message=types.Content(
+        role="user", parts=[types.Part(text="Book me a flight to London")])):
+    for fc in event.get_function_calls():
+        if fc.name == "get_user_choice":
+            pending_id = fc.id                      # fc.args["options"] holds the choices to show
+
+async for event in runner.run_async(user_id="u1", session_id="s1", new_message=types.Content(
+        role="user", parts=[types.Part(function_response=types.FunctionResponse(
+            id=pending_id, name="get_user_choice", response={"result": "Morning flight"}))])):
+    ...
+```
+
+The same reply pattern answers a confirmation request: respond to the `adk_request_confirmation` call with `response={"confirmed": True}` (or a full `ToolConfirmation` dict; `ToolConfirmation.from_response_dict` accepts both that and the ADK client's `{"response": "<json>"}` wrapper).
 
 ## Patterns
 
@@ -1601,9 +1706,9 @@ Spin up `McpToolset` at runtime (e.g. per-tenant filesystem); pass `tool_name_pr
 
 ## Gotchas
 
-- In ADK 2.3.0 `output_schema=` and `tools=` can be used together on an `LlmAgent` — tools run during the thought loop and the schema is enforced only on the final reply.
+- Since ADK 2.3.0, `output_schema=` and `tools=` can be used together on an `LlmAgent` — tools run during the thought loop and the schema is enforced only on the final reply.
 - `tool_context` is injected by parameter name (`tool_context`) **or** type (`ToolContext`). Any other parameter of type `ToolContext` would also be treated as the context slot.
 - `FunctionTool` treats the first sentence of the docstring as the tool description. Keep it focused — the model obeys it.
 - Built-in Gemini tools (`google_search`, `url_context`, `google_maps_grounding`) cannot coexist freely. ADK tries to wrap them, but if you hit `400 INVALID_ARGUMENT` try `bypass_multi_tools_limit=True` where available.
 - `LongRunningFunctionTool` is just a `FunctionTool` with `is_long_running=True`. The model is separately instructed not to re-call it while pending.
-- Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](./runner-and-sessions/).
+- Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](/google-adk-guide/python/runner-and-sessions/).

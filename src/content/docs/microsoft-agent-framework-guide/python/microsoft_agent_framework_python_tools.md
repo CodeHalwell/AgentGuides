@@ -1,17 +1,15 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
-description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers. All verified against agent-framework-core 1.6.0."
-framework: microsoft-agent-framework
-language: python
+description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Tools — Python
 
 Tools are how agents call back into your code. Agent Framework offers two ways to define them — the `@tool` decorator for the common case and the `FunctionTool` class for advanced construction. Both target the same `FunctionTool` object that the agent sees.
 
 This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
 
-Verified against `agent-framework-core==1.6.0` (`agent_framework._tools`).
+Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._tools`, re-checked %%versions-checked%%; first written for 1.6.0).
 
 ## Minimal `@tool`
 
@@ -117,7 +115,7 @@ def get_user_orders(
     ctx: FunctionInvocationContext,
 ) -> str:
     user_id = ctx.kwargs.get("user_id")
-    session_id = ctx.session.id if ctx.session else "no-session"
+    session_id = ctx.session.session_id if ctx.session else "no-session"
     # …run your query…
     return f"{user_id} has 3 {status} orders"
 
@@ -335,7 +333,7 @@ agent = Agent(client=client, instructions="You are a research assistant.")
 await agent.run("Research the order pipeline")
 ```
 
-All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework-core==1.6.0`):
+All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework` %%version=agent-framework%%):
 
 | Key | Type | Default | Effect |
 |---|---|---|---|
@@ -438,18 +436,19 @@ agent = Agent(client=OpenAIChatClient(), tools=[fetcher])
 
 All parameters accepted by `FunctionTool.__init__` (and equivalently by `@tool(...)`):
 
-```python
+```text
 FunctionTool(
-    name: str,                              # tool name sent to the model
-    description: str,                       # tool description in the schema
-    func: Callable | None = None,           # None → declaration-only (model sees tool; no auto-invoke)
-    *,
-    input_model: type[BaseModel] | dict | None = None,  # override inferred Pydantic schema
-    approval_mode: Literal["always_require", "never_require"] = "never_require",
-    max_invocations: int | None = None,     # raise ToolException after N successful calls
+    *,                                       # every argument is keyword-only
+    name: str,                               # tool name sent to the model
+    description: str = "",                   # tool description in the schema
+    approval_mode: ApprovalMode | None = None,   # "always_require" | "never_require"; None = never
+    kind: str | None = None,                 # free-form classification label, e.g. "readonly"
+    max_invocations: int | None = None,      # raise ToolException after N successful calls
     max_invocation_exceptions: int | None = None,  # raise ToolException after N errors
-    additional_properties: dict | None = None,     # custom metadata attached to the FunctionTool object
-    kind: str = "function",                 # free-form classification label; use "readonly", "mutating", etc.
+    additional_properties: dict | None = None,     # custom metadata (e.g. FIDES source_integrity)
+    func: Callable | None = None,            # None = declaration-only (model sees the tool; no auto-invoke)
+    input_model: type[BaseModel] | Mapping | None = None,  # override the inferred schema
+    result_parser: Callable[[Any], str | list[Content]] | None = None,  # how the return value is sent back
 )
 ```
 
@@ -619,7 +618,7 @@ from agent_framework.openai import OpenAIChatClient
 
 # Specialist agent — narrow job, narrow toolset
 billing = Agent(
-    client=OpenAIChatClient(model="gpt-4o-mini"),     # cheaper model for the specialist
+    client=OpenAIChatClient(model="%%model=openai-small%%"),     # cheaper model for the specialist
     name="billing_specialist",
     description="Resolves invoice, refund and subscription questions.",
     instructions="Only answer billing questions. Refuse anything else politely.",
@@ -628,7 +627,7 @@ billing = Agent(
 
 # Supervisor agent — broad job, delegates via the wrapped specialist
 supervisor = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     name="customer_support",
     instructions="Triage user questions. Delegate billing topics to the specialist tool.",
     tools=[

@@ -1,18 +1,16 @@
 ---
 title: "Chapter 5 — Memory & Persistence"
 description: "Short-term state via checkpointers, long-term memory via Store, and cross-thread memory that survives across sessions."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "5 · Memory & persistence"
   order: 5
 ---
 
-# Chapter 5 — Memory & Persistence
-
 **What you'll learn:** LangGraph's two memory tiers. **Checkpointers** save graph state at each step so you can resume after a failure. **Stores** provide durable key/value storage (and optional semantic search) that survives across threads and users. You'll also see the **cross-thread memory** pattern that lets one conversation learn from another.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.checkpoint.memory`, `langgraph.store.memory`, `langgraph.store.base`).
 
 **Time:** ~25 minutes.
 
@@ -50,14 +48,20 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
 checkpointer = SqliteSaver(conn)
 
-# Or use the convenience class method:
-checkpointer = SqliteSaver.from_conn_string("checkpoints.db")
-
-# Async variant (requires aiosqlite)
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-async_checkpointer = AsyncSqliteSaver.from_conn_string("checkpoints.db")
-
 graph = builder.compile(checkpointer=checkpointer)
+
+# Or use the convenience class method, which is a context manager:
+with SqliteSaver.from_conn_string("checkpoints.db") as checkpointer:
+    graph = builder.compile(checkpointer=checkpointer)
+    graph.invoke(inputs, {"configurable": {"thread_id": "t1"}})
+
+# Async variant (requires aiosqlite), an async context manager
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+
+async def run():
+    async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as async_checkpointer:
+        graph = builder.compile(checkpointer=async_checkpointer)
+        await graph.ainvoke(inputs, {"configurable": {"thread_id": "t1"}})
 ```
 
 ### `PostgresSaver` (production)
@@ -69,7 +73,7 @@ from langgraph.checkpoint.postgres import PostgresSaver
 
 conn_str = "postgresql://user:password@localhost/langgraph_db"
 
-# Sync — run setup_tables() once before first use
+# Sync — run setup() once before first use
 with PostgresSaver.from_conn_string(conn_str) as checkpointer:
     checkpointer.setup()
     graph = builder.compile(checkpointer=checkpointer)
@@ -169,7 +173,7 @@ A `Store` provides **cross-thread, cross-session** key/value storage with option
 |---|---|
 | `namespace: tuple[str, ...]` | Hierarchical path, e.g. `("users", "alice", "prefs")` |
 | `key: str` | Unique identifier within the namespace |
-| `value: dict[str, Any]` | JSON-serializable payload |
+| `value: dict[str, Any]` | JSON-serialisable payload |
 | `Item` | Returned by `get`/`search`. Fields: `value`, `key`, `namespace`, `created_at`, `updated_at` |
 | `SearchItem(Item)` | Returned by `search`. Adds `score: float | None` |
 
@@ -515,17 +519,26 @@ async def async_memory_node(state: AppState, runtime: Runtime[AppContext]) -> di
 
 ## Store TTL (Time to Live)
 
-Some store implementations support TTL per item. With `InMemoryStore`, pass `ttl=` (in minutes) per put operation:
+`InMemoryStore` does not support TTL: `store.supports_ttl` is `False`, and `put(..., ttl=...)` raises `NotImplementedError`. Use `PostgresStore` (or `AsyncPostgresStore`) from `langgraph-checkpoint-postgres`, configure a default TTL in **minutes**, and start the background sweeper that deletes expired items:
 
 ```python
-# Data expires after 60 minutes
-store.put(("sessions",), "token_xyz", {"data": "..."}, ttl=60)
+from langgraph.store.postgres import PostgresStore
 
-# Check if a store supports TTL
-print(store.supports_ttl)   # True for InMemoryStore (with index or explicit ttl_config)
+DB_URI = "postgresql://user:pass@localhost:5432/app"
+
+with PostgresStore.from_conn_string(
+    DB_URI,
+    ttl={"default_ttl": 60 * 24, "refresh_on_read": True, "sweep_interval_minutes": 60},
+) as store:
+    store.setup()
+    store.start_ttl_sweeper()          # background thread; store.sweep_ttl() runs one pass
+    store.put(("sessions",), "token_xyz", {"data": "..."})           # expires after the default
+    store.put(("sessions",), "short", {"data": "..."}, ttl=30)        # per-item override, minutes
+    ...
+    store.stop_ttl_sweeper()
 ```
 
-For `PostgresStore`, configure TTL at the store level and sweep expired rows with `abackground_tasks()`.
+With `refresh_on_read=True`, reading an item restarts its clock. On the LangGraph Agent Server, set `store.ttl` in `langgraph.json` instead; the server runs the sweeper ([production guide](/langgraph-guide/python/langgraph_production_guide/#project-layout-and-langgraphjson)).
 
 ---
 
@@ -539,4 +552,4 @@ For `PostgresStore`, configure TTL at the store level and sweep expired rows wit
 | History | Yes — `get_state_history()` | No |
 | Semantic search | No | Yes (with `index=` config) |
 | Cross-thread | No | Yes |
-| Required for `interrupt()` | Yes | No |
+| Required to resume after `interrupt()` | Yes | No |

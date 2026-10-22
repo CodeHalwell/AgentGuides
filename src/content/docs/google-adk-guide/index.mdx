@@ -1,7 +1,7 @@
 ---
 title: "Google ADK"
 description: "Google Agent Development Kit — GCP-native agents in Python, Go, and TypeScript."
-framework: google-adk
+framework: "google-adk"
 sidebar:
   label: "Overview"
   order: 0
@@ -9,33 +9,43 @@ sidebar:
 
 import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-**Google's Agent Development Kit.** Build agents on Gemini with MCP, A2A, multi-agent orchestration, and native GCP IAM. Three language implementations share the same architecture.
+**Google's Agent Development Kit.** Build agents on Gemini with MCP, A2A, multi-agent orchestration, and native GCP IAM. Three language implementations share the same architecture and version independently.
+
+**Current versions** (checked %%versions-checked%%): Python `google-adk` %%version=google-adk%% · Go `google.golang.org/adk` v%%version=google.golang.org/adk%% · TypeScript `@google/adk` %%version=@google/adk%%.
 
 ## Choose your language
 
 <CardGrid>
   <LinkCard
-    title="🐍 Python"
+    title="Python"
     href="/google-adk-guide/python/"
-    description="v2.9.2 · the reference implementation — full feature set, richest ecosystem."
+    description="google-adk %%version=google-adk%% · the reference implementation — full feature set, richest ecosystem."
   />
   <LinkCard
-    title="🐹 Go"
+    title="Go"
     href="/google-adk-guide/go/"
-    description="v1.0.0 GA · stable APIs, goroutine-first orchestration, idiomatic Go."
+    description="google.golang.org/adk v%%version=google.golang.org/adk%% · stable 1.x API, typed tools, idiomatic Go."
   />
   <LinkCard
-    title="📘 TypeScript"
+    title="TypeScript"
     href="/google-adk-guide/typescript/"
-    description="v1.0.0 · active development — same architecture, Node + browser."
+    description="@google/adk %%version=@google/adk%% · same architecture, Node.js and browser."
   />
 </CardGrid>
+
+## Install
+
+| Language | Install |
+|---|---|
+| Python | `pip install google-adk` |
+| Go | `go get google.golang.org/adk@v%%version=google.golang.org/adk%%` |
+| TypeScript | `npm install @google/adk` |
 
 ## What you'll find in each guide
 
 <CardGrid>
   <Card title="LLM-backed agent" icon="rocket">
-    Core agent primitive — Gemini and other LLMs via `google-genai`. Python calls it `LlmAgent`; Go uses `LLMAgent`.
+    Core agent primitive — Gemini and other LLMs. `LlmAgent` in Python and TypeScript; `llmagent.New` in Go.
   </Card>
   <Card title="Multi-agent orchestration" icon="random">
     Orchestrator routing, specialist delegation.
@@ -58,13 +68,16 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 ## Revision history
 
-| Date | Version | Changes |
-|------|---------|---------|
-| 2026-09-21 | Py 2.9.2 / Go 1.0.0 / TS 1.0.0 | **Python 2.9.2 update.** Installed google-adk 2.9.2 and source-verified 10 classes from the `optimization` module (newly deepened in this volume) and other underrepresented areas. Added _Class Deep Dives Vol. 4_ covering `SimplePromptOptimizer`, `GEPARootAgentOptimizer`, `Sampler`, `LocalEvalSampler`, `TelemetryConfig`, `UrlContextTool`, `Skill`, `SkillRegistry`, `SkillToolset`, and `VertexAiRagMemoryService`. Updated "latest release" banners in agents, runner-and-sessions, tools, workflows, callbacks-and-plugins, mcp-and-a2a, memory-and-artifacts, evaluation, google_adk_iam_examples, google_adk_advanced_python, and google_adk_comprehensive_guide from 2.9.0/2.8.0 → 2.9.2, worded as "as of 2026-09-21" so they stay accurate after later releases. Python card updated to v2.9.2. |
-| 2026-09-08 | Py 2.8.0 / Go 1.0.0 / TS 1.0.0 | Consistency sweep. Language cards corrected from stale Py 2.7.1 / TS 0.6.1 to the versions the sub-guides document; comprehensive-guide header now states google-adk 2.8.0 as latest and 2.7.1 as the verified-against version; install pins bumped off `>=1.0.0` / `>=2.0.0`; Go and Python tables of contents trimmed to real sections. No package installation or symbol verification performed. |
-| 2026-08-24 | Py 2.7.1 / Go 1.0 / TS 0.6.1 | **Python examples expansion.** Added source-verified deep-example sections for 10 randomly sampled classes (`BuiltInCodeExecutor`, `VertexAiCodeExecutor`, `TransferToAgentTool`, `LoadMemoryTool`, `RunConfig` full-knob walkthrough, `ContextCacheConfig` HTTP options, `LoggingPlugin` + JSON-subclass, `SaveFilesAsArtifactsPlugin` cross-session mode, `AgentEvaluator.evaluate_eval_set` CSV/artifact/results-manager wiring, `Workflow` `max_concurrency` + `state_schema`), each verified via live introspection against `google-adk==2.7.1`. Python card version bumped to 2.7.1. |
-| 2026-05-09 | Py 1.33.0 / Go 1.0 / TS 0.6.1 | Python stable bumped 1.32.0 → 1.33.0 (minor release); Python card description updated; comprehensive guide header updated; revision history entry added. `google.adk.agents.Agent`, `google.adk.agents.LlmAgent`, `google.adk.tools.FunctionTool` verified against installed `google-adk 1.33.0` (`.routine-envs/check-0509-py`). Claude routine. |
-| 2026-05-01 | Py 1.32.0 / Go 1.0 / TS 0.6.1 | Python stable bumped 1.31.1 → 1.32.0; comprehensive guide header updated; revision history entry added. `google.adk.agents.Agent` import verified. |
-| 2026-04-21 | Py 1.31 / Go 1.0 / TS 0.6.1 | Parent index redesigned as language selector. |
-| April 2026 | Go 1.0 GA | Go SDK graduated to v1.0 GA. |
-| November 2025 | Py 1.18 / Go 0.1 | Initial multi-language guide. |
+Changes to this guide. Package release notes are in each language's changelog: [Python](/google-adk-guide/python/#changelog), [Go](/google-adk-guide/go/), [TypeScript](/google-adk-guide/typescript/).
+
+| Date | Changes |
+|------|---------|
+| 2026-10-21 | **Accuracy rewrite.** Python: rewrote the comprehensive guide as a verified single-page tour (the separate class-by-class reference was removed; its user-facing facts are on the topic pages), added the `adk` CLI, rebuilt the production guide around `adk deploy` and the Agent Platform SDK, fixed runner examples that skipped session creation, the direct-Anthropic example and several other broken snippets, and moved examples off the Gemini 2.5 models. Merged three changelogs into one. TypeScript: added tools, multi-agent, session and runner examples. Go: model IDs in deployment config now follow the current default. |
+| 2026-10-21 | **Version and accuracy sweep.** Version numbers now come from the site's version data. Python imports and constructor arguments re-checked against the current release; Go pages rewritten around the real API with every program compiled; TypeScript example replaced with a type-checked one. |
+| 2026-09-21 | Python pages updated for 2.9.2, including the optimisation module, `TelemetryConfig`, `UrlContextTool`, skills and `VertexAiRagMemoryService`. |
+| 2026-09-08 | Consistency sweep: language cards and install pins brought in line with the sub-guides. |
+| 2026-08-24 | Python examples expanded for code executors, `TransferToAgentTool`, `LoadMemoryTool`, `RunConfig`, `ContextCacheConfig`, logging plugins, `SaveFilesAsArtifactsPlugin`, `AgentEvaluator` and `Workflow` concurrency. |
+| 2026-05-09 | Python guide updated for 1.33.0. |
+| 2026-05-01 | Python guide updated for 1.32.0. |
+| 2026-04-21 | Overview page redesigned as a language selector. |
+| November 2025 | Initial multi-language guide (Python 1.18, Go 0.1). |

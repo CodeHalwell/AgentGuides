@@ -1,11 +1,11 @@
 ---
-title: "Microsoft Agent Framework .NET - Architecture & Workflow Diagrams"
+title: "Microsoft Agent Framework (.NET) — Architecture Diagrams"
 description: "This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET."
-framework: microsoft-agent-framework
-language: dotnet
+framework: "microsoft-agent-framework"
+language: "dotnet"
+sidebar:
+  label: "Diagrams"
 ---
-
-# Microsoft Agent Framework .NET - Architecture & Workflow Diagrams
 
 This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET.
 
@@ -25,7 +25,7 @@ graph TD
 
     subgraph Agent Framework
         B(Orchestration Layer<br/><i>Workflows, GroupChat</i>)
-        C(Agent Abstraction Layer<br/><i>AIAgent, ChatClientAgent, AgentThread</i>)
+        C(Agent Abstraction Layer<br/><i>AIAgent, ChatClientAgent, AgentSession</i>)
         D(Core Components<br/><i>Tools, Memory, State</i>)
         E(LLM & Integration Layer<br/><i>AzureOpenAI, Connectors</i>)
     end
@@ -47,7 +47,7 @@ This diagram illustrates the lifecycle of a stateful `ChatClientAgent` as it pro
 ```mermaid
 graph TD
     Start((Create Thread)) --> Idle
-    Idle -- InvokeAsync(userInput) --> Processing
+    Idle -- RunAsync(userInput) --> Processing
     
     subgraph Processing
         direction LR
@@ -59,7 +59,7 @@ graph TD
     end
 
     Processing -- Returns AgentResponse --> Idle
-    Idle -- "InvokeAsync(...)" --> Processing
+    Idle -- "RunAsync(...)" --> Processing
     Idle -- End of Session --> End((Thread Terminated))
 ```
 

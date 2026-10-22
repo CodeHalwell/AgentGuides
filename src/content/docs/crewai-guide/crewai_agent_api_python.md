@@ -1,14 +1,14 @@
 ---
 title: "Agent API reference"
 description: "Every field on crewai.Agent, verified against installed source — role/goal/backstory, tools, planning_config, guardrails, knowledge, MCP servers, A2A, and checkpoint."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Agent API"
   order: 20
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/agent/core.py`, `crewai/agents/agent_builder/base_agent.py`). Every import, field, and default below was read from the installed package.
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/agent/core.py`, `crewai/agents/agent_builder/base_agent.py`). Every import, field, and default below was read from the installed package.
 
 `Agent` is a Pydantic model. Fields inherit from `BaseAgent` and `Agent` extends the set. Any unknown kwarg raises a validation error — this page lists the real fields.
 
@@ -21,7 +21,7 @@ analyst = Agent(
     role="Research Analyst",
     goal="Surface the strongest 3 claims about {topic}",
     backstory="Senior analyst at an investigative newsroom.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     verbose=True,
 )
 
@@ -46,9 +46,12 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `role` | `str` | required | Role name; also used as knowledge collection name. |
 | `goal` | `str` | required | Objective. `{placeholders}` are interpolated from crew inputs. |
 | `backstory` | `str` | required | Persona text. `{placeholders}` also interpolated. |
-| `llm` | `str \| BaseLLM \| None` | `None` | Model name (`"openai/gpt-4o"`) or `LLM(...)` / `BaseLLM` instance. `None` uses default from `crewai.llm`. |
-| `function_calling_llm` | `str \| BaseLLM \| None` | `None` | Override the tool-calling LLM only (agent keeps `llm` for reasoning). |
+| `llm` | `str \| BaseLLM \| None` | `None` | Model name (`"openai/%%model=openai%%"`) or `LLM(...)` / `BaseLLM` instance. `None` reads the `MODEL` environment variable, then falls back to CrewAI's default (`gpt-4.1-mini`). |
+| `function_calling_llm` | `str \| BaseLLM \| None` | `None` | Deprecated in the 1.15 line (marked for removal). Overrides the tool-calling LLM only. |
 | `tools` | `list[BaseTool] \| None` | `[]` | Tools the agent may call. See the tools page. |
+| `skills` | `list[Path \| Skill \| str] \| None` | `None` | Agent Skills: directories to discover, inline `SKILL.md` text, `Skill` objects, or `"@org/name"` registry refs. |
+| `tool_failure_policy` | `"ignore" \| "warn" \| "raise" \| None` | `None` | What to do when a tool runs but reports failure. `None` inherits from the crew, then `"warn"`. |
+| `memory` | `bool \| Memory \| MemoryScope \| MemorySlice \| None` | `None` | Per-agent memory; falls back to the crew's memory when unset. |
 | `max_iter` | `int` | `25` | Hard cap on reasoning iterations per task. |
 | `max_rpm` | `int \| None` | `None` | Requests-per-minute throttle for this agent. |
 | `max_tokens` | `int \| None` | `None` | Max tokens per LLM call. |
@@ -59,7 +62,7 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `respect_context_window` | `bool` | `True` | Summarise messages to stay under the model's context limit. |
 | `max_retry_limit` | `int` | `2` | Retries on task-level errors. |
 | `use_system_prompt` | `bool \| None` | `True` | Whether to set a system message (some o1-style models want `False`). |
-| `inject_date` | `bool` | `False` | Prepend current date to the task description. |
+| `inject_date` | `bool` | `False` | Inject the current date into the agent's prompt. |
 | `date_format` | `str` | `"%Y-%m-%d"` | Format when `inject_date=True`. |
 | `planning` | `bool` | `False` | Enable planning (reflection) before execution. |
 | `planning_config` | `PlanningConfig \| None` | `None` | Fine-tune planning (max attempts, LLM override). |
@@ -74,18 +77,18 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `step_callback` | `Callable \| None` | `None` | Called after every agent step. |
 | `system_template` / `prompt_template` / `response_template` | `str \| None` | `None` | Override the built-in prompt strings. |
 | `checkpoint` | `CheckpointConfig \| bool \| None` | `None` | Opt the agent into checkpointing. |
-| `executor_class` | `type[CrewAgentExecutor] \| type[AgentExecutor]` | `CrewAgentExecutor` | Swap in the experimental `AgentExecutor` (ReAct-style). |
+| `executor_class` | `type[CrewAgentExecutor] \| type[AgentExecutor]` | `AgentExecutor` | The newer `AgentExecutor` (from `crewai.experimental`) is now the default; pass `CrewAgentExecutor` to get the older loop back. |
 | `from_repository` | `str \| None` | `None` | Load base config from the user's CrewAI repository. |
 
-## Deprecated in 1.14.x
+## Deprecated fields
 
-The installed source marks these as deprecated — **don't introduce them in new code**:
+These were deprecated during the 1.14 line and are still marked so in the current release — **don't introduce them in new code**:
 
 - `allow_code_execution` / `code_execution_mode` — `CodeInterpreterTool` was removed. Call out to E2B / Modal / your own sandbox.
-- `multimodal` — pass files natively via `Task.input_files`.
+- `multimodal` — pass files natively via `Task.input_files`. The field description says it will be removed in v2.0.
 - `reasoning`, `max_reasoning_attempts` — superseded by `planning` + `planning_config`.
 
-Setting any of these still works but emits a `DeprecationWarning`.
+These fields are still accepted and are marked deprecated in the model schema. `allow_code_execution` and `code_execution_mode` no longer do anything, because the tool they enabled has been removed. `function_calling_llm` (on `Agent` and `Crew`) is also marked deprecated in 1.15.
 
 ## Tools
 
@@ -116,13 +119,13 @@ support = Agent(
 ```python
 from crewai import Agent, PlanningConfig, LLM
 
-planner_llm = LLM(model="openai/gpt-4o")  # cheaper than the exec LLM is fine
+planner_llm = LLM(model="openai/%%model=openai%%")  # cheaper than the exec LLM is fine
 
 researcher = Agent(
     role="Researcher",
     goal="Gather the strongest 3 sources on {topic}",
     backstory="Veteran librarian.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     planning=True,
     planning_config=PlanningConfig(max_attempts=3, llm=planner_llm),
 )
@@ -205,7 +208,7 @@ remote = Agent(
     goal="Look up internal knowledge base",
     backstory="Specialised retrieval agent.",
     a2a=A2AClientConfig(
-        agent_card_url="https://kb.example.com/.well-known/agent.json",
+        endpoint="https://kb.example.com/.well-known/agent-card.json",
     ),
 )
 ```
@@ -215,28 +218,32 @@ Pass a single config, a single `A2AServerConfig`, or a list combining clients wi
 ## Callbacks and observability
 
 ```python
-def on_step(step):
-    print(f"[{step.agent.role}] {step.tool} -> {step.observation[:80]}")
+from crewai.agents.parser import AgentAction
 
-agent = Agent(role="...", goal="...", backstory="...", step_callback=on_step)
+def on_step(step):
+    if isinstance(step, AgentAction):          # a tool call and its result
+        print(f"{step.tool}({step.tool_input}) -> {str(step.result)[:80]}")
+
+agent = Agent(role="Researcher", goal="Find sources", backstory="Librarian.", step_callback=on_step)
 ```
 
-`step_callback` fires after each reasoning step. For crew-wide callbacks, use `Crew(step_callback=...)` — the crew-level one runs for every agent.
+`step_callback` fires after each tool step. It receives the executor's own objects (`AgentAction`, `ToolResult`), not the agent; a run that answers without calling a tool may not trigger it. For run-wide observability use event listeners (see [Production](/crewai-guide/crewai_production_guide/#event-listeners)). For crew-wide callbacks, use `Crew(step_callback=...)` — the crew-level one runs for every agent.
 
 ## Patterns
 
 ### 1. Parallel fan-out with `async_execution`
 
 ```python
-analyst_a = Agent(role="Market Analyst", ...)
-analyst_b = Agent(role="Tech Analyst", ...)
+analyst_a = Agent(role="Market Analyst", goal="Size the market", backstory="Industry analyst.")
+analyst_b = Agent(role="Tech Analyst", goal="Assess the technology", backstory="Former CTO.")
+editor = Agent(role="Editor", goal="Merge findings", backstory="Report editor.")
 
-task_a = Task(description="...", expected_output="...", agent=analyst_a, async_execution=True)
-task_b = Task(description="...", expected_output="...", agent=analyst_b, async_execution=True)
-summary = Task(description="Merge", expected_output="...", agent=editor, context=[task_a, task_b])
+task_a = Task(description="Market view of {topic}.", expected_output="Five bullets.", agent=analyst_a, async_execution=True)
+task_b = Task(description="Technology view of {topic}.", expected_output="Five bullets.", agent=analyst_b, async_execution=True)
+summary = Task(description="Merge both views.", expected_output="One page.", agent=editor, context=[task_a, task_b])
 ```
 
-Async tasks at the same level run concurrently; `context=[...]` forces the summariser to wait for both.
+Consecutive async tasks run concurrently; the next synchronous task waits for them. `context=[...]` limits the summary to those two outputs.
 
 ### 2. Cheap executor, smart planner
 
@@ -245,11 +252,11 @@ Keep the reasoning model cheap, use a bigger model only for the planning reflect
 ```python
 Agent(
     role="Doc Writer",
-    goal="...",
-    backstory="...",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    goal="Write API docs",
+    backstory="Technical writer.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
     planning=True,
-    planning_config=PlanningConfig(llm=LLM(model="openai/gpt-4o")),
+    planning_config=PlanningConfig(llm=LLM(model="openai/%%model=openai%%")),
 )
 ```
 
@@ -261,9 +268,14 @@ manager = Agent(
     goal="Break the problem down and route tasks",
     backstory="Skilled at decomposition.",
     allow_delegation=True,
-    llm=LLM(model="openai/gpt-4o"),
+    llm=LLM(model="openai/%%model=openai%%"),
 )
-crew = Crew(agents=[manager, researcher, writer], tasks=[...], process=Process.hierarchical, manager_agent=manager)
+crew = Crew(
+    agents=[researcher, writer],      # workers only: listing the manager here is a ValidationError
+    tasks=[brief, article],
+    process=Process.hierarchical,
+    manager_agent=manager,
+)
 ```
 
 Don't set both `manager_llm` and `manager_agent` — pick one. `manager_agent` gives you full control over prompts.
@@ -271,7 +283,7 @@ Don't set both `manager_llm` and `manager_agent` — pick one. `manager_agent` g
 ### 4. Per-agent rate limiting
 
 ```python
-Agent(role="Web Scraper", goal="...", backstory="...", max_rpm=20)
+Agent(role="Web Scraper", goal="Collect pages", backstory="Crawler operator.", max_rpm=20)
 ```
 
 `max_rpm` is enforced before each LLM call; `max_execution_time` covers the whole task wall-clock.
@@ -281,7 +293,7 @@ Agent(role="Web Scraper", goal="...", backstory="...", max_rpm=20)
 ```python
 from crewai import Agent, CheckpointConfig
 
-slow = Agent(role="Heavy Research", goal="...", backstory="...",
+slow = Agent(role="Heavy Research", goal="Survey the literature", backstory="Research fellow.",
              checkpoint=CheckpointConfig(on_events=["task_completed", "llm_call_completed"]))
 ```
 
@@ -290,7 +302,7 @@ Other agents in the same crew can leave `checkpoint=None` (the crew's setting th
 ## Gotchas
 
 - **Field name is `planning`, not `reasoning`.** The `reasoning=...` kwarg still works but is deprecated.
-- **`function_calling_llm` isn't the agent's primary LLM.** It's used only for tool-call formatting on models that need a separate call for JSON-schema arguments.
+- **`function_calling_llm` isn't the agent's primary LLM.** It's used only for tool-call formatting, and it is marked deprecated in 1.15; prefer a model that handles tool calls itself.
 - **`allow_code_execution` is a no-op.** `CodeInterpreterTool` was removed from the public API in 1.14; use E2B or Modal.
 - **`knowledge_sources` needs an embedder.** If neither the agent's `embedder` nor the crew's is set, the default `OpenAIEmbeddingFunction` tries to reach OpenAI and needs `OPENAI_API_KEY`.
 - **`from_repository`** merges settings from your CrewAI repo on top of the explicit kwargs you passed — explicit values win.

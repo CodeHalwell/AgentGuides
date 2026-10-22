@@ -1,722 +1,465 @@
 ---
 title: "Mistral Agents API: Production Deployment Guide"
-description: "This production guide provides everything needed to deploy and maintain Mistral Agents API at scale."
-framework: mistral-agents-api
+description: "Running services on Mistral's Agents API in production: configuration, concurrency, retries, observability, storage, rate limits, security and CI/CD."
+framework: "mistral-agents-api"
+language: "python"
+sidebar:
+  label: "Production"
+  order: 7
 ---
 
-# Mistral Agents API: Production Deployment Guide
+**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%).
 
-## 1. Infrastructure Setup
+The agent loop, built-in tools and conversation storage run on Mistral's side, so your service is mostly an API client: it needs sensible concurrency, retries, observability, its own record of which conversations belong to whom, and careful handling of secrets.
 
-### Cloud Provider Configuration
+---
 
-**AWS Deployment (Recommended)**
-
-```yaml
-Region: us-east-1 (or closest to users)
-Services:
-  - ALB (Application Load Balancer)
-  - ECS Fargate (Worker containers)
-  - RDS PostgreSQL (Conversation storage)
-  - ElastiCache Redis (Session/rate limit cache)
-  - CloudWatch (Monitoring)
-  - VPC with private subnets
-```
-
-**GCP Alternative**
-```yaml
-Services:
-  - Cloud Load Balancing
-  - Cloud Run (Serverless containers)
-  - Cloud SQL (PostgreSQL)
-  - Memorystore Redis
-  - Cloud Logging/Monitoring
-```
-
-### Environment Variables
+## 1. Configuration
 
 ```bash
-# Core Configuration
-MISTRAL_API_KEY=your-api-key
-ENVIRONMENT=production
-LOG_LEVEL=INFO
+# Credentials (one of)
+MISTRAL_API_KEY=...
+MISTRAL_SA_TOKEN_PATH=/var/run/secrets/mistral/token   # Mistral service-account token file; wins over MISTRAL_API_KEY
 
-# Database
-DB_HOST=prod-db.xxxxx.rds.amazonaws.com
-DB_PORT=5432
-DB_NAME=agents_prod
-DB_USER=agentuser
-DB_PASSWORD=${SECURE_PASSWORD}
-DB_POOL_SIZE=20
-
-# Cache
-REDIS_HOST=prod-cache.xxxxx.cache.amazonaws.com
-REDIS_PORT=6379
-REDIS_PASSWORD=${SECURE_PASSWORD}
-
-# Rate Limiting
-RATE_LIMIT_REQUESTS=1000
-RATE_LIMIT_WINDOW=3600
-
-# Monitoring
-DATADOG_API_KEY=${DATADOG_KEY}
-DATADOG_SITE=datadoghq.com
+# Your service
+AGENT_ID_SUPPORT=ag_...           # created by a deploy script, not at request time
+AGENT_VERSION_SUPPORT=prod        # version alias
+MISTRAL_SERVER=eu                 # "eu", "us" or "global"
+MISTRAL_TIMEOUT_MS=60000
+MISTRAL_MAX_CONCURRENCY=16
 ```
 
----
-
-## 2. Scaling Strategies
-
-### Horizontal Scaling (Multiple Instances)
+Load and validate it once at start-up:
 
 ```python
-from mistralai.client import Mistral
 import os
-from typing import Optional
+from pydantic import BaseModel
 
-class ScalableAgentManager:
-    """Manages agents across multiple worker instances"""
-    
-    def __init__(self, worker_pool_size: int = 10):
-        self.api_key = os.environ["MISTRAL_API_KEY"]
-        self.pool_size = worker_pool_size
-        self.clients = [
-            Mistral(api_key=self.api_key) 
-            for _ in range(worker_pool_size)
-        ]
-        self.current_idx = 0
-    
-    def get_next_client(self) -> Mistral:
-        """Round-robin client selection"""
-        client = self.clients[self.current_idx]
-        self.current_idx = (self.current_idx + 1) % self.pool_size
-        return client
-    
-    def process_conversation(self, agent_id: str, inputs: str) -> dict:
-        """Process with load balancing"""
-        client = self.get_next_client()
-        response = client.beta.conversations.start(
-            agent_id=agent_id,
-            inputs=inputs
-        )
-        return response
+class Settings(BaseModel):
+    agent_id_support: str
+    agent_version_support: str = "prod"
+    mistral_server: str = "eu"
+    mistral_timeout_ms: int = 60_000
+    mistral_max_concurrency: int = 16
+
+settings = Settings(**{k.lower(): v for k, v in os.environ.items() if k.lower() in Settings.model_fields})
 ```
 
-### Vertical Scaling (Larger Instances)
+**Create agents in a deploy step, not per request.** A script (or CI job) creates or updates agents, sets a version alias such as `prod`, and writes the agent IDs into configuration. Requests then start conversations against `agent_version="prod"`, and a rollback is `update_version()` or moving the alias.
 
 ```python
-class PerformanceOptimizedManager:
-    """Optimised for single powerful instance"""
-    
-    def __init__(self, max_concurrent: int = 50):
-        self.max_concurrent = max_concurrent
-        self.semaphore = asyncio.Semaphore(max_concurrent)
-        self.client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-    
-    async def process_async(self, agent_id: str, inputs: str):
-        """Process with concurrency control"""
-        async with self.semaphore:
-            response = await self.client.beta.conversations.start(
-                agent_id=agent_id,
-                inputs=inputs
-            )
-            return response
-    
-    async def batch_process(self, tasks: list) -> list:
-        """Process multiple tasks concurrently"""
-        results = await asyncio.gather(*[
-            self.process_async(t['agent_id'], t['inputs'])
-            for t in tasks
-        ])
-        return results
+# deploy_agents.py
+import os
+from mistralai.client import Mistral
+
+client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+
+agent = client.beta.agents.update(
+    agent_id=os.environ["AGENT_ID_SUPPORT"],
+    instructions=open("prompts/support.md").read(),
+    version_message=os.environ.get("GIT_SHA", "manual"),
+)
+client.beta.agents.create_version_alias(agent_id=agent.id, alias="prod", version=agent.version)
+print("support agent now at version", agent.version)
 ```
 
 ---
 
-## 3. Monitoring & Observability
+## 2. Client, concurrency and retries
 
-### Metrics Collection
-
-```python
-import time
-from datadog import initialize, api
-from datetime import datetime
-
-class MetricsCollector:
-    """Collect and send metrics to monitoring system"""
-    
-    def __init__(self):
-        self.client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-    
-    def track_conversation(self, agent_id: str, conversation_id: str):
-        """Track conversation metrics"""
-        start_time = time.time()
-        
-        try:
-            history = self.client.beta.conversations.get_history(
-                conversation_id=conversation_id
-            )
-            
-            duration = time.time() - start_time
-            entry_count = len(history.entries) if history.entries else 0
-            
-            # Send metrics
-            metrics = {
-                'agent_id': agent_id,
-                'conversation_id': conversation_id,
-                'entry_count': entry_count,
-                'duration_seconds': duration,
-                'timestamp': datetime.utcnow().isoformat(),
-                'status': 'success'
-            }
-            
-            self.send_to_monitoring(metrics)
-            
-        except Exception as e:
-            self.send_to_monitoring({
-                'agent_id': agent_id,
-                'status': 'error',
-                'error': str(e),
-                'timestamp': datetime.utcnow().isoformat()
-            })
-    
-    def send_to_monitoring(self, metrics: dict):
-        """Send to Datadog/CloudWatch"""
-        # Datadog
-        api.Metric.send(
-            metric='mistral.conversation',
-            points=metrics['entry_count'],
-            tags=[f"agent_id:{metrics['agent_id']}"]
-        )
-        
-        # CloudWatch
-        # cloudwatch.put_metric_data(...)
-```
-
-### Logging Setup
-
-```python
-import logging
-import logging.config
-
-LOGGING_CONFIG = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'json': {
-            '()': 'pythonjsonlogger.jsonlogger.JsonFormatter',
-            'format': '%(timestamp)s %(level)s %(name)s %(message)s'
-        }
-    },
-    'handlers': {
-        'console': {
-            'class': 'logging.StreamHandler',
-            'formatter': 'json',
-            'stream': 'ext://sys.stdout'
-        },
-        'file': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': '/var/log/mistral_agents.log',
-            'maxBytes': 10485760,  # 10MB
-            'backupCount': 10,
-            'formatter': 'json'
-        }
-    },
-    'loggers': {
-        'mistral_agents': {
-            'level': 'INFO',
-            'handlers': ['console', 'file']
-        },
-        'mistralai': {
-            'level': 'DEBUG',
-            'handlers': ['console', 'file']
-        }
-    }
-}
-
-logging.config.dictConfig(LOGGING_CONFIG)
-logger = logging.getLogger('mistral_agents')
-```
-
----
-
-## 4. Error Handling & Recovery
-
-### Retry Logic with Exponential Backoff
+Create one client per process and reuse it; it pools HTTP connections. Bound concurrency explicitly.
 
 ```python
 import asyncio
-from typing import Callable, Any
+from mistralai.client import Mistral
+from mistralai.client.utils import BackoffStrategy, RetryConfig
 
-class RobustAgentClient:
-    """Agent client with automatic retry logic"""
-    
-    def __init__(
-        self,
-        max_retries: int = 3,
-        base_delay: float = 1.0,
-        max_delay: float = 60.0
-    ):
-        self.client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-        self.max_retries = max_retries
-        self.base_delay = base_delay
-        self.max_delay = max_delay
-    
-    async def retry_with_backoff(
-        self,
-        func: Callable,
-        *args,
-        **kwargs
-    ) -> Any:
-        """Execute with exponential backoff retry"""
-        for attempt in range(self.max_retries):
-            try:
-                return await func(*args, **kwargs)
-            
-            except Exception as e:
-                if attempt == self.max_retries - 1:
-                    logger.error(f"Final attempt failed: {str(e)}")
-                    raise
-                
-                delay = min(
-                    self.base_delay * (2 ** attempt),
-                    self.max_delay
-                )
-                
-                logger.warning(
-                    f"Attempt {attempt + 1} failed. "
-                    f"Retrying in {delay}s: {str(e)}"
-                )
-                
-                await asyncio.sleep(delay)
-    
-    async def start_conversation_resilient(
-        self,
-        agent_id: str,
-        inputs: str
-    ):
-        """Start conversation with automatic retry"""
-        async def _start():
-            return self.client.beta.conversations.start(
-                agent_id=agent_id,
-                inputs=inputs
-            )
-        
-        return await self.retry_with_backoff(_start)
+client = Mistral(
+    server=settings.mistral_server,
+    timeout_ms=settings.mistral_timeout_ms,
+    retry_config=RetryConfig(
+        "backoff",
+        BackoffStrategy(initial_interval=500, max_interval=20_000, exponent=2.0, max_elapsed_time=90_000),
+        retry_connection_errors=True,
+    ),
+)
+limit = asyncio.Semaphore(settings.mistral_max_concurrency)
+
+async def start_conversation(inputs: str, metadata: dict[str, str]):
+    async with limit:
+        return await client.beta.conversations.start_async(
+            agent_id=settings.agent_id_support,
+            agent_version=settings.agent_version_support,
+            inputs=inputs,
+            metadata=metadata,
+        )
 ```
 
-### Circuit Breaker Pattern
+The SDK's retry policy retries connection errors and the status codes it considers transient. Retrying `start()` can create a second conversation if the first request actually succeeded; for idempotency, record the conversation ID before acting on the reply, and retry `append()` only after checking the history.
+
+For a custom transport (proxies, custom TLS), pass `httpx2` clients; since v3 the SDK no longer uses `httpx`:
 
 ```python
-from enum import Enum
-from datetime import datetime, timedelta
+import httpx2
+from mistralai.client import Mistral
 
-class CircuitState(Enum):
-    CLOSED = "closed"      # Normal operation
-    OPEN = "open"          # Failing, reject requests
-    HALF_OPEN = "half_open"  # Testing recovery
+client = Mistral(
+    client=httpx2.Client(timeout=60, limits=httpx2.Limits(max_connections=50)),
+    async_client=httpx2.AsyncClient(timeout=60, limits=httpx2.Limits(max_connections=50)),
+)
+```
+
+### Circuit breaker
+
+When Mistral (or your network) is down, fail fast instead of piling up requests:
+
+```python
+import time
+from mistralai.client import errors
 
 class CircuitBreaker:
-    """Prevent cascading failures"""
-    
-    def __init__(
-        self,
-        failure_threshold: int = 5,
-        recovery_timeout: int = 60
-    ):
-        self.state = CircuitState.CLOSED
-        self.failure_count = 0
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.last_failure_time = None
-        self.client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-    
-    def call(self, func, *args, **kwargs):
-        """Execute function with circuit breaker protection"""
-        
-        if self.state == CircuitState.OPEN:
-            if self._should_attempt_reset():
-                self.state = CircuitState.HALF_OPEN
-                logger.info("Circuit breaker: attempting recovery")
-            else:
-                raise Exception("Circuit breaker OPEN")
-        
-        try:
-            result = func(*args, **kwargs)
-            self._on_success()
-            return result
-        
-        except Exception as e:
-            self._on_failure()
-            raise
-    
-    def _on_success(self):
-        self.failure_count = 0
-        self.state = CircuitState.CLOSED
-    
-    def _on_failure(self):
-        self.failure_count += 1
-        self.last_failure_time = datetime.now()
-        
-        if self.failure_count >= self.failure_threshold:
-            self.state = CircuitState.OPEN
-            logger.error("Circuit breaker OPEN: too many failures")
-    
-    def _should_attempt_reset(self) -> bool:
-        if self.last_failure_time is None:
-            return False
-        
-        timeout = timedelta(seconds=self.recovery_timeout)
-        return datetime.now() - self.last_failure_time > timeout
+    def __init__(self, threshold: int = 5, reset_after: float = 30.0):
+        self.threshold, self.reset_after = threshold, reset_after
+        self.failures, self.opened_at = 0, 0.0
+
+    def allow(self) -> bool:
+        return self.failures < self.threshold or time.monotonic() - self.opened_at > self.reset_after
+
+    def record(self, ok: bool) -> None:
+        if ok:
+            self.failures = 0
+        else:
+            self.failures += 1
+            if self.failures == self.threshold:
+                self.opened_at = time.monotonic()
+
+breaker = CircuitBreaker()
+
+async def guarded_start(inputs: str):
+    if not breaker.allow():
+        raise RuntimeError("Mistral temporarily unavailable")
+    try:
+        response = await start_conversation(inputs, metadata={})
+    except errors.MistralError as e:
+        breaker.record(ok=e.status_code < 500 and e.status_code != 429)
+        raise
+    breaker.record(ok=True)
+    return response
 ```
 
 ---
 
-## 5. Database Schema
+## 3. Observability
 
-### PostgreSQL Schema
+Log one structured record per call. `response.usage` has token counts, including `connector_tokens` for built-in tools; `outputs` shows which tools ran and which agents handled the request.
+
+```python
+import json
+import logging
+import time
+
+log = logging.getLogger("agents")
+
+async def observed_start(inputs: str, user_id: str):
+    started = time.monotonic()
+    response = await start_conversation(inputs, metadata={"user_id": user_id})
+    log.info(json.dumps({
+        "event": "conversation.start",
+        "conversation_id": response.conversation_id,
+        "user_id": user_id,
+        "latency_ms": int((time.monotonic() - started) * 1000),
+        "prompt_tokens": response.usage.prompt_tokens,
+        "completion_tokens": response.usage.completion_tokens,
+        "connector_tokens": response.usage.connector_tokens,
+        "tools": [e.name for e in response.outputs if e.type == "tool.execution"],
+        "handoffs": [e.next_agent_name for e in response.outputs if e.type == "agent.handoff"],
+    }))
+    return response
+```
+
+### OpenTelemetry
+
+The SDK can emit OpenTelemetry spans for its API calls (operation, model, token usage and, unless redacted, the messages and tool calls), but only once you opt in, with `configure_telemetry()` or the `MISTRAL_SDK_TELEMETRY` environment variable (`dedicated`, `global` or `false`). A tracer provider on its own is not enough. Install the extra first:
+
+```bash
+pip install "mistralai[telemetry]==%%version=mistralai%%"
+```
+
+To send the SDK's spans through your own pipeline, next to your service's spans, use `global` mode:
+
+```python
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from mistralai.extra.observability import RedactingSpanExporter, configure_telemetry
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(
+    RedactingSpanExporter(OTLPSpanExporter(endpoint="http://otel-collector:4318/v1/traces"))
+))
+trace.set_tracer_provider(provider)
+
+# SDK spans now use the global provider. redaction=False only silences the SDK's notice that
+# its own redaction does not apply in this mode; the exporter above does the redacting.
+configure_telemetry(client, provider="global", redaction=False)
+
+tracer = trace.get_tracer("support-service")
+with tracer.start_as_current_span("answer_support_question") as span:
+    response = client.beta.conversations.start(agent_id=settings.agent_id_support, inputs="Where is ORD-1234?")
+    span.set_attribute("conversation.id", response.conversation_id)
+```
+
+The SDK's own spans then appear as children of `answer_support_question`. In `global` mode (or when you pass your own `TracerProvider`) the SDK does not redact anything, which is why the exporter above is wrapped in `RedactingSpanExporter`; its default policy masks secrets and common personal data (emails, card-like numbers, IP addresses) in span attributes.
+
+`configure_telemetry(client)` with no `provider` uses `dedicated` mode instead: the SDK creates its own exporter, redacts by default (`redaction=` takes a policy, a callback or `False`) and sends the spans to Mistral's telemetry endpoint, authenticated with the client's API key.
+
+### Mistral's traces and evaluations
+
+Spans sent in `dedicated` mode are stored by Mistral, and `client.beta.observability` (beta) works with them: `traces` and `spans` search and aggregate them, `judges` defines LLM judges that score conversations, `datasets` builds evaluation sets (including from spans or an uploaded file), and `evaluations` runs evaluation pipelines over them. This is one way to run the evaluation set mentioned under [CI/CD](#10-deployment-and-cicd) before moving a version alias; a plain pytest suite over a fixed set of prompts is another.
+
+### What to alert on
+
+Alert on: error rate by status code, p95 latency, tokens per conversation (a rising trend usually means a prompt or tool regression), and 429s.
+
+---
+
+## 4. Testing
+
+Unit-test your code against scripted API responses rather than the live API. The client accepts any `httpx2` client, so an `httpx2.MockTransport` can return canned conversation entries, for example a `function.call` followed by the final `message.output`:
+
+```python
+# test_support.py
+import json
+import httpx2
+from mistralai.client import Mistral
+from mistralai.client.models import FunctionCallEntry, FunctionResultEntry
+
+# --- code under test (normally imported from your service) ---
+def get_order_status(order_id: str) -> dict:
+    return {"order_id": order_id, "status": "shipped"}
+
+def answer_order_question(client: Mistral, agent_id: str, question: str, max_turns: int = 5) -> str:
+    response = client.beta.conversations.start(agent_id=agent_id, inputs=question)
+    for _ in range(max_turns):
+        call = response.outputs[-1]
+        if not isinstance(call, FunctionCallEntry):
+            return response.outputs[-1].content
+        args = json.loads(call.arguments) if isinstance(call.arguments, str) else call.arguments
+        response = client.beta.conversations.append(
+            conversation_id=response.conversation_id,
+            inputs=[FunctionResultEntry(tool_call_id=call.tool_call_id, result=json.dumps(get_order_status(**args)))],
+        )
+    raise RuntimeError("too many tool calls")
+
+# --- test helpers ---
+NOW = "2026-10-21T00:00:00Z"
+
+def entry(kind: str, **fields) -> dict:
+    return {"object": "entry", "type": kind, "id": f"{kind}-1", "created_at": NOW, **fields}
+
+def scripted_client(turns: list[list[dict]]) -> tuple[Mistral, list[dict]]:
+    """A client whose conversation calls return `turns` in order; also returns the request bodies sent."""
+    sent: list[dict] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        sent.append(json.loads(request.content or b"{}"))
+        return httpx2.Response(200, json={
+            "object": "conversation.response",
+            "conversation_id": "conv_test",
+            "outputs": turns.pop(0),
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        })
+
+    return Mistral(api_key="test", client=httpx2.Client(transport=httpx2.MockTransport(handler))), sent
+
+def test_order_question_runs_the_tool() -> None:
+    client, sent = scripted_client([
+        [entry("function.call", tool_call_id="tc1", name="get_order_status", arguments='{"order_id": "ORD-1234"}')],
+        [entry("message.output", role="assistant", content="ORD-1234 has shipped.")],
+    ])
+    assert answer_order_question(client, "ag_test", "Where is ORD-1234?") == "ORD-1234 has shipped."
+    assert sent[1]["inputs"][0]["tool_call_id"] == "tc1"
+    assert json.loads(sent[1]["inputs"][0]["result"])["status"] == "shipped"
+```
+
+For async code pass `async_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler))` as well. Script handoffs (`agent.handoff` entries), pending approvals (`function.call` with `"confirmation_status": "pending"`) and errors (`httpx2.Response(429, ...)`) the same way. In TypeScript, pass a `fetcher` to `HTTPClient`; see [TypeScript production](/mistral-agents-api-guide/typescript/production/#testing).
+
+Keep a small set of live tests as well, run against a staging agent version before you move the `prod` alias: mocks prove your loop handles the entries, not that the agent's instructions produce them.
+
+---
+
+## 5. Cost
+
+- **Model tokens.** `usage.prompt_tokens` and `usage.completion_tokens` are billed at the agent's model rate. Routers, classifiers and extractors rarely need more than `mistral-small-latest`.
+- **Tool tokens and calls.** `usage.connector_tokens` counts the tokens that tool results (search results, retrieved passages, code output) added to the context; they are included in `total_tokens`. `usage.connectors` counts calls per tool (for example `{"web_search": 1}`). Built-in tools are also priced per call (image generation per image) on top of tokens; check Mistral's pricing page.
+- **History grows.** Stored conversations save you resending the transcript, but the model still reads the whole history on every `append()`, so prompt tokens rise with each turn. Start a new conversation, or `restart()` from an earlier entry, when the topic changes.
+- **Cap the work.** Set `completion_args={"max_tokens": ...}` on agents, bound function-call loops, and give each agent only the tools it needs (every tool definition is sent on every turn).
+- **Batch offline work.** The Batch API (`client.batch.jobs`) is priced below synchronous requests and suits bulk classification or extraction with no tools or conversation state.
+- **Track it.** Log usage per conversation (section 3) and keep running totals per user (section 6), so a prompt or tool regression shows up as a cost trend before it shows up on the invoice.
+
+---
+
+## 6. Storing conversation references
+
+Mistral stores the conversation; you store who it belongs to.
 
 ```sql
--- Agents Table
-CREATE TABLE agents (
-    id VARCHAR(255) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    model VARCHAR(50) NOT NULL,
-    instructions TEXT,
-    version INTEGER DEFAULT 1,
-    tools JSONB,
-    completion_args JSONB,
-    owner_id VARCHAR(255),
-    status VARCHAR(20) DEFAULT 'active',
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    UNIQUE(owner_id, name)
+CREATE TABLE agent_conversations (
+    conversation_id TEXT PRIMARY KEY,
+    user_id         TEXT NOT NULL,
+    agent_id        TEXT NOT NULL,
+    agent_version   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    last_used_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    prompt_tokens   INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    status          TEXT NOT NULL DEFAULT 'active'      -- active | closed | deleted
 );
-
--- Conversations Table
-CREATE TABLE conversations (
-    id VARCHAR(255) PRIMARY KEY,
-    agent_id VARCHAR(255) NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
-    owner_id VARCHAR(255),
-    name VARCHAR(255),
-    description TEXT,
-    status VARCHAR(20) DEFAULT 'active',
-    metadata JSONB,
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW(),
-    FOREIGN KEY (agent_id) REFERENCES agents(id)
-);
-
--- Conversation Entries (Messages, Tool Calls, etc.)
-CREATE TABLE conversation_entries (
-    id VARCHAR(255) PRIMARY KEY,
-    conversation_id VARCHAR(255) NOT NULL,
-    type VARCHAR(50) NOT NULL,  -- message.input, message.output, tool.execution
-    role VARCHAR(20),           -- user, assistant, tool
-    content TEXT,
-    content_json JSONB,
-    token_count INTEGER,
-    created_at TIMESTAMP DEFAULT NOW(),
-    completed_at TIMESTAMP,
-    agent_id VARCHAR(255),
-    model VARCHAR(50),
-    tool_name VARCHAR(255),
-    tool_call_id VARCHAR(255),
-    parent_entry_id VARCHAR(255),
-    metadata JSONB,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
-);
-
--- Indexes
-CREATE INDEX idx_conv_agent ON conversations(agent_id);
-CREATE INDEX idx_conv_owner ON conversations(owner_id);
-CREATE INDEX idx_conv_created ON conversations(created_at DESC);
-CREATE INDEX idx_entries_conv ON conversation_entries(conversation_id);
-CREATE INDEX idx_entries_created ON conversation_entries(created_at DESC);
-CREATE INDEX idx_entries_type ON conversation_entries(type);
-CREATE INDEX idx_agent_owner ON agents(owner_id);
+CREATE INDEX ON agent_conversations (user_id, last_used_at DESC);
 ```
+
+Check ownership before every `append()`, so one user cannot continue another's conversation by guessing an ID. Use conversation `metadata` for search and filtering (`conversations.list(metadata=...)`), but keep authorisation in your own database. When a user deletes their data, call `client.beta.conversations.delete(conversation_id=...)` as well as removing your rows.
 
 ---
 
-## 6. Rate Limiting
+## 7. Rate limiting your users
 
-### Token Bucket Algorithm
+Mistral enforces workspace limits; you should enforce per-user limits so one user cannot exhaust them:
 
 ```python
 import time
-from redis import Redis
 
-class RateLimiter:
-    """Token bucket rate limiting with Redis backend"""
-    
-    def __init__(
-        self,
-        redis_client: Redis,
-        rate: float = 100,  # requests
-        window: int = 60     # seconds
-    ):
-        self.redis = redis_client
-        self.rate = rate
-        self.window = window
-    
-    def is_allowed(self, user_id: str) -> bool:
-        """Check if request is allowed"""
-        key = f"rate_limit:{user_id}"
-        now = time.time()
-        
-        # Get current token count
-        data = self.redis.get(key)
-        
-        if not data:
-            # First request
-            self.redis.setex(
-                key,
-                self.window,
-                self.rate - 1  # Use one token
-            )
+class TokenBucket:
+    def __init__(self, rate_per_sec: float, capacity: int):
+        self.rate, self.capacity = rate_per_sec, capacity
+        self.tokens, self.updated = float(capacity), time.monotonic()
+
+    def take(self, n: int = 1) -> bool:
+        now = time.monotonic()
+        self.tokens = min(self.capacity, self.tokens + (now - self.updated) * self.rate)
+        self.updated = now
+        if self.tokens >= n:
+            self.tokens -= n
             return True
-        
-        tokens = float(data)
-        
-        if tokens > 0:
-            # Token available
-            self.redis.decr(key)
-            return True
-        
         return False
-    
-    def get_remaining(self, user_id: str) -> int:
-        """Get remaining tokens"""
-        key = f"rate_limit:{user_id}"
-        tokens = self.redis.get(key)
-        return int(tokens) if tokens else int(self.rate)
+
+buckets: dict[str, TokenBucket] = {}
+
+def allow(user_id: str) -> bool:
+    return buckets.setdefault(user_id, TokenBucket(rate_per_sec=0.2, capacity=5)).take()
 ```
+
+In a multi-instance deployment, keep the buckets in Redis.
 
 ---
 
-## 7. Performance Tuning
+## 8. Performance
 
-### Connection Pooling
-
-```python
-from mistralai.client import Mistral
-import asyncio
-
-class OptimisedClientPool:
-    """Connection pool for efficient resource usage"""
-    
-    def __init__(self, pool_size: int = 10):
-        self.pool = [
-            Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-            for _ in range(pool_size)
-        ]
-        self.queue = asyncio.Queue(maxsize=pool_size)
-        
-        for client in self.pool:
-            self.queue.put_nowait(client)
-    
-    async def execute(self, coro):
-        """Execute with pooled client"""
-        client = await self.queue.get()
-        try:
-            result = await coro
-            return result
-        finally:
-            await self.queue.put(client)
-```
-
-### Batch Processing
-
-```python
-class BatchProcessor:
-    """Process multiple conversations efficiently"""
-    
-    def __init__(self, batch_size: int = 50, client: Mistral = None):
-        self.batch_size = batch_size
-        self.client = client or Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-        self.batch = []
-    
-    def add_task(self, agent_id: str, inputs: str) -> int:
-        """Add task to batch"""
-        self.batch.append((agent_id, inputs))
-        
-        if len(self.batch) >= self.batch_size:
-            self.flush()
-        
-        return len(self.batch)
-    
-    def flush(self):
-        """Process entire batch"""
-        results = []
-        for agent_id, inputs in self.batch:
-            try:
-                response = self.client.beta.conversations.start(
-                    agent_id=agent_id,
-                    inputs=inputs
-                )
-                results.append(response)
-            except Exception as e:
-                logger.error(f"Batch item failed: {e}")
-        
-        self.batch = []
-        return results
-```
+- **Stream** with `start_stream_async()` for user-facing requests; time to first token matters more than total time.
+- **Choose models per agent.** Routers and classifiers rarely need more than `mistral-small-latest`.
+- **Keep instructions stable** so the platform can cache the prompt; put per-request data in `inputs`, not `instructions`.
+- **Trim tools.** Every tool definition costs prompt tokens on every turn.
+- **Use `store=False`** for one-shot requests you will never append to.
 
 ---
 
-## 8. Security Best Practices
+## 9. Security
 
-### API Key Management
-
-```python
-import os
-from typing import Optional
-
-class SecureConfigManager:
-    """Secure configuration and secrets management"""
-    
-    @staticmethod
-    def get_api_key() -> str:
-        """Get API key from environment (not hardcoded)"""
-        key = os.environ.get("MISTRAL_API_KEY")
-        if not key:
-            raise ValueError("MISTRAL_API_KEY not set")
-        return key
-    
-    @staticmethod
-    def validate_request(request) -> bool:
-        """Validate incoming requests"""
-        # Check API key
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return False
-        
-        # Check content-type
-        if request.content_type != "application/json":
-            return False
-        
-        return True
-    
-    @staticmethod
-    def sanitise_inputs(inputs: str) -> str:
-        """Sanitise user inputs"""
-        # Remove potentially harmful content
-        inputs = inputs.strip()
-        
-        # Prevent prompt injection
-        forbidden_patterns = [
-            "ignore previous instructions",
-            "system override",
-            "admin mode"
-        ]
-        
-        for pattern in forbidden_patterns:
-            if pattern.lower() in inputs.lower():
-                logger.warning(f"Potential injection detected: {pattern}")
-                inputs = inputs.replace(pattern, "[REDACTED]")
-        
-        return inputs
-```
-
-### Role-Based Access Control (RBAC)
-
-```python
-from enum import Enum
-
-class Role(Enum):
-    ADMIN = "admin"
-    USER = "user"
-    READ_ONLY = "read_only"
-
-class AccessControl:
-    """Manage access to agents and conversations"""
-    
-    PERMISSIONS = {
-        Role.ADMIN: [
-            'create_agent', 'update_agent', 'delete_agent',
-            'list_conversations', 'read_conversation',
-            'start_conversation', 'archive_conversation'
-        ],
-        Role.USER: [
-            'list_conversations', 'read_conversation',
-            'start_conversation', 'archive_conversation'
-        ],
-        Role.READ_ONLY: [
-            'list_conversations', 'read_conversation'
-        ]
-    }
-    
-    def has_permission(self, role: Role, action: str) -> bool:
-        """Check if role has permission"""
-        return action in self.PERMISSIONS.get(role, [])
-    
-    def can_access_agent(self, user_id: str, agent_id: str) -> bool:
-        """Check if user can access agent"""
-        # Query database to verify ownership
-        # or check if user is organisation member
-        pass
-```
+- **Secrets.** Prefer Mistral service-account tokens (`MISTRAL_SA_TOKEN_PATH`, re-read on every request so rotation needs no restart) over long-lived API keys. If the variable is set but the file is missing, every request fails with `ServiceAccountTokenError`; unset it rather than leaving it dangling.
+- **Data residency.** Use `server="eu"` or `server="us"` to pin the region.
+- **Guardrails.** Attach `GuardrailConfig` with `ModerationLlmv2Config` to public-facing agents.
+- **Prompt injection.** Web search results, documents and connector outputs are untrusted. Use `requires_confirmation` on tools that write or send, and never put credentials in instructions.
+- **Least privilege for connectors.** Scope credentials (`consumer_scope="user"` where possible) and expose only needed tools with `include`.
+- **Access control.** Map your users to conversations in your database (section 6) and check it on every request.
 
 ---
 
-## 9. CI/CD Integration
+## 10. Deployment and CI/CD
 
-### GitHub Actions Example
+This is the one deployment set-up for the Python pages in this guide; the [FastAPI streaming server](/mistral-agents-api-guide/mistral_streaming_server_fastapi/) and a [chat-completions service](/mistral-agents-api-guide/mistral_agents_api_advanced_python/) deploy the same way.
 
+```dockerfile
+FROM python:3.12-slim
+RUN useradd --create-home app
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt      # pins mistralai==%%version=mistralai%%
+COPY --chown=app:app . .
+USER app
+EXPOSE 8000
+CMD ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+On Kubernetes, mount the Mistral service-account token from a Secret as a file and point `MISTRAL_SA_TOKEN_PATH` at it:
 
 ```yaml
-name: Deploy Mistral Agents
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mistral-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: mistral-agent }
+  template:
+    metadata:
+      labels: { app: mistral-agent }
+    spec:
+      containers:
+        - name: app
+          image: ghcr.io/yourorg/mistral-agent:1.0.0
+          env:
+            - name: MISTRAL_SA_TOKEN_PATH
+              value: /var/run/secrets/mistral/token
+            - name: AGENT_ID_SUPPORT
+              valueFrom: { configMapKeyRef: { name: mistral-config, key: agentIdSupport } }
+          volumeMounts:
+            - { name: mistral-token, mountPath: /var/run/secrets/mistral, readOnly: true }
+          ports: [{ containerPort: 8000 }]
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+      volumes:
+        - name: mistral-token
+          secret:
+            secretName: mistral-sa-token          # holds the Mistral token under the key "token"
+            items: [{ key: token, path: token }]
+```
 
+The token is a Mistral service-account token (see `client.beta.service_accounts`), not the pod's own Kubernetes service-account token, which Mistral does not accept. Kubernetes updates a mounted Secret in place (unless it is mounted with `subPath`), and the SDK re-reads the file on each request, so rotating the Secret needs no restart. With an API key instead, set `MISTRAL_API_KEY` from a `secretKeyRef`.
+
+Because the heavy work happens at Mistral, instances are light: scale on concurrent requests and keep `MISTRAL_MAX_CONCURRENCY` × replicas below your workspace rate limit.
+
+CI runs the mocked tests from section 4, then creates the new agent version and moves the alias:
+
+```yaml
+name: agents
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
-        with:
-          python-version: '3.10'
-      
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
-      
-      - name: Run tests
-        run: pytest --cov=mistral_agents tests/
-      
-      - name: Upload coverage
-        uses: codecov/codecov-action@v2
-
-  deploy:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt pytest
+      - run: pytest -q                       # the mocked tests from section 4
+  deploy-agents:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    environment: production
     steps:
-      - uses: actions/checkout@v2
-      
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-      
-      - name: Deploy to ECS
-        run: |
-          ./scripts/deploy.sh
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - run: python deploy_agents.py         # creates a new agent version and moves the "prod" alias
+        env:
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          AGENT_ID_SUPPORT: ${{ vars.AGENT_ID_SUPPORT }}
+          GIT_SHA: ${{ github.sha }}
 ```
 
-
----
-
-**This production guide provides everything needed to deploy and maintain Mistral Agents API at scale.**
-
-
+Run a small evaluation set against the new agent version before moving the alias, and keep the previous version number so rollback is one call. Build and push the container image in the same workflow with your usual Docker actions.

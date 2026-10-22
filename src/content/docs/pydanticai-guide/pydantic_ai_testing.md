@@ -1,13 +1,14 @@
 ---
 title: "PydanticAI: Testing with TestModel, FunctionModel & Overrides"
 description: "Deterministic testing of PydanticAI agents using TestModel, FunctionModel, capture_run_messages, agent.override(), and pytest fixtures."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Testing"
+  order: 10
 ---
 
-# Testing Agents
-
-Verified against **pydantic-ai==2.8.0** — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.models.test`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI ships two model implementations built for tests: `TestModel` (auto-generates tool calls + a response from JSON schema) and `FunctionModel` (you write the response-generating function). Combined with `agent.override(...)` and `capture_run_messages`, you can unit-test agents hermetically — no network, no API keys, deterministic.
 
@@ -17,7 +18,7 @@ PydanticAI ships two model implementations built for tests: `TestModel` (auto-ge
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-5.2', system_prompt='Be terse.')
+agent = Agent('openai:%%model=openai%%', system_prompt='Be terse.')
 
 def test_greet():
     with agent.override(model=TestModel()):
@@ -29,13 +30,13 @@ def test_greet():
 
 ## `TestModel` — structural test double
 
-Lives at `pydantic_ai.models.test.TestModel` (`models/test.py:60`). Given the agent's tool schemas, it:
+Lives at `pydantic_ai.models.test.TestModel`. Given the agent's tool schemas, it:
 
 1. Calls every tool once (unless you restrict with `call_tools=[...]`).
 2. Synthesises tool arguments that match each tool's JSON schema.
 3. Produces a final response — a string, or args that match the output tool's schema.
 
-Constructor (`models/test.py:94`):
+Constructor:
 
 | Argument              | Type                                | Default | Purpose                                                       |
 | --------------------- | ----------------------------------- | ------- | ------------------------------------------------------------- |
@@ -53,10 +54,10 @@ After the run, `TestModel.last_model_request_parameters` holds the final `ModelR
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool
-def lookup(ctx: RunContext[None], sku: str) -> dict:
+def lookup(ctx: RunContext[object], sku: str) -> dict:
     return {'sku': sku, 'price': 9.99}
 
 def test_model_calls_lookup():
@@ -86,7 +87,7 @@ For agents with `output_type=MyModel`, set `custom_output_args` to a dict matchi
 
 ## `FunctionModel` — write your own response
 
-`pydantic_ai.models.function.FunctionModel` (`models/function.py:45`) lets you implement the model as a function. You get the full message history and metadata, and return a `ModelResponse`.
+`pydantic_ai.models.function.FunctionModel` lets you implement the model as a function. You get the full message history and metadata, and return a `ModelResponse`.
 
 ```python
 from pydantic_ai import Agent
@@ -103,7 +104,7 @@ result = agent.run_sync('hello')
 assert result.output == 'echo: hello'
 ```
 
-`AgentInfo` (`models/function.py:219`) exposes what the agent decided to send this step:
+`AgentInfo` (`pydantic_ai.models.function.AgentInfo`) exposes what the agent decided to send this step:
 
 - `function_tools: list[ToolDefinition]`
 - `output_tools: list[ToolDefinition]`
@@ -148,7 +149,9 @@ agent = Agent(FunctionModel(stream_function=stream_word_by_word))
 async def test_streaming():
     chunks = []
     async with agent.run_stream('What is the answer?') as stream:
-        async for chunk in stream.stream_text(delta=True):
+        # debounce_by=None: yield every delta (the default 0.1 s window would
+        # merge this fast in-process stream into a single chunk)
+        async for chunk in stream.stream_text(delta=True, debounce_by=None):
             chunks.append(chunk)
         final = await stream.get_output()
 
@@ -160,7 +163,7 @@ asyncio.run(test_streaming())
 
 ### Streaming tool calls with `DeltaToolCalls`
 
-To simulate a streaming model that emits a tool call then returns text, use `DeltaToolCalls` — a `dict[int, DeltaToolCall]` keyed by a per-call index (verified in `models/function.py` source):
+To simulate a streaming model that emits a tool call then returns text, use `DeltaToolCalls` — a `dict[int, DeltaToolCall]` keyed by a per-call index:
 
 ```python
 import asyncio
@@ -199,7 +202,6 @@ async def streaming_tool_call(
 
 agent = Agent(
     FunctionModel(spy_function, stream_function=streaming_tool_call),
-    deps_type=None,
 )
 
 @agent.tool_plain
@@ -225,7 +227,7 @@ async def test_stream():
 asyncio.run(test_stream())
 ```
 
-`AgentInfo` fields available inside any function/stream function (verified `models/function.py`):
+`AgentInfo` fields available inside any function/stream function:
 
 | Field | Type | Description |
 |---|---|---|
@@ -238,7 +240,7 @@ asyncio.run(test_stream())
 
 ## `Agent.override(...)` — swap parts per run/test
 
-`agent/__init__.py:1639`. Temporarily replaces any of:
+`Agent.override(...)` is a context manager that temporarily replaces any of:
 
 - `model` (`Model`, a `KnownModelName`, or any `str`)
 - `deps`
@@ -316,7 +318,7 @@ Pair with [syrupy](https://github.com/syrupy-project/syrupy) or pytest-snapshot.
 | `TestModel`                        | You want schema-correct, deterministic behaviour. Fast.      |
 | `FunctionModel`                    | You need to control the exact `ModelResponse`.                |
 | Real model + `pytest-vcr`          | Regression-test against the real provider. Slow, flaky, needs API keys on record. |
-| `respx` / `httpx_mock` + real `OpenAIModel` | HTTP-layer testing. Flakier than `FunctionModel`.      |
+| `respx` / `httpx_mock` + real `OpenAIChatModel` | HTTP-layer testing. Flakier than `FunctionModel`.      |
 
 For most unit tests, prefer `TestModel` or `FunctionModel`. For contract tests, use real models in a CI nightly job.
 
@@ -375,7 +377,7 @@ def test_validator_retries():
             agent.run_sync('go')
 ```
 
-After `output_retries` attempts, `ModelRetry` bubbles up as `UnexpectedModelBehavior`.
+Once the output retry budget (`retries={'output': N}`, default 1) is used up, `ModelRetry` bubbles up as `UnexpectedModelBehavior`.
 
 ### 5. Swap `deps` per test without rebuilding the agent
 
@@ -387,7 +389,7 @@ with agent.override(deps=fake_db, model=TestModel()):
 
 ## Gotchas
 
-- **`TestModel` randomises tool args**. Pin behaviour with `seed=42` if you assert on them.
+- **`TestModel` generates tool arguments from the schema**, seeded (`seed=0` by default), so a run is repeatable. Change `seed=` for different values, or use `FunctionModel` when a test depends on specific arguments.
 - **`override` leaks if you manually `__enter__` without `__exit__`.** Always use `with`.
 - **Async tests**: prefer `await agent.run(...)` inside `async def test_*` — don't mix `run_sync` and a running event loop.
 - **`include_return_schema`**: `TestModel` does _not_ honour tool return schemas unless the agent is set to include them; see `IncludeReturnSchemasToolset`.
@@ -483,8 +485,8 @@ test_valid_invoice()
 
 ## Reference
 
-- `TestModel` — `models/test.py:60`
-- `FunctionModel`, `AgentInfo`, `DeltaToolCalls` — `models/function.py`
-- `Agent.override(...)` — `agent/__init__.py:1639`
-- `capture_run_messages()` — `_agent_graph.py:1791`
-- `ModelMessagesTypeAdapter` — `messages.py:2034`
+- `TestModel` — `pydantic_ai.models.test`
+- `FunctionModel`, `AgentInfo`, `DeltaToolCalls` — `pydantic_ai.models.function`
+- `Agent.override(...)` — `pydantic_ai.Agent`
+- `capture_run_messages()` — `pydantic_ai`
+- `ModelMessagesTypeAdapter` — `pydantic_ai.messages`

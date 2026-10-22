@@ -1,2952 +1,1151 @@
 ---
-title: "Anthropic Claude Agent SDK - Comprehensive Technical Guide"
-description: "> Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude"
-framework: anthropic-claude-agent-sdk
+title: "Claude Agent SDK (Python) — Comprehensive Guide"
+description: "Reference for building agents with the Python claude-agent-sdk: query(), ClaudeSDKClient, tools, MCP, subagents, hooks, permissions, sessions and thinking."
+framework: "claude-agent-sdk"
+language: "python"
 ---
 
-Latest: claude-agent-sdk 0.2.93 | Updated: June 7, 2026
-# Anthropic Claude Agent SDK - Comprehensive Technical Guide
+**Verified against `claude-agent-sdk` %%version=claude-agent-sdk%%** (checked %%versions-checked%%). Every import, class, option and method signature on this page was checked against an installed copy of that release.
 
-> **Exhaustive Reference for Building, Deploying, and Scaling Production AI Agents with Claude**
+The TypeScript package has its own guide: [Claude Agent SDK (TypeScript)](/anthropic-claude-agent-sdk-typescript-guide/).
 
 ---
 
-## Table of Contents
+## Table of contents
 
 1. [Introduction](#introduction)
-2. [Installation & Authentication](#installation--authentication)
-3. [Core Architecture & Concepts](#core-architecture--concepts)
-4. [Simple Agents](#simple-agents)
-5. [Tools & Integration](#tools--integration)
-6. [Multi-Agent Systems](#multi-agent-systems)
-7. [Computer Use API](#computer-use-api)
-8. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-9. [Structured Output](#structured-output)
-10. [Session Management](#session-management)
-11. [Context Engineering](#context-engineering)
-12. [Advanced Permissions](#advanced-permissions)
-13. [Agentic Patterns](#agentic-patterns)
-14. [API Reference](#api-reference)
+2. [Installation & authentication](#installation--authentication)
+3. [Core architecture & concepts](#core-architecture--concepts)
+4. [Simple agents](#simple-agents)
+5. [Tools & integration](#tools--integration)
+6. [Permissions](#permissions)
+7. [Hooks](#hooks)
+8. [User input and approvals](#user-input-and-approvals)
+9. [Multi-agent systems](#multi-agent-systems)
+10. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+11. [Structured output](#structured-output)
+12. [Session management](#session-management)
+13. [Thinking and effort](#thinking-and-effort)
+14. [File checkpointing and rewind](#file-checkpointing-and-rewind)
+15. [Context usage, budgets and limits](#context-usage-budgets-and-limits)
+16. [Error handling](#error-handling)
+17. [API reference](#api-reference)
 
 ---
 
 ## Introduction
 
-### What is the Claude Agent SDK?
+### What the SDK is
 
-The **Claude Agent SDK** is the evolution of the Claude Code SDK, renamed to reflect its expanded capabilities beyond coding tasks. It provides a comprehensive framework for building production-ready AI agents that can:
+The Claude Agent SDK is Claude Code packaged as a library. It was called the Claude Code SDK until version 0.1.0, when it was renamed to reflect that the same harness is useful well beyond coding.
 
-- Execute complex, multi-step tasks autonomously
-- Control computers through mouse, keyboard, and screen interactions ("giving agents a computer")
-- Integrate custom tools and services via the Model Context Protocol (MCP)
-- Maintain context and state across long-running sessions
-- Operate with fine-grained permission controls and safety guarantees
-- Scale from simple single-agent applications to complex multi-agent orchestration systems
+Under the hood the Python package starts the Claude Code CLI as a subprocess (a copy is bundled in the platform wheels) and talks to it over a JSON stream. That gives you, without writing a tool loop yourself:
 
-### Key Differentiators
+- the agent loop, context management and automatic compaction;
+- built-in tools — `Read`, `Write`, `Edit`, `Bash`, `Glob`, `Grep`, `WebSearch`, `WebFetch`, the `Agent` tool for subagents, and others;
+- in-process custom tools via MCP, plus external MCP servers;
+- permission modes, a `can_use_tool` callback and lifecycle hooks;
+- persistent, resumable and forkable sessions;
+- subagents, skills, plugins and sandboxing.
 
-| Feature | Claude Agent SDK | Traditional LLM Libraries |
-|---------|------------------|---------------------------|
-| Computer Control | ✅ Native support | ❌ Not built-in |
-| Tool Integration | ✅ MCP-based standardisation | ⚠️ Ad-hoc implementations |
-| Context Management | ✅ Automatic compaction | ❌ Manual management |
-| Permissions System | ✅ Fine-grained control | ❌ Limited |
-| Session Persistence | ✅ Built-in | ⚠️ Requires external storage |
-| Multi-Agent Coordination | ✅ Native patterns | ⚠️ Custom implementation |
+### When to use it
 
-### Who Should Use This Guide
+Use the Agent SDK when you want a batteries-included agent that works on files, runs commands and calls tools on your own infrastructure. If you only need a single model call, or a tool loop over tools you define yourself, the plain `anthropic` client (with its tool runner) is lighter. The SDK does not host anything for you: you deploy it like any other Python service.
 
-- **Backend engineers** building agent-based services
-- **DevOps specialists** deploying agents to production
-- **AI practitioners** implementing complex agentic workflows
-- **Researchers** exploring autonomous agent capabilities
-- **Full-stack developers** adding AI automation to applications
+### Two entry points
+
+| | `query()` | `ClaudeSDKClient` |
+|---|---|---|
+| Shape | async generator, one task | async context manager, a conversation |
+| Follow-up turns | resume via `options.resume` | call `client.query()` again |
+| Interrupts, model switch, MCP status | no | yes |
+| `rewind_files()`, `get_context_usage()` | no | yes |
+| Typical use | scripts, batch jobs, CI | chat UIs, long-lived workers |
+
+There is no `Agent` class; everything goes through these two.
 
 ---
 
-## Installation & Authentication
+## Installation & authentication
 
-### TypeScript/JavaScript Installation
+### Requirements
 
-#### Prerequisites
-- Node.js 16.0.0 or later (18+ recommended for best performance)
-- npm 7+ or yarn 1.22+
-- TypeScript 4.5+ (for type safety)
-
-#### Installation Steps
+- Python 3.10 or later.
+- The platform wheels on PyPI bundle the Claude Code CLI, so no separate Node.js install is needed. If you want to use a CLI installed elsewhere, pass `cli_path=` in the options.
 
 ```bash
-# Create a new project
-mkdir my-agent
-cd my-agent
-
-# Initialise Node project
-npm init -y
-
-# Install Claude Agent SDK
-npm install @anthropic-ai/claude-agent-sdk
-
-# Install TypeScript and types (optional but recommended)
-npm install --save-dev typescript @types/node ts-node
-
-# Install recommended dependencies
-npm install dotenv  # For environment variable management
-npm install zod     # For schema validation
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install claude-agent-sdk==%%version=claude-agent-sdk%%
 ```
 
-#### Project Structure
+A minimal `requirements.txt`:
 
-```
-my-agent/
-├── src/
-│   ├── agents/
-│   │   ├── basic-agent.ts
-│   │   └── advanced-agent.ts
-│   ├── tools/
-│   │   ├── custom-tools.ts
-│   │   └── mcp-servers.ts
-│   ├── index.ts
-│   └── types.ts
-├── .env
-├── .env.example
-├── package.json
-├── tsconfig.json
-└── README.md
+```txt
+claude-agent-sdk==%%version=claude-agent-sdk%%
+python-dotenv>=1.0
 ```
 
-### Python Installation
+Check what you have installed:
 
-#### Prerequisites
-- Python 3.10 or later (3.11+ recommended)
-- pip package manager
-- Virtual environment manager (venv or poetry recommended)
-
-#### Installation Steps
-
-```bash
-# Create project directory
-mkdir my-agent
-cd my-agent
-
-# Create virtual environment
-python3 -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
-source venv/bin/activate
-# On Windows:
-.\venv\Scripts\activate
-
-# Upgrade pip
-pip install --upgrade pip
-
-# Install Claude Agent SDK
-pip install claude-agent-sdk  # Latest stable release (0.2.93)
-
-# Install recommended dependencies
-pip install python-dotenv pydantic aiohttp
-```
-
-#### Project Structure
-
-```
-my-agent/
-├── src/
-│   ├── agents/
-│   │   ├── basic_agent.py
-│   │   └── advanced_agent.py
-│   ├── tools/
-│   │   ├── custom_tools.py
-│   │   └── mcp_servers.py
-│   ├── main.py
-│   └── types.py
-├── .env
-├── .env.example
-├── requirements.txt
-├── pyproject.toml
-└── README.md
-```
-
-### Authentication & Configuration
-
-#### Setting Up API Keys
-
-**Step 1: Get Your API Key**
-1. Go to https://console.anthropic.com
-2. Sign up or log in
-3. Navigate to "API Keys"
-4. Click "Generate API Key"
-5. Copy the generated key
-
-**Step 2: Configure Environment**
-
-**TypeScript:**
-```typescript
-// .env
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
-```
-
-**Python:**
 ```python
-# .env
-ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
+import claude_agent_sdk
+print(claude_agent_sdk.__version__)  # e.g. %%version=claude-agent-sdk%%
 ```
 
-#### Loading Configuration
+### API key
 
-**TypeScript:**
-```typescript
-import dotenv from 'dotenv';
-import { query } from '@anthropic-ai/claude-agent-sdk';
+The CLI reads credentials from the environment. Create a key in the [Claude Console](https://platform.claude.com/) and export it:
 
-dotenv.config();
-
-const apiKey = process.env.ANTHROPIC_API_KEY;
-const model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
-
-if (!apiKey) {
-  throw new Error('ANTHROPIC_API_KEY environment variable is required');
-}
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Python:**
+You can also pass environment variables to the CLI process explicitly through `env=`:
+
 ```python
 import os
-from dotenv import load_dotenv
-from claude_agent_sdk import query
+from claude_agent_sdk import ClaudeAgentOptions
 
-load_dotenv()
-
-api_key = os.getenv('ANTHROPIC_API_KEY')
-model = os.getenv('ANTHROPIC_MODEL', 'claude-3-5-sonnet-20241022')
-
-if not api_key:
-    raise ValueError('ANTHROPIC_API_KEY environment variable is required')
+options = ClaudeAgentOptions(env={"ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"]})
 ```
 
-### Alternative Authentication Methods
+### Amazon Bedrock, Google Vertex AI and Microsoft Foundry
 
-#### AWS Bedrock
+There are no `api_provider`-style options. Provider selection is done with the same environment variables Claude Code uses:
 
-```typescript
-// TypeScript
-import { ClaudeSDKClient, ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk';
+```bash
+# Amazon Bedrock (credentials from the usual AWS chain)
+export CLAUDE_CODE_USE_BEDROCK=1
+export AWS_REGION=us-east-1
 
-const options = ClaudeAgentOptions({
-  apiProvider: 'bedrock',
-  bedrockRegion: 'us-east-1',
-  // AWS credentials will be loaded from environment or IAM role
-});
+# Google Vertex AI (credentials from Application Default Credentials)
+export CLAUDE_CODE_USE_VERTEX=1
+export CLOUD_ML_REGION=global
+export ANTHROPIC_VERTEX_PROJECT_ID=my-gcp-project
 ```
 
-```python
-# Python
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
-
-options = ClaudeAgentOptions(
-    api_provider='bedrock',
-    bedrock_region='us-east-1',
-    # AWS credentials will be loaded from environment or IAM role
-)
-```
-
-#### Google Vertex AI
-
-```typescript
-// TypeScript
-import { ClaudeSDKClient, ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk';
-
-const options = ClaudeAgentOptions({
-  apiProvider: 'vertexai',
-  vertexProjectId: 'your-project-id',
-  vertexRegion: 'us-central1',
-});
-```
-
-```python
-# Python
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
-
-options = ClaudeAgentOptions(
-    api_provider='vertexai',
-    vertex_project_id='your-project-id',
-    vertex_region='us-central1',
-)
-```
+Set them in the process environment or in `ClaudeAgentOptions(env={...})`. Model IDs differ per provider (Bedrock IDs carry an `anthropic.` prefix); check the provider console for the exact string.
 
 ---
 
-## Core Architecture & Concepts
-
-### Architecture Overview
-
-The Claude Agent SDK is built on the same agent harness that powers Claude Code, providing:
+## Core architecture & concepts
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Claude Agent SDK                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │         User Application Layer                       │  │
-│  │  (Your agents, business logic, orchestration)        │  │
-│  └────────────────────┬─────────────────────────────────┘  │
-│                       │                                     │
-│  ┌────────────────────▼─────────────────────────────────┐  │
-│  │         Agent Execution Engine                       │  │
-│  │  (Session management, context compaction,            │  │
-│  │   tool execution, streaming)                         │  │
-│  └────────────────────┬─────────────────────────────────┘  │
-│                       │                                     │
-│  ┌────────────────────▼──────┬──────────┬────────────────┐ │
-│  │   Tool Ecosystem          │   MCP    │   Claude API  │ │
-│  │  (File ops, Bash,         │ Server   │   Integration │ │
-│  │   Web search)             │ support  │   & Caching   │ │
-│  └───────────────────────────┴──────────┴────────────────┘ │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+your code ──► query() / ClaudeSDKClient ──► Claude Code CLI subprocess ──► Claude API
+                    ▲                              │
+                    │      JSON message stream     │  built-in tools, MCP servers,
+                    └──────────────────────────────┘  hooks, permission checks
 ```
 
-### Core Concepts Explained
+**Options.** All configuration lives in one dataclass, `ClaudeAgentOptions`. The fields you will use most are `model`, `system_prompt`, `allowed_tools` / `disallowed_tools`, `permission_mode`, `cwd`, `max_turns`, `max_budget_usd`, `mcp_servers`, `agents`, `hooks`, `can_use_tool`, `resume` and `setting_sources`. The full list is in the [API reference](#api-reference).
 
-#### 1. Agents
-An **agent** is an autonomous entity that:
-- Accepts a task or prompt as input
-- Plans and reasons about how to accomplish the task
-- Executes tools and commands to achieve goals
-- Iteratively refines its approach based on feedback
-- Returns results to the user
+**Messages.** Both entry points yield typed dataclasses, not dictionaries:
 
-```typescript
-// TypeScript: A basic agent
-const agent = query({
-  prompt: "Analyze this codebase and suggest improvements",
-  options: {
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
+| Class | When you see it | Useful fields |
+|---|---|---|
+| `SystemMessage` | `subtype="init"` at the start; also other system events | `subtype`, `data` (a dict; `data["session_id"]` on init) |
+| `AssistantMessage` | each model turn | `content` (list of blocks), `model`, `usage`, `session_id` |
+| `UserMessage` | tool results fed back to the model | `content`, `uuid`, `tool_use_result` |
+| `ResultMessage` | last message of each turn | `result`, `is_error`, `subtype`, `total_cost_usd`, `usage`, `model_usage`, `num_turns`, `session_id`, `structured_output`, `terminal_reason`, `api_error_status` |
+| `StreamEvent` | only with `include_partial_messages=True` | `event` (raw API stream event) |
+| `RateLimitEvent` | when a rate-limit state changes | `rate_limit_info` |
 
-#### 2. Tools
-**Tools** are capabilities that agents can invoke to accomplish tasks:
+Task-related messages (`TaskStartedMessage`, `TaskProgressMessage`, `TaskNotificationMessage`) are subclasses of `SystemMessage`, emitted for background tasks and subagents.
 
-- **File Operations**: Read, write, edit files
-- **Command Execution**: Run bash/shell commands
-- **Web Search**: Query the internet for information
-- **Custom Tools**: Domain-specific functions via MCP
-- **Computer Use**: Mouse, keyboard, screen control
+**Content blocks** inside `AssistantMessage.content` and `UserMessage.content`: `TextBlock(text)`, `ThinkingBlock(thinking, signature)`, `ToolUseBlock(id, name, input)`, `ToolResultBlock(tool_use_id, content, is_error)`, plus `ServerToolUseBlock` / `ServerToolResultBlock`.
 
-#### 3. Sessions
-A **session** maintains state across multiple interactions:
+**Settings isolation.** Since 0.1.0 the SDK does not inject the Claude Code system prompt — you get a minimal prompt unless you ask for the preset (see [System prompts](#system-prompts)). `setting_sources` controls whether `settings.json`, `CLAUDE.md`, project slash commands and file-based subagents are read: `None` (the default) loads all sources, as the CLI does; `[]` loads nothing; and a list such as `["project"]` loads only what you name (`"project"` is needed for `CLAUDE.md`). For reproducible services, pass an explicit list or `[]`.
 
-```typescript
-// TypeScript: Create a session
-let sessionId: string | undefined;
+### Models
 
-const response = query({
-  prompt: "First, analyse the data",
-  options: { model: "claude-3-5-sonnet-20241022" }
-});
+The model is any Claude model ID, or one of the aliases the CLI understands (`"opus"`, `"sonnet"`, `"haiku"`). When `model` is omitted the CLI's default is used. The current family:
 
-for await (const message of response) {
-  if (message.type === 'system' && message.subtype === 'init') {
-    sessionId = message.session_id;
-  }
-}
+| Model | ID | Notes |
+|---|---|---|
+| Claude Opus 5.5 | `claude-opus-5-5` | Default choice for agentic and coding work |
+| Claude Sonnet 5.5 | `claude-sonnet-5-5` | Faster and cheaper; good for most subagents |
+| Claude Haiku 5.5 | `claude-haiku-5-5` | Cheapest; classification, routing, simple subagents |
+| Claude Fable 5.1 | `claude-fable-5-1` | Most capable and most expensive; long-horizon reasoning |
 
-// Resume the same session
-const continued = query({
-  prompt: "Now generate a report based on that analysis",
-  options: {
-    resume: sessionId,
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### 4. Context
-**Context** is the information available to the agent, including:
-- System prompts and instructions
-- Conversation history
-- Tool outputs and results
-- Environment variables and file system state
-- User-provided background information
-
-#### 5. Permissions
-**Permissions** control what agents can and cannot do:
-- Tool access restrictions
-- File system boundaries
-- Command execution policies
-- User approval workflows
-- Cost and usage limits
-
-### Supported Claude Models
-
-#### Claude 3.5 Sonnet (Recommended for Agents)
-- **Best For**: Most agentic tasks, complex reasoning, balanced cost/performance
-- **Context Window**: 200K tokens
-- **Strengths**: Excellent at tool use, reasoning, code understanding
-- **Cost**: Mid-range (balance of capability and cost)
-
-```typescript
-// TypeScript
-const response = query({
-  prompt: "Your task here",
-  options: { model: "claude-3-5-sonnet-20241022" }
-});
-```
-
-#### Claude 3.5 Opus (Complex Reasoning)
-- **Best For**: Complex multi-step reasoning, large context windows
-- **Context Window**: 200K tokens
-- **Strengths**: Strongest reasoning, best at complex coordination
-- **Cost**: Premium (highest capability tier)
-
-```typescript
-const response = query({
-  prompt: "Complex orchestration task",
-  options: { model: "claude-3-5-opus-20241022" }
-});
-```
-
-#### Claude 3.5 Haiku (Cost-Efficient)
-- **Best For**: Simple tasks, lightweight operations, cost-sensitive applications
-- **Context Window**: 200K tokens
-- **Strengths**: Fast, low-cost, good for simple logic
-- **Cost**: Economy (lowest cost tier)
-
-```typescript
-const response = query({
-  prompt: "Simple task",
-  options: { model: "claude-3-5-haiku-20241022" }
-});
-```
+All four have a 1M-token context window. `fallback_model=` names a model to switch to if the primary is overloaded.
 
 ---
 
-## Simple Agents
+## Simple agents
 
-### Creating Your First Agent
-
-#### TypeScript Example
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import dotenv from 'dotenv';
-
-dotenv.config();
-
-async function main() {
-  const response = query({
-    prompt: "What is the capital of France?",
-    options: {
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  for await (const message of response) {
-    if (message.type === 'assistant') {
-      console.log('Claude:', message.content);
-    } else if (message.type === 'system' && message.subtype === 'init') {
-      console.log(`Session ID: ${message.session_id}`);
-    }
-  }
-}
-
-main().catch(console.error);
-```
-
-#### Python Example
+### First agent
 
 ```python
 import asyncio
-from claude_agent_sdk import query
-from dotenv import load_dotenv
+from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, ResultMessage, TextBlock
 
-load_dotenv()
-
-async def main():
-    async for message in query(prompt="What is the capital of France?"):
+async def main() -> None:
+    options = ClaudeAgentOptions(model="%%model=anthropic-flagship%%")
+    async for message in query(prompt="What is the capital of France?", options=options):
         if isinstance(message, AssistantMessage):
             for block in message.content:
                 if isinstance(block, TextBlock):
-                    print(f"Claude: {block.text}")
-        elif message.type == 'system' and message.subtype == 'init':
-            print(f"Session ID: {message.session_id}")
+                    print(block.text)
+        elif isinstance(message, ResultMessage):
+            print(f"[{message.num_turns} turns, ${message.total_cost_usd or 0:.4f}]")
 
 asyncio.run(main())
 ```
 
-### System Prompts & Instructions
+Note that `prompt` and `options` are keyword-only: `query("...")` raises a `TypeError`.
 
-System prompts define an agent's behaviour, role, and constraints:
-
-#### TypeScript
-
-```typescript
-import { query, ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk';
-
-const response = query({
-  prompt: "Help me optimise this function for performance",
-  options: {
-    systemPrompt: `You are an expert performance engineer.
-Your task is to:
-1. Identify performance bottlenecks
-2. Suggest optimisations using best practices
-3. Provide concrete code examples
-4. Estimate performance improvements
-
-Always prioritise readability alongside performance improvements.
-Avoid premature optimisation for simple cases.`,
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Python
+If you only want the final answer, `ResultMessage.result` already holds it. Check `is_error` first: when the last API call fails, the result has `subtype="success"`, `is_error=True` and the error text in `result` (see [Error handling](#error-handling)):
 
 ```python
-from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk import query, ResultMessage
 
-options = ClaudeAgentOptions(
-    system_prompt="""You are an expert performance engineer.
-Your task is to:
-1. Identify performance bottlenecks
-2. Suggest optimisations using best practices
-3. Provide concrete code examples
-4. Estimate performance improvements
+async def ask(prompt: str) -> str:
+    async for message in query(prompt=prompt):
+        if isinstance(message, ResultMessage):
+            if message.is_error:
+                raise RuntimeError(f"{message.subtype}: {message.errors or message.result}")
+            return message.result or ""
+    return ""
+```
 
-Always prioritise readability alongside performance improvements.
-Avoid premature optimisation for simple cases.""",
-    model="claude-3-5-sonnet-20241022"
+### System prompts
+
+`system_prompt` takes a plain string, or a preset dictionary that keeps Claude Code's own prompt and appends to it:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
+
+# Your own prompt only
+reviewer = ClaudeAgentOptions(
+    system_prompt=(
+        "You are a performance engineer. Identify bottlenecks, propose concrete "
+        "changes with code, and estimate the gain. Prefer readability over "
+        "micro-optimisation."
+    ),
 )
 
-async for message in query(
-    prompt="Help me optimise this function for performance",
-    options=options
-):
-    print(message)
-```
-
-### Streaming Responses
-
-Streaming allows real-time feedback as the agent processes tasks:
-
-#### TypeScript Streaming
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-async function streamingExample() {
-  const response = query({
-    prompt: "Write a detailed essay on climate change",
-    options: {
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let totalTokens = 0;
-  let assistantMessages = 0;
-
-  for await (const message of response) {
-    switch (message.type) {
-      case 'assistant':
-        assistantMessages++;
-        // Display content as it arrives
-        if (typeof message.content === 'string') {
-          process.stdout.write(message.content);
-        } else {
-          message.content.forEach(block => {
-            if (block.type === 'text') {
-              process.stdout.write(block.text);
-            }
-          });
-        }
-        break;
-
-      case 'system':
-        if (message.subtype === 'completion') {
-          console.log('\n\n[Task Completed]');
-          if (message.usage) {
-            totalTokens = message.usage.output_tokens + message.usage.input_tokens;
-            console.log(`Total tokens used: ${totalTokens}`);
-          }
-        }
-        break;
-    }
-  }
-}
-
-streamingExample().catch(console.error);
-```
-
-#### Python Streaming
-
-```python
-import asyncio
-from claude_agent_sdk import query, AssistantMessage, TextBlock
-
-async def streaming_example():
-    total_tokens = 0
-    assistant_messages = 0
-
-    async for message in query(
-        prompt="Write a detailed essay on climate change"
-    ):
-        if isinstance(message, AssistantMessage):
-            assistant_messages += 1
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    print(block.text, end='', flush=True)
-
-        elif message.type == 'system':
-            if message.subtype == 'completion':
-                print('\n\n[Task Completed]')
-                if hasattr(message, 'usage'):
-                    total_tokens = (
-                        message.usage.output_tokens +
-                        message.usage.input_tokens
-                    )
-                    print(f'Total tokens used: {total_tokens}')
-
-asyncio.run(streaming_example())
-```
-
-### Single-Task Agent Execution
-
-For simple, single-purpose tasks:
-
-#### TypeScript
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-async function analyseJSON(jsonString: string) {
-  const response = query({
-    prompt: `Analyse this JSON and explain its structure:
-
-\`\`\`json
-${jsonString}
-\`\`\``,
-    options: {
-      model: "claude-3-5-sonnet-20241022",
-      systemPrompt: "You are a JSON analyst. Explain structure clearly."
-    }
-  });
-
-  let result = '';
-  for await (const message of response) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        result += message.content;
-      }
-    }
-  }
-  return result;
-}
-
-// Usage
-const jsonData = JSON.stringify({
-  users: [
-    { id: 1, name: "Alice", role: "admin" },
-    { id: 2, name: "Bob", role: "user" }
-  ]
-}, null, 2);
-
-analyseJSON(jsonData).then(analysis => {
-  console.log("Analysis:", analysis);
-});
-```
-
-#### Python
-
-```python
-import asyncio
-from claude_agent_sdk import query, AssistantMessage, TextBlock
-
-async def analyse_json(json_string: str) -> str:
-    result = ''
-    
-    async for message in query(
-        prompt=f"""Analyse this JSON and explain its structure:
-
-```json
-{json_string}
-```""",
-        options=ClaudeAgentOptions(
-            model="claude-3-5-sonnet-20241022",
-            system_prompt="You are a JSON analyst. Explain structure clearly."
-        )
-    ):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    result += block.text
-    
-    return result
-
-# Usage
-import json
-json_data = json.dumps({
-    "users": [
-        {"id": 1, "name": "Alice", "role": "admin"},
-        {"id": 2, "name": "Bob", "role": "user"}
-    ]
-}, indent=2)
-
-analysis = asyncio.run(analyse_json(json_data))
-print("Analysis:", analysis)
-```
-
-### Error Handling
-
-Proper error handling ensures robustness:
-
-#### TypeScript Error Handling
-
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-async function robustQuery(prompt: string, maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = query({
-        prompt,
-        options: {
-          model: "claude-3-5-sonnet-20241022"
-        }
-      });
-
-      let result = '';
-      for await (const message of response) {
-        if (message.type === 'assistant') {
-          if (typeof message.content === 'string') {
-            result += message.content;
-          }
-        } else if (message.type === 'error') {
-          throw new Error(`Agent error: ${message.error?.message}`);
-        }
-      }
-
-      return result;
-
-    } catch (error) {
-      const err = error as any;
-      console.error(`Attempt ${attempt} failed:`, err.message);
-
-      // Handle specific error types
-      if (err.code === 'RATE_LIMIT_EXCEEDED') {
-        const waitTime = Math.min(1000 * Math.pow(2, attempt - 1), 30000);
-        console.log(`Rate limited. Waiting ${waitTime}ms...`);
-        await new Promise(resolve => setTimeout(resolve, waitTime));
-        continue;
-      }
-
-      if (err.code === 'CONTEXT_LENGTH_EXCEEDED') {
-        console.error('Context too large. Consider breaking into smaller tasks.');
-        throw error;
-      }
-
-      if (attempt === maxRetries) {
-        throw error;
-      }
-
-      // Exponential backoff
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
-      console.log(`Retrying in ${delay}ms...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw new Error('Failed after max retries');
-}
-
-// Usage
-robustQuery("Perform a complex analysis").then(result => {
-  console.log(result);
-}).catch(error => {
-  console.error('Final error:', error);
-});
-```
-
-#### Python Error Handling
-
-```python
-import asyncio
-from claude_agent_sdk import (
-    query,
-    ClaudeSDKError,
-    CLINotFoundError,
-    ProcessError,
-    CLIJSONDecodeError
+# Claude Code's prompt plus your additions
+coder = ClaudeAgentOptions(
+    system_prompt={
+        "type": "preset",
+        "preset": "claude_code",
+        "append": "Always run the test suite before declaring a task finished.",
+    },
 )
+```
 
-async def robust_query(prompt: str, max_retries: int = 3) -> str:
-    for attempt in range(1, max_retries + 1):
-        try:
-            result = ''
-            async for message in query(prompt):
+The preset also accepts `"exclude_dynamic_sections": True`, which strips per-machine details (working directory, git status) so the prompt stays identical across runs and caches well.
+
+### Streaming partial output
+
+By default you receive complete messages. Set `include_partial_messages=True` to also receive `StreamEvent`s carrying raw API deltas, which is what a chat UI wants:
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, StreamEvent, ResultMessage
+
+async def stream(prompt: str) -> None:
+    options = ClaudeAgentOptions(include_partial_messages=True)
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, StreamEvent):
+            event = message.event
+            if event.get("type") == "content_block_delta":
+                delta = event.get("delta", {})
+                if delta.get("type") == "text_delta":
+                    print(delta["text"], end="", flush=True)
+        elif isinstance(message, ResultMessage):
+            print()
+
+asyncio.run(stream("Explain the CAP theorem in three paragraphs."))
+```
+
+### Images and multi-part prompts
+
+A string prompt is text only. To send an image, pass an async iterable of user-message dicts whose `content` is a list of Messages API blocks:
+
+```python
+import asyncio
+import base64
+from pathlib import Path
+from typing import Any, AsyncIterator
+from claude_agent_sdk import query, ResultMessage
+
+async def with_image(path: str, question: str) -> AsyncIterator[dict[str, Any]]:
+    data = base64.standard_b64encode(Path(path).read_bytes()).decode()
+    yield {
+        "type": "user",
+        "message": {
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": data}},
+                {"type": "text", "text": question},
+            ],
+        },
+        "parent_tool_use_id": None,
+    }
+
+async def main() -> None:
+    async for message in query(prompt=with_image("chart.png", "What trend does this chart show?")):
+        if isinstance(message, ResultMessage):
+            print(message.result)
+
+asyncio.run(main())
+```
+
+The agent can also open image files itself with the `Read` tool.
+
+### Interactive sessions with `ClaudeSDKClient`
+
+```python
+import asyncio
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
+
+async def main() -> None:
+    options = ClaudeAgentOptions(
+        model="%%model=anthropic%%",
+        system_prompt="You are a concise assistant.",
+    )
+    async with ClaudeSDKClient(options=options) as client:
+        for question in ["Name three sorting algorithms.", "Which is stable?"]:
+            await client.query(question)
+            async for message in client.receive_response():
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock):
-                            result += block.text
-                elif message.type == 'error':
-                    raise Exception(f"Agent error: {message.error}")
-            
-            return result
+                            print(block.text)
 
-        except ProcessError as e:
-            print(f"Attempt {attempt} failed: Process error {e.exit_code}")
-            
-            if "rate limit" in str(e).lower():
-                wait_time = min(1000 * (2 ** (attempt - 1)), 30000)
-                print(f"Rate limited. Waiting {wait_time}ms...")
-                await asyncio.sleep(wait_time / 1000)
-                continue
-            
-            if attempt == max_retries:
-                raise
-            
-            delay = min(1000 * (2 ** (attempt - 1)), 10000)
-            print(f"Retrying in {delay}ms...")
-            await asyncio.sleep(delay / 1000)
-
-        except CLINotFoundError:
-            print("Error: Claude Code not installed")
-            raise
-
-        except ClaudeSDKError as e:
-            print(f"SDK error: {e}")
-            if attempt == max_retries:
-                raise
-
-    raise Exception("Failed after max retries")
-
-# Usage
-try:
-    result = asyncio.run(robust_query("Perform a complex analysis"))
-    print(result)
-except Exception as e:
-    print(f"Final error: {e}")
+asyncio.run(main())
 ```
 
-### Token Usage Tracking
+`receive_response()` stops after the next `ResultMessage`; `receive_messages()` keeps going until you break. The CLI process stays up between turns, so check `is_error` on each turn's `ResultMessage`: `ResultError` is only raised when the process exits. Other client methods: `interrupt()`, `set_model()`, `set_permission_mode()`, `get_mcp_status()`, `toggle_mcp_server()`, `reconnect_mcp_server()`, `get_context_usage()`, `rewind_files()`, `stop_task()` and `get_server_info()`.
 
-Monitor token consumption for cost control:
+### Token usage and cost
 
-#### TypeScript Token Tracking
+`ResultMessage` reports what the run cost, so there is no need to hard-code prices. Use `total_cost_usd` and `model_usage` for accounting: they are cumulative and cover every model call (main loop, subagents, compaction). `usage` covers the main loop only, and in a `ClaudeSDKClient` session only the latest turn.
 
-```typescript
-import { query } from '@anthropic-ai/claude-agent-sdk';
+```python
+from claude_agent_sdk import query, ResultMessage
 
-interface TokenUsage {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  estimatedCostUSD: number;
-}
-
-async function trackTokenUsage(
-  prompt: string
-): Promise<{ result: string; usage: TokenUsage }> {
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let result = '';
-
-  const response = query({
-    prompt,
-    options: { model: "claude-3-5-sonnet-20241022" }
-  });
-
-  for await (const message of response) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        result += message.content;
-      } else {
-        message.content.forEach(block => {
-          if (block.type === 'text') {
-            result += block.text;
-          }
-        });
-      }
-    } else if (message.type === 'system' && message.subtype === 'completion') {
-      if (message.usage) {
-        inputTokens = message.usage.input_tokens;
-        outputTokens = message.usage.output_tokens;
-      }
-    }
-  }
-
-  const totalTokens = inputTokens + outputTokens;
-  
-  // Pricing as of 2024 (Claude 3.5 Sonnet)
-  const inputCostPer1kTokens = 0.003;
-  const outputCostPer1kTokens = 0.015;
-  
-  const estimatedCost =
-    (inputTokens / 1000) * inputCostPer1kTokens +
-    (outputTokens / 1000) * outputCostPer1kTokens;
-
-  return {
-    result,
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      estimatedCostUSD: estimatedCost
-    }
-  };
-}
-
-// Usage
-trackTokenUsage("Generate a detailed technical specification").then(data => {
-  console.log("Result:", data.result);
-  console.log("Tokens - Input:", data.usage.inputTokens);
-  console.log("Tokens - Output:", data.usage.outputTokens);
-  console.log("Tokens - Total:", data.usage.totalTokens);
-  console.log("Estimated Cost: $" + data.usage.estimatedCostUSD.toFixed(4));
-});
+async def run_and_report(prompt: str) -> None:
+    async for message in query(prompt=prompt):
+        if isinstance(message, ResultMessage):
+            print("cost (USD):", message.total_cost_usd)
+            for model, mu in (message.model_usage or {}).items():
+                print(f"  {model}: in={mu.get('inputTokens')} out={mu.get('outputTokens')} "
+                      f"cache_read={mu.get('cacheReadInputTokens')} ${mu.get('costUSD', 0):.4f}")
 ```
 
-#### Python Token Tracking
+In a `ClaudeSDKClient` session each `ResultMessage` carries the running total so far: read the latest one rather than adding them up.
+
+---
+
+## Tools & integration
+
+### Built-in tools
+
+| Tool | Purpose |
+|---|---|
+| `Read`, `Write`, `Edit` | Read, create and modify files |
+| `Glob`, `Grep` | Find files and search contents |
+| `Bash` | Run shell commands (subject to permissions and sandboxing) |
+| `WebSearch`, `WebFetch` | Search the web and fetch pages |
+| `Agent` | Delegate to a subagent |
+| `TaskCreate`, `TaskUpdate`, `TaskGet`, `TaskList` | Task tracking (in SDK sessions these replaced `TodoWrite`) |
+| `AskUserQuestion` | Ask the user a multiple-choice question (see [User input and approvals](#user-input-and-approvals)) |
+| `NotebookEdit`, `Skill` | Jupyter notebooks, skills (enable skills with the `skills=` option rather than listing `"Skill"` in `allowed_tools`, which is deprecated) |
+
+Three options shape the tool set:
+
+- `tools=` sets the base set the model can see (a list of names, or a preset).
+- `allowed_tools=` lists tools that are **pre-approved** — they run without a permission check.
+- `disallowed_tools=` removes tools entirely.
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
+
+read_only = ClaudeAgentOptions(
+    cwd="/srv/repos/payments",
+    allowed_tools=["Read", "Glob", "Grep"],
+    disallowed_tools=["Bash", "Write", "Edit"],
+)
+```
+
+Tool permission rules use the same syntax as Claude Code settings, so you can pre-approve narrowly, for example `"Bash(npm test:*)"` or `"Read(./src/**)"`.
+
+### Custom tools with an in-process MCP server
+
+Define a tool with the `@tool` decorator and serve it with `create_sdk_mcp_server()`. The server runs inside your Python process; there is no subprocess or network hop.
 
 ```python
 import asyncio
-from claude_agent_sdk import query, AssistantMessage, ResultMessage, TextBlock
+from typing import Any
+from claude_agent_sdk import (
+    tool, create_sdk_mcp_server, query, ClaudeAgentOptions, ResultMessage,
+)
 
-async def track_token_usage(prompt: str) -> dict:
-    input_tokens = 0
-    output_tokens = 0
-    result = ''
+@tool("get_exchange_rate", "Return the exchange rate between two ISO currency codes",
+      {"base": str, "quote": str})
+async def get_exchange_rate(args: dict[str, Any]) -> dict[str, Any]:
+    rates = {("GBP", "EUR"): 1.17, ("EUR", "GBP"): 0.85}
+    rate = rates.get((args["base"].upper(), args["quote"].upper()))
+    if rate is None:
+        return {"content": [{"type": "text", "text": "Unknown currency pair"}], "is_error": True}
+    return {"content": [{"type": "text", "text": f"1 {args['base']} = {rate} {args['quote']}"}]}
 
-    async for message in query(prompt):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    result += block.text
-        
-        elif isinstance(message, ResultMessage):
-            input_tokens = message.usage.input_tokens
-            output_tokens = message.usage.output_tokens
+fx_server = create_sdk_mcp_server(name="fx", version="1.0.0", tools=[get_exchange_rate])
 
-    total_tokens = input_tokens + output_tokens
-    
-    # Pricing as of 2024 (Claude 3.5 Sonnet)
-    input_cost_per_1k = 0.003
-    output_cost_per_1k = 0.015
-    
-    estimated_cost = (
-        (input_tokens / 1000) * input_cost_per_1k +
-        (output_tokens / 1000) * output_cost_per_1k
+async def main() -> None:
+    options = ClaudeAgentOptions(
+        mcp_servers={"fx": fx_server},
+        allowed_tools=["mcp__fx__get_exchange_rate"],
     )
+    async for message in query(prompt="How many euros is 250 pounds?", options=options):
+        if isinstance(message, ResultMessage):
+            print(message.result)
 
-    return {
-        "result": result,
-        "usage": {
-            "input_tokens": input_tokens,
-            "output_tokens": output_tokens,
-            "total_tokens": total_tokens,
-            "estimated_cost_usd": estimated_cost
-        }
-    }
-
-# Usage
-data = asyncio.run(track_token_usage("Generate a detailed technical specification"))
-print(f"Result: {data['result']}")
-print(f"Tokens - Input: {data['usage']['input_tokens']}")
-print(f"Tokens - Output: {data['usage']['output_tokens']}")
-print(f"Tokens - Total: {data['usage']['total_tokens']}")
-print(f"Estimated Cost: ${data['usage']['estimated_cost_usd']:.4f}")
+asyncio.run(main())
 ```
 
----
+Points worth knowing:
 
-## Tools & Integration
-
-### Built-in Tool Ecosystem
-
-The Claude Agent SDK includes a rich set of built-in tools:
-
-#### File Operations
-
-**Read Files:**
-
-```typescript
-// TypeScript - Read file tool
-const response = query({
-  prompt: `Read and summarise the README.md file`,
-  options: {
-    allowedTools: ['Read'],
-    workingDirectory: '/path/to/project',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-**Write Files:**
-
-```typescript
-// TypeScript - Write file tool
-const response = query({
-  prompt: `Create a file named "output.txt" with a detailed report`,
-  options: {
-    allowedTools: ['Write'],
-    permissionMode: 'acceptEdits',
-    workingDirectory: '/path/to/project',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-**Edit Files:**
-
-```typescript
-// TypeScript - Edit file tool
-const response = query({
-  prompt: `Fix the bug in auth.ts by updating the validation logic`,
-  options: {
-    allowedTools: ['Edit', 'Read'],
-    permissionMode: 'acceptEdits',
-    workingDirectory: '/path/to/project',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Bash Command Execution
-
-```typescript
-// TypeScript - Execute bash commands
-const response = query({
-  prompt: `Run npm test and report any failures`,
-  options: {
-    allowedTools: ['Bash', 'Read'],
-    workingDirectory: '/path/to/project',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### File Search Operations
-
-```typescript
-// TypeScript - Search operations
-const response = query({
-  prompt: `Find all TypeScript files that import '@anthropic-ai/claude-agent-sdk'`,
-  options: {
-    allowedTools: ['Glob', 'Grep', 'Read'],
-    workingDirectory: '/path/to/project',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-### Permission Modes
-
-Control how agents use tools:
-
-#### Accept Edits Mode
-
-```typescript
-// TypeScript - Automatically accept file modifications
-const response = query({
-  prompt: "Refactor this code for better performance",
-  options: {
-    allowedTools: ['Read', 'Write', 'Edit'],
-    permissionMode: 'acceptEdits',  // Auto-approves edits
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Default Mode with Prompting
-
-```typescript
-// TypeScript - Ask for confirmation
-const response = query({
-  prompt: "Update the configuration file",
-  options: {
-    allowedTools: ['Read', 'Write'],
-    permissionMode: 'default',  // Prompts for each action
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Custom Permission Callback
-
-```typescript
-// TypeScript - Fine-grained control
-const response = query({
-  prompt: "Perform system tasks",
-  options: {
-    allowedTools: ['Read', 'Write', 'Bash'],
-    canUseTool: async (toolName, input) => {
-      // Block destructive operations
-      if (toolName === 'Bash' && input.command.includes('rm -rf')) {
-        return {
-          behavior: 'deny',
-          message: 'Destructive operations not allowed'
-        };
-      }
-
-      // Require confirmation for deploys
-      if (toolName === 'Bash' && input.command.includes('deploy')) {
-        return {
-          behavior: 'ask',
-          message: 'Confirm deployment to production?'
-        };
-      }
-
-      return { behavior: 'allow' };
-    },
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Python Permission Control
+- Tool names exposed to the model are `mcp__<server key>__<tool name>`; the server key is the dictionary key in `mcp_servers`, not the `name=` argument.
+- The handler receives a single `args` dict and returns an MCP result: `{"content": [...]}`, optionally with `"is_error": True`.
+- `input_schema` can be a `{name: type}` mapping, a `TypedDict`, or a full JSON Schema dict.
+- Add per-parameter descriptions with `typing.Annotated`:
 
 ```python
-from claude_agent_sdk import (
-    ClaudeAgentOptions,
-    query,
-    PermissionResultDeny,
-    PermissionResultAllow
-)
-
-async def can_use_tool(tool_name: str, tool_input: dict, context):
-    """Custom tool permission logic."""
-    
-    # Block writes to sensitive files
-    if tool_name == "Write":
-        file_path = tool_input.get("file_path", "")
-        if "config" in file_path.lower() or "secret" in file_path.lower():
-            return PermissionResultDeny(
-                behavior="deny",
-                message="Cannot write to sensitive files"
-            )
-    
-    # Modify bash commands for safety
-    if tool_name == "Bash":
-        command = tool_input.get("command", "")
-        if command.startswith("rm"):
-            # Add confirmation flag
-            modified_input = {**tool_input, "command": f"{command} -i"}
-            return PermissionResultAllow(
-                behavior="allow",
-                updated_input=modified_input
-            )
-    
-    return PermissionResultAllow(behavior="allow")
-
-options = ClaudeAgentOptions(
-    allowed_tools=["Read", "Write", "Bash"],
-    can_use_tool=can_use_tool
-)
-
-async for message in query(
-    prompt="Perform system tasks",
-    options=options
-):
-    print(message)
-```
-
-### Custom Tool Creation with MCP
-
-Custom tools are exposed via the Model Context Protocol:
-
-#### Creating a Custom Tool
-
-```typescript
-// TypeScript - Custom tool example
-import { query, createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
-
-// Define a weather tool
-const weatherTool = tool(
-  'get_weather',
-  'Get current weather for a location',
-  {
-    location: z.string().describe('City name or coordinates'),
-    units: z.enum(['celsius', 'fahrenheit']).default('celsius')
-  },
-  async (args) => {
-    try {
-      const response = await fetch(
-        `https://api.weather.com/v1/current?location=${args.location}&units=${args.units}`
-      );
-      const data = await response.json();
-
-      return {
-        content: [{
-          type: 'text',
-          text: `Temperature: ${data.temp}° ${args.units === 'celsius' ? 'C' : 'F'}\nConditions: ${data.conditions}\nHumidity: ${data.humidity}%`
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Error fetching weather: ${(error as Error).message}`
-        }],
-        isError: true
-      };
-    }
-  }
-);
-
-// Create MCP server with tools
-const weatherServer = createSdkMcpServer({
-  name: 'weather-service',
-  version: '1.0.0',
-  tools: [weatherTool]
-});
-
-// Use in agent
-const response = query({
-  prompt: "What's the weather in San Francisco?",
-  options: {
-    mcpServers: {
-      'weather': weatherServer
-    },
-    allowedTools: ['mcp__weather__get_weather'],
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-
-for await (const message of response) {
-  if (message.type === 'assistant') {
-    console.log(message.content);
-  }
-}
-```
-
-#### Python Custom Tools
-
-```python
-from claude_agent_sdk import (
-    tool,
-    create_sdk_mcp_server,
-    query,
-    ClaudeAgentOptions
-)
+from typing import Annotated, Any
+from claude_agent_sdk import tool
 
 @tool(
-    "get_weather",
-    "Get current weather for a location",
-    {"location": str, "units": str}
-)
-async def get_weather(args: dict) -> dict:
-    import aiohttp
-    
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"https://api.weather.com/v1/current?"
-                f"location={args['location']}&"
-                f"units={args.get('units', 'celsius')}"
-            ) as resp:
-                data = await resp.json()
-        
-        units_symbol = '°C' if args.get('units') == 'celsius' else '°F'
-        return {
-            "content": [{
-                "type": "text",
-                "text": (
-                    f"Temperature: {data['temp']}{units_symbol}\n"
-                    f"Conditions: {data['conditions']}\n"
-                    f"Humidity: {data['humidity']}%"
-                )
-            }]
-        }
-    
-    except Exception as e:
-        return {
-            "content": [{
-                "type": "text",
-                "text": f"Error fetching weather: {str(e)}"
-            }],
-            "is_error": True
-        }
-
-# Create MCP server
-weather_server = create_sdk_mcp_server(
-    name="weather-service",
-    version="1.0.0",
-    tools=[get_weather]
-)
-
-# Use in agent
-options = ClaudeAgentOptions(
-    mcp_servers={"weather": weather_server},
-    allowed_tools=["mcp__weather__get_weather"]
-)
-
-async for message in query(
-    prompt="What's the weather in San Francisco?",
-    options=options
-):
-    print(message)
-```
-
----
-
-## Multi-Agent Systems
-
-### Agent Coordination Patterns
-
-#### Sequential Coordination
-
-```typescript
-// TypeScript - Sequential agent execution
-async function sequentialAnalysis() {
-  // Agent 1: Data analysis
-  const analysisResponse = query({
-    prompt: "Analyse this dataset for trends",
-    options: {
-      systemPrompt: "You are a data analyst. Focus on statistical significance.",
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let analysisResult = '';
-  for await (const message of analysisResponse) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        analysisResult += message.content;
-      }
-    }
-  }
-
-  // Agent 2: Generate report based on analysis
-  const reportResponse = query({
-    prompt: `Based on this analysis:\n${analysisResult}\n\nGenerate an executive summary`,
-    options: {
-      systemPrompt: "You are a business analyst. Create concise, actionable summaries.",
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let reportResult = '';
-  for await (const message of reportResponse) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        reportResult += message.content;
-      }
-    }
-  }
-
-  return {
-    analysis: analysisResult,
-    report: reportResult
-  };
-}
-```
-
-#### Parallel Coordination
-
-```typescript
-// TypeScript - Parallel agent execution
-async function parallelReview(codeSnippet: string) {
-  const [securityReview, performanceReview, qualityReview] = await Promise.all([
-    // Security review agent
-    (async () => {
-      let result = '';
-      const response = query({
-        prompt: `Review this code for security vulnerabilities:\n${codeSnippet}`,
-        options: {
-          systemPrompt: "You are a security expert. Identify and explain all security issues.",
-          model: "claude-3-5-sonnet-20241022"
-        }
-      });
-
-      for await (const message of response) {
-        if (message.type === 'assistant') {
-          if (typeof message.content === 'string') {
-            result += message.content;
-          }
-        }
-      }
-      return result;
-    })(),
-
-    // Performance review agent
-    (async () => {
-      let result = '';
-      const response = query({
-        prompt: `Review this code for performance improvements:\n${codeSnippet}`,
-        options: {
-          systemPrompt: "You are a performance engineer. Identify bottlenecks and optimisations.",
-          model: "claude-3-5-sonnet-20241022"
-        }
-      });
-
-      for await (const message of response) {
-        if (message.type === 'assistant') {
-          if (typeof message.content === 'string') {
-            result += message.content;
-          }
-        }
-      }
-      return result;
-    })(),
-
-    // Quality review agent
-    (async () => {
-      let result = '';
-      const response = query({
-        prompt: `Review this code for quality and best practices:\n${codeSnippet}`,
-        options: {
-          systemPrompt: "You are a code quality expert. Focus on maintainability and clarity.",
-          model: "claude-3-5-sonnet-20241022"
-        }
-      });
-
-      for await (const message of response) {
-        if (message.type === 'assistant') {
-          if (typeof message.content === 'string') {
-            result += message.content;
-          }
-        }
-      }
-      return result;
-    })()
-  ]);
-
-  return {
-    securityReview,
-    performanceReview,
-    qualityReview
-  };
-}
-```
-
-#### Hierarchical Agent Structure
-
-```typescript
-// TypeScript - Hierarchical agents (coordinator + specialists)
-interface AgentSpecialist {
-  name: string;
-  role: string;
-  tools: string[];
-  systemPrompt: string;
-}
-
-const specialists: Record<string, AgentSpecialist> = {
-  researcher: {
-    name: "Researcher",
-    role: "Gathers and analysed information",
-    tools: ["Read", "Glob", "Grep"],
-    systemPrompt: "You are a research specialist. Find and synthesise information."
-  },
-  architect: {
-    name: "Architect",
-    role: "Designs solutions and systems",
-    tools: ["Read"],
-    systemPrompt: "You are a system architect. Design scalable solutions."
-  },
-  implementer: {
-    name: "Implementer",
-    role: "Implements solutions",
-    tools: ["Read", "Write", "Edit"],
-    systemPrompt: "You are a developer. Implement solutions with clean code."
-  },
-  reviewer: {
-    name: "Reviewer",
-    role: "Reviews work for quality",
-    tools: ["Read", "Grep"],
-    systemPrompt: "You are a quality reviewer. Check for issues and improvements."
-  }
-};
-
-async function hierarchicalWorkflow(task: string) {
-  const results: Record<string, string> = {};
-
-  // Coordinator delegates to specialists
-  for (const [specKey, spec] of Object.entries(specialists)) {
-    console.log(`\n[${spec.name}] Processing...`);
-
-    const response = query({
-      prompt: `${task}\n\nYour role: ${spec.role}`,
-      options: {
-        systemPrompt: spec.systemPrompt,
-        allowedTools: spec.tools,
-        model: "claude-3-5-sonnet-20241022"
-      }
-    });
-
-    let result = '';
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        if (typeof message.content === 'string') {
-          result += message.content;
-        }
-      }
-    }
-
-    results[specKey] = result;
-  }
-
-  return results;
-}
-```
-
-### Shared Context Management
-
-```typescript
-// TypeScript - Shared context across agents
-interface SharedContext {
-  projectName: string;
-  requirements: string[];
-  decisions: Record<string, string>;
-  results: Record<string, string>;
-}
-
-async function multiAgentWithSharedContext() {
-  const context: SharedContext = {
-    projectName: "ML Pipeline",
-    requirements: [
-      "Handle large datasets efficiently",
-      "Provide real-time predictions",
-      "Support model versioning"
-    ],
-    decisions: {},
-    results: {}
-  };
-
-  // Agent 1: Requirements analysis
-  context.decisions['requirements'] = `Analysed ${context.requirements.length} requirements`;
-
-  // Agent 2: Architecture design (has access to shared context)
-  const archResponse = query({
-    prompt: `Design architecture for project: ${context.projectName}
-Requirements:
-${context.requirements.map((r, i) => `${i + 1}. ${r}`).join('\n')}
-
-Previous decisions: ${JSON.stringify(context.decisions)}`,
-    options: {
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let architecture = '';
-  for await (const message of archResponse) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        architecture += message.content;
-      }
-    }
-  }
-
-  context.results['architecture'] = architecture;
-
-  // Agent 3: Implementation planning (has access to architecture)
-  const implResponse = query({
-    prompt: `Create implementation plan based on this architecture:
-${architecture}`,
-    options: {
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let implementation = '';
-  for await (const message of implResponse) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        implementation += message.content;
-      }
-    }
-  }
-
-  context.results['implementation'] = implementation;
-
-  return context;
-}
-```
-
----
-
-## Computer Use API
-
-### Mouse and Keyboard Control
-
-The Computer Use API allows agents to interact with graphical interfaces:
-
-#### Screen Interaction
-
-```typescript
-// TypeScript - Computer use for UI automation
-const response = query({
-  prompt: `
-Please help me automate the following task:
-1. Open the web browser
-2. Navigate to example.com
-3. Search for "Claude Agent SDK"
-4. Click on the first result
-5. Take a screenshot of the page
-6. Close the browser
-`,
-  options: {
-    allowedTools: ['ComputerUse'],
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-
-for await (const message of response) {
-  if (message.type === 'tool_call' && message.tool_name === 'ComputerUse') {
-    console.log(`Computer action: ${JSON.stringify(message.input)}`);
-  } else if (message.type === 'assistant') {
-    console.log(`Agent: ${message.content}`);
-  }
-}
-```
-
-#### Mouse Control
-
-Computer Use API supports:
-- **Mouse movement**: `mouse_move(x, y)`
-- **Clicks**: `left_click()`, `right_click()`, `double_click()`
-- **Scrolling**: `scroll(direction, amount)`
-- **Dragging**: `mouse_drag(start_x, start_y, end_x, end_y)`
-
-#### Keyboard Control
-
-Keyboard operations include:
-- **Typing text**: `type(text)`
-- **Key presses**: `key(key_name)` - Enter, Tab, Escape, Backspace, etc.
-- **Keyboard shortcuts**: `key(Ctrl+C)`, `key(Cmd+V)`, etc.
-- **Text selection**: `key(Ctrl+A)` combined with actions
-
-### Computer Control Use Cases
-
-#### Research and Data Collection
-
-```typescript
-// TypeScript - Automated research workflow
-const response = query({
-  prompt: `
-Perform market research on the Claude Agent SDK:
-1. Navigate to GitHub and search for "claude-agent-sdk"
-2. Find the official repository
-3. Extract key metrics (stars, forks, recent commits)
-4. Navigate to the npm package page
-5. Get current download statistics
-6. Compile into a structured report
-`,
-  options: {
-    allowedTools: ['ComputerUse', 'Write'],
-    permissionMode: 'acceptEdits',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-
-for await (const message of response) {
-  if (message.type === 'assistant') {
-    console.log(message.content);
-  }
-}
-```
-
-#### Video and Content Creation
-
-```typescript
-// TypeScript - Automated video editing
-const response = query({
-  prompt: `
-Create a tutorial video for the Claude Agent SDK:
-1. Open video editing software
-2. Import the pre-recorded footage
-3. Add title and intro text
-4. Insert chapter markers at 5-minute intervals
-5. Add captions from the transcript file
-6. Apply professional transitions
-7. Add background music from the assets folder
-8. Export as MP4 with optimised settings
-`,
-  options: {
-    allowedTools: ['ComputerUse', 'Read', 'Write'],
-    workingDirectory: '/home/user/video-project',
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Note-Taking and Document Management
-
-```typescript
-// Python - Automated note-taking
-async def automated_notetaking():
-    async for message in query(
-        prompt="""
-        Take structured notes from this meeting:
-        1. Open note-taking application
-        2. Create new document titled "Project Kickoff - 2024"
-        3. Add sections: Objectives, Decisions, Action Items, Timeline
-        4. Fill in details from the meeting materials
-        5. Create a summary section
-        6. Save and sync to cloud storage
-        """
-    ):
-        if message.type == 'tool_call' and message.tool_name == 'ComputerUse':
-            print(f"Action: {message.input}")
-        elif isinstance(message, AssistantMessage):
-            print(f"Status: {message.content}")
-```
-
-### Safety and Permissions with Computer Use
-
-```typescript
-// TypeScript - Safe computer use with permission control
-const response = query({
-  prompt: "Help me organize my files by creating folders and moving documents",
-  options: {
-    allowedTools: ['ComputerUse'],
-    canUseTool: async (toolName, input) => {
-      if (toolName === 'ComputerUse') {
-        // Allow viewing and navigation
-        if (input.action === 'screenshot' || input.action === 'mouse_move') {
-          return { behavior: 'allow' };
-        }
-
-        // Require confirmation for system changes
-        if (input.action === 'type' && input.text.includes('format') ||
-            input.action === 'type' && input.text.includes('delete')) {
-          return {
-            behavior: 'ask',
-            message: `Confirm: Execute this potentially destructive action?`
-          };
-        }
-
-        // Restrict access to sensitive folders
-        if (input.action === 'key' && input.key.includes('C:\\Windows') ||
-            input.action === 'key' && input.key.includes('/etc')) {
-          return {
-            behavior: 'deny',
-            message: 'Cannot access system folders'
-          };
-        }
-      }
-
-      return { behavior: 'allow' };
+    "search_codebase",
+    "Search the project for a pattern",
+    {
+        "pattern": Annotated[str, "Regex or literal string to search for"],
+        "max_results": Annotated[int, "Maximum matches to return (1-100)"],
     },
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
+)
+async def search_codebase(args: dict[str, Any]) -> dict[str, Any]:
+    ...
+    return {"content": [{"type": "text", "text": "no matches"}]}
 ```
+
+- `annotations=ToolAnnotations(readOnlyHint=True)` advertises MCP hints to Claude; `ToolAnnotations(maxResultSizeChars=...)` raises the size up to which a result stays inline.
+
+---
+
+## Permissions
+
+Permission checks run in this order: hooks → deny rules → permission mode → allow rules → the `can_use_tool` callback.
+
+### Permission modes
+
+| Mode | Behaviour |
+|---|---|
+| `"default"` | Unapproved tools go to `can_use_tool` (or are denied if there is none) |
+| `"acceptEdits"` | File edits are auto-approved; other tools follow the default path |
+| `"plan"` | Planning only; no edits or commands are executed |
+| `"dontAsk"` | Anything not pre-approved is denied rather than asked about |
+| `"auto"` | The CLI's classifier decides whether a call is safe to run |
+| `"bypassPermissions"` | Everything runs. Only inside a disposable sandbox |
+
+The mode can be changed mid-session with `await client.set_permission_mode("acceptEdits")`.
+
+### `can_use_tool`
+
+The callback receives the tool name, its input and a `ToolPermissionContext`, and returns `PermissionResultAllow` or `PermissionResultDeny`:
+
+```python
+from typing import Any
+from claude_agent_sdk import (
+    ClaudeAgentOptions, PermissionResultAllow, PermissionResultDeny, ToolPermissionContext,
+)
+
+PROTECTED = ("/etc", ".env", "secrets")
+
+async def can_use_tool(
+    tool_name: str, tool_input: dict[str, Any], context: ToolPermissionContext
+) -> PermissionResultAllow | PermissionResultDeny:
+    if tool_name in ("Write", "Edit"):
+        path = tool_input.get("file_path", "")
+        if any(p in path for p in PROTECTED):
+            return PermissionResultDeny(message=f"{path} is protected")
+    if tool_name == "Bash":
+        command = tool_input.get("command", "")
+        if "rm -rf" in command:
+            return PermissionResultDeny(message="Destructive command refused", interrupt=True)
+        # Rewrite the input before it runs
+        if command.startswith("pytest") and "-q" not in command:
+            return PermissionResultAllow(updated_input={**tool_input, "command": command + " -q"})
+    return PermissionResultAllow()
+
+options = ClaudeAgentOptions(permission_mode="default", can_use_tool=can_use_tool)
+```
+
+`ToolPermissionContext` carries `tool_use_id` and `agent_id` (to tell parallel calls and subagents apart), `suggestions` (permission updates the CLI proposes), plus `blocked_path`, `decision_reason`, `title`, `display_name` and `description`.
+
+Two traps:
+
+- A tool listed in `allowed_tools`, or any tool under `bypassPermissions`, never reaches the callback. Since 0.2.111 the SDK emits a `CanUseToolShadowedWarning` when this happens. `PreToolUse` hooks still run for those tools, because hooks come first in the order above; use a hook when every call must be checked.
+- Since 0.2.140 `can_use_tool` works with `query()` and string prompts, not just `ClaudeSDKClient`.
+
+### Sandboxing
+
+`sandbox=` runs Bash commands in an OS-level sandbox with optional network restrictions:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
+
+options = ClaudeAgentOptions(
+    sandbox={
+        "enabled": True,
+        "autoAllowBashIfSandboxed": True,
+        "excludedCommands": ["docker"],
+        "network": {"allowedDomains": ["pypi.org", "files.pythonhosted.org"]},
+    },
+)
+```
+
+Since 0.2.166 `ignoreViolations` is a `dict[str, list[str]]` mapping a command-pattern substring to violation-text substrings, for example `{"*": ["/tmp"]}`.
+
+---
+
+## Hooks
+
+Hooks are async callbacks that run at fixed points in the loop. Register them per event with `HookMatcher`; `matcher` filters by tool name (a regex such as `"Write|Edit"`), and `None` matches everything.
+
+Supported events: `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `Stop`, `SubagentStart`, `SubagentStop`, `PreCompact`, `Notification` and `PermissionRequest`.
+
+```python
+import json
+import time
+from typing import Any
+from claude_agent_sdk import ClaudeAgentOptions, HookMatcher, HookContext
+
+async def block_env_files(input_data: dict[str, Any], tool_use_id: str | None,
+                          context: HookContext) -> dict[str, Any]:
+    path = input_data["tool_input"].get("file_path", "")
+    if path.endswith(".env"):
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": "Environment files are off limits",
+            }
+        }
+    return {}
+
+async def audit(input_data: dict[str, Any], tool_use_id: str | None,
+                context: HookContext) -> dict[str, Any]:
+    with open("tool_audit.jsonl", "a") as f:
+        f.write(json.dumps({"ts": time.time(), "tool": input_data["tool_name"],
+                            "id": tool_use_id}) + "\n")
+    return {}
+
+options = ClaudeAgentOptions(
+    hooks={
+        "PreToolUse": [HookMatcher(matcher="Read|Write|Edit", hooks=[block_env_files])],
+        "PostToolUse": [HookMatcher(hooks=[audit], timeout=10)],
+    },
+)
+```
+
+A hook returns a dict. Common keys are `continue_` (set `False` to stop the run; the trailing underscore is converted for you), `stopReason`, `systemMessage`, `reason`, and `hookSpecificOutput`. For `PreToolUse`, `permissionDecision` may be `"allow"`, `"deny"`, `"ask"` or `"defer"`, and `updatedInput` rewrites the tool input. For `PostToolUse`, `additionalContext` adds text for the model and `updatedToolOutput` replaces the result. Since 0.2.166 these output shapes have typed classes (`PreToolUseHookSpecificOutput` and friends).
+
+All matchers registered for an event fire concurrently, so do not rely on ordering between them.
+
+---
+
+## User input and approvals
+
+Two things reach your code when the agent needs a person: permission prompts for tools that are not pre-approved, and questions the model asks with the built-in `AskUserQuestion` tool. Both arrive through `can_use_tool`.
+
+For `AskUserQuestion`, the tool input holds up to four `questions`, each with a `question`, a short `header`, two to four `options` (`label`, `description`) and `multiSelect`. Collect the answers, put them in the input under `answers` (question text → chosen label; join several labels with `", "` for multi-select), and allow the call. The model sees the answers as the tool result.
+
+For other tools, `context.suggestions` holds the permission rules the CLI proposes for an "always allow" choice. Returning them as `updated_permissions` applies them, so later matching calls no longer reach the callback.
+
+```python
+import asyncio
+from typing import Any
+from claude_agent_sdk import (
+    ClaudeAgentOptions, PermissionResultAllow, PermissionResultDeny, ToolPermissionContext,
+)
+
+async def ask_human(prompt: str) -> str:
+    return (await asyncio.to_thread(input, prompt)).strip()
+
+async def approvals(tool_name: str, tool_input: dict[str, Any],
+                    context: ToolPermissionContext) -> PermissionResultAllow | PermissionResultDeny:
+    if tool_name == "AskUserQuestion":
+        answers: dict[str, str] = {}
+        for q in tool_input["questions"]:
+            labels = [option["label"] for option in q["options"]]
+            print(q["question"])
+            for number, label in enumerate(labels, 1):
+                print(f"  {number}. {label}")
+            reply = await ask_human("> ")
+            # A number picks an option; anything else is passed on as a free-text answer.
+            if reply.isdigit() and 1 <= int(reply) <= len(labels):
+                reply = labels[int(reply) - 1]
+            answers[q["question"]] = reply
+        return PermissionResultAllow(updated_input={**tool_input, "answers": answers})
+
+    reply = await ask_human(f"Allow {tool_name} {tool_input}? [y]es / [a]lways / [n]o ")
+    if reply == "a":
+        return PermissionResultAllow(updated_permissions=context.suggestions)
+    if reply == "y":
+        return PermissionResultAllow()
+    return PermissionResultDeny(message="The user declined this action.")
+
+options = ClaudeAgentOptions(
+    can_use_tool=approvals,
+    allowed_tools=["Read", "Glob", "Grep"],   # never prompt for these
+)
+```
+
+If you set `tools=`, include `"AskUserQuestion"` in it, or the model cannot ask. In a web app, `can_use_tool` is the place to hand the question to the browser and await the reply (keep a timeout, and deny when it expires). For unattended jobs use `permission_mode="dontAsk"` so nothing waits for a person.
+
+---
+
+## Multi-agent systems
+
+### Programmatic subagents
+
+Define subagents in `agents=`. The main agent delegates to them through the `Agent` tool, and each runs with its own context window, prompt, tools and model:
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, AgentDefinition, ResultMessage
+
+options = ClaudeAgentOptions(
+    model="%%model=anthropic-flagship%%",
+    allowed_tools=["Read", "Glob", "Grep", "Agent"],
+    agents={
+        "security-reviewer": AgentDefinition(
+            description="Reviews code for security vulnerabilities. Use for any security question.",
+            prompt="You are an application security specialist. Report issues with severity and a fix.",
+            tools=["Read", "Glob", "Grep"],
+            model="sonnet",
+        ),
+        "test-writer": AgentDefinition(
+            description="Writes pytest tests for a given module.",
+            prompt="You write focused, deterministic pytest tests.",
+            tools=["Read", "Write", "Bash"],
+            model="%%model=anthropic%%",
+            maxTurns=20,
+        ),
+    },
+)
+
+async def main() -> None:
+    async for message in query(
+        prompt="Review src/auth/ for security problems, then add tests for anything you fix.",
+        options=options,
+    ):
+        if isinstance(message, ResultMessage):
+            print(message.result)
+
+asyncio.run(main())
+```
+
+`AgentDefinition` takes `description` and `prompt` (required), and optionally `tools`, `disallowedTools`, `model` (an alias, `"inherit"`, or a full ID), `skills`, `mcpServers`, `maxTurns`, `effort`, `permissionMode`, `memory`, `initialPrompt` and `background`. Note the camelCase field names: they mirror the CLI's schema.
+
+Messages produced inside a subagent carry `parent_tool_use_id`, pointing at the `Agent` tool call that spawned it. Set `forward_subagent_text=True` to receive the subagent's text and thinking blocks in the stream as well. Background subagents emit `TaskStartedMessage`, `TaskProgressMessage` and `TaskNotificationMessage`; `client.stop_task(task_id)` cancels one.
+
+### Orchestrating from your own code
+
+When the pipeline is fixed, plain Python is clearer than asking a model to orchestrate. Independent steps can run concurrently:
+
+```python
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
+
+async def run(prompt: str, system: str, model: str = "%%model=anthropic%%") -> str:
+    options = ClaudeAgentOptions(model=model, system_prompt=system, allowed_tools=["Read", "Grep"])
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, ResultMessage):
+            if message.is_error:   # otherwise an API error's text would be merged as a review
+                raise RuntimeError(f"{message.subtype}: {message.errors or message.result}")
+            return message.result or ""
+    return ""
+
+async def review(path: str) -> dict[str, str]:
+    security, performance = await asyncio.gather(
+        run(f"Review {path} for security issues.", "You are a security reviewer."),
+        run(f"Review {path} for performance issues.", "You are a performance engineer."),
+    )
+    summary = await run(
+        f"Merge these reviews into one prioritised list:\n\n{security}\n\n{performance}",
+        "You write short, prioritised engineering summaries.",
+        model="%%model=anthropic-flagship%%",
+    )
+    return {"security": security, "performance": performance, "summary": summary}
+```
+
+Each `query()` call starts its own CLI process, so concurrency is bounded by memory and your rate limits; use an `asyncio.Semaphore` for large fan-outs.
 
 ---
 
 ## Model Context Protocol (MCP)
 
-### MCP Fundamentals
-
-MCP is a standardised protocol for tool integration:
-
-```
-┌─────────────────────────────────────────────────────┐
-│              Claude Agent Application                │
-└──────────────────┬──────────────────────────────────┘
-                   │
-                   │ (MCP Protocol)
-                   │
-        ┌──────────┼──────────┐
-        │          │          │
-        ▼          ▼          ▼
-    ┌────────┐ ┌────────┐ ┌────────┐
-    │ MCP    │ │ MCP    │ │ MCP    │
-    │Server 1│ │Server 2│ │Server N│
-    └────────┘ └────────┘ └────────┘
-    (Custom)  (External) (Third-party)
-```
-
-### Creating MCP Servers
-
-#### TypeScript MCP Server
-
-```typescript
-import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
-import { z } from 'zod';
-
-// Define multiple tools
-const calculateTool = tool(
-  'calculate',
-  'Perform mathematical calculations',
-  {
-    expression: z.string().describe('Math expression to evaluate'),
-    precision: z.number().default(2)
-  },
-  async (args) => {
-    try {
-      // Use a safe math evaluator
-      const result = evaluateMath(args.expression);
-      return {
-        content: [{
-          type: 'text',
-          text: `Result: ${result.toFixed(args.precision)}`
-        }]
-      };
-    } catch (error) {
-      return {
-        content: [{
-          type: 'text',
-          text: `Error: ${(error as Error).message}`
-        }],
-        isError: true
-      };
-    }
-  }
-);
-
-const convertTool = tool(
-  'convert_units',
-  'Convert between different units',
-  {
-    value: z.number(),
-    fromUnit: z.enum(['m', 'km', 'mi', 'ft']),
-    toUnit: z.enum(['m', 'km', 'mi', 'ft'])
-  },
-  async (args) => {
-    const conversions: Record<string, number> = {
-      'm': 1,
-      'km': 1000,
-      'mi': 1609.34,
-      'ft': 0.3048
-    };
-
-    const meters = args.value * conversions[args.fromUnit];
-    const result = meters / conversions[args.toUnit];
-
-    return {
-      content: [{
-        type: 'text',
-        text: `${args.value} ${args.fromUnit} = ${result.toFixed(2)} ${args.toUnit}`
-      }]
-    };
-  }
-);
-
-// Create server
-const mathServer = createSdkMcpServer({
-  name: 'math-tools',
-  version: '1.0.0',
-  tools: [calculateTool, convertTool]
-});
-
-// Use in agent
-export { mathServer };
-
-// Usage example
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-const response = query({
-  prompt: "Calculate the result of (15 + 25) * 3, then convert 100 miles to kilometres",
-  options: {
-    mcpServers: { 'math': mathServer },
-    allowedTools: [
-      'mcp__math__calculate',
-      'mcp__math__convert_units'
-    ],
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
-#### Python MCP Server
+`mcp_servers` accepts a dictionary of server configs, or a path to an MCP JSON config file. Four server types are supported:
 
 ```python
-from claude_agent_sdk import (
-    tool,
-    create_sdk_mcp_server,
-    query,
-    ClaudeAgentOptions
-)
+import os
+from claude_agent_sdk import ClaudeAgentOptions, create_sdk_mcp_server
 
-@tool(
-    "calculate",
-    "Perform mathematical calculations",
-    {"expression": str, "precision": int}
-)
-async def calculate(args: dict) -> dict:
-    try:
-        # Use a safe math evaluator
-        result = eval(args["expression"])  # In production, use a safer evaluator
-        precision = args.get("precision", 2)
-        return {
-            "content": [{
-                "type": "text",
-                "text": f"Result: {result:.{precision}f}"
-            }]
-        }
-    except Exception as e:
-        return {
-            "content": [{
-                "type": "text",
-                "text": f"Error: {str(e)}"
-            }],
-            "is_error": True
-        }
+in_process = create_sdk_mcp_server(name="calc", tools=[])  # tools defined with @tool
 
-@tool(
-    "convert_units",
-    "Convert between different units",
-    {"value": float, "from_unit": str, "to_unit": str}
-)
-async def convert_units(args: dict) -> dict:
-    conversions = {
-        'm': 1,
-        'km': 1000,
-        'mi': 1609.34,
-        'ft': 0.3048
-    }
-
-    from_unit = args["from_unit"]
-    to_unit = args["to_unit"]
-    value = args["value"]
-
-    meters = value * conversions[from_unit]
-    result = meters / conversions[to_unit]
-
-    return {
-        "content": [{
-            "type": "text",
-            "text": f"{value} {from_unit} = {result:.2f} {to_unit}"
-        }]
-    }
-
-# Create server
-math_server = create_sdk_mcp_server(
-    name="math-tools",
-    version="1.0.0",
-    tools=[calculate, convert_units]
-)
-
-# Usage example
-async def main():
-    options = ClaudeAgentOptions(
-        mcp_servers={"math": math_server},
-        allowed_tools=[
-            "mcp__math__calculate",
-            "mcp__math__convert_units"
-        ]
-    )
-
-    async for message in query(
-        prompt="Calculate (15 + 25) * 3, then convert 100 miles to kilometres",
-        options=options
-    ):
-        print(message)
-```
-
-### Integrating External MCP Servers
-
-```typescript
-// TypeScript - Using external MCP servers
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-const response = query({
-  prompt: "List files in the current directory and analyze the git history",
-  options: {
-    mcpServers: {
-      // In-process server (from SDK)
-      'calculations': mathServer,
-
-      // External stdio server
-      'filesystem': {
-        type: 'stdio',
-        command: 'npx',
-        args: ['@modelcontextprotocol/server-filesystem'],
-        env: {
-          ALLOWED_PATHS: '/home/user/projects:/tmp'
-        }
-      },
-
-      // External git server
-      'git': {
-        type: 'stdio',
-        command: 'node',
-        args: ['/usr/local/bin/git-mcp-server.js'],
-        env: {
-          GIT_REPO_PATH: '/home/user/projects/myrepo'
-        }
-      },
-
-      // HTTP/SSE server
-      'remote-api': {
-        url: 'https://api.example.com/mcp',
-        headers: {
-          'Authorization': `Bearer ${process.env.API_TOKEN}`
-        }
-      }
+options = ClaudeAgentOptions(
+    mcp_servers={
+        # In-process (type "sdk")
+        "calc": in_process,
+        # Local subprocess over stdio
+        "filesystem": {
+            "type": "stdio",
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem", "/srv/data"],
+        },
+        # Remote over streamable HTTP
+        "tickets": {
+            "type": "http",
+            "url": "https://mcp.example.com/mcp",
+            "headers": {"Authorization": f"Bearer {os.environ.get('TICKETS_TOKEN', '')}"},
+        },
+        # Remote over SSE (older servers)
+        "legacy": {"type": "sse", "url": "https://legacy.example.com/sse"},
     },
-    allowedTools: [
-      'mcp__filesystem__list_files',
-      'mcp__git__log',
-      'mcp__remote-api__query'
-    ],
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-
-for await (const message of response) {
-  if (message.type === 'assistant') {
-    console.log(message.content);
-  }
-}
+    allowed_tools=["mcp__filesystem__read_file", "mcp__tickets__search"],
+    strict_mcp_config=True,   # ignore MCP servers from settings files
+)
 ```
 
----
-
-## Structured Output
-
-### Response Schemas
-
-```typescript
-// TypeScript - Define response schemas with Zod
-import { z } from 'zod';
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-const ProductSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  price: z.number(),
-  inStock: z.boolean(),
-  tags: z.array(z.string())
-});
-
-const APIResponseSchema = z.object({
-  status: z.enum(['success', 'error']),
-  data: z.array(ProductSchema),
-  timestamp: z.string()
-});
-
-async function getStructuredResponse() {
-  const response = query({
-    prompt: `Generate sample product data in JSON format.
-Return it in this exact structure:
-{
-  "status": "success",
-  "data": [
-    {
-      "id": "string",
-      "name": "string",
-      "price": number,
-      "inStock": boolean,
-      "tags": ["string"]
-    }
-  ],
-  "timestamp": "ISO8601 string"
-}`,
-    options: {
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let jsonString = '';
-  for await (const message of response) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        jsonString += message.content;
-      }
-    }
-  }
-
-  // Extract JSON and validate
-  const jsonMatch = jsonString.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    throw new Error('No JSON found in response');
-  }
-
-  const parsed = JSON.parse(jsonMatch[0]);
-  const validated = APIResponseSchema.parse(parsed);
-  
-  return validated;
-}
-```
-
-### JSON Mode
+At runtime, `ClaudeSDKClient` can report and manage servers:
 
 ```python
-# Python - Structured output with JSON mode
-from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk import ClaudeSDKClient
 
-async def get_structured_output():
-    options = ClaudeAgentOptions(
-        system_prompt="""You MUST respond with valid JSON only.
-No markdown, no explanation, just the JSON object."""
-    )
-
-    result = {}
-    async for message in query(
-        prompt="""Generate a technical specification document in JSON format:
-{
-  "title": "...",
-  "version": "...",
-  "sections": [
-    {
-      "name": "...",
-      "content": "..."
-    }
-  ]
-}""",
-        options=options
-    ):
-        if isinstance(message, AssistantMessage):
-            for block in message.content:
-                if isinstance(block, TextBlock):
-                    result['content'] = block.text
-
-    # Parse and validate
-    import json
-    spec = json.loads(result['content'])
-    return spec
+async def show_mcp(client: ClaudeSDKClient) -> None:
+    status = await client.get_mcp_status()
+    for server in status["mcpServers"]:
+        print(server["name"], server["status"])
+    await client.toggle_mcp_server("legacy", enabled=False)
 ```
+
+Since 0.2.140 the SDK supports both `mcp` 1.x and 2.x for in-process servers, and you can pass a hand-built `mcp.server.Server` with resources and prompts at full fidelity.
 
 ---
 
-## Session Management
+## Structured output
 
-### Session Lifecycle
-
-```typescript
-// TypeScript - Complete session lifecycle
-import { query } from '@anthropic-ai/claude-agent-sdk';
-
-interface SessionMetadata {
-  sessionId?: string;
-  startTime: Date;
-  endTime?: Date;
-  interactions: number;
-  totalTokens: number;
-}
-
-async function completeSessionLifecycle() {
-  const metadata: SessionMetadata = {
-    startTime: new Date(),
-    interactions: 0,
-    totalTokens: 0
-  };
-
-  // Step 1: Initialize session
-  console.log('[Session] Initializing...');
-  const initResponse = query({
-    prompt: "Start a new project planning session",
-    options: {
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  for await (const message of initResponse) {
-    if (message.type === 'system' && message.subtype === 'init') {
-      metadata.sessionId = message.session_id;
-      console.log(`[Session] Started with ID: ${metadata.sessionId}`);
-    } else if (message.type === 'assistant') {
-      metadata.interactions++;
-    }
-  }
-
-  // Step 2: Continue in same session
-  console.log('[Session] Continuing conversation...');
-  if (metadata.sessionId) {
-    const continueResponse = query({
-      prompt: "Now let's define the project requirements",
-      options: {
-        resume: metadata.sessionId,
-        model: "claude-3-5-sonnet-20241022"
-      }
-    });
-
-    for await (const message of continueResponse) {
-      if (message.type === 'assistant') {
-        metadata.interactions++;
-      } else if (message.type === 'system' && message.subtype === 'completion') {
-        if (message.usage) {
-          metadata.totalTokens += message.usage.input_tokens + message.usage.output_tokens;
-        }
-      }
-    }
-  }
-
-  // Step 3: Fork session for alternative approach
-  console.log('[Session] Forking for alternative approach...');
-  if (metadata.sessionId) {
-    const forkResponse = query({
-      prompt: "Let's explore an alternative architecture approach",
-      options: {
-        resume: metadata.sessionId,
-        forkSession: true,
-        model: "claude-3-5-sonnet-20241022"
-      }
-    });
-
-    let forkedSessionId: string | undefined;
-    for await (const message of forkResponse) {
-      if (message.type === 'system' && message.subtype === 'init') {
-        forkedSessionId = message.session_id;
-        console.log(`[Session] Forked to new session: ${forkedSessionId}`);
-      }
-    }
-  }
-
-  metadata.endTime = new Date();
-  const duration = (metadata.endTime.getTime() - metadata.startTime.getTime()) / 1000;
-
-  console.log(`\n[Session] Summary:
-  Duration: ${duration}s
-  Interactions: ${metadata.interactions}
-  Total Tokens: ${metadata.totalTokens}
-  Session ID: ${metadata.sessionId}`);
-
-  return metadata;
-}
-```
-
-### State Persistence
-
-```python
-# Python - Persistent session storage
-import asyncio
-import json
-from pathlib import Path
-from claude_agent_sdk import query, ClaudeAgentOptions
-
-class SessionManager:
-    def __init__(self, storage_dir: str = "./sessions"):
-        self.storage_dir = Path(storage_dir)
-        self.storage_dir.mkdir(exist_ok=True)
-
-    def save_session(self, session_id: str, metadata: dict):
-        """Save session metadata to disk."""
-        file_path = self.storage_dir / f"{session_id}.json"
-        with open(file_path, 'w') as f:
-            json.dump(metadata, f, indent=2, default=str)
-
-    def load_session(self, session_id: str) -> dict | None:
-        """Load session metadata from disk."""
-        file_path = self.storage_dir / f"{session_id}.json"
-        if file_path.exists():
-            with open(file_path, 'r') as f:
-                return json.load(f)
-        return None
-
-    async def resume_session(self, session_id: str, new_prompt: str):
-        """Resume a persisted session."""
-        metadata = self.load_session(session_id)
-        if not metadata:
-            raise ValueError(f"Session {session_id} not found")
-
-        async for message in query(
-            prompt=new_prompt,
-            options=ClaudeAgentOptions(resume=session_id)
-        ):
-            yield message
-
-# Usage
-async def main():
-    manager = SessionManager()
-
-    # Create new session
-    session_id = None
-    async for message in query(prompt="Start a research session"):
-        if hasattr(message, 'session_id'):
-            session_id = message.session_id
-            manager.save_session(session_id, {
-                "created_at": str(asyncio.get_event_loop().time()),
-                "interactions": 1
-            })
-
-    # Later, resume the session
-    if session_id:
-        async for message in manager.resume_session(
-            session_id,
-            "Continue the research from before"
-        ):
-            print(message)
-```
-
----
-
-## Context Engineering
-
-### System Prompt Design
-
-```typescript
-// TypeScript - Well-designed system prompts
-import { query, ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk';
-
-// Example 1: Security-focused system prompt
-const securityPrompt = `You are a senior security engineer specialising in application security.
-
-**Your Responsibilities:**
-1. Identify security vulnerabilities in code and systems
-2. Assess risk levels and provide remediation strategies
-3. Recommend security best practices and standards
-4. Explain security implications in clear terms
-5. Suggest preventative measures for future development
-
-**Guidelines:**
-- Always consider OWASP Top 10 vulnerabilities
-- Evaluate both risks and likelihood of exploitation
-- Provide practical, implementable solutions
-- Consider performance vs security trade-offs
-- Document findings with severity levels
-
-**Format Requirements:**
-- Always structure findings as: Issue → Risk Level → Impact → Remediation
-- Include code examples for all recommendations
-- Reference official security standards when applicable`;
-
-// Example 2: Data analysis system prompt
-const dataAnalysisPrompt = `You are a data scientist and statistical expert.
-
-**Your Approach:**
-1. Validate data quality and completeness first
-2. Identify patterns, trends, and anomalies
-3. Perform statistical significance testing
-4. Generate actionable insights
-5. Recommend further analysis or data collection
-
-**Statistical Rigor:**
-- Always report confidence intervals
-- Test assumptions before applying methods
-- Explain limitations of analysis
-- Suggest alternatives for invalid assumptions
-- Use appropriate significance levels (p < 0.05 default)
-
-**Communication:**
-- Explain technical findings in business terms
-- Use visualisations to support findings
-- Provide recommendations with confidence levels
-- Suggest next steps for deeper analysis`;
-
-// Example 3: Creative writing system prompt
-const creativePrompt = `You are an award-winning creative writer and storyteller.
-
-**Your Style:**
-- Vivid, descriptive language that engages the senses
-- Well-developed characters with distinct voices
-- Compelling narrative arcs with tension and resolution
-- Appropriate pacing for the story length
-- Thematic depth beneath entertaining surface
-
-**Your Process:**
-1. Understand the core story concept
-2. Develop compelling characters
-3. Create tension and conflict
-4. Build towards satisfying resolution
-5. Layer in thematic elements
-
-**Quality Standards:**
-- Show, don't tell (use examples and dialogue)
-- Vary sentence structure for rhythm
-- Avoid clichés and overused phrases
-- Ensure emotional authenticity
-- End with impact`;
-
-// Using system prompts
-async function exampleUsage() {
-  const securityResponse = query({
-    prompt: "Review this authentication code for vulnerabilities",
-    options: {
-      systemPrompt: securityPrompt,
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  for await (const message of securityResponse) {
-    if (message.type === 'assistant') {
-      console.log(message.content);
-    }
-  }
-}
-```
-
-### Few-Shot Prompting
-
-```typescript
-// TypeScript - Few-shot examples for better outputs
-const fewShotPrompt = `You are a code reviewer focusing on code quality.
-
-**Review Format Example:**
-Issue: Function lacks error handling
-Severity: Medium
-Suggestion:
-\`\`\`typescript
-// Before
-async function fetchData(url: string) {
-  const response = await fetch(url);
-  return response.json();
-}
-
-// After
-async function fetchData(url: string) {
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);
-    }
-    return response.json();
-  } catch (error) {
-    console.error('Failed to fetch data:', error);
-    throw new Error('Data fetch failed');
-  }
-}
-\`\`\`
-
-Now review this code:
-\`\`\`typescript
-function processUserData(users: User[]) {
-  return users.map(user => {
-    return {
-      ...user,
-      email: user.email.toLowerCase(),
-      fullName: user.first + ' ' + user.last
-    };
-  });
-}
-\`\`\`
-
-Please identify issues following the format above.`;
-
-const response = query({
-  prompt: fewShotPrompt,
-  options: {
-    model: "claude-3-5-sonnet-20241022"
-  }
-});
-```
-
----
-
-## Advanced Permissions
-
-### Permission Architecture
-
-```typescript
-// TypeScript - Comprehensive permission system
-import { query, ClaudeAgentOptions } from '@anthropic-ai/claude-agent-sdk';
-
-interface ToolPermission {
-  tool: string;
-  allowed: boolean;
-  restrictions?: {
-    pathPatterns?: string[];
-    commandPatterns?: string[];
-    requireApproval?: boolean;
-  };
-}
-
-const permissionPolicy: ToolPermission[] = [
-  {
-    tool: 'Read',
-    allowed: true,
-    restrictions: {
-      pathPatterns: ['/home/user/**', '/var/log/**']
-    }
-  },
-  {
-    tool: 'Write',
-    allowed: true,
-    restrictions: {
-      pathPatterns: ['/home/user/documents/**', '/tmp/**'],
-      requireApproval: true
-    }
-  },
-  {
-    tool: 'Bash',
-    allowed: true,
-    restrictions: {
-      commandPatterns: ['npm *', 'git *', 'ls *'],
-      requireApproval: true
-    }
-  },
-  {
-    tool: 'ComputerUse',
-    allowed: false  // Completely disabled for this agent
-  }
-];
-
-async function queryWithPermissions(prompt: string) {
-  const response = query({
-    prompt,
-    options: {
-      canUseTool: async (toolName, input) => {
-        const permission = permissionPolicy.find(p => p.tool === toolName);
-
-        if (!permission?.allowed) {
-          return {
-            behavior: 'deny',
-            message: `Tool '${toolName}' is not permitted for this agent`
-          };
-        }
-
-        // Check restrictions
-        if (permission.restrictions) {
-          // Check path patterns
-          if (permission.restrictions.pathPatterns && input.path) {
-            const isAllowed = permission.restrictions.pathPatterns.some(pattern =>
-              matchPattern(input.path, pattern)
-            );
-
-            if (!isAllowed) {
-              return {
-                behavior: 'deny',
-                message: `Path '${input.path}' is not permitted`
-              };
-            }
-          }
-
-          // Check command patterns
-          if (permission.restrictions.commandPatterns && input.command) {
-            const isAllowed = permission.restrictions.commandPatterns.some(pattern =>
-              matchPattern(input.command, pattern)
-            );
-
-            if (!isAllowed) {
-              return {
-                behavior: 'deny',
-                message: `Command pattern not permitted`
-              };
-            }
-          }
-
-          // Check if approval required
-          if (permission.restrictions.requireApproval) {
-            return {
-              behavior: 'ask',
-              message: `Confirm permission to execute: ${toolName}`
-            };
-          }
-        }
-
-        return { behavior: 'allow' };
-      },
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  for await (const message of response) {
-    console.log(message);
-  }
-}
-
-function matchPattern(input: string, pattern: string): boolean {
-  // Simple glob pattern matching
-  const regex = pattern
-    .replace(/\./g, '\\.')
-    .replace(/\*/g, '.*')
-    .replace(/\?/g, '.');
-  return new RegExp(`^${regex}$`).test(input);
-}
-```
-
----
-
-## Agentic Patterns
-
-### Self-Correction Loop
-
-```typescript
-// TypeScript - Self-correcting agent
-async function selfCorrectingAgent(task: string, maxAttempts = 3) {
-  let attempts = 0;
-  let previousAttempt = '';
-  let result = null;
-
-  while (attempts < maxAttempts && !result) {
-    attempts++;
-    console.log(`\n[Attempt ${attempts}/${maxAttempts}]`);
-
-    const prompt = previousAttempt
-      ? `${task}\n\nPrevious attempt (which had issues):\n${previousAttempt}\n\nPlease try again, addressing any issues from the previous attempt.`
-      : task;
-
-    const response = query({
-      prompt,
-      options: {
-        systemPrompt: `You are a problem-solving agent. 
-When given a task, attempt to solve it.
-If the previous attempt had issues, learn from them and try a different approach.
-Always explain your reasoning.`,
-        model: "claude-3-5-sonnet-20241022"
-      }
-    });
-
-    let attemptResult = '';
-    let hasErrors = false;
-
-    for await (const message of response) {
-      if (message.type === 'assistant') {
-        if (typeof message.content === 'string') {
-          attemptResult += message.content;
-        }
-      } else if (message.type === 'error') {
-        hasErrors = true;
-        console.log(`Error in attempt ${attempts}: ${message.error?.message}`);
-      }
-    }
-
-    previousAttempt = attemptResult;
-
-    // Validate result
-    if (attemptResult.includes('[SUCCESS]') || attemptResult.includes('completed')) {
-      result = attemptResult;
-    } else if (attempts < maxAttempts && hasErrors) {
-      console.log('Attempt failed, retrying...');
-    } else if (attempts === maxAttempts) {
-      console.log(`Max attempts (${maxAttempts}) reached`);
-      result = attemptResult;
-    }
-  }
-
-  return result;
-}
-
-// Usage
-selfCorrectingAgent("Create a Python script that reads JSON and generates a CSV").then(result => {
-  console.log("\nFinal Result:\n", result);
-});
-```
-
-### Planning and Execution Separation
-
-```typescript
-// TypeScript - Separate planning from execution
-async function planThenExecute(task: string) {
-  console.log('[Phase 1] Planning...\n');
-
-  // Phase 1: Create plan
-  const planResponse = query({
-    prompt: `Create a detailed step-by-step plan to accomplish this task:
-${task}
-
-Format your plan as a numbered list with clear, actionable steps.`,
-    options: {
-      systemPrompt: `You are a strategic planner.
-Create detailed, practical plans that break complex tasks into manageable steps.
-Consider dependencies between steps.
-Identify potential challenges.`,
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let plan = '';
-  for await (const message of planResponse) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        plan += message.content;
-      }
-    }
-  }
-
-  console.log('Plan:\n', plan);
-
-  console.log('\n[Phase 2] Execution...\n');
-
-  // Phase 2: Execute plan
-  const execResponse = query({
-    prompt: `Execute this plan:
-${plan}
-
-Provide updates as you complete each step.
-Note any challenges encountered and how you addressed them.`,
-    options: {
-      systemPrompt: `You are a task executor.
-Follow the provided plan step by step.
-Provide clear status updates for each step.
-Adapt if you encounter issues not anticipated in the plan.`,
-      model: "claude-3-5-sonnet-20241022"
-    }
-  });
-
-  let execution = '';
-  for await (const message of execResponse) {
-    if (message.type === 'assistant') {
-      if (typeof message.content === 'string') {
-        execution += message.content;
-      }
-    }
-  }
-
-  console.log('Execution Result:\n', execution);
-
-  return { plan, execution };
-}
-```
-
----
-
-## API Reference
-
-### Query Function
-
-```typescript
-// TypeScript - query() function signature
-interface QueryOptions {
-  // Model selection
-  model?: string;
-
-  // Agent customisation
-  systemPrompt?: string;
-  allowedTools?: string[];
-
-  // Execution control
-  workingDirectory?: string;
-  maxTurns?: number;
-  maxBudgetUsd?: number;
-
-  // Permissions
-  permissionMode?: 'acceptEdits' | 'default' | 'plan' | 'bypassPermissions';
-  canUseTool?: (toolName: string, input: any) => Promise<PermissionResult>;
-
-  // MCP integration
-  mcpServers?: Record<string, MCPServerConfig>;
-
-  // Session management
-  resume?: string;
-  forkSession?: boolean;
-
-  // Streaming
-  include_partial_messages?: boolean;
-
-  // Other options
-  settingSources?: string[];
-  env?: Record<string, string>;
-}
-
-async function query(
-  options: {
-    prompt: string | AsyncIterable<string>;
-    options?: QueryOptions;
-  }
-): AsyncIterableIterator<Message>
-```
-
-### Message Types
-
-```typescript
-interface AssistantMessage {
-  type: 'assistant';
-  content: string | ContentBlock[];
-  model: string;
-}
-
-interface ToolCallMessage {
-  type: 'tool_call';
-  tool_name: string;
-  input: any;
-}
-
-interface ToolResultMessage {
-  type: 'tool_result';
-  tool_name: string;
-  result: string;
-}
-
-interface SystemMessage {
-  type: 'system';
-  subtype?: 'init' | 'completion' | 'progress';
-  session_id?: string;
-  usage?: { input_tokens: number; output_tokens: number };
-}
-
-interface ErrorMessage {
-  type: 'error';
-  error?: {
-    type: string;
-    message: string;
-    code?: string;
-  };
-}
-```
-
----
-
-## Extended Thinking Configuration (v0.1.60+)
-
-The SDK now exposes fine-grained control over Claude's extended thinking capability.
-
-```python
-from claude_agent_sdk import (
-    ClaudeAgentOptions,
-    ThinkingConfigAdaptive,
-    ThinkingConfigEnabled,
-    ThinkingConfigDisabled,
-)
-
-# Adaptive thinking - Claude decides when to use extended thinking
-options = ClaudeAgentOptions(
-    thinking=ThinkingConfigAdaptive(),
-)
-
-# Always-on extended thinking with effort level
-options = ClaudeAgentOptions(
-    thinking=ThinkingConfigEnabled(budget_tokens=10000),
-    effort="high",  # "low", "medium", "high", or "max"
-)
-
-# Disable thinking entirely
-options = ClaudeAgentOptions(
-    thinking=ThinkingConfigDisabled(),
-)
-```
-
-The `effort` field provides a high-level shortcut that automatically sets an appropriate `budget_tokens` value:
-
-| Effort Level | Thinking Budget |
-|-------------|----------------|
-| `"low"` | ~1,000 tokens |
-| `"medium"` | ~5,000 tokens |
-| `"high"` | ~20,000 tokens |
-| `"max"` | Maximum available |
-
----
-
-## File Checkpointing and Session Rewind (v0.1.60+)
-
-Long-running agent sessions can now be checkpointed and rewound to recover from errors or explore alternative execution paths.
+`output_format` asks the agent to finish with JSON that matches a schema. The parsed value arrives on `ResultMessage.structured_output`:
 
 ```python
 import asyncio
-from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
 
-async def main():
+schema = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "risk": {"type": "string", "enum": ["low", "medium", "high"]},
+        "files": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["summary", "risk", "files"],
+    "additionalProperties": False,
+}
+
+async def main() -> None:
     options = ClaudeAgentOptions(
-        checkpoint_enabled=True,
-        checkpoint_dir="./agent_checkpoints",
+        output_format={"type": "json_schema", "schema": schema},
+        allowed_tools=["Read", "Glob", "Grep"],
     )
-
-    async for message in query(
-        prompt="Analyse this codebase and suggest improvements",
-        options=options,
-    ):
-        print(message)
-
-    # Rewind to before the last file change
-    options_rewind = ClaudeAgentOptions(
-        checkpoint_enabled=True,
-        checkpoint_dir="./agent_checkpoints",
-        rewind_to_checkpoint="last",  # or a specific checkpoint ID
-    )
-    print("Rewinding session...")
-    async for message in query(
-        prompt="Try a different approach",
-        options=options_rewind,
-    ):
-        print(message)
+    async for message in query(prompt="Assess the risk of upgrading requests in this repo.",
+                               options=options):
+        if isinstance(message, ResultMessage) and not message.is_error:
+            print(message.structured_output)  # a dict matching the schema
 
 asyncio.run(main())
 ```
 
-### Context Usage Tracking
+With Pydantic, generate the schema with `Model.model_json_schema()` and validate with `Model.model_validate(message.structured_output)`.
 
-Track token consumption across agent turns via `ClaudeSDKClient.get_context_usage()`. The method returns a breakdown by category (system prompt, conversation history, tool results):
+---
+
+## Session management
+
+Every run is a session, persisted by the CLI as a transcript under `~/.claude/projects/`. The session ID is on the init `SystemMessage` and on `ResultMessage`.
+
+### Resume and fork
 
 ```python
-from claude_agent_sdk import query, ClaudeAgentOptions, ClaudeSDKClient
+import asyncio
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
 
-client = ClaudeSDKClient()
+async def last_result(prompt: str, options: ClaudeAgentOptions) -> ResultMessage:
+    result = None
+    async for message in query(prompt=prompt, options=options):
+        if isinstance(message, ResultMessage):
+            result = message
+    assert result is not None
+    return result
 
-async for message in client.query(prompt="Long complex task...", options=ClaudeAgentOptions()):
-    usage = await client.get_context_usage()
-    print(f"System: {usage.system_tokens} | Convo: {usage.conversation_tokens} | Tools: {usage.tool_tokens}")
-    print(f"Total: {usage.total_tokens}/{usage.context_window} ({usage.utilisation_pct:.1f}%)")
-    if usage.utilisation_pct > 80:
-        print("Warning: approaching context limit — consider compaction")
-    print(message)
+async def main() -> None:
+    first = await last_result("Read README.md and summarise the architecture.", ClaudeAgentOptions())
+    sid = first.session_id
+
+    # Continue the same session
+    await last_result("Now list the three riskiest modules.", ClaudeAgentOptions(resume=sid))
+
+    # Branch: a new session that starts from the same history
+    alt = await last_result("Propose a microservices split instead.",
+                            ClaudeAgentOptions(resume=sid, fork_session=True))
+    print("forked to", alt.session_id)
+
+asyncio.run(main())
 ```
 
-The `ContextUsage` object exposes:
-- `system_tokens` — tokens used by the system prompt
-- `conversation_tokens` — tokens from the conversation history
-- `tool_tokens` — tokens attributed to tool results
-- `total_tokens` — total tokens in context
-- `context_window` — maximum context window for the current model
-- `utilisation_pct` — percentage of context window consumed
+`continue_conversation=True` resumes the most recent session in `cwd` without an ID. `resume_session_at=<message uuid>` resumes from an earlier point, and `resume_drops_turn` guards against silently dropping messages you have not seen (both 0.2.137+).
 
-### Typed Tool Parameter Descriptions (v0.1.63+)
+### Inspecting stored sessions
 
-Use `typing.Annotated` to attach per-parameter descriptions directly in function signatures. The SDK generates accurate JSON Schema from these annotations, improving tool call accuracy:
+Module-level helpers read and manage transcripts without starting the CLI:
 
 ```python
-from typing import Annotated
-from claude_agent_sdk import tool, create_sdk_mcp_server
+from claude_agent_sdk import list_sessions, get_session_messages, rename_session, tag_session
 
-@tool("search_codebase", "Search the project codebase for patterns")
-async def search_codebase(
-    pattern:   Annotated[str,  "The regex or literal string to search for"],
-    directory: Annotated[str,  "Relative path to the directory to search in"] = ".",
-    max_results: Annotated[int, "Maximum number of results to return (1–100)"] = 20,
-    case_sensitive: Annotated[bool, "Whether the search is case-sensitive"] = False
-) -> dict:
-    # The SDK injects these descriptions into the tool's JSON Schema automatically
-    import subprocess
-    flag = "" if case_sensitive else "-i"
-    result = subprocess.run(
-        ["grep", "-rn", flag, "--include=*.py", f"-m{max_results}", pattern, directory],
-        capture_output=True, text=True
-    )
-    return {"matches": result.stdout.splitlines()}
+for info in list_sessions(directory="/srv/repos/payments", limit=10):
+    print(info.session_id, info.custom_title or info.summary, info.git_branch)
 
-server = create_sdk_mcp_server(name="code-tools", version="1.0.0", tools=[search_codebase])
+messages = get_session_messages("SESSION_ID", directory="/srv/repos/payments")
+rename_session("SESSION_ID", "Payments risk review")
+tag_session("SESSION_ID", "reviewed")
 ```
 
-### Parallel Tool Disambiguation with ToolPermissionContext (v0.1.63+)
+There are also `get_session_info`, `fork_session`, `delete_session`, `list_subagents` and `get_subagent_messages`.
 
-When an agent invokes multiple tools simultaneously (e.g., two `Bash` calls in parallel), the `tool_use_id` and `agent_id` fields on `ToolPermissionContext` let you distinguish which request is which:
+### Session stores
+
+For multi-host deployments, `session_store=` mirrors every transcript line to an external store, and `resume` rebuilds a session from it when the local file is missing (on another host, or in a fresh container). The CLI still writes its local copy first; the store receives a second copy in batches, once per turn by default or after every frame with `session_store_flush="eager"`. `InMemorySessionStore` is provided for tests.
+
+A store is any object with async `append(key, entries)` and `load(key)`; `list_sessions`, `list_session_summaries`, `delete` and `list_subkeys` are optional. `key` is a dict with `project_key` (by default derived from `cwd`), `session_id` and, for subagent transcripts, `subpath`. Entries are JSON-safe dicts; treat them as opaque, and use their `uuid` (when present) to ignore duplicates, because failed batches are retried. A SQLite version (the same queries work on Postgres):
 
 ```python
-from claude_agent_sdk import ClaudeAgentOptions, query
+# sqlite_store.py
+import asyncio
+import json
+import sqlite3
+import time
+from claude_agent_sdk import (
+    SessionKey, SessionListSubkeysKey, SessionStoreEntry, SessionStoreListEntry,
+)
 
-async def granular_permission_handler(tool_name: str, tool_input: dict, context) -> dict:
-    print(f"[{context.agent_id}] Tool call {context.tool_use_id}: {tool_name}")
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS transcript (
+    seq         INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_key TEXT NOT NULL,
+    session_id  TEXT NOT NULL,
+    subpath     TEXT NOT NULL,          -- '' for the main transcript
+    uuid        TEXT,                   -- idempotency key; NULL entries are never deduplicated
+    entry       TEXT NOT NULL,
+    written_ms  INTEGER NOT NULL,
+    UNIQUE (project_key, session_id, subpath, uuid)
+)
+"""
 
-    # Allow read-only tools unconditionally
-    if tool_name in ("Read", "Glob", "Grep"):
-        return {"allow": True}
+class SQLiteSessionStore:
+    """Mirrors Claude Code transcripts into SQLite."""
 
-    # For destructive operations, check the specific call by ID
-    if tool_name == "Bash" and "rm " in tool_input.get("command", ""):
-        print(f"  → Denying destructive command from call {context.tool_use_id}")
-        return {"allow": False, "reason": "Destructive commands are not permitted"}
+    def __init__(self, path: str) -> None:
+        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db.execute(SCHEMA)
+        self._lock = asyncio.Lock()
 
-    return {"allow": True}
+    async def _run(self, sql: str, params: tuple = (), many: list[tuple] | None = None) -> list[tuple]:
+        def work() -> list[tuple]:
+            with self._db:
+                if many is not None:
+                    self._db.executemany(sql, many)
+                    return []
+                return self._db.execute(sql, params).fetchall()
+        async with self._lock:
+            return await asyncio.to_thread(work)
+
+    async def append(self, key: SessionKey, entries: list[SessionStoreEntry]) -> None:
+        now = int(time.time() * 1000)
+        rows = [(key["project_key"], key["session_id"], key.get("subpath", ""),
+                 e.get("uuid"), json.dumps(e), now) for e in entries]
+        await self._run("INSERT OR IGNORE INTO transcript (project_key, session_id, subpath, uuid,"
+                        " entry, written_ms) VALUES (?, ?, ?, ?, ?, ?)", many=rows)
+
+    async def load(self, key: SessionKey) -> list[SessionStoreEntry] | None:
+        rows = await self._run("SELECT entry FROM transcript WHERE project_key = ? AND session_id = ?"
+                               " AND subpath = ? ORDER BY seq",
+                               (key["project_key"], key["session_id"], key.get("subpath", "")))
+        return [json.loads(entry) for (entry,) in rows] or None
+
+    async def list_sessions(self, project_key: str) -> list[SessionStoreListEntry]:
+        rows = await self._run("SELECT session_id, MAX(written_ms) FROM transcript"
+                               " WHERE project_key = ? AND subpath = '' GROUP BY session_id",
+                               (project_key,))
+        return [{"session_id": sid, "mtime": mtime} for sid, mtime in rows]
+
+    async def delete(self, key: SessionKey) -> None:
+        if "subpath" in key:      # one subagent transcript
+            await self._run("DELETE FROM transcript WHERE project_key = ? AND session_id = ? AND subpath = ?",
+                            (key["project_key"], key["session_id"], key["subpath"]))
+        else:                     # the session and everything under it
+            await self._run("DELETE FROM transcript WHERE project_key = ? AND session_id = ?",
+                            (key["project_key"], key["session_id"]))
+
+    async def list_subkeys(self, key: SessionListSubkeysKey) -> list[str]:
+        rows = await self._run("SELECT DISTINCT subpath FROM transcript WHERE project_key = ?"
+                               " AND session_id = ? AND subpath != ''",
+                               (key["project_key"], key["session_id"]))
+        return [subpath for (subpath,) in rows]
+```
+
+Use it on every host, and resume by ID wherever the next request lands:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
+from sqlite_store import SQLiteSessionStore
+
+store = SQLiteSessionStore("/data/sessions.db")
+
+def options_for(session_id: str | None) -> ClaudeAgentOptions:
+    return ClaudeAgentOptions(cwd="/work", session_store=store, resume=session_id)
+```
+
+The SDK ships the contract tests it relies on; run them against your adapter:
+
+```python
+# test_sqlite_store.py — run with: pytest -q (requires pytest-asyncio)
+import pytest
+from claude_agent_sdk.testing import run_session_store_conformance
+from sqlite_store import SQLiteSessionStore
+
+@pytest.mark.asyncio
+async def test_sqlite_store_conformance():
+    await run_session_store_conformance(lambda: SQLiteSessionStore(":memory:"))
+```
+
+`load_timeout_ms` (default 60 000) bounds each `load()` / `list_subkeys()` call during a store-backed resume, so a slow store fails the query instead of hanging it. The store-aware variants of the session helpers (`list_sessions_from_store`, `get_session_messages_from_store`, `fork_session_via_store`, `delete_session_via_store` and so on) read from a store instead of the local disk. Retention is up to you: the SDK never deletes from a store unless you call `delete_session_via_store()`.
+
+---
+
+## Thinking and effort
+
+Two options control reasoning:
+
+- `effort=` — `"low"`, `"medium"`, `"high"`, `"xhigh"` or `"max"`. This is the main lever on current models.
+- `thinking=` — a `ThinkingConfigAdaptive`, `ThinkingConfigEnabled` or `ThinkingConfigDisabled` dict.
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
 
 options = ClaudeAgentOptions(
-    allowed_tools=["Read", "Bash", "Glob", "Grep"],
-    permission_prompt_tool_callback=granular_permission_handler
+    model="%%model=anthropic-flagship%%",
+    thinking={"type": "adaptive", "display": "summarized"},
+    effort="high",
 )
 ```
 
----
+On the Claude 5 family thinking is adaptive: the model decides how much to think, and `effort` sets how hard it tries. Fixed budgets (`{"type": "enabled", "budget_tokens": N}`) are rejected by Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5 and Claude Fable 5.1. Do not rely on disabling thinking either; to make a run cheaper, lower `effort`. `display: "summarized"` returns readable summaries in `ThinkingBlock`s; the default on these models leaves the thinking text empty.
 
-## Revision History
+Claude Opus 5.5 defaults to `medium` effort, so set it explicitly when you want more. `xhigh` is a good setting for long coding and agentic tasks; `low` suits simple subagents.
 
-| Version | Date | Changes |
-|---------|------|----------|
-| 0.2.91 | June 5, 2026 | Patch releases 0.2.90–0.2.91; stability and dependency updates. `Latest:` header updated 0.2.89 → 0.2.91; pip install version pin updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`) verified against installed `claude-agent-sdk==0.2.91` (`.routine-envs/check-0605-claude-py`, 2026-06-05); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 0.2.89 | June 4, 2026 | Patch release 0.2.89; stability and dependency updates. `Latest:` header updated 0.2.88 → 0.2.89; pip install version pin updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`) verified against installed `claude-agent-sdk==0.2.89` (`/tmp/claude-sdk-check`, 2026-06-04); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 0.2.88 | June 3, 2026 | Patch release 0.2.88; stability and dependency updates. `Latest:` header updated 0.2.87 → 0.2.88; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 0.2.87 | May 23, 2026 | Patch releases 0.2.86–0.2.87; stability and dependency updates. `Latest:` header updated 0.2.85 → 0.2.87; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 0.2.85 | May 22, 2026 | Patch releases 0.2.83–0.2.85; stability and dependency updates. `Latest:` header updated 0.2.82 → 0.2.85; pip install version pin updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.85` (`.routine-envs/check-0522-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 0.2.82 | May 19, 2026 | Major minor-version bump 0.1.81 → 0.2.82. Expanded API surface: sandbox types (`SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations`), task lifecycle types (`TaskBudget`, `TaskNotificationMessage`, `TaskUsage`), `EffortLevel`, `DeferredToolUse`, `SdkBeta`, `SdkPluginConfig`, store-backed session helpers, `project_key_for_directory`. Stale `pip install` version pin corrected. All core symbols verified against installed 0.2.82 (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
-| 0.1.81 | May 12, 2026 | Patch release; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.81` (`.routine-envs/check-0512-py`); `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` all PASS with `-W error::DeprecationWarning`. |
-| 0.1.80 | May 9, 2026 | Patch releases 0.1.74–0.1.80; stability and dependency updates. Version confirmed against installed `claude-agent-sdk 0.1.80` (`.routine-envs/check-0509-py`); all symbols PASS. |
-| 0.1.73 | May 5, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.73` (`.routine-envs/check-0505`); `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` imports verified with `-W error::DeprecationWarning` — all PASS. |
-| 0.1.72 | May 1, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.72` (`.routine-envs/check-claude-0501`); `query`, `ClaudeAgentOptions` imports verified with `-W error::DeprecationWarning`. |
-| 0.1.71 | April 29, 2026 | Patch releases (0.1.70–0.1.71); stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.71` (`.routine-envs/main-py-0429`); `query`, `ClaudeAgentOptions` imports verified. |
-| 0.1.69 | April 28, 2026 | Patch release; stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.69` (`.routine-envs/main-py-0428`); `query`, `ClaudeAgentOptions` imports verified. |
-| 0.1.68 | April 25, 2026 | Patch release (0.1.67–0.1.68); stability improvements. Version confirmed against installed `claude-agent-sdk 0.1.68` (`.routine-envs/main-py-0425`); `query`, `ClaudeAgentOptions` imports verified. |
-| 0.1.66 | April 23, 2026 | Patch release; stability improvements. Version bump confirmed against PyPI `claude-agent-sdk 0.1.66`. |
-| 0.1.65 | April 22, 2026 | Patch release; bundled Claude Code CLI updated; dependency pinning improvements. |
-| 0.1.64 | April 20, 2026 | Patch release; stability and dependency updates. |
-| 0.1.63 | April 18, 2026 | `get_context_usage()` on `ClaudeSDKClient` with per-category breakdown (system/conversation/tool tokens); `typing.Annotated` for per-parameter descriptions in `@tool` and `create_sdk_mcp_server`; `tool_use_id` and `agent_id` in `ToolPermissionContext` |
-| 0.1.60 | April 16, 2026 | Extended thinking configuration (`ThinkingConfigAdaptive`, `ThinkingConfigEnabled`, `ThinkingConfigDisabled`); `effort` field for thinking depth control; file checkpointing and session rewind |
-| 0.1.59 | April 13, 2026 | Package rename finalised (`claude_code_sdk` → `claude_agent_sdk`); `ClaudeAgentOptions` replaces `ClaudeCodeOptions`; structured outputs; MCP integration |
-| 0.1.6 | Previous version | Original documented version |
+`max_thinking_tokens` is deprecated in favour of `thinking` and should not be used in new code.
 
 ---
 
-**This comprehensive guide covers the Claude Agent SDK from installation through advanced patterns. For additional examples and recipes, refer to the Recipes guide.**
+## File checkpointing and rewind
+
+With `enable_file_checkpointing=True`, the CLI backs up files before modifying them, and `ClaudeSDKClient.rewind_files()` restores them to their state at any earlier user message. You need the user message UUIDs, which the CLI only sends when asked to replay user messages:
+
+```python
+import asyncio
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, UserMessage
+
+async def main() -> None:
+    options = ClaudeAgentOptions(
+        enable_file_checkpointing=True,
+        permission_mode="acceptEdits",
+        extra_args={"replay-user-messages": None},
+    )
+    async with ClaudeSDKClient(options=options) as client:
+        checkpoint = None
+        await client.query("Refactor utils.py to use dataclasses.")
+        async for message in client.receive_response():
+            if isinstance(message, UserMessage) and message.uuid and checkpoint is None:
+                checkpoint = message.uuid
+
+        # Unhappy with the result: put the files back
+        if checkpoint:
+            await client.rewind_files(checkpoint)
+
+asyncio.run(main())
+```
+
+Rewinding restores files only; the conversation history is unchanged. To rewind the conversation as well, start a new run with `resume=` and `resume_session_at=`.
+
+---
+
+## Context usage, budgets and limits
+
+### Context usage
+
+`get_context_usage()` returns a `ContextUsageResponse` (a `TypedDict` with camelCase keys) describing what is occupying the context window:
+
+```python
+from claude_agent_sdk import ClaudeSDKClient
+
+async def report_context(client: ClaudeSDKClient) -> None:
+    usage = await client.get_context_usage()
+    print(f"{usage['totalTokens']:,} / {usage['maxTokens']:,} tokens ({usage['percentage']:.1f}%)")
+    for category in usage["categories"]:
+        print(f"  {category['name']}: {category['tokens']:,}")
+    if usage["isAutoCompactEnabled"]:
+        print("auto-compact at", usage["autoCompactThreshold"])
+```
+
+### Limits
+
+| Option | Effect |
+|---|---|
+| `max_turns` | Stop after N agent turns (`ResultMessage.subtype == "error_max_turns"`) |
+| `max_budget_usd` | Stop when the run's cost passes the limit (`"error_max_budget_usd"`) |
+| `task_budget={"total": N}` | Tell the model its token budget so it paces itself (advisory, not enforced) |
+
+`ResultMessage.terminal_reason` (0.2.126+) says why the loop ended: `"completed"`, `"max_turns"`, `"api_error"`, `"aborted_streaming"`, `"aborted_tools"` and so on.
+
+---
+
+## Error handling
+
+Exceptions all derive from `ClaudeSDKError`:
+
+| Exception | Raised when |
+|---|---|
+| `CLINotFoundError` | The CLI binary cannot be found (no bundled wheel for your platform and nothing on `PATH`) |
+| `CLIConnectionError` | The SDK cannot talk to the CLI process |
+| `ProcessError` | The CLI exited with an error without reporting a result (a crash); has `exit_code` and `stderr` |
+| `ResultError` | Subclass of `ProcessError` raised after a terminal error result (0.2.140+); has `subtype`, `errors`, `result`, `terminal_reason`, `api_error_status`, `session_id` |
+| `CLIJSONDecodeError` | A line from the CLI could not be parsed |
+
+### A failed run arrives twice
+
+When a `query()` run fails, the SDK first **yields** the error `ResultMessage` and then, once the CLI has exited, **raises** `ResultError` carrying the same details:
+
+| What failed | `ResultMessage` / `ResultError` fields |
+|---|---|
+| The model API, after the CLI's own retries (overload, 5xx, auth) | `subtype="success"`, `is_error=True`, `result="API Error: …"`, `api_error_status` (e.g. 529, 401), `terminal_reason="api_error"` |
+| `max_turns` reached | `subtype="error_max_turns"`, `terminal_reason="max_turns"` |
+| `max_budget_usd` reached | `subtype="error_max_budget_usd"` |
+| Structured output never validated | `subtype="error_max_structured_output_retries"` |
+
+Two consequences:
+
+- Code that `return`s on the first `ResultMessage` closes the generator before the exception can be raised. If it does not check `is_error`, it returns the error text as if it were the answer.
+- Code that wants the exception (for example, to retry) must keep iterating after the `ResultMessage`.
+
+```python
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage, ResultError
+
+async def run_and_explain(prompt: str, options: ClaudeAgentOptions) -> ResultMessage | None:
+    result = None
+    try:
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, ResultMessage):
+                result = message          # keep going: ResultError follows an error result
+    except ResultError as e:
+        print("failed:", e.subtype, e.terminal_reason, e.api_error_status, e.errors or e.result)
+        return None
+    return result
+```
+
+Decide whether to retry from those fields: retry API errors with a transient status (429, 5xx, 529), not limits you set yourself and not 4xx errors such as 401. The [production guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_production_guide/#retry-only-what-is-worth-retrying) has a retry wrapper that does this and is tested against each case.
+
+An `AssistantMessage` can also carry an `error` field (for example `"rate_limit"` or `"authentication_failed"`) when a single model call fails but the loop continues.
+
+---
+
+## API reference
+
+### `query()`
+
+```python
+async def query(
+    *,
+    prompt: str | AsyncIterable[dict[str, Any]],
+    options: ClaudeAgentOptions | None = None,
+    transport: Transport | None = None,
+) -> AsyncIterator[Message]: ...
+```
+
+Passing an async iterable of message dicts as `prompt` streams input (see [Images and multi-part prompts](#images-and-multi-part-prompts)).
+
+### `ClaudeSDKClient`
+
+```python
+class ClaudeSDKClient:
+    def __init__(self, options: ClaudeAgentOptions | None = None, transport: Transport | None = None): ...
+    async def connect(self, prompt=None) -> None: ...
+    async def query(self, prompt, session_id: str = "default") -> None: ...
+    def receive_messages(self) -> AsyncIterator[Message]: ...
+    def receive_response(self) -> AsyncIterator[Message]: ...
+    async def interrupt(self) -> None: ...
+    async def set_model(self, model: str | None = None) -> None: ...
+    async def set_permission_mode(self, mode) -> None: ...
+    async def get_context_usage(self) -> ContextUsageResponse: ...
+    async def get_mcp_status(self) -> McpStatusResponse: ...
+    async def toggle_mcp_server(self, server_name: str, enabled: bool) -> None: ...
+    async def reconnect_mcp_server(self, server_name: str) -> None: ...
+    async def rewind_files(self, user_message_id: str) -> None: ...
+    async def stop_task(self, task_id: str) -> None: ...
+    async def disconnect(self) -> None: ...
+```
+
+### `ClaudeAgentOptions` (selected fields)
+
+| Field | Type | Notes |
+|---|---|---|
+| `model`, `fallback_model` | `str` | Full ID or alias |
+| `system_prompt` | `str` or preset dict | See [System prompts](#system-prompts) |
+| `tools`, `allowed_tools`, `disallowed_tools` | `list[str]` | Tool set and pre-approvals |
+| `permission_mode` | `"default" \| "acceptEdits" \| "plan" \| "bypassPermissions" \| "dontAsk" \| "auto"` | |
+| `can_use_tool` | async callback | Returns `PermissionResultAllow` / `PermissionResultDeny` |
+| `hooks` | `dict[event, list[HookMatcher]]` | |
+| `mcp_servers`, `strict_mcp_config` | dict or path; `bool` | |
+| `agents` | `dict[str, AgentDefinition]` | Programmatic subagents |
+| `cwd`, `add_dirs` | path; list of paths | Working directory and extra readable directories |
+| `max_turns`, `max_budget_usd`, `task_budget` | `int`; `float`; `TaskBudget` | Limits |
+| `effort`, `thinking` | see [Thinking and effort](#thinking-and-effort) | |
+| `output_format` | `dict` | JSON schema output |
+| `resume`, `continue_conversation`, `fork_session`, `session_id` | | Sessions |
+| `resume_session_at`, `resume_drops_turn` | `str` | Truncating resume |
+| `session_store`, `session_store_flush`, `load_timeout_ms` | `SessionStore`; `"batched" \| "eager"`; `int` | External transcript mirror; `load_timeout_ms` (default 60 000) bounds each store `load()` during resume |
+| `setting_sources` | `list["user" \| "project" \| "local"]` | Filesystem settings to load; `None` loads all, `[]` none |
+| `skills` | `list[str] \| "all"` | Enable skills without hand-editing `allowed_tools` |
+| `plugins` | `list[SdkPluginConfig]` | Local plugins: `{"type": "local", "path": "..."}` |
+| `sandbox` | `SandboxSettings` | Bash sandboxing |
+| `enable_file_checkpointing` | `bool` | Needed for `rewind_files()` |
+| `include_partial_messages`, `include_hook_events`, `forward_subagent_text` | `bool` | Extra stream content |
+| `verbatim_prompts` | `bool` | Deliver prompts literally: no `@file` expansion or slash commands (0.2.158+) |
+| `env`, `extra_args`, `cli_path`, `settings`, `user` | | Process-level configuration |
+| `stderr` | `Callable[[str], None]` | Receives CLI stderr lines |
+| `betas` | `list[str]` | e.g. `["context-1m-2025-08-07"]` |
+
+### What changed recently
+
+The full history is in the SDK's [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md). Changes since 0.2.93 that affect code on this page:
+
+- **0.2.111** — warning when `can_use_tool` is shadowed by `allowed_tools` or `bypassPermissions`.
+- **0.2.126** — `ResultMessage.terminal_reason`; typed `model_usage`.
+- **0.2.129 (breaking)** — skill names in `skills=` are validated; replace `skills=["*"]` or `["plugin:*"]` with `skills="all"`.
+- **0.2.137** — `ConversationResetMessage` joins the `Message` union (exhaustive `match` statements need a new case); `origin` on `UserMessage`/`ResultMessage`; `resume_session_at` and `resume_drops_turn`.
+- **0.2.140** — `ResultError`; `can_use_tool` works with `query()`; `forward_subagent_text`; `mcp` 2.x support.
+- **0.2.158** — `verbatim_prompts`.
+- **0.2.166** — typed hook outputs and `SystemInitData`; `SandboxSettings.ignoreViolations` changed to `dict[str, list[str]]`.
+- **0.2.170** — `get_session_messages()` now returns every branch of parallel tool calls.

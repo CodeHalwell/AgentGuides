@@ -1,14 +1,14 @@
 ---
 title: "Tools, @tool decorator, and MCP"
 description: "Build tools with BaseTool, the @tool decorator, or bridge MCP servers — plus caching, usage caps, result_as_answer, async variants, and from_langchain."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Tools"
   order: 24
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/tools/base_tool.py`, `crewai/tools/__init__.py`, `crewai/mcp/config.py`, `crewai/tools/agent_tools/`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/tools/base_tool.py`, `crewai/tools/__init__.py`, `crewai/mcp/config.py`, `crewai/tools/agent_tools/`).
 
 There are three ways to give an agent a tool:
 
@@ -35,7 +35,7 @@ researcher = Agent(
     role="Research Assistant",
     goal="Answer factual questions with citations",
     backstory="Librarian with encyclopaedic instincts.",
-    llm=LLM(model="openai/gpt-4o-mini"),
+    llm=LLM(model="openai/%%model=openai-small%%"),
     tools=[wiki_summary],
 )
 
@@ -81,7 +81,7 @@ def lookup_order(order_id: str) -> dict:
 
 Rules from the source:
 - The function **must** have a docstring — it becomes the LLM-facing description.
-- The function **must** have typed parameters — the schema is derived from annotations.
+- Type annotations are strongly recommended: the argument schema is derived from them. Unannotated parameters are accepted, but the LLM then sees no type for them.
 - Three overload forms: `@tool`, `@tool("name")`, `@tool("name", ...)` / `@tool(result_as_answer=True)`.
 - Async functions work; `asyncio.run` is invoked transparently if the agent runs synchronously.
 
@@ -163,6 +163,7 @@ When the agent calls `get_final_report`, its output is returned verbatim — no 
 ```python
 @tool("external_api", max_usage_count=3)
 def external_api(q: str) -> str:
+    """Query the partner API (at most three calls per task)."""
     ...
 ```
 
@@ -228,13 +229,14 @@ Per-server options:
 ## Bridging from LangChain tools
 
 ```python
+from crewai import Agent
 from crewai.tools import BaseTool
 from langchain_community.tools import DuckDuckGoSearchRun
 
 lc_tool = DuckDuckGoSearchRun()
 crew_tool = BaseTool.from_langchain(lc_tool)
 
-agent = Agent(role="...", goal="...", backstory="...", tools=[crew_tool])
+agent = Agent(role="Researcher", goal="Search the web", backstory="Analyst.", tools=[crew_tool])
 ```
 
 The return trip exists too — `to_langchain([crew_tool])` converts to `CrewStructuredTool` instances compatible with LangChain-style orchestrators.
@@ -286,7 +288,12 @@ class SlowAPI(BaseTool):
 ### 3. Per-task tool restrictions
 
 ```python
-analyst = Agent(role="Analyst", ..., tools=[wiki_summary, db_lookup, web_scrape])
+analyst = Agent(
+    role="Analyst",
+    goal="Answer data questions",
+    backstory="BI analyst.",
+    tools=[wiki_summary, db_lookup, web_scrape],
+)
 
 t = Task(
     description="Only use the DB, no web.",
@@ -299,24 +306,33 @@ t = Task(
 ### 4. MCP with tool filter
 
 ```python
-from crewai.mcp.filters import create_dynamic_tool_filter
+from typing import Any
 
-def allow_read_only(tool_name: str, metadata: dict) -> bool:
-    return metadata.get("readOnly", False)
+from crewai import Agent
+from crewai.mcp import MCPServerStdio
+from crewai.mcp.filters import ToolFilterContext, create_dynamic_tool_filter
+
+def read_only_for_reviewers(ctx: ToolFilterContext, tool: dict[str, Any]) -> bool:
+    # tool has "name", "original_name", "description" and "inputSchema"
+    if ctx.agent.role == "Reviewer":
+        return tool["name"].startswith(("read_", "list_", "search_"))
+    return True
 
 agent = Agent(
-    role="Browser",
-    goal="...",
-    backstory="...",
+    role="Reviewer",
+    goal="Review the files in /sandbox",
+    backstory="Careful code reviewer.",
     mcps=[
         MCPServerStdio(
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem", "/sandbox"],
-            tool_filter=create_dynamic_tool_filter(allow_read_only),
+            tool_filter=create_dynamic_tool_filter(read_only_for_reviewers),
         ),
     ],
 )
 ```
+
+A dynamic filter is called once per listed tool with `(ToolFilterContext, tool_dict)`. The context carries `agent`, `server_name` and `run_context`. The tool dict does not include MCP tool annotations such as `readOnlyHint`, so filter on names or descriptions.
 
 ### 5. Tool that returns the answer verbatim
 
@@ -331,7 +347,7 @@ When the agent calls this, the task's `TaskOutput.raw` is exactly the return val
 
 ## Gotchas
 
-- **Docstring + annotations are mandatory** with `@tool`. The decorator raises `ValueError` at import time if either is missing.
+- **A docstring is mandatory** with `@tool`: the decorator raises `ValueError: Function must have a docstring` at import time without one. Annotations are optional but give the LLM a typed schema.
 - **`description` is auto-extended.** `BaseTool._generate_description` prepends name/args JSON to your description; what the LLM sees is longer than what you wrote.
 - **`async_execution` on the task is separate from `_arun`.** Tasks run on threads when `async_execution=True`; tools still execute on that thread.
 - **MCP stdio servers spawn a subprocess.** Long-lived crews may leak processes if you don't run them under a supervisor — set `cache_tools_list=True` to avoid re-listing.

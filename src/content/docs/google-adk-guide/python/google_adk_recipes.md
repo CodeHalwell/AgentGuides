@@ -1,13 +1,14 @@
 ---
 title: "Google ADK - Practical Recipes and Examples"
-description: "Version: 2.2.0 Focus: Real-world implementations and use cases"
-framework: google-adk
-language: python
+description: "Practical, runnable Google ADK recipes: multi-agent support desks, research pipelines, tools, sessions, evaluation and cost control."
+framework: "google-adk"
+language: "python"
+sidebar:
+  label: "Recipes"
+  order: 95
 ---
 
-# Google ADK - Practical Recipes and Examples
-
-**Version:** Verified against google-adk==2.2.0  
+**Verified against:** `google-adk` %%version=google-adk%% (checked %%versions-checked%%); first written for 2.2.0.  
 **Focus:** Real-world implementations and use cases
 
 ---
@@ -53,7 +54,7 @@ import asyncio
 # NOTE: temperature and max_output_tokens go in generate_content_config, not on the agent directly
 chat_assistant = LlmAgent(
     name="chat_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="A friendly conversation partner",
     instruction="""You are a helpful, friendly chat assistant. 
     Your job is to have engaging conversations and help with general questions.
@@ -131,13 +132,12 @@ async def chat_loop():
 
 An agent that conducts comprehensive web research on topics.
 
-> **Note:** `SequentialAgent` and `ParallelAgent` are deprecated in google-adk==2.0.0.
-> For new projects, prefer the `Workflow` API (see [Resilient Tool Pipeline](#resilient-tool-pipeline)).
-> These agents remain functional but the `instruction` field belongs only on `LlmAgent`, not on
-> `SequentialAgent`/`ParallelAgent`.
+The three agents run in order as a `Workflow` chain; each one receives the previous agent's output.
 
 ```python
-from google.adk.agents import SequentialAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, Workflow
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import google_search, url_context
@@ -147,7 +147,7 @@ import asyncio
 # Step 1: Research agent
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Searches for comprehensive information",
     instruction="""You are a research specialist. Your role is to:
     1. Search for relevant information on the topic
@@ -160,7 +160,7 @@ researcher = LlmAgent(
 # Step 2: Summariser agent
 summariser = LlmAgent(
     name="summariser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Summarises research findings",
     instruction="""You are an excellent summariser. Your role is to:
     1. Analyse the research provided
@@ -172,7 +172,7 @@ summariser = LlmAgent(
 # Step 3: Analyst agent
 analyst = LlmAgent(
     name="analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Provides analysis and insights",
     instruction="""You are a critical analyst. Your role is to:
     1. Analyse the summary for insights
@@ -182,19 +182,17 @@ analyst = LlmAgent(
 )
 
 # Create workflow
-# NOTE: SequentialAgent does NOT accept an instruction= argument
-research_pipeline = SequentialAgent(
+research_pipeline = Workflow(
     name="research_pipeline",
     description="Comprehensive research workflow",
-    sub_agents=[researcher, summariser, analyst],
+    edges=[(START, researcher, summariser, analyst)],
 )
 
 async def conduct_research(topic: str) -> dict:
     """Conduct research on a topic."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="research_app",
-        agent=research_pipeline,
+        app=App(name="research_app", root_agent=research_pipeline),
         session_service=session_service,
     )
 
@@ -259,7 +257,7 @@ bq_tools = BigQueryToolset()
 # NOTE: Pass the toolset directly in the tools list — do NOT call bq_tools.get_tools()
 data_analyst = LlmAgent(
     name="data_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Analyses data and provides insights",
     instruction="""You are a professional data analyst with expertise in SQL and data insights.
     
@@ -352,7 +350,7 @@ import asyncio
 # Support tier agents
 tier1_support = LlmAgent(
     name="tier1_support",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="First-line support agent",
     instruction="""You are a first-line support agent. Your role is to:
     1. Listen to the customer's issue
@@ -371,7 +369,7 @@ tier1_support = LlmAgent(
 
 tier2_support = LlmAgent(
     name="tier2_support",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Technical support specialist",
     instruction="""You are a technical support specialist. Your role is to:
     1. Handle complex technical issues
@@ -384,7 +382,7 @@ tier2_support = LlmAgent(
 
 manager = LlmAgent(
     name="support_manager",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Routes and manages support requests",
     instruction="""You are a support manager. Your responsibilities:
     1. Assess incoming support requests
@@ -399,7 +397,7 @@ async def handle_support_request(customer_issue: str, customer_id: str) -> dict:
     """Handle a customer support request."""
     # DatabaseSessionService persists sessions to a SQLite database.
     # For production on GCP, replace with VertexAiSessionService(project=..., location=...).
-    # FirestoreSessionService does NOT exist in google-adk==2.0.0.
+    # Firestore sessions: google.adk.integrations.firestore.FirestoreSessionService.
     session_service = DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk_support.db")
 
     runner = Runner(
@@ -450,11 +448,12 @@ async def handle_support_request(customer_issue: str, customer_id: str) -> dict:
 
 A sophisticated content generation system.
 
-> **Note:** `SequentialAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The stages run in order as a `Workflow` chain; each one receives the previous stage's output.
 
 ```python
-from google.adk.agents import SequentialAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, Workflow
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.adk.tools import google_search
@@ -473,7 +472,7 @@ class ContentRequest(BaseModel):
 # Research phase
 researcher = LlmAgent(
     name="content_researcher",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Researches content topic",
     instruction="""You are a content researcher. Your role is to:
     1. Research the topic thoroughly
@@ -487,7 +486,7 @@ researcher = LlmAgent(
 # Outline phase
 outliner = LlmAgent(
     name="content_outliner",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Creates content outline",
     instruction="""You are an expert at creating content outlines. Your role is to:
     1. Create a logical structure
@@ -500,7 +499,7 @@ outliner = LlmAgent(
 # Writing phase
 writer = LlmAgent(
     name="content_writer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Writes main content",
     instruction="""You are a professional content writer. Your role is to:
     1. Write engaging, well-structured content
@@ -513,7 +512,7 @@ writer = LlmAgent(
 # Editing phase
 editor = LlmAgent(
     name="content_editor",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Edits and polishes content",
     instruction="""You are a professional editor. Your role is to:
     1. Proofread for grammar and spelling
@@ -526,7 +525,7 @@ editor = LlmAgent(
 # SEO optimiser
 seo_optimizer = LlmAgent(
     name="seo_optimizer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Optimises for search engines",
     instruction="""You are an SEO specialist. Your role is to:
     1. Optimise headline for keywords
@@ -536,19 +535,17 @@ seo_optimizer = LlmAgent(
     5. Ensure readability for search engines""",
 )
 
-# NOTE: SequentialAgent does NOT accept an instruction= argument
-content_pipeline = SequentialAgent(
+content_pipeline = Workflow(
     name="content_generation_pipeline",
     description="Complete content generation workflow",
-    sub_agents=[researcher, outliner, writer, editor, seo_optimizer],
+    edges=[(START, researcher, outliner, writer, editor, seo_optimizer)],
 )
 
 async def generate_content(request: ContentRequest) -> dict:
     """Generate content through the pipeline."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="content_gen_app",
-        agent=content_pipeline,
+        app=App(name="content_gen_app", root_agent=content_pipeline),
         session_service=session_service,
     )
 
@@ -594,11 +591,12 @@ async def generate_content(request: ContentRequest) -> dict:
 
 An intelligent code review system.
 
-> **Note:** `ParallelAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The reviewers run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines the results.
 
 ````python
-from google.adk.agents import ParallelAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, JoinNode, Workflow, node
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -615,7 +613,7 @@ class CodeReviewRequest(BaseModel):
 # Quality reviewer
 quality_reviewer = LlmAgent(
     name="quality_reviewer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Checks code quality",
     instruction="""Review this code for:
     1. Readability and clarity
@@ -628,7 +626,7 @@ quality_reviewer = LlmAgent(
 # Security reviewer
 security_reviewer = LlmAgent(
     name="security_reviewer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Checks for security issues",
     instruction="""Review this code for security:
     1. Input validation
@@ -641,7 +639,7 @@ security_reviewer = LlmAgent(
 # Performance reviewer
 performance_reviewer = LlmAgent(
     name="performance_reviewer",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Checks performance",
     instruction="""Review this code for performance:
     1. Algorithmic efficiency
@@ -651,19 +649,23 @@ performance_reviewer = LlmAgent(
     5. Resource usage""",
 )
 
-# NOTE: ParallelAgent does NOT accept an instruction= argument
-code_reviewer = ParallelAgent(
+@node
+def combine_code_reviewer(node_input: dict) -> str:
+    """JoinNode output is {branch_name: output}; format it as one report."""
+    return "\n\n".join(f"## {name}\n{text}" for name, text in node_input.items())
+
+
+code_reviewer = Workflow(
     name="comprehensive_code_reviewer",
     description="Reviews code from multiple perspectives",
-    sub_agents=[quality_reviewer, security_reviewer, performance_reviewer],
+    edges=[(START, (quality_reviewer, security_reviewer, performance_reviewer), JoinNode(name="join_code_reviewer"), combine_code_reviewer)],
 )
 
 async def review_code(request: CodeReviewRequest) -> dict:
     """Review code comprehensively."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="code_review_app",
-        agent=code_reviewer,
+        app=App(name="code_review_app", root_agent=code_reviewer),
         session_service=session_service,
     )
 
@@ -695,8 +697,8 @@ Provide detailed, constructive feedback."""
         session_id="session_1",
         new_message=message,
     ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response = "".join(p.text or "" for p in event.content.parts)
+        if isinstance(event.output, str):   # the combine node's report
+            response = event.output
 
     return {
         "language": request.language,
@@ -729,7 +731,7 @@ class MeetingRequest(BaseModel):
 
 meeting_scheduler = LlmAgent(
     name="meeting_scheduler",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="""You are a meeting scheduling assistant. Your role is to:
     1. Parse meeting requirements
     2. Suggest optimal meeting times
@@ -790,11 +792,12 @@ async def schedule_meeting(request: MeetingRequest) -> dict:
 
 An agent that processes and extracts information from documents.
 
-> **Note:** `SequentialAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The stages run in order as a `Workflow` chain; each one receives the previous stage's output.
 
 ```python
-from google.adk.agents import SequentialAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, Workflow
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -811,7 +814,7 @@ class DocumentProcessRequest(BaseModel):
 # Parser agent
 parser = LlmAgent(
     name="document_parser",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Parses document structure",
     instruction="""Parse the document structure:
     1. Identify sections and hierarchy
@@ -823,7 +826,7 @@ parser = LlmAgent(
 # Extractor agent
 extractor = LlmAgent(
     name="information_extractor",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="Extracts key information",
     instruction="""Extract the required information:
     1. Find and extract specified fields
@@ -835,7 +838,7 @@ extractor = LlmAgent(
 # Validator agent
 validator = LlmAgent(
     name="data_validator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Validates extracted data",
     instruction="""Validate the extracted data:
     1. Check for completeness
@@ -844,19 +847,17 @@ validator = LlmAgent(
     4. Provide quality assessment""",
 )
 
-# NOTE: SequentialAgent does NOT accept an instruction= argument
-document_processor = SequentialAgent(
+document_processor = Workflow(
     name="document_processor",
     description="Complete document processing workflow",
-    sub_agents=[parser, extractor, validator],
+    edges=[(START, parser, extractor, validator)],
 )
 
 async def process_document(request: DocumentProcessRequest) -> dict:
     """Process a document and extract structured information."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="doc_processor_app",
-        agent=document_processor,
+        app=App(name="doc_processor_app", root_agent=document_processor),
         session_service=session_service,
     )
 
@@ -917,7 +918,7 @@ import asyncio
 
 lead_qualifier = LlmAgent(
     name="lead_qualifier",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""You are an expert sales lead qualifier. Evaluate leads based on:
     1. Company size and industry fit
     2. Budget availability indicators
@@ -980,11 +981,12 @@ Provide:
 
 An agent that monitors system health.
 
-> **Note:** `ParallelAgent` is deprecated in google-adk==2.0.0. The `instruction` field is only
-> valid on `LlmAgent`. For new projects, prefer the `Workflow` API.
+The reviewers run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines the results.
 
 ```python
-from google.adk.agents import ParallelAgent, LlmAgent
+from google.adk.agents import LlmAgent
+from google.adk.apps import App
+from google.adk.workflow import START, JoinNode, Workflow, node
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -994,7 +996,7 @@ import json
 
 performance_monitor = LlmAgent(
     name="performance_monitor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="""Monitor performance metrics:
     1. CPU usage
     2. Memory utilisation
@@ -1005,7 +1007,7 @@ performance_monitor = LlmAgent(
 
 error_monitor = LlmAgent(
     name="error_monitor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="""Monitor error logs:
     1. Error frequency and types
     2. Error severity
@@ -1015,7 +1017,7 @@ error_monitor = LlmAgent(
 
 security_monitor = LlmAgent(
     name="security_monitor",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="""Monitor security metrics:
     1. Authentication failures
     2. Suspicious activities
@@ -1023,19 +1025,23 @@ security_monitor = LlmAgent(
     4. Security patch status""",
 )
 
-# NOTE: ParallelAgent does NOT accept an instruction= argument
-health_monitor = ParallelAgent(
+@node
+def combine_health_monitor(node_input: dict) -> str:
+    """JoinNode output is {branch_name: output}; format it as one report."""
+    return "\n\n".join(f"## {name}\n{text}" for name, text in node_input.items())
+
+
+health_monitor = Workflow(
     name="system_health_monitor",
     description="Comprehensive system monitoring",
-    sub_agents=[performance_monitor, error_monitor, security_monitor],
+    edges=[(START, (performance_monitor, error_monitor, security_monitor), JoinNode(name="join_health_monitor"), combine_health_monitor)],
 )
 
 async def monitor_system_health(metrics: Dict) -> dict:
     """Monitor system health."""
     session_service = InMemorySessionService()
     runner = Runner(
-        app_name="monitoring_app",
-        agent=health_monitor,
+        app=App(name="monitoring_app", root_agent=health_monitor),
         session_service=session_service,
     )
 
@@ -1067,8 +1073,8 @@ Provide:
         session_id="session_1",
         new_message=message,
     ):
-        if event.is_final_response() and event.content and event.content.parts:
-            response = "".join(p.text or "" for p in event.content.parts)
+        if isinstance(event.output, str):   # the combine node's report
+            response = event.output
 
     return {
         "health_assessment": response,
@@ -1094,7 +1100,7 @@ import asyncio
 # Agent configured for streaming (temperature via generate_content_config)
 streaming_agent = LlmAgent(
     name="streaming_assistant",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     description="A chat assistant with SSE streaming enabled",
     instruction="""You are a helpful assistant. Respond clearly and in detail.""",
     generate_content_config=types.GenerateContentConfig(
@@ -1214,8 +1220,14 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.adk.workflow import Workflow, node, START, RetryConfig
 from google.genai import types
+from pydantic import BaseModel
 import asyncio
 import httpx
+
+
+class FetchRequest(BaseModel):
+    """Input the LLM supplies when it calls the pipeline as a tool."""
+    url: str
 
 # ---------------------------------------------------------------------------
 # Workflow nodes
@@ -1231,9 +1243,9 @@ import httpx
     ),
     timeout=30.0,
 )
-async def fetch_data(node_input: dict) -> dict:
+async def fetch_data(node_input: FetchRequest) -> dict:
     """Fetch JSON data from a URL with automatic retry on transient errors."""
-    url = node_input.get("url") if isinstance(node_input, dict) else str(node_input)
+    url = node_input.url
     if not url:
         return {"error": "No URL provided", "data": {}}
     async with httpx.AsyncClient(timeout=25.0) as client:
@@ -1251,8 +1263,9 @@ async def fetch_data(node_input: dict) -> dict:
     ),
     timeout=20.0,
 )
-async def enrich_data(raw: dict) -> dict:
+async def enrich_data(node_input: dict) -> dict:
     """Enrich the fetched data with additional metadata."""
+    raw = node_input  # the previous node's output arrives as `node_input`
     data = raw.get("data", {})
     # Guard: jsonplaceholder-style endpoints return a list, not a mapping
     base = data if isinstance(data, dict) else {"items": data}
@@ -1266,8 +1279,9 @@ async def enrich_data(raw: dict) -> dict:
 
 
 @node(timeout=10.0)
-async def summarise(enriched: dict) -> str:
+async def summarise(node_input: dict) -> str:
     """Format the enriched data as a human-readable summary."""
+    enriched = node_input
     count = enriched.get("record_count", "unknown")
     source = enriched.get("source_url", "unknown source")
     return f"Fetched {count} record(s) from {source}. Enrichment applied: {enriched.get('enriched')}."
@@ -1279,6 +1293,8 @@ async def summarise(enriched: dict) -> str:
 
 pipeline = Workflow(
     name="resilient_data_pipeline",
+    description="Fetch JSON from a URL, enrich it and summarise it.",
+    input_schema=FetchRequest,   # required to use a Workflow as a tool
     edges=[(START, fetch_data, enrich_data, summarise)],
 )
 
@@ -1288,7 +1304,7 @@ pipeline = Workflow(
 
 analyst_agent = LlmAgent(
     name="pipeline_analyst",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Runs the data pipeline and explains results",
     instruction="""You are a data pipeline analyst. Use the provided workflow tools to
     fetch, enrich, and summarise data. Explain the results clearly to the user.""",
@@ -1392,7 +1408,9 @@ session_service = DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db")
 # from google.adk.sessions import VertexAiSessionService
 # session_service = VertexAiSessionService(project="my-project", location="us-central1")
 
-# NOTE: FirestoreSessionService does NOT exist in google-adk==2.0.0
+# Firestore — FirestoreSessionService lives under google.adk.integrations.firestore
+# from google.adk.integrations.firestore import FirestoreSessionService
+# session_service = FirestoreSessionService()  # or client=firestore.AsyncClient(...)
 ```
 
 ### 5. Cost Monitoring
@@ -1403,12 +1421,12 @@ from google.genai import types
 
 # Use Flash model for simple tasks (cheaper)
 flash_config = types.GenerateContentConfig(temperature=0.5, max_output_tokens=1024)
-simple_agent = LlmAgent(name="simple", model="gemini-2.5-flash",
+simple_agent = LlmAgent(name="simple", model="%%model=gemini%%",
                         generate_content_config=flash_config)
 
 # Use Pro for complex reasoning (more capable, higher cost)
 pro_config = types.GenerateContentConfig(temperature=0.3, max_output_tokens=8192)
-complex_agent = LlmAgent(name="complex", model="gemini-2.5-pro",
+complex_agent = LlmAgent(name="complex", model="%%model=gemini-flagship%%",
                          generate_content_config=pro_config)
 ```
 
@@ -1422,7 +1440,7 @@ from google.genai import types
 # CORRECT
 agent = LlmAgent(
     name="my_agent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     generate_content_config=types.GenerateContentConfig(
         temperature=0.7,
         max_output_tokens=2048,
@@ -1431,7 +1449,7 @@ agent = LlmAgent(
 )
 
 # WRONG — these kwargs do not exist on LlmAgent/Agent
-# agent = LlmAgent(name="my_agent", model="gemini-2.5-pro", temperature=0.7)
+# agent = LlmAgent(name="my_agent", model="%%model=gemini-flagship%%", temperature=0.7)
 ```
 
 ---
@@ -1508,7 +1526,7 @@ toolset = OpenAPIToolset(
 
 agent = LlmAgent(
     name="petstore_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Help the user look up and manage pets in the store.",
     tools=[toolset],
 )
@@ -1546,7 +1564,7 @@ from google.genai import types
 
 agent = LlmAgent(
     name="traced_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions and use tools as needed.",
 )
 
@@ -1614,7 +1632,7 @@ os.environ["OPENAI_API_KEY"] = "sk-..."
 # Fast Gemini Flash for routing
 triage = LlmAgent(
     name="triage",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "Classify the user's question as exactly one of: "
         "'research', 'code', or 'billing'. Reply with only the label."
@@ -1624,7 +1642,7 @@ triage = LlmAgent(
 # Claude for deep research (high-quality reasoning)
 researcher = LlmAgent(
     name="researcher",
-    model=LiteLlm(model="anthropic/claude-opus-4-5"),
+    model=LiteLlm(model="anthropic/%%model=anthropic-flagship%%"),
     description="Answers research questions with citations.",
     instruction="Research the question thoroughly and cite at least two sources.",
     tools=[google_search],
@@ -1633,7 +1651,7 @@ researcher = LlmAgent(
 # GPT-4o for code (strong at coding tasks)
 coder = LlmAgent(
     name="coder",
-    model=LiteLlm(model="openai/gpt-4o"),
+    model=LiteLlm(model="openai/%%model=openai%%"),
     description="Writes and explains code.",
     instruction="Provide a working Python example and explain each step.",
 )
@@ -1641,14 +1659,14 @@ coder = LlmAgent(
 # Cheap GPT-4o-mini for billing lookups (simple task, cost-sensitive)
 billing = LlmAgent(
     name="billing",
-    model=LiteLlm(model="openai/gpt-4o-mini"),
+    model=LiteLlm(model="openai/%%model=openai-small%%"),
     description="Handles billing and account enquiries.",
     instruction="Answer billing questions concisely.",
 )
 
 root = LlmAgent(
     name="router",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "Route the user to the right specialist. "
         "For research questions use `researcher`. "
@@ -1720,7 +1738,7 @@ class PaymentsRetryPlugin(ReflectAndRetryToolPlugin):
 
 agent = LlmAgent(
     name="payments_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "Process payment requests. Use charge_card to charge the card. "
         "If a charge fails, retry with the same arguments."
@@ -1774,21 +1792,21 @@ class ISODateProvider(BaseExampleProvider):
         Example(
             input=types.Content(
                 role="user",
-                parts=[types.Part.from_text("Convert '25th December 2024' to ISO format.")],
+                parts=[types.Part.from_text(text="Convert '25th December 2024' to ISO format.")],
             ),
             output=[types.Content(
                 role="model",
-                parts=[types.Part.from_text("2024-12-25")],
+                parts=[types.Part.from_text(text="2024-12-25")],
             )],
         ),
         Example(
             input=types.Content(
                 role="user",
-                parts=[types.Part.from_text("What is ISO format for March 3rd, 2025?")],
+                parts=[types.Part.from_text(text="What is ISO format for March 3rd, 2025?")],
             ),
             output=[types.Content(
                 role="model",
-                parts=[types.Part.from_text("2025-03-03")],
+                parts=[types.Part.from_text(text="2025-03-03")],
             )],
         ),
     ]
@@ -1797,11 +1815,11 @@ class ISODateProvider(BaseExampleProvider):
         Example(
             input=types.Content(
                 role="user",
-                parts=[types.Part.from_text("What is the ISO currency code for British pounds?")],
+                parts=[types.Part.from_text(text="What is the ISO currency code for British pounds?")],
             ),
             output=[types.Content(
                 role="model",
-                parts=[types.Part.from_text("GBP")],
+                parts=[types.Part.from_text(text="GBP")],
             )],
         ),
     ]
@@ -1816,7 +1834,7 @@ class ISODateProvider(BaseExampleProvider):
 
 agent = LlmAgent(
     name="standards_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions about ISO standards precisely.",
     tools=[ExampleTool(ISODateProvider())],
 )
@@ -1876,7 +1894,7 @@ def send_trade_notification(email: str, message: str) -> dict:
 
 agent = LlmAgent(
     name="trading_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You are a trading assistant. Check exchange rates and market data, "
         "then send notifications when trades are executed."
@@ -1929,7 +1947,7 @@ sim_config = EnvironmentSimulationConfig(
             ],
         ),
     ],
-    simulation_model="gemini-2.0-flash",
+    simulation_model="%%model=gemini%%",
     environment_data=json.dumps({
         "stocks": [
             {"symbol": "GOOG", "price": 185.50, "change_pct": 1.2},
@@ -1980,7 +1998,7 @@ executor = VertexAiCodeExecutor(
 
 agent = LlmAgent(
     name="data_explorer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You are an interactive data analyst. "
         "Execute Python code to answer user questions about data. "

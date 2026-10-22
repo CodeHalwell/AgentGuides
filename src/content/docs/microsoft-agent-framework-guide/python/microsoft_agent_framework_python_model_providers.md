@@ -1,15 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — Model Providers"
-description: "Real imports and constructors for every first-party chat client in agent-framework 1.5.0: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Ollama, Bedrock, GitHub Copilot, Copilot Studio."
-framework: microsoft-agent-framework
-language: python
+description: "Real imports and constructors for every first-party chat client in agent-framework: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Ollama, Bedrock, GitHub Copilot, Copilot Studio."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Model Providers — Python
 
 Every chat client in `agent-framework` implements the same `SupportsChatGetResponse` protocol, so `Agent(client=...)` accepts them interchangeably. The import is always `agent_framework.<provider>.<ClassName>` — **no Azure SDK import is required for any of these**. The Azure SDK only becomes relevant for authentication (`azure-identity`) or for Azure-specific storage providers.
 
-This page was verified against `agent-framework-core==1.5.0` and provider packages at `1.0.0b260514` (May 2026). Each sub-package is imported lazily from the `agent_framework.<provider>` namespace — you install the provider package and import from `agent_framework.<provider>`.
+This page was verified against `agent-framework` %%version=agent-framework%% and the provider packages it installs (re-checked %%versions-checked%%; first written for 1.5.0 and the `1.0.0b260514` provider line). Each sub-package is imported lazily from the `agent_framework.<provider>` namespace — you install the provider package and import from `agent_framework.<provider>`.
 
 ## Provider index
 
@@ -50,8 +48,8 @@ Responses API vs Chat Completions API: `OpenAIChatClient` uses the **Responses A
 ```python
 from agent_framework.openai import OpenAIChatClient, OpenAIChatCompletionClient
 
-responses_client = OpenAIChatClient(model="gpt-5")            # /responses
-completions_client = OpenAIChatCompletionClient(model="gpt-5")  # /chat/completions
+responses_client = OpenAIChatClient(model="%%model=openai%%")            # /responses
+completions_client = OpenAIChatCompletionClient(model="%%model=openai%%")  # /chat/completions
 ```
 
 Azure OpenAI with Entra ID (passwordless):
@@ -113,12 +111,12 @@ async with AzureCliCredential() as credential:
     agent = Agent(
         client=FoundryChatClient(
             project_endpoint="https://<project>.services.ai.azure.com",
-            model="gpt-4o-mini",
+            model="%%model=openai-small%%",
             credential=credential,
         ),
         instructions="You are a helpful assistant.",
     )
-    response = await agent.run("Summarise agent-framework 1.5.0 in one line.")
+    response = await agent.run("Summarise the Microsoft Agent Framework in one line.")
 ```
 
 Env vars: `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`.
@@ -129,7 +127,7 @@ If you already hold an `AIProjectClient`, pass it directly and skip endpoint/cre
 from azure.ai.projects import AIProjectClient
 
 project = AIProjectClient(endpoint=..., credential=...)
-client = FoundryChatClient(project_client=project, model="gpt-4o-mini")
+client = FoundryChatClient(project_client=project, model="%%model=openai-small%%")
 ```
 
 **Service-managed agents.** Use `FoundryAgent` when you want the agent's identity, threads, and tool definitions to live in Foundry (not in your process):
@@ -173,20 +171,21 @@ from agent_framework.anthropic import (
 )
 
 agent = Agent(
-    client=AnthropicClient(model="claude-sonnet-4-5"),
+    client=AnthropicClient(model="%%model=anthropic%%"),
     instructions="You are a helpful assistant.",
 )
 ```
 
-Use the Claude Agent SDK instead of a chat client when you want Claude to drive its own tool loop, subagents, and session continuity:
+Use `ClaudeAgent` (package `agent-framework-claude`, built on the Claude Agent SDK and the Claude Code CLI) instead of a chat client when you want Claude to drive its own tool loop, subagents and session continuity. `ClaudeAgentOptions.model` takes the CLI's aliases (`"sonnet"`, `"opus"`, `"haiku"`):
 
 ```python
 from agent_framework.anthropic import ClaudeAgent, ClaudeAgentOptions
 
-claude = ClaudeAgent(
-    options=ClaudeAgentOptions(model="claude-sonnet-4-5", permission_mode="default"),
-)
-response = await claude.run("Refactor utils.py to use dataclasses.")
+async with ClaudeAgent(
+    instructions="You are a careful Python reviewer.",
+    default_options=ClaudeAgentOptions(model="sonnet", permission_mode="default"),
+) as claude:
+    response = await claude.run("Refactor utils.py to use dataclasses.")
 ```
 
 ## Ollama
@@ -206,7 +205,7 @@ agent = Agent(
 Custom base URL (non-default daemon):
 
 ```python
-OllamaChatClient(model="llama3.1", base_url="http://gpu-host:11434")
+OllamaChatClient(model="llama3.1", host="http://gpu-host:11434")
 ```
 
 ## Amazon Bedrock (native)
@@ -223,28 +222,40 @@ agent = Agent(
 )
 ```
 
-Guardrails:
+Guardrails are a chat option (`guardrailConfig`), not a constructor argument. `BedrockGuardrailConfig` is a `TypedDict` using the Bedrock API's own camelCase keys:
 
 ```python
+from agent_framework import Agent
 from agent_framework.amazon import BedrockChatClient, BedrockGuardrailConfig
 
-client = BedrockChatClient(
-    model="amazon.nova-pro-v1:0",
-    guardrail=BedrockGuardrailConfig(guardrail_id="gr-xyz", guardrail_version="1"),
+guardrail: BedrockGuardrailConfig = {
+    "guardrailIdentifier": "gr-xyz",
+    "guardrailVersion": "1",
+    "trace": "enabled",
+}
+
+agent = Agent(
+    client=BedrockChatClient(model="amazon.nova-pro-v1:0", region="us-east-1"),
+    instructions="You are a helpful assistant.",
+    default_options={"guardrailConfig": guardrail},   # or per call via options=
 )
 ```
 
 ## GitHub Copilot
 
-```python
-from agent_framework import Agent
-from agent_framework.github import CopilotChatClient  # agent_framework_github_copilot
+`agent-framework-github-copilot` wraps the GitHub Copilot SDK as an agent in its own right — `GitHubCopilotAgent` — rather than as a chat client for `Agent`:
 
-agent = Agent(
-    client=CopilotChatClient(model="gpt-4o"),
-    instructions="Pair-programmer mode.",
+```python
+from agent_framework.github import GitHubCopilotAgent  # agent_framework_github_copilot
+
+agent = GitHubCopilotAgent(
+    "Pair-programmer mode.",
+    default_options={"model": "%%model=openai%%"},
 )
+response = await agent.run("Explain this stack trace.")
 ```
+
+
 
 ## Copilot Studio
 
@@ -252,9 +263,11 @@ agent = Agent(
 from agent_framework.microsoft import CopilotStudioAgent  # agent_framework_copilotstudio
 
 agent = CopilotStudioAgent(
-    bot_id="<bot id>",
+    environment_id="<power platform environment id>",
+    agent_identifier="<copilot schema name>",
+    client_id="<entra app client id>",
     tenant_id="<tenant id>",
-    # …auth config…
+    # or pass a pre-built `client=` / `settings=`; values can also come from env vars
 )
 ```
 
@@ -272,10 +285,10 @@ from agent_framework.ollama import OllamaChatClient
 def build_client():
     provider = os.environ.get("LLM_PROVIDER", "openai")
     if provider == "anthropic":
-        return AnthropicClient(model="claude-sonnet-4-5")
+        return AnthropicClient(model="%%model=anthropic%%")
     if provider == "ollama":
         return OllamaChatClient(model="llama3.1")
-    return OpenAIChatClient(model="gpt-5")
+    return OpenAIChatClient(model="%%model=openai%%")
 
 agent = Agent(client=build_client(), instructions="Helpful assistant.")
 ```
@@ -375,7 +388,7 @@ Every provider-specific options TypedDict (`OpenAIChatOptions`, `AnthropicChatOp
 from agent_framework import ChatOptions
 
 common: ChatOptions = {
-    "model": "gpt-5-mini",
+    "model": "%%model=openai-small%%",
     "temperature": 0.2,
     "top_p": 0.9,
     "max_tokens": 2_000,
@@ -638,12 +651,16 @@ Providers that don't support structured output natively fall back to JSON-mode +
 
 ### Merging with client-level defaults
 
-Every client accepts the same TypedDict on construction. The call-level `options=` is a shallow merge on top: keys you set win, keys you omit inherit from the client.
+Defaults live in the agent's `default_options=` (the same TypedDict). The call-level `options=` is a shallow merge on top: keys you set win, keys you omit inherit from the client.
 
 ```python
+from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
-client = OpenAIChatClient(model="gpt-5-mini", temperature=0.7)
+agent = Agent(
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
+    default_options={"temperature": 0.7},
+)
 
 # Inherits temperature=0.7; only max_tokens is overridden.
 await agent.run("Draft a tweet.", options={"max_tokens": 280})
@@ -656,14 +673,14 @@ Every client accepts `model=` at construction and remembers it. But you can also
 ```python
 from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
 
-default_client = OpenAIChatClient(model="gpt-5-mini")
+default_client = OpenAIChatClient(model="%%model=openai-small%%")
 
 agent = Agent(client=default_client, instructions="…")
 
 # Upgrade to a bigger model just for this one tricky question.
 response = await agent.run(
     "Prove Fermat's last theorem in two sentences.",
-    options=OpenAIChatOptions(model="gpt-5", temperature=0.2),
+    options=OpenAIChatOptions(model="%%model=openai%%", temperature=0.2),
 )
 ```
 

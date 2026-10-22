@@ -1,13 +1,14 @@
 ---
 title: "Google ADK — IAM, Auth & Credentials"
-description: "Least-privilege IAM roles, service account setup, AuthenticatedFunctionTool, Secret Manager integration, and credential patterns for google-adk 2.1.0."
-framework: google-adk
-language: python
+description: "Least-privilege IAM roles, service account setup, AuthenticatedFunctionTool, Secret Manager integration, and credential patterns for Google ADK agents."
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 80
+  label: "IAM, auth and credentials"
+  order: 85
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`). As of 2026-09-21 the latest release was **2.9.2** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 This guide covers the full credential story for ADK agents deployed on Google Cloud: which IAM roles each service needs, how to create and bind a service account, how to inject secrets via Secret Manager, and how to wire OAuth2 / API-key auth into your tools with `AuthenticatedFunctionTool`.
 
@@ -76,9 +77,9 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 ### Deploy to Cloud Run with the SA
 
 ```bash
-# Build and deploy — the SA runs the container, Workload Identity handles model calls
+# Deploy an image from Artifact Registry; the service runs as the SA, and ADC picks up its identity for model calls
 gcloud run deploy adk-agent \
-  --image="gcr.io/${PROJECT_ID}/adk-agent:latest" \
+  --image="us-central1-docker.pkg.dev/${PROJECT_ID}/agents/adk-agent:latest" \
   --region="us-central1" \
   --service-account="${SA_EMAIL}" \
   --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GOOGLE_CLOUD_LOCATION=us-central1" \
@@ -235,7 +236,7 @@ weather_tool = AuthenticatedFunctionTool(
 
 agent = LlmAgent(
     name="weather_bot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer weather questions using the call_weather_api tool.",
     tools=[weather_tool],
 )
@@ -453,7 +454,7 @@ def build_agent() -> LlmAgent:
     payment_tool = AuthenticatedFunctionTool(func=charge_card, auth_config=stripe_auth)
     return LlmAgent(
         name="payment_agent",
-        model="gemini-2.5-flash",
+        model="%%model=gemini%%",
         instruction="Process payment requests using charge_card.",
         tools=[payment_tool],
     )
@@ -585,7 +586,7 @@ gcloud secrets add-iam-policy-binding "my-secret" \
 
 ## 9 · Gotchas
 
-- `AuthenticatedFunctionTool` is `@experimental(FeatureName.PLUGGABLE_AUTH)` — suppress the warning with `GOOGLE_ADK_IGNORE_WARNINGS=pluggable_auth`.
+- `AuthenticatedFunctionTool` is `@experimental(FeatureName.AUTHENTICATED_FUNCTION_TOOL)` — suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
 - `credential_key` in `AuthConfig` allows two tools to share a cached token. Without it, each tool triggers its own auth flow even when they use the same provider.
 - `AuthenticatedFunctionTool` marks `"credential"` as an `_ignore_params` name — it does **not** appear in the model's function schema. Always name the parameter exactly `credential` in your function signature.
 - On Cloud Run with min-instances=0, the SA key rotation is picked up on cold start. Warm instances keep the old secret until their memory is cleared.

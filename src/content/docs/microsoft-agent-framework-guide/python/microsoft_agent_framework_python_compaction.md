@@ -1,15 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — Compaction"
-description: "Keep long agent conversations inside the context window: TruncationStrategy, SlidingWindowStrategy, SummarizationStrategy, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, and CompactionProvider."
-framework: microsoft-agent-framework
-language: python
+description: "Keep long agent conversations inside the context window: TruncationStrategy, SlidingWindowStrategy, SummarizationStrategy, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, ContextWindowCompactionStrategy, and CompactionProvider."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Compaction — Python
 
 Long-running agents blow through the context window. Compaction strategies decide which messages to keep, which to drop, and which to replace with shorter summaries — **per turn**, before the messages reach the model.
 
-Six first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework-core==1.6.0` (`agent_framework._compaction`).
+Seven first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.6.0) (`agent_framework._compaction`).
 
 ## Mental model
 
@@ -25,6 +23,7 @@ Compaction sees your conversation as an ordered list of **message groups** (user
 | `ToolResultCompactionStrategy` | Collapse older tool calls into one-line summaries | Keep a readable trace but cut tokens |
 | `SummarizationStrategy` | LLM-summarise older groups into a single message | Long chats where earlier context still matters |
 | `TokenBudgetComposedStrategy` | Run other strategies until a token budget is met | Hard limit per turn; compose lighter strategies first |
+| `ContextWindowCompactionStrategy` | Two thresholds derived from the model's window: collapse old tool results, then truncate | You know the model's context and output limits and want a sensible default |
 
 All implement `CompactionStrategy`:
 
@@ -329,7 +328,7 @@ from agent_framework import SummarizationStrategy
 from agent_framework.openai import OpenAIChatClient
 
 summariser = SummarizationStrategy(
-    client=OpenAIChatClient(model="gpt-4o-mini"),
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
     target_count=8,     # leave 8 non-system messages untouched
     threshold=4,        # trigger when included > target + threshold
 )
@@ -343,7 +342,7 @@ The default prompt preserves goals, decisions, and unresolved items. Override wi
 
 ```python
 support_summariser = SummarizationStrategy(
-    client=OpenAIChatClient(model="gpt-4o-mini"),
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
     target_count=6,
     threshold=3,
     prompt=(
@@ -402,7 +401,7 @@ from agent_framework import (
 )
 from agent_framework.openai import OpenAIChatClient
 
-summariser_client = OpenAIChatClient(model="gpt-4o-mini")
+summariser_client = OpenAIChatClient(model="%%model=openai-small%%")
 
 strategy = TokenBudgetComposedStrategy(
     token_budget=8_000,
@@ -428,7 +427,7 @@ from agent_framework import TokenizerProtocol
 class TiktokenTokenizer:
     """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
 
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    def __init__(self, model: str = "%%model=openai-small%%") -> None:
         self._enc = tiktoken.encoding_for_model(model)
 
     def count_tokens(self, text: str) -> int:
@@ -454,6 +453,36 @@ est.count_tokens("a" * 4_000)       # 1000
 ```
 
 It's good enough for budget-aware fallbacks during dev/test. For production cost accounting use the real tokenizer that matches your model. Any object with a `count_tokens(text: str) -> int` method satisfies `TokenizerProtocol` — the protocol is structurally typed (`runtime_checkable`), so no inheritance is required.
+
+## Context-window strategy — sized from the model's limits
+
+`ContextWindowCompactionStrategy` is the "just give me sensible defaults" option. You tell it the model's context window and maximum output, and it works out an **input budget** (`max_context_window_tokens - max_output_tokens`) with two thresholds:
+
+1. **Tool eviction**: once included tokens pass `tool_eviction_threshold × budget` (default 50%), older tool-call groups are collapsed into summaries, as `ToolResultCompactionStrategy` does, keeping the newest `keep_last_tool_call_groups` (default 4).
+2. **Truncation**: if tokens still pass `truncation_threshold × budget` (default 80%) after re-measuring, the oldest non-system groups are dropped.
+
+```python
+from agent_framework import Agent, CompactionProvider, ContextWindowCompactionStrategy, InMemoryHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
+strategy = ContextWindowCompactionStrategy(
+    max_context_window_tokens=128_000,   # your model's context window
+    max_output_tokens=16_384,
+    tool_eviction_threshold=0.5,
+    truncation_threshold=0.8,            # must be >= tool_eviction_threshold
+    keep_last_tool_call_groups=4,
+    preserve_first_user_group=True,      # keep the original task statement during truncation
+    # tokenizer=TiktokenTokenizer(),     # defaults to CharacterEstimatorTokenizer
+)
+
+agent = Agent(
+    client=OpenAIChatClient(model="%%model=openai%%"),
+    instructions="You are a research assistant with tool access.",
+    context_providers=[InMemoryHistoryProvider(), CompactionProvider(before_strategy=strategy)],
+)
+```
+
+Use `TokenBudgetComposedStrategy` instead when you want summarisation in the pipeline or a custom ordering. This strategy never calls a model.
 
 ## Wiring compaction into an agent
 
@@ -740,7 +769,7 @@ Excluded messages stay in the original list — `apply_compaction` mutates in pl
 
 **Default for chat UIs.** `SlidingWindowStrategy(keep_last_groups=20)` as `before_strategy`, `ToolResultCompactionStrategy(keep_last_tool_call_groups=1)` as `after_strategy`. Predictable, no judge tokens.
 
-**Research agents with long plans.** Use `SummarizationStrategy` with a cheap model — Phi-3 / Haiku / gpt-4o-mini. The summary retains goals and open questions so the agent stays on-track past 50 turns.
+**Research agents with long plans.** Use `SummarizationStrategy` with a cheap model — the small tier of your provider (for example `%%model=openai-small%%` or `%%model=anthropic-small%%`). The summary retains goals and open questions so the agent stays on-track past 50 turns.
 
 **Strict SLA on context size.** `TokenBudgetComposedStrategy(token_budget=32_000, ...)` guarantees you never send >32k tokens, with deterministic fallback even if summarisation fails.
 
@@ -764,7 +793,7 @@ from agent_framework.openai import OpenAIChatClient
 class TiktokenTokenizer:
     """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
 
-    def __init__(self, model: str = "gpt-4o-mini") -> None:
+    def __init__(self, model: str = "%%model=openai-small%%") -> None:
         self._enc = tiktoken.encoding_for_model(model)
 
     def count_tokens(self, text: str) -> int:
@@ -772,7 +801,7 @@ class TiktokenTokenizer:
 
 
 # Cheap model used for summarisation only — separate from the agent's main model.
-summary_client = OpenAIChatClient(model="gpt-4o-mini")
+summary_client = OpenAIChatClient(model="%%model=openai-small%%")
 tokenizer: TokenizerProtocol = TiktokenTokenizer()
 history = InMemoryHistoryProvider()
 ```
@@ -800,7 +829,7 @@ summariser = SummarizationStrategy(
 )
 
 agent = Agent(
-    client=OpenAIChatClient(model="gpt-4o"),
+    client=OpenAIChatClient(model="%%model=openai%%"),
     instructions="You are a research assistant for a multi-week project.",
     context_providers=[
         history,
@@ -1006,12 +1035,6 @@ from agent_framework import (
 
 
 async def main() -> None:
-    messages = [
-        Message(role="user",      contents=[Content.from_text(f"Question {i}")]),
-        Message(role="assistant", contents=[Content.from_text(f"Answer {i}")])
-        for i in range(10)
-    ]
-    # Flatten the list comprehension (above produces nested lists)
     flat: list[Message] = []
     for i in range(10):
         flat.append(Message(role="user",      contents=[Content.from_text(f"Q{i}")]))
@@ -1178,7 +1201,7 @@ agent = Agent(
 
 Constructor:
 
-```python
+```text
 SelectiveToolCallCompactionStrategy(
     keep_last_tool_call_groups: int = 1,   # set to 0 to drop all tool-call groups
 )
@@ -1304,7 +1327,7 @@ asyncio.run(main())
 
 ### `CompactionProvider` constructor reference
 
-```python
+```text
 CompactionProvider(
     *,
     before_strategy: CompactionStrategy | None = None,

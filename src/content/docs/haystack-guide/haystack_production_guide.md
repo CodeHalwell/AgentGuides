@@ -1,886 +1,140 @@
 ---
 title: "Haystack Production Deployment and Operations Guide"
-description: "Deploying Haystack in production — readiness checklist, Docker, Kubernetes, FastAPI services, scaling and caching."
-framework: haystack
+description: "Running Haystack 3 in production — readiness checks, serialised pipelines, serving with FastAPI or Hayhooks, security, cost controls, testing and evaluation, scaling and caching."
+framework: "haystack"
+language: "python"
+sidebar:
+  label: "Production"
+  order: 7
 ---
 
-# Haystack Production Deployment and Operations Guide
+> Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%).
 
 ## Table of Contents
 
 1. [Production Readiness Checklist](#production-readiness-checklist)
 2. [Deployment Strategies](#deployment-strategies)
-3. [Containerisation and Docker](#containerisation-and-docker)
-4. [Kubernetes Deployment](#kubernetes-deployment)
-5. [API Service Development](#api-service-development)
-6. [Scaling Strategies](#scaling-strategies)
-7. [Caching and Performance](#caching-and-performance)
+3. [Containers and Kubernetes](#containers-and-kubernetes)
+4. [API Service Development](#api-service-development)
+5. [Security](#security)
+6. [Cost Controls](#cost-controls)
+7. [Testing and Evaluation](#testing-and-evaluation)
+8. [Scaling Strategies](#scaling-strategies)
+9. [Caching and Performance](#caching-and-performance)
 
-For tracing, metrics and error-recovery patterns, continue in [Observability](/haystack-guide/haystack_observability_python/); for resilience inside the agent loop, see [Error Handling and Resilience](/haystack-guide/haystack_comprehensive_guide/#error-handling-and-resilience) in the comprehensive guide.
+For tracing, logging, retries, fallbacks and dead letters, continue in [Observability](/haystack-guide/haystack_observability_python/).
 
 ---
 
 ## Production Readiness Checklist
 
-### Pre-Deployment Validation
+### Before you deploy
+
+| Area | Check |
+|------|-------|
+| Versions | Pin `haystack-ai` and every integration package; Haystack 3 integrations are released independently of the core |
+| Secrets | API keys passed as `Secret.from_env_var(...)`, never as strings in code or YAML |
+| Start-up | `pipeline.warm_up()` at start-up so missing keys and unreachable stores fail fast (from 3.0, keys are resolved at warm-up, not construction) |
+| Shutdown | `pipeline.close()` / `await pipeline.close_async()` to release HTTP clients and connections |
+| Serialisation | Pipelines loaded from YAML use an explicit `allowed_modules` list, never `unsafe=True` for files you did not write |
+| Prompts | Template variables are required by default; integration tests cover every input path |
+| Agents | `max_agent_steps` set deliberately; `exit_reason` logged; tools with side effects behind a confirmation hook |
+| Security | Privileged IDs reach tools through `State` parameters, not `inputs_from_state` or the prompt (see [Security](#security)) |
+| Cost | A `TokenBudgetHook` per agent; token usage logged per request (see [Cost controls](#cost-controls)) |
+| Tests | Pipelines and agents exercised in CI with `MockChatGenerator`; evaluators run on a golden set (see [Testing and evaluation](#testing-and-evaluation)) |
+| Tracing | A tracer is enabled explicitly (nothing is auto-enabled in 3.x); content tracing only where PII rules allow |
+| Telemetry | `HAYSTACK_TELEMETRY_ENABLED=False` set in the environment if your policy forbids anonymous usage statistics |
+| Logging | Decide whether Haystack's handler should propagate to your root logger (see [Observability](/haystack-guide/haystack_observability_python/#logging)) |
+| Data | If you index with auto-generated IDs and upgraded from 2.x, re-index documents with non-empty `meta` (their IDs changed) |
+
+### A start-up check
 
 ```python
-from dataclasses import dataclass
-from typing import List, Tuple
 import logging
+import os
+
+from haystack import Pipeline
 
 logger = logging.getLogger(__name__)
 
-@dataclass
-class ReadinessCheckResult:
-    """Result of a readiness check."""
-    component: str
-    passed: bool
-    message: str
-    severity: str  # "critical", "warning", "info"
-    recommendation: str = ""
+REQUIRED_ENV = ["OPENAI_API_KEY"]
 
-class ProductionReadinessChecklist:
-    """
-    Validates Haystack application readiness for production deployment.
-    """
-    
-    def __init__(self):
-        self.checks: List[ReadinessCheckResult] = []
-    
-    def check_configuration(self) -> bool:
-        """Verify configuration is production-ready."""
-        issues = []
-        
-        # Check required environment variables
-        required_vars = [
-            "LLM_API_KEY",
-            "DATABASE_URL",
-            "VECTOR_STORE_URL",
-            "REDIS_URL",
-            "LOG_LEVEL"
-        ]
-        
-        import os
-        for var in required_vars:
-            if not os.getenv(var):
-                issues.append(var)
-        
-        if issues:
-            self.checks.append(ReadinessCheckResult(
-                component="Configuration",
-                passed=False,
-                message=f"Missing environment variables: {', '.join(issues)}",
-                severity="critical",
-                recommendation="Set all required environment variables before deployment"
-            ))
-            return False
-        
-        self.checks.append(ReadinessCheckResult(
-            component="Configuration",
-            passed=True,
-            message="All required environment variables present",
-            severity="info"
-        ))
-        return True
-    
-    def check_dependencies(self) -> bool:
-        """Verify all dependencies are available."""
-        required_packages = [
-            "haystack_ai",
-            "fastapi",
-            "uvicorn",
-            "pydantic",
-            "redis",
-            "psycopg2",
-            "elasticsearch",
-            "weaviate"
-        ]
-        
-        missing = []
-        for package in required_packages:
-            try:
-                __import__(package.replace('-', '_'))
-            except ImportError:
-                missing.append(package)
-        
-        if missing:
-            self.checks.append(ReadinessCheckResult(
-                component="Dependencies",
-                passed=False,
-                message=f"Missing packages: {', '.join(missing)}",
-                severity="critical",
-                recommendation=f"Install missing packages: pip install {' '.join(missing)}"
-            ))
-            return False
-        
-        self.checks.append(ReadinessCheckResult(
-            component="Dependencies",
-            passed=True,
-            message="All required packages available",
-            severity="info"
-        ))
-        return True
-    
-    def check_connectivity(self) -> bool:
-        """Verify connectivity to external services."""
-        services_to_check = {
-            "LLM Provider": "OPENAI_API_KEY",
-            "Vector Database": "VECTOR_STORE_URL",
-            "Cache": "REDIS_URL",
-            "Primary Database": "DATABASE_URL"
-        }
-        
-        all_connected = True
-        
-        for service, config_key in services_to_check.items():
-            try:
-                # Attempt to connect to each service
-                connected = self._test_service_connection(service, config_key)
-                
-                if connected:
-                    self.checks.append(ReadinessCheckResult(
-                        component=f"Connectivity - {service}",
-                        passed=True,
-                        message=f"Connected to {service}",
-                        severity="info"
-                    ))
-                else:
-                    self.checks.append(ReadinessCheckResult(
-                        component=f"Connectivity - {service}",
-                        passed=False,
-                        message=f"Failed to connect to {service}",
-                        severity="critical",
-                        recommendation=f"Verify {config_key} configuration and service availability"
-                    ))
-                    all_connected = False
-            
-            except Exception as e:
-                self.checks.append(ReadinessCheckResult(
-                    component=f"Connectivity - {service}",
-                    passed=False,
-                    message=f"Error testing {service}: {str(e)}",
-                    severity="critical"
-                ))
-                all_connected = False
-        
-        return all_connected
-    
-    def check_logging(self) -> bool:
-        """Verify logging is properly configured."""
-        import logging
-        
-        logger = logging.getLogger()
-        
-        if not logger.handlers:
-            self.checks.append(ReadinessCheckResult(
-                component="Logging",
-                passed=False,
-                message="No logging handlers configured",
-                severity="warning",
-                recommendation="Configure logging handlers for proper observability"
-            ))
-            return False
-        
-        self.checks.append(ReadinessCheckResult(
-            component="Logging",
-            passed=True,
-            message="Logging is properly configured",
-            severity="info"
-        ))
-        return True
-    
-    def _test_service_connection(self, service: str, config_key: str) -> bool:
-        """Test connection to a service."""
-        # Implementation would test actual connection
-        return True
-    
-    def run_all_checks(self) -> Tuple[bool, List[ReadinessCheckResult]]:
-        """Run all readiness checks."""
-        all_passed = True
-        
-        all_passed &= self.check_configuration()
-        all_passed &= self.check_dependencies()
-        all_passed &= self.check_connectivity()
-        all_passed &= self.check_logging()
-        
-        return all_passed, self.checks
-    
-    def report(self) -> str:
-        """Generate readiness report."""
-        critical = [c for c in self.checks if c.severity == "critical" and not c.passed]
-        warnings = [c for c in self.checks if c.severity == "warning" and not c.passed]
-        
-        report = "PRODUCTION READINESS REPORT\n"
-        report += "=" * 50 + "\n\n"
-        
-        if critical:
-            report += "CRITICAL ISSUES (must fix before deployment):\n"
-            for check in critical:
-                report += f"  ✗ {check.component}: {check.message}\n"
-                if check.recommendation:
-                    report += f"    → {check.recommendation}\n"
-            report += "\n"
-        
-        if warnings:
-            report += "WARNINGS (should address):\n"
-            for check in warnings:
-                report += f"  ⚠ {check.component}: {check.message}\n"
-                if check.recommendation:
-                    report += f"    → {check.recommendation}\n"
-            report += "\n"
-        
-        passed_checks = [c for c in self.checks if c.passed]
-        report += f"PASSED: {len(passed_checks)}/{len(self.checks)} checks\n"
-        
-        if not critical:
-            report += "\n✓ Application is ready for production deployment\n"
-        else:
-            report += f"\n✗ Application has {len(critical)} critical issues to resolve\n"
-        
-        return report
 
-# Usage
-checklist = ProductionReadinessChecklist()
-all_passed, results = checklist.run_all_checks()
-print(checklist.report())
+def check_ready(pipeline: Pipeline) -> None:
+    missing = [v for v in REQUIRED_ENV if not os.getenv(v)]
+    if missing:
+        raise RuntimeError(f"Missing environment variables: {', '.join(missing)}")
 
-if not all_passed:
-    raise RuntimeError("Production readiness checks failed")
+    # Creates API clients and connects to stores; raises on bad credentials or config
+    pipeline.warm_up()
+
+    # Connections are type-checked by connect(); log the entry points and outputs for the record
+    logger.info("Pipeline ready: inputs=%s outputs=%s", pipeline.inputs(), pipeline.outputs())
 ```
+
+For a deeper smoke test, run the pipeline once in CI with `MockChatGenerator` in place of the real generator; see [Testing and evaluation](#testing-and-evaluation).
 
 ---
 
 ## Deployment Strategies
 
-### Blue-Green Deployment
+### Pipelines as configuration
+
+Build pipelines in code, serialise them to YAML, and ship the YAML with the release. The same artefact then runs in every environment:
 
 ```python
-from enum import Enum
-from typing import Optional
-import logging
+from haystack import Pipeline
 
-logger = logging.getLogger(__name__)
-
-class DeploymentEnvironment(Enum):
-    BLUE = "blue"
-    GREEN = "green"
-
-class BlueGreenDeploymentManager:
-    """
-    Manages blue-green deployments for zero-downtime updates.
-    """
-    
-    def __init__(self, load_balancer_config: dict):
-        self.load_balancer_config = load_balancer_config
-        self.active_environment = DeploymentEnvironment.BLUE
-        self.inactive_environment = DeploymentEnvironment.GREEN
-    
-    def deploy_to_inactive(self, version: str) -> bool:
-        """
-        Deploy new version to inactive environment.
-        
-        Args:
-            version: Version to deploy
-            
-        Returns:
-            Success status
-        """
-        try:
-            logger.info(f"Deploying version {version} to {self.inactive_environment.value}")
-            
-            # 1. Deploy to inactive environment
-            self._deploy_services(self.inactive_environment, version)
-            
-            # 2. Run health checks
-            if not self._health_check(self.inactive_environment):
-                logger.error(f"Health check failed for {self.inactive_environment.value}")
-                self._rollback(self.inactive_environment)
-                return False
-            
-            # 3. Run smoke tests
-            if not self._run_smoke_tests(self.inactive_environment):
-                logger.error(f"Smoke tests failed for {self.inactive_environment.value}")
-                self._rollback(self.inactive_environment)
-                return False
-            
-            logger.info(f"Deployment to {self.inactive_environment.value} successful")
-            return True
-        
-        except Exception as e:
-            logger.error(f"Deployment failed: {str(e)}")
-            self._rollback(self.inactive_environment)
-            return False
-    
-    def switch_traffic(self) -> bool:
-        """
-        Switch traffic to newly deployed environment.
-        
-        Returns:
-            Success status
-        """
-        try:
-            logger.info(f"Switching traffic from {self.active_environment.value} to {self.inactive_environment.value}")
-            
-            # Update load balancer
-            self._update_load_balancer(self.inactive_environment)
-            
-            # Swap active/inactive
-            self.active_environment, self.inactive_environment = (
-                self.inactive_environment,
-                self.active_environment
-            )
-            
-            logger.info("Traffic switch successful")
-            return True
-        
-        except Exception as e:
-            logger.error(f"Traffic switch failed: {str(e)}")
-            return False
-    
-    def _deploy_services(self, environment: DeploymentEnvironment, version: str):
-        """Deploy services to specified environment."""
-        logger.info(f"Deploying services to {environment.value}")
-        # Implementation would deploy Docker containers or pods
-    
-    def _health_check(self, environment: DeploymentEnvironment) -> bool:
-        """Perform health checks on environment."""
-        logger.info(f"Running health checks for {environment.value}")
-        # Implementation would check service health endpoints
-        return True
-    
-    def _run_smoke_tests(self, environment: DeploymentEnvironment) -> bool:
-        """Run smoke tests on environment."""
-        logger.info(f"Running smoke tests for {environment.value}")
-        # Implementation would run basic functionality tests
-        return True
-    
-    def _update_load_balancer(self, target_environment: DeploymentEnvironment):
-        """Update load balancer to route to target environment."""
-        logger.info(f"Updating load balancer to route to {target_environment.value}")
-        # Implementation would update load balancer configuration
-    
-    def _rollback(self, environment: DeploymentEnvironment):
-        """Rollback deployment from environment."""
-        logger.info(f"Rolling back deployment from {environment.value}")
-        # Implementation would remove deployed services
-
-# Usage
-deployment_manager = BlueGreenDeploymentManager(load_balancer_config={})
-
-# Deploy to inactive (GREEN)
-if deployment_manager.deploy_to_inactive("2.16.1"):
-    # Switch traffic to GREEN
-    if deployment_manager.switch_traffic():
-        logger.info("Deployment completed successfully")
-    else:
-        logger.error("Failed to switch traffic")
-else:
-    logger.error("Deployment failed")
+# build.py — run in CI
+pipeline = build_rag_pipeline()          # your factory function
+with open("pipelines/rag.yaml", "w") as fp:
+    pipeline.dump(fp)
 ```
-
-### Canary Deployment
 
 ```python
-import time
-from typing import Callable
-import logging
+# service start-up
+from haystack import Pipeline
 
-logger = logging.getLogger(__name__)
-
-class CanaryDeploymentManager:
-    """
-    Manages canary deployments with gradual traffic increase.
-    """
-    
-    def __init__(self, health_check_fn: Callable):
-        self.health_check_fn = health_check_fn
-        self.traffic_percentages = [5, 10, 25, 50, 100]  # Gradual increase
-        self.current_traffic = 0
-        self.error_threshold = 0.05  # 5% error rate
-    
-    def start_canary_deployment(self, new_version: str) -> bool:
-        """
-        Start canary deployment with gradual traffic shift.
-        
-        Args:
-            new_version: Version to deploy
-            
-        Returns:
-            Success status
-        """
-        try:
-            # Deploy new version
-            logger.info(f"Deploying canary version: {new_version}")
-            self._deploy_canary(new_version)
-            
-            # Gradually increase traffic
-            for target_traffic in self.traffic_percentages:
-                logger.info(f"Increasing traffic to {target_traffic}%")
-                self.current_traffic = target_traffic
-                
-                # Update load balancer
-                self._update_traffic_split(target_traffic)
-                
-                # Monitor metrics
-                time.sleep(5)  # Monitor for 5 seconds
-                
-                if not self._check_canary_health():
-                    logger.error(f"Canary health check failed at {target_traffic}%")
-                    logger.info("Rolling back canary")
-                    self._rollback_canary(new_version)
-                    return False
-                
-                logger.info(f"Canary healthy at {target_traffic}% traffic")
-            
-            logger.info("Canary deployment successful, fully promoting")
-            self._promote_canary(new_version)
-            return True
-        
-        except Exception as e:
-            logger.error(f"Canary deployment failed: {str(e)}")
-            self._rollback_canary(new_version)
-            return False
-    
-    def _check_canary_health(self) -> bool:
-        """Check canary version health metrics."""
-        metrics = self.health_check_fn()
-        
-        # Check error rate
-        if metrics.get("error_rate", 0) > self.error_threshold:
-            logger.warning(f"Error rate too high: {metrics['error_rate']}")
-            return False
-        
-        # Check latency
-        if metrics.get("p99_latency", 0) > 5000:  # 5 second threshold
-            logger.warning(f"Latency too high: {metrics['p99_latency']}")
-            return False
-        
-        return True
-    
-    def _deploy_canary(self, version: str):
-        """Deploy canary version."""
-        logger.info(f"Deploying canary: {version}")
-        # Implementation
-    
-    def _update_traffic_split(self, percentage: int):
-        """Update traffic split between versions."""
-        logger.info(f"Setting traffic split: {percentage}% to canary")
-        # Implementation
-    
-    def _rollback_canary(self, version: str):
-        """Rollback canary deployment."""
-        logger.info(f"Rolling back canary: {version}")
-        # Implementation
-    
-    def _promote_canary(self, version: str):
-        """Promote canary to stable."""
-        logger.info(f"Promoting canary to stable: {version}")
-        # Implementation
+with open("pipelines/rag.yaml") as fp:
+    pipeline = Pipeline.load(fp, allowed_modules=["myapp.components.*"])
 ```
+
+Components from `haystack`, `haystack_integrations` and `haystack_experimental` are trusted by default. Your own components and tool functions must be allowed per call (as above), process-wide with `haystack.core.serialization.allow_deserialization_module("myapp.*")`, or through the `HAYSTACK_DESERIALIZATION_ALLOWLIST` environment variable.
+
+### Releasing changes
+
+Keep the service stateless (conversation history and documents in external stores) and any blue-green or canary set-up your platform offers will work. When comparing a canary with the current version, look at the `exit_reason` distribution, steps per run and token usage as well as error rate and latency. Treat a model change, a prompt change and a Haystack upgrade as three separate releases; each can change behaviour on its own.
 
 ---
 
-## Containerisation and Docker
+## Containers and Kubernetes
 
-### Production Dockerfile
+Nothing about a Haystack service is unusual to containerise. A minimal image:
 
 ```dockerfile
-# Multi-stage build for optimised image size
-FROM python:3.11-slim as builder
-
-# Set working directory
-WORKDIR /build
-
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements
-COPY requirements.txt .
-
-# Build wheels for all dependencies
-RUN pip wheel --no-cache-dir --no-deps --wheel-dir /build/wheels -r requirements.txt
-
-# Production stage
-FROM python:3.11-slim
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    LANG=C.UTF-8
-
-# Create non-root user for security
+FROM python:3.12-slim
+ENV PYTHONUNBUFFERED=1 HAYSTACK_TELEMETRY_ENABLED=False
 RUN useradd -m -u 1000 haystack
-
-# Set working directory
 WORKDIR /app
-
-# Copy wheels from builder
-COPY --from=builder /build/wheels /wheels
-COPY --from=builder /build/requirements.txt .
-
-# Install dependencies from wheels
-RUN pip install --no-cache /wheels/* \
-    && rm -rf /wheels
-
-# Copy application
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY --chown=haystack:haystack . .
-
-# Switch to non-root user
 USER haystack
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
-
-# Expose port
 EXPOSE 8000
-
-# Run application
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-### Docker Compose for Development
+`requirements.txt` pins `haystack-ai==%%version=haystack-ai%%` and the exact versions of every integration package you tested (`elasticsearch-haystack`, `opentelemetry-haystack` and so on), since integrations are released independently of the core. The base image must be Python 3.11 or later.
 
-```yaml
-version: '3.8'
+The Haystack-specific points for Kubernetes or any other orchestrator:
 
-services:
-  # Haystack API
-  haystack-api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - LLM_PROVIDER=openai
-      - LLM_API_KEY=${LLM_API_KEY}
-      - REDIS_URL=redis://redis:6379
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - DATABASE_URL=postgresql://haystack:password@postgres:5432/haystack
-      - LOG_LEVEL=INFO
-    depends_on:
-      - redis
-      - elasticsearch
-      - postgres
-    volumes:
-      - ./src:/app/src
-    networks:
-      - haystack-network
+- **Configuration.** Put `HAYSTACK_DESERIALIZATION_ALLOWLIST` (for pipelines loaded from YAML), `HAYSTACK_TELEMETRY_ENABLED` and, only if you have cleared it for PII, `HAYSTACK_CONTENT_TRACING_ENABLED` in the environment; all three are read at start-up or import. API keys come from a secret and are read by `Secret.from_env_var`.
+- **Readiness.** Call `pipeline.warm_up()` (or `agent.warm_up()`) during start-up, before the readiness probe passes, so a bad key or unreachable store keeps the pod out of rotation.
+- **Shutdown.** Call `pipeline.close()` / `await pipeline.close_async()` on termination to release HTTP clients and store connections.
+- **Scaling signal.** LLM-bound services spend most of their time waiting on the network, so CPU is a weak signal. Scale on in-flight requests or latency if you can.
+- **Ingestion.** Run indexing pipelines as batch jobs, separate from the query service.
 
-  # Redis cache
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
-    networks:
-      - haystack-network
-
-  # Elasticsearch for document store
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.0.0
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms512m -Xmx512m
-    ports:
-      - "9200:9200"
-    volumes:
-      - elasticsearch-data:/usr/share/elasticsearch/data
-    networks:
-      - haystack-network
-
-  # PostgreSQL database
-  postgres:
-    image: postgres:15
-    environment:
-      - POSTGRES_USER=haystack
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=haystack
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    networks:
-      - haystack-network
-
-  # Prometheus for metrics
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus-data:/prometheus
-    networks:
-      - haystack-network
-
-  # Grafana for dashboards
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana-data:/var/lib/grafana
-    networks:
-      - haystack-network
-
-volumes:
-  redis-data:
-  elasticsearch-data:
-  postgres-data:
-  prometheus-data:
-  grafana-data:
-
-networks:
-  haystack-network:
-    driver: bridge
-```
-
----
-
-## Kubernetes Deployment
-
-### Kubernetes Manifests
-
-
-```yaml
-
-# namespace.yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: haystack-production
-
----
-# configmap.yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: haystack-config
-  namespace: haystack-production
-data:
-  LOG_LEVEL: INFO
-  LLM_PROVIDER: openai
-  REDIS_URL: redis://redis-service:6379
-  ELASTICSEARCH_URL: http://elasticsearch-service:9200
-  DATABASE_URL: postgresql://haystack:password@postgres-service:5432/haystack
-
----
-# secret.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: haystack-secrets
-  namespace: haystack-production
-type: Opaque
-data:
-  LLM_API_KEY: {{ base64_encoded_api_key }}
-  DATABASE_PASSWORD: {{ base64_encoded_password }}
-
----
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: haystack-api
-  namespace: haystack-production
-  labels:
-    app: haystack
-    component: api
-spec:
-  replicas: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-  selector:
-    matchLabels:
-      app: haystack
-      component: api
-  template:
-    metadata:
-      labels:
-        app: haystack
-        component: api
-    spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
-      
-      containers:
-      - name: haystack
-        image: your-registry/haystack-api:2.16.1
-        imagePullPolicy: IfNotPresent
-        
-        ports:
-        - name: http
-          containerPort: 8000
-          protocol: TCP
-        
-        envFrom:
-        - configMapRef:
-            name: haystack-config
-        - secretRef:
-            name: haystack-secrets
-        
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "250m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
-        
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: http
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
-        
-        readinessProbe:
-          httpGet:
-            path: /ready
-            port: http
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 2
-        
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-            - ALL
-          readOnlyRootFilesystem: true
-        
-        volumeMounts:
-        - name: tmp
-          mountPath: /tmp
-        - name: cache
-          mountPath: /app/cache
-      
-      volumes:
-      - name: tmp
-        emptyDir: {}
-      - name: cache
-        emptyDir: {}
-      
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchExpressions:
-                - key: app
-                  operator: In
-                  values:
-                  - haystack
-              topologyKey: kubernetes.io/hostname
-
----
-# service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: haystack-service
-  namespace: haystack-production
-spec:
-  type: LoadBalancer
-  selector:
-    app: haystack
-    component: api
-  ports:
-  - name: http
-    port: 80
-    targetPort: http
-    protocol: TCP
-
----
-# ingress.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: haystack-ingress
-  namespace: haystack-production
-  annotations:
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-    nginx.ingress.kubernetes.io/rate-limit: "100"
-spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - api.haystack.example.com
-    secretName: haystack-tls
-  rules:
-  - host: api.haystack.example.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: haystack-service
-            port:
-              number: 80
-
----
-# horizontalpodautoscaler.yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: haystack-hpa
-  namespace: haystack-production
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: haystack-api
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
-
-```
-
+For SSE streaming behind a proxy, see the [streaming server](/haystack-guide/haystack_streaming_server_fastapi/) page.
 
 ---
 
@@ -888,212 +142,238 @@ spec:
 
 ### FastAPI Integration
 
+Build the agent once at start-up, warm it up, and call `run_async` per request so one worker can serve many concurrent requests.
+
 ```python
-from fastapi import FastAPI, HTTPException, Depends
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import BaseModel
-from typing import Optional, List
 import logging
 import time
-from functools import wraps
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
 
 from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack.tools import tool
 
 logger = logging.getLogger(__name__)
 
-# Pydantic models for request/response
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"Sunny in {city}"
+
+
 class Query(BaseModel):
-    text: str
-    max_iterations: int = 10
-    timeout: int = 30
+    text: str = Field(min_length=1, max_length=4000)
+    session_id: str | None = None
+
 
 class AgentResponse(BaseModel):
-    query: str
-    response: str
-    iteration_count: int
-    execution_time: float
-    success: bool
+    answer: str
+    exit_reason: str | None
+    steps: int
+    tool_calls: dict[str, int]
+    total_tokens: int | None
+    seconds: float
 
-class HealthStatus(BaseModel):
-    status: str
-    version: str
-    dependencies: dict
-    timestamp: float
 
-# Initialise FastAPI app
-app = FastAPI(
-    title="Haystack Agent API",
-    description="Production-grade Haystack agent service",
-    version="2.16.1"
-)
+agent: Agent | None = None
 
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://example.com"],  # Restrict in production
-    allow_credentials=True,
-    allow_methods=["POST", "GET"],
-    allow_headers=["*"],
-)
 
-# Add trusted host middleware
-app.add_middleware(
-    TrustedHostMiddleware,
-    allowed_hosts=["api.example.com", "localhost"]
-)
-
-# Initialize agent (would be done properly in production)
-agent = None
-
-def get_agent() -> Agent:
-    """Dependency to get agent instance."""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global agent
-    if agent is None:
-        raise HTTPException(status_code=503, detail="Agent not initialised")
-    return agent
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize application on startup."""
-    global agent
-    try:
-        # Initialize agent
-        logger.info("Initialising Haystack agent")
-        # agent = create_agent()  # Your initialization logic
-        logger.info("Agent initialised successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialise agent: {str(e)}")
-        raise
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    logger.info("Shutting down application")
-    # Cleanup logic here
-
-@app.get("/health", response_model=HealthStatus)
-async def health_check():
-    """
-    Health check endpoint.
-    
-    Returns:
-        Health status
-    """
-    return HealthStatus(
-        status="healthy",
-        version="2.16.1",
-        dependencies={
-            "agent": "operational",
-            "database": "connected",
-            "cache": "connected"
-        },
-        timestamp=time.time()
+    agent = Agent(
+        chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%", timeout=60, max_retries=2),
+        tools=[get_weather],
+        system_prompt="You are a helpful assistant.",
+        max_agent_steps=10,
     )
+    agent.warm_up()
+    yield
 
-@app.get("/ready")
-async def readiness_check():
-    """Readiness probe for Kubernetes."""
-    try:
-        # Check dependencies
-        if agent is None:
-            return {"status": "not_ready", "reason": "Agent not initialised"}, 503
-        
-        return {"status": "ready"}, 200
-    except Exception as e:
-        logger.error(f"Readiness check failed: {str(e)}")
-        return {"status": "not_ready", "reason": str(e)}, 503
+
+app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
+
 
 @app.post("/query", response_model=AgentResponse)
-async def process_query(
-    query: Query,
-    agent: Agent = Depends(get_agent)
-):
-    """
-    Process query with agent.
-    
-    Args:
-        query: Query object
-        agent: Agent instance
-        
-    Returns:
-        Agent response
-        
-    Raises:
-        HTTPException: On error
-    """
-    start_time = time.time()
-    
+async def query(q: Query) -> AgentResponse:
+    start = time.perf_counter()
     try:
-        # Validate input
-        if not query.text or len(query.text.strip()) == 0:
-            raise HTTPException(status_code=400, detail="Query cannot be empty")
-        
-        if len(query.text) > 5000:
-            raise HTTPException(status_code=400, detail="Query too long (max 5000 characters)")
-        
-        # Run agent
-        logger.info(f"Processing query: {query.text[:100]}")
-        result = agent.run(
-            query=query.text,
-            max_iterations=min(query.max_iterations, 20)
-        )
-        
-        execution_time = time.time() - start_time
-        
-        logger.info(f"Query processed in {execution_time:.2f}s")
-        
-        return AgentResponse(
-            query=query.text,
-            response=str(result),
-            iteration_count=result.get("iterations", 0),
-            execution_time=execution_time,
-            success=True
-        )
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Query processing failed: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error"
-        )
-
-@app.get("/metrics")
-async def get_metrics():
-    """
-    Get application metrics.
-    
-    Returns:
-        Metrics in Prometheus format
-    """
-    # Would integrate with Prometheus client
-    return {
-        "requests_total": 1000,
-        "requests_failed": 5,
-        "average_latency_ms": 250
-    }
-
-# Error handlers
-@app.exception_handler(ValueError)
-async def value_error_handler(request, exc):
-    return HTTPException(status_code=400, detail=str(exc))
-
-@app.exception_handler(TimeoutError)
-async def timeout_error_handler(request, exc):
-    return HTTPException(status_code=408, detail="Request timeout")
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        workers=4,
-        log_level="info"
+        result = await agent.run_async(messages=[ChatMessage.from_user(q.text)])
+    except Exception:
+        logger.exception("Agent run failed")
+        raise HTTPException(status_code=502, detail="Upstream model error")
+    return AgentResponse(
+        answer=result["last_message"].text or "",
+        exit_reason=result.get("exit_reason"),
+        steps=result["step_count"],
+        tool_calls=result["tool_call_counts"],
+        total_tokens=result["token_usage"].get("total_tokens"),
+        seconds=round(time.perf_counter() - start, 3),
     )
 ```
+
+For token streaming over server-sent events, see the [streaming server](/haystack-guide/haystack_streaming_server_fastapi/) page.
+
+### Serving with Hayhooks
+
+deepset's **Hayhooks** (`pip install hayhooks`) serves pipelines and agents without a hand-written FastAPI layer. Each deployment is a folder with a `pipeline_wrapper.py` that defines a `PipelineWrapper`:
+
+```python
+# pipelines/weather_agent/pipeline_wrapper.py
+from collections.abc import AsyncGenerator
+
+from hayhooks import BasePipelineWrapper, async_streaming_generator, get_last_user_message
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack.tools import tool
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"Sunny in {city}"
+
+
+class PipelineWrapper(BasePipelineWrapper):
+    def setup(self) -> None:
+        self.agent = Agent(
+            chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+            tools=[get_weather],
+            system_prompt="You are a helpful assistant.",
+            max_agent_steps=10,
+        )
+
+    async def run_api_async(self, question: str) -> str:
+        """Answer a question, calling tools where they help."""
+        result = await self.agent.run_async(messages=[ChatMessage.from_user(question)])
+        return result["last_message"].text
+
+    async def run_chat_completion_async(self, model: str, messages: list[dict], body: dict) -> AsyncGenerator:
+        question = get_last_user_message(messages)
+        return async_streaming_generator(
+            pipeline=self.agent,
+            pipeline_run_args={"messages": [ChatMessage.from_user(question)]},
+        )
+```
+
+`hayhooks run --pipelines-dir pipelines` starts the server (port 1416 by default) and deploys every folder. The request model for `POST /weather_agent/run` is generated from the `run_api_async` signature (`{"question": "..."}`), and `run_chat_completion_async` adds an OpenAI-compatible `POST /v1/chat/completions` endpoint (use the folder name as `model`) that streams tokens and tool calls. With `pip install "hayhooks[mcp]"`, `hayhooks mcp run` exposes the same wrappers as MCP tools, using the docstring of `run_api_async` (or `run_api`) as the tool description. The endpoints are not authenticated by default, so put the server behind your gateway.
+
+---
+
+## Security
+
+Haystack gives you the pieces; how strict to be depends on your platform. The framework-specific points:
+
+- **Tenant and user IDs.** Pass them to `agent.run(...)` as state values and read them in tools through a parameter typed as `State`, which the Agent always injects. Do not rely on `inputs_from_state` for this: arguments the model supplies override it, so a prompt-injected call can name another tenant. Hooks read request-scoped values from `hook_context`. The [multi-tenant recipe](/haystack-guide/haystack_recipes/#multi-tenant-customer-support-agent) shows the pattern.
+- **Side effects.** Put a `ConfirmationHook` (`haystack.hooks.human_in_the_loop`) in front of tools that move money, send messages or delete data, with a `ConfirmationUI` that asks through your front end. From 3.0 the confirmation sees only the arguments the model asked for, which is what the user should approve.
+- **Tool surface.** Give each agent only the tools it needs. `MCPToolset(..., tool_names=[...])` limits what an MCP server exposes; tools that read files, run SQL or fetch URLs should enforce their own allow-lists, because retrieved documents and web pages can carry injected instructions.
+- **Deserialisation.** Load YAML pipelines with an explicit `allowed_modules` list (or `HAYSTACK_DESERIALIZATION_ALLOWLIST`), never `unsafe=True` for files you did not write.
+- **Offloaded tool results.** A `ToolResultOffloadHook` store holds full tool output; give each run its own store through `hook_context` so users cannot read each other's results.
+- **Traces.** Content tracing puts prompts, documents and tool results into your tracing backend. Leave `HAYSTACK_CONTENT_TRACING_ENABLED` off where that data is personal, or redact in the exporter.
+- **Telemetry.** Haystack sends anonymous usage statistics by default: component types and, for agents, the generator, model and tool names (never prompts, documents or tool descriptions). Set `HAYSTACK_TELEMETRY_ENABLED=False` in the environment to opt out; it is read when `haystack` is imported.
+- **Secrets.** Use `Secret.from_env_var(...)`. `Pipeline.dumps()` writes the variable name, not the key, so serialised pipelines are safe to commit.
+
+Authentication, rate limiting and network policy belong to your API gateway or service layer.
+
+## Cost Controls
+
+- **Bound every agent.** `max_agent_steps` limits iterations; [`TokenBudgetHook`](/haystack-guide/haystack_advanced_agents_python/#token-budgets) limits tokens and ends the run with `exit_reason="token_budget_exceeded"`. Sub-agents behind `AgentTool` need their own budget, because a coordinator's `token_usage` counts only its own model calls.
+- **Keep the context small.** [`CompactionHook` and `ToolResultOffloadHook`](/haystack-guide/haystack_comprehensive_guide/#context-management) stop long runs re-sending large tool results and old turns; `SearchableToolset` stops large tool catalogues being sent on every call.
+- **Use the cheap model where it is enough.** Routing, classification (`LLMMessagesRouter`), narrow specialists and summarisation compactors rarely need the flagship model.
+- **Measure.** Log `token_usage`, `step_count`, `tool_call_counts` and `exit_reason` per request (the FastAPI example above returns them), and alert on drift after each release.
+- **Cache** repeated questions and unchanged documents (below).
+
+## Testing and Evaluation
+
+### Unit tests with MockChatGenerator
+
+`MockChatGenerator` (`haystack.components.generators.chat`) is a drop-in chat generator that never calls an API. Give it a list of replies, including `ChatMessage`s with tool calls, to drive an agent through a known path, then assert on tools, state and `exit_reason`:
+
+```python
+# test_agent.py — run with pytest
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage, ToolCall
+from haystack.tools import tool
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"Sunny in {city}"
+
+
+def build_agent(chat_generator) -> Agent:          # the factory your service uses
+    return Agent(chat_generator=chat_generator, tools=[get_weather], max_agent_steps=5)
+
+
+def test_agent_calls_weather_tool():
+    llm = MockChatGenerator(responses=[
+        ChatMessage.from_assistant(tool_calls=[ToolCall(tool_name="get_weather", arguments={"city": "Paris"})]),
+        "It is sunny in Paris.",
+    ])
+    result = build_agent(llm).run(messages=[ChatMessage.from_user("Weather in Paris?")])
+
+    assert result["exit_reason"] == "text"
+    assert result["tool_call_counts"] == {"get_weather": 1}
+    tool_result = next(m.tool_call_result for m in result["messages"] if m.tool_call_result)
+    assert tool_result.result == "Sunny in Paris"
+```
+
+`MockChatGenerator(response_fn=...)` computes each reply from the input messages instead, and with no arguments it echoes the last message, which is enough to smoke-test that every connection and prompt variable in a pipeline is wired. Set `HAYSTACK_TELEMETRY_ENABLED=False` in the CI environment.
+
+### Evaluating quality
+
+The core package ships evaluators in `haystack.components.evaluators`: retrieval metrics (`DocumentMRREvaluator`, `DocumentRecallEvaluator`, `DocumentMAPEvaluator`, `DocumentNDCGEvaluator`), answer metrics (`AnswerExactMatchEvaluator`, `SASEvaluator`) and model-judged metrics (`FaithfulnessEvaluator`, `ContextRelevanceEvaluator`, and `LLMEvaluator` for your own rubric). Run them over a small golden set of questions with known relevant documents:
+
+```python
+from haystack import Document
+from haystack.components.evaluators import DocumentMRREvaluator, FaithfulnessEvaluator
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+from haystack.evaluation import EvaluationRunResult
+
+docs = [Document(content="Returns are accepted within 30 days."), Document(content="Shipping takes 5-7 business days.")]
+store = InMemoryDocumentStore()
+store.write_documents(docs)
+retriever = InMemoryBM25Retriever(document_store=store, top_k=2)
+
+golden = [  # question and the document that should be retrieved for it
+    ("How many days do I have for returns?", docs[0]),
+    ("How long does shipping take?", docs[1]),
+]
+questions = [q for q, _ in golden]
+retrieved = [retriever.run(query=q)["documents"] for q in questions]
+answers = ["You have 30 days.", "Five to seven business days."]   # your pipeline's answers
+
+mrr = DocumentMRREvaluator().run(
+    ground_truth_documents=[[d] for _, d in golden], retrieved_documents=retrieved
+)
+faithfulness = FaithfulnessEvaluator(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), progress_bar=False
+).run(questions=questions, contexts=[[d.content for d in ds] for ds in retrieved], predicted_answers=answers)
+
+report = EvaluationRunResult(
+    run_name="rag-baseline",
+    inputs={"question": questions, "answer": answers},
+    results={"mrr": mrr, "faithfulness": faithfulness},
+)
+print(report.aggregated_report())          # one score per metric; detailed_report() gives per-question rows
+```
+
+Each evaluator returns an overall `score` and `individual_scores`. In CI, run the golden set on every change to prompts, models or retrieval settings and fail the job when a score drops below your baseline. The model-judged evaluators make one model call per item, so keep the golden set small for per-commit runs and run a larger one nightly.
 
 ---
 
@@ -1101,65 +381,20 @@ if __name__ == "__main__":
 
 ### Horizontal Scaling with Load Balancing
 
-```python
-from typing import List, Dict
-import load_balancer  # Example library
+- **Keep workers stateless.** Store conversation history (`ChatMessage.to_dict()`), user state and documents outside the process so any replica can serve any request.
+- **Prefer async.** `Agent.run_async` and `Pipeline.run_async` let one Uvicorn worker overlap many LLM calls. Use a few workers per pod (`--workers 2-4`) for CPU-bound pre-processing.
+- **Bound concurrency.** `Pipeline.run_async(..., concurrency_limit=N)` limits parallel components per request; `tool_concurrency_limit` limits parallel tool calls per agent step. Add a semaphore at the API layer to protect provider rate limits.
+- **Separate indexing from querying.** Run indexing pipelines as batch jobs (Kubernetes `Job`/`CronJob`) so ingestion spikes do not affect query latency.
+- **Spread provider risk.** `FallbackChatGenerator` fails over between providers or regions; see [Retries and fallbacks](/haystack-guide/haystack_observability_python/#retries-and-fallbacks).
 
-class ScalingStrategy:
-    """
-    Manages horizontal scaling of Haystack services.
-    """
-    
-    def __init__(self, min_instances: int = 3, max_instances: int = 10):
-        self.min_instances = min_instances
-        self.max_instances = max_instances
-        self.current_instances = min_instances
-    
-    def calculate_required_instances(self, metrics: Dict) -> int:
-        """
-        Calculate required instances based on metrics.
-        
-        Args:
-            metrics: Current system metrics
-            
-        Returns:
-            Number of instances required
-        """
-        cpu_utilisation = metrics.get("cpu_utilisation", 0)
-        memory_utilisation = metrics.get("memory_utilisation", 0)
-        request_queue_length = metrics.get("request_queue_length", 0)
-        
-        # Calculate load factor
-        load_factor = max(
-            cpu_utilisation / 70,  # Scale at 70% CPU
-            memory_utilisation / 80,  # Scale at 80% memory
-            request_queue_length / 100  # Scale if queue > 100
-        )
-        
-        # Calculate required instances
-        required = max(
-            self.min_instances,
-            min(
-                int(self.current_instances * load_factor) + 1,
-                self.max_instances
-            )
-        )
-        
-        return required
-    
-    def scale_up(self, target_instances: int):
-        """Scale up to target number of instances."""
-        if target_instances > self.current_instances:
-            logger.info(f"Scaling up from {self.current_instances} to {target_instances} instances")
-            # Implementation would spin up new containers/pods
-            self.current_instances = target_instances
-    
-    def scale_down(self, target_instances: int):
-        """Scale down to target number of instances."""
-        if target_instances < self.current_instances:
-            logger.info(f"Scaling down from {self.current_instances} to {target_instances} instances")
-            # Implementation would terminate containers/pods gracefully
-            self.current_instances = target_instances
+```python
+import asyncio
+
+MAX_IN_FLIGHT = asyncio.Semaphore(32)   # per process
+
+async def run_limited(messages):
+    async with MAX_IN_FLIGHT:
+        return await agent.run_async(messages=messages)
 ```
 
 ---
@@ -1168,117 +403,54 @@ class ScalingStrategy:
 
 ### Multi-Layer Caching Strategy
 
+1. **Response cache** for repeated identical questions (Redis, short TTL).
+2. **Embedding / indexing cache** so unchanged documents are not re-embedded: `CacheChecker` looks up documents by a metadata field and splits inputs into hits and misses.
+3. **Provider-side prompt caching**: keep long system prompts and tool schemas stable and at the start of the prompt so providers can reuse them.
+
 ```python
-from redis import Redis
-import json
 import hashlib
-from typing import Optional
-import logging
+import json
 
-logger = logging.getLogger(__name__)
+from redis.asyncio import Redis
 
-class CachingLayer:
-    """
-    Implements multi-layer caching for Haystack applications.
-    """
-    
-    def __init__(self, redis_url: str):
-        self.redis_client = Redis.from_url(redis_url, decode_responses=True)
-        self.cache_ttl = {
-            "query_result": 3600,  # 1 hour
-            "embeddings": 86400,  # 24 hours
-            "metadata": 604800  # 7 days
-        }
-    
-    def generate_cache_key(self, prefix: str, *args) -> str:
-        """Generate cache key from arguments."""
-        key_string = f"{prefix}:{'_'.join(str(arg) for arg in args)}"
-        return hashlib.md5(key_string.encode()).hexdigest()
-    
-    def get_cached_result(self, cache_key: str) -> Optional[dict]:
-        """Retrieve cached result."""
-        try:
-            cached = self.redis_client.get(cache_key)
-            if cached:
-                logger.debug(f"Cache hit: {cache_key}")
-                return json.loads(cached)
-            logger.debug(f"Cache miss: {cache_key}")
-            return None
-        except Exception as e:
-            logger.warning(f"Cache retrieval error: {str(e)}")
-            return None
-    
-    def cache_result(self, cache_key: str, result: dict, ttl: Optional[int] = None):
-        """Cache result with TTL."""
-        try:
-            ttl = ttl or self.cache_ttl.get("query_result", 3600)
-            self.redis_client.setex(
-                cache_key,
-                ttl,
-                json.dumps(result)
-            )
-            logger.debug(f"Cached result for {ttl}s: {cache_key}")
-        except Exception as e:
-            logger.warning(f"Cache write error: {str(e)}")
-    
-    def invalidate_cache(self, pattern: str):
-        """Invalidate cache entries matching pattern."""
-        try:
-            keys = self.redis_client.keys(pattern)
-            if keys:
-                self.redis_client.delete(*keys)
-                logger.info(f"Invalidated {len(keys)} cache entries matching '{pattern}'")
-        except Exception as e:
-            logger.warning(f"Cache invalidation error: {str(e)}")
+redis = Redis.from_url("redis://localhost:6379/0", decode_responses=True)
+TTL_SECONDS = 3600
 
-# Usage in query processing
-@app.post("/query")
-async def process_query_with_cache(
-    query: Query,
-    cache_layer: CachingLayer = Depends(get_cache_layer),
-    agent: Agent = Depends(get_agent)
-):
-    """Process query with caching."""
-    # Generate cache key
-    cache_key = cache_layer.generate_cache_key("query", query.text)
-    
-    # Check cache
-    cached_result = cache_layer.get_cached_result(cache_key)
-    if cached_result:
-        return AgentResponse(
-            query=query.text,
-            response=cached_result["response"],
-            iteration_count=cached_result["iteration_count"],
-            execution_time=0,
-            success=True,
-            from_cache=True
-        )
-    
-    # Execute query
-    start_time = time.time()
-    result = agent.run(query=query.text, max_iterations=query.max_iterations)
-    execution_time = time.time() - start_time
-    
-    # Cache result
-    cache_layer.cache_result(cache_key, {
-        "response": str(result),
-        "iteration_count": result.get("iterations", 0)
-    })
-    
-    return AgentResponse(
-        query=query.text,
-        response=str(result),
-        iteration_count=result.get("iterations", 0),
-        execution_time=execution_time,
-        success=True,
-        from_cache=False
-    )
+
+def cache_key(text: str, model: str = "%%model=openai-small%%", prompt_version: str = "v3") -> str:
+    digest = hashlib.sha256(f"{model}|{prompt_version}|{text.strip().lower()}".encode()).hexdigest()
+    return f"answer:{digest}"
+
+
+async def cached_answer(text: str) -> dict:
+    key = cache_key(text)
+    if (hit := await redis.get(key)) is not None:
+        return {**json.loads(hit), "from_cache": True}
+
+    result = await run_limited([ChatMessage.from_user(text)])
+    payload = {"answer": result["last_message"].text, "exit_reason": result.get("exit_reason")}
+    if result.get("exit_reason") == "text":          # only cache clean completions
+        await redis.set(key, json.dumps(payload), ex=TTL_SECONDS)
+    return {**payload, "from_cache": False}
+```
+
+Include the model name and a prompt version in the key so a deployment that changes either does not serve stale answers. Do not cache answers that depend on user-specific tool results.
+
+Skipping already-indexed files with `CacheChecker`:
+
+```python
+from haystack import Document
+from haystack.components.caching import CacheChecker
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+store = InMemoryDocumentStore()
+store.write_documents([Document(content="old", meta={"url": "https://example.com/a"})])
+
+checker = CacheChecker(document_store=store, cache_field="url")
+result = checker.run(items=["https://example.com/a", "https://example.com/b"])
+print(result["misses"])   # ['https://example.com/b'] — only these need fetching and indexing
 ```
 
 ---
 
-This guide covers deployment, containerisation, Kubernetes, API service design, scaling and caching for Haystack applications, with complete code examples for Docker, Kubernetes and FastAPI integration.
-
-**Not covered here.** Rate limiting, security hardening, error recovery, database management, multi-tenancy, governance and disaster recovery are outside this page's scope. For tracing and metrics see [Observability](/haystack-guide/haystack_observability_python/); for resilience inside the agent loop see [Error Handling and Resilience](/haystack-guide/haystack_comprehensive_guide/#error-handling-and-resilience).
-
-
+**Not covered here.** Rate limiting, database operations, governance and disaster recovery depend on your platform more than on Haystack. For tracing and logging see [Observability](/haystack-guide/haystack_observability_python/).

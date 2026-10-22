@@ -1,8 +1,8 @@
 ---
 title: "Google ADK (Python)"
-description: "Google Agent Development Kit — Gemini-native agents with workflows, MCP, A2A, and GCP services."
-framework: google-adk
-language: python
+description: "Google Agent Development Kit for Python: Gemini-first agents with Workflow orchestration, MCP, A2A, the adk CLI and deployment to Agent Engine, Cloud Run and GKE."
+framework: "google-adk"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,7 +10,7 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Google's Agent Development Kit.** Build agents on Gemini (and any LLM via `google-genai` / `LiteLlm`) with graph-based `Workflow` orchestration, MCP client + server, A2A protocol, and native GCP services (Vertex AI, Cloud Run, Agent Engine).
+**Google's Agent Development Kit for Python.** Build agents on Gemini (or other models through `LiteLlm`, `AnthropicLlm` and the OpenAI classes), compose them with `Workflow` graphs, connect them to MCP servers and other agents over A2A, and deploy them with the `adk` CLI.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
@@ -19,93 +19,40 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v2.11.0** · October 2026 · Python 3.10+
+    **%%version=google-adk%%** · Python 3.11+
   </Card>
   <Card title="Best for" icon="puzzle">
-    GCP-native workloads, Gemini-first agents, Vertex AI Agent Engine.
+    Gemini-first agents, Google Cloud workloads, Vertex AI Agent Engine.
   </Card>
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  New? Follow Zero → Hero. Already familiar? Jump to a topic. The **Class & API Reference** (step 15) is a consolidated, source-verified reference for every ADK class, checked directly against `google-adk==2.7.1` — it replaces the previous 48-volume "class deep dives" series. Note: `--pre` is no longer required; install with `pip install google-adk`.
+  New to ADK? Read the [comprehensive guide](/google-adk-guide/python/google_adk_comprehensive_guide/) from the top: it has one runnable example per concept and links to the topic pages for detail. MCP and A2A are optional extras: `pip install "google-adk[mcp,a2a]"`.
 </Aside>
 
-## Zero → Hero
+## Quick start
 
-<CardGrid>
-  <LinkCard title="1 · Introduction" href="./google_adk_comprehensive_guide/#introduction" description="What ADK is, why Google built it · 10 min" />
-  <LinkCard title="2 · Core fundamentals" href="./google_adk_comprehensive_guide/#core-fundamentals" description="Install, auth, first agent · 25 min" />
-  <LinkCard title="3 · Agents" href="./agents/" description="LlmAgent, Parallel, Loop, Sequential · 25 min" />
-  <LinkCard title="4 · Workflows" href="./workflows/" description="Graph orchestration with @node · 30 min" />
-  <LinkCard title="5 · Tools" href="./tools/" description="FunctionTool, AgentTool, built-ins · 30 min" />
-  <LinkCard title="6 · Callbacks & plugins" href="./callbacks-and-plugins/" description="Interception points · 20 min" />
-  <LinkCard title="7 · Runner & sessions" href="./runner-and-sessions/" description="App, Runner, session services · 25 min" />
-  <LinkCard title="8 · Memory & artifacts" href="./memory-and-artifacts/" description="Long-term memory + file storage · 20 min" />
-  <LinkCard title="9 · MCP & A2A" href="./mcp-and-a2a/" description="Tool servers + agent handoff · 20 min" />
-  <LinkCard title="10 · Structured output" href="./google_adk_comprehensive_guide/#structured-output" description="Pydantic validation · 15 min" />
-  <LinkCard title="11 · Advanced Python" href="./google_adk_advanced_python/" description="Planners, custom tools, auth, deployment · 30 min" />
-  <LinkCard title="12 · Evaluation" href="./evaluation/" description="AgentEvaluator, EvalCase, EvalSet, metrics · 25 min" />
-  <LinkCard title="13 · IAM & security" href="./google_adk_iam_examples/" description="IAM roles, workload identity · 20 min" />
-  <LinkCard title="14 · Production" href="./google_adk_production_guide/" description="Deployment, scaling, monitoring · 30 min" />
-  <LinkCard title="15 · Class & API reference" href="./google_adk_comprehensive_guide/#class--api-reference" description="Consolidated, source-verified reference for every ADK class across 12 subject areas — replaces the old 48-volume deep-dive series · source-verified against google-adk 2.7.1 (2.8.0 additions in steps 16 and 17)" />
-  <LinkCard title="16 · Class deep dives — v2.8.0" href="./google_adk_class_deep_dives_v2_8/" description="10 source-verified deep dives for 2.8.0: LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, exit_loop + get_user_choice_tool" />
-  <LinkCard title="17 · Class deep dives Vol. 3 — v2.8.0" href="./google_adk_class_deep_dives_vol3/" description="10 more source-verified deep dives: RunConfig, BuiltInPlanner, PlanReActPlanner, BasePlugin, ReflectAndRetryToolPlugin, ContextFilterPlugin, VertexAiMemoryBankService, VertexAiCodeExecutor, ConversationScenarios + LlmBackedUserSimulatorConfig, SaveFilesAsArtifactsPlugin" />
-  <LinkCard title="18 · Class deep dives Vol. 4 — v2.9.2" href="./google_adk_class_deep_dives_vol4/" description="10 source-verified deep dives: SimplePromptOptimizer, GEPARootAgentOptimizer, Sampler, LocalEvalSampler, TelemetryConfig, UrlContextTool, Skill, SkillRegistry, SkillToolset, VertexAiRagMemoryService" />
-  <LinkCard title="19 · Class deep dives Vol. 5 — v2.11.0" href="./google_adk_class_deep_dives_vol5/" description="10 source-verified deep dives: Event, EventActions, Context (unified CallbackContext/ToolContext), FunctionTool, LongRunningFunctionTool, AuthConfig, DatabaseSessionService, SqliteSessionService, VertexAiSessionService, VertexAiSearchTool" />
-  <LinkCard title="20 · Class deep dives Vol. 6 — v2.11.0" href="./google_adk_class_deep_dives_vol6/" description="10 source-verified deep dives: Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App (compaction + resumability), LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, ToolboxToolset" />
-</CardGrid>
+```bash
+pip install google-adk
+adk create my_agent --model %%model=gemini%%   # asks for an API key or a Google Cloud project
+adk run my_agent                                # chat in the terminal
+adk web .                                       # or in the Dev UI at http://127.0.0.1:8000
+```
 
-## Jump to a topic
-
-<CardGrid>
-  <LinkCard title="LlmAgent" href="./agents/" />
-  <LinkCard title="Workflow graphs" href="./workflows/" />
-  <LinkCard title="Tools & built-ins" href="./tools/" />
-  <LinkCard title="Callbacks & plugins" href="./callbacks-and-plugins/" />
-  <LinkCard title="Runner & sessions" href="./runner-and-sessions/" />
-  <LinkCard title="Memory & artifacts" href="./memory-and-artifacts/" />
-  <LinkCard title="MCP & A2A" href="./mcp-and-a2a/" />
-  <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
-  <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" />
-  <LinkCard title="Evaluation" href="./evaluation/" />
-</CardGrid>
-
-## Reference
-
-<CardGrid>
-  <LinkCard title="Agents" href="./agents/" description="LlmAgent, Parallel, Loop, Sequential (deprecated)." />
-  <LinkCard title="Workflows" href="./workflows/" description="Workflow, @node, Edge, JoinNode." />
-  <LinkCard title="Tools" href="./tools/" description="FunctionTool, AgentTool, BaseTool, BaseToolset, MCP." />
-  <LinkCard title="Callbacks & plugins" href="./callbacks-and-plugins/" description="All 13 plugin hooks + agent callbacks." />
-  <LinkCard title="Runner & sessions" href="./runner-and-sessions/" description="Runner, App, session services, RunConfig." />
-  <LinkCard title="Memory & artifacts" href="./memory-and-artifacts/" description="MemoryService + ArtifactService implementations." />
-  <LinkCard title="MCP & A2A" href="./mcp-and-a2a/" description="McpToolset, RemoteA2aAgent, to_a2a()." />
-  <LinkCard title="Evaluation" href="./evaluation/" description="AgentEvaluator, EvalCase, EvalSet, PrebuiltMetrics." />
-  <LinkCard title="Comprehensive guide" href="./google_adk_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Advanced Python" href="./google_adk_advanced_python/" description="Planners, custom tools, auth, deployment." />
-  <LinkCard title="IAM examples" href="./google_adk_iam_examples/" />
-  <LinkCard title="Recipes" href="./google_adk_recipes/" />
-  <LinkCard title="Diagrams" href="./google_adk_diagrams/" />
-  <LinkCard title="Production guide" href="./google_adk_production_guide/" />
-  <LinkCard title="Class deep dives v2.8.0" href="./google_adk_class_deep_dives_v2_8/" description="LiveRequestQueue, ExecuteBashTool, ToolConfirmation, App, EventsCompactionConfig, LlmEventSummarizer, PreloadMemoryTool, ToolboxToolset, GcsArtifactService, exit_loop + get_user_choice_tool" />
-  <LinkCard title="Class deep dives Vol. 3 v2.8.0" href="./google_adk_class_deep_dives_vol3/" description="RunConfig, BuiltInPlanner, PlanReActPlanner, BasePlugin, ReflectAndRetryToolPlugin, ContextFilterPlugin, VertexAiMemoryBankService, VertexAiCodeExecutor, ConversationScenarios + LlmBackedUserSimulatorConfig, SaveFilesAsArtifactsPlugin" />
-  <LinkCard title="Class deep dives Vol. 4 v2.9.2" href="./google_adk_class_deep_dives_vol4/" description="SimplePromptOptimizer, GEPARootAgentOptimizer, Sampler, LocalEvalSampler, TelemetryConfig, UrlContextTool, Skill, SkillRegistry, SkillToolset, VertexAiRagMemoryService" />
-  <LinkCard title="Class deep dives Vol. 5 v2.11.0" href="./google_adk_class_deep_dives_vol5/" description="Event, EventActions, Context (unified CallbackContext/ToolContext), FunctionTool, LongRunningFunctionTool, AuthConfig, DatabaseSessionService, SqliteSessionService, VertexAiSessionService, VertexAiSearchTool" />
-  <LinkCard title="Class deep dives Vol. 6 v2.11.0" href="./google_adk_class_deep_dives_vol6/" description="Workflow, Graph, BaseNode, FunctionNode, RetryConfig, App (compaction + resumability), LlmAgent advanced fields, OpenAPIToolset, RemoteA2aAgent, GcsArtifactService, PubSubToolset, ToolboxToolset" />
-</CardGrid>
-
-## Install, minimal example
+The same agent from a script:
 
 ```python
 import asyncio
+
 from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a helpful assistant.",
 )
+
 
 async def main():
     runner = InMemoryRunner(agent=agent, app_name="demo")
@@ -113,30 +60,55 @@ async def main():
     events = await runner.run_debug("What is 15 + 27?", user_id="u1", session_id="s1")
     print(events[-1].content.parts[0].text)
 
+
 asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./google_adk_comprehensive_guide/#introduction)**
+## Learning path
 
----
+<CardGrid>
+  <LinkCard title="1 · Setup and the adk CLI" href="/google-adk-guide/python/google_adk_comprehensive_guide/#installation-and-setup" description="Install, credentials, project layout, adk create / run / web / eval / deploy." />
+  <LinkCard title="2 · Comprehensive guide" href="/google-adk-guide/python/google_adk_comprehensive_guide/" description="One page, one example per concept: models, agents, tools, workflows, state, MCP, streaming." />
+  <LinkCard title="3 · Agents" href="/google-adk-guide/python/agents/" description="LlmAgent, its modes, transfer, code executors, LangGraph and remote agents." />
+  <LinkCard title="4 · Workflows" href="/google-adk-guide/python/workflows/" description="Graph orchestration: edges, routing, joins, loops, retries, human approval." />
+  <LinkCard title="5 · Tools" href="/google-adk-guide/python/tools/" description="FunctionTool, AgentTool, Google built-ins, OpenAPI and Google Cloud toolsets." />
+  <LinkCard title="6 · Runner, App and sessions" href="/google-adk-guide/python/runner-and-sessions/" description="Runner, App, RunConfig, session services, state, events, context caching." />
+  <LinkCard title="7 · Callbacks and plugins" href="/google-adk-guide/python/callbacks-and-plugins/" description="Per-agent callbacks, the 14 plugin hooks, built-in plugins." />
+  <LinkCard title="8 · Memory and artifacts" href="/google-adk-guide/python/memory-and-artifacts/" description="Memory services, Memory Bank, artifact storage." />
+  <LinkCard title="9 · MCP and A2A" href="/google-adk-guide/python/mcp-and-a2a/" description="MCP toolsets, exposing and calling A2A agents." />
+  <LinkCard title="10 · Evaluation" href="/google-adk-guide/python/evaluation/" description="Eval sets, adk eval, AgentEvaluator, metrics, user simulation." />
+  <LinkCard title="11 · Advanced" href="/google-adk-guide/python/google_adk_advanced_python/" description="Planners, custom tools and toolsets, authenticated tools, other model providers." />
+  <LinkCard title="12 · IAM, auth and credentials" href="/google-adk-guide/python/google_adk_iam_examples/" description="Service accounts, Workload Identity, Secret Manager, authenticated tools." />
+  <LinkCard title="13 · Production" href="/google-adk-guide/python/google_adk_production_guide/" description="adk deploy, Agent Engine, Cloud Run, GKE, telemetry, cost controls, guardrails." />
+</CardGrid>
+
+## Also in this guide
+
+<CardGrid>
+  <LinkCard title="Recipes" href="/google-adk-guide/python/google_adk_recipes/" description="Complete agents for common jobs." />
+  <LinkCard title="Diagrams" href="/google-adk-guide/python/google_adk_diagrams/" description="How the runner, agents, tools and services fit together." />
+</CardGrid>
 
 ## Changelog
 
-Compact, version-level history. Per-symbol details for the current release live in the [Class & API Reference](./google_adk_comprehensive_guide/#class--api-reference) above; older per-volume changelog detail has been superseded and lives in git history.
+Package releases of `google-adk` 2.x, with the changes that affect code in this guide. Full notes are in the [ADK changelog](https://github.com/google/adk-python/blob/main/CHANGELOG.md).
 
-| Version | Date | Summary |
+| Version | Released | Summary |
 |---|---|---|
-| 1.18.0 | Nov 2025 | Initial documented version. |
-| 1.31.0 | Apr 2026 | A2A protocol, MCP client + server, Web UI overhaul (Graph View, execution traces), Vertex AI Agent Engine Sandbox, Firestore session support. |
-| 2.0.0 (beta → GA) | Apr – May 2026 | `Workflow` graph orchestration ships; `SequentialAgent`/`ParallelAgent`/`LoopAgent` deprecated in its favor. Plugin system (`BasePlugin`, 11+ hooks). MCP sampling/resources/auth schemes. `to_a2a()` / `RemoteA2aAgent`. Vertex AI Memory Bank + RAG. Built-in code executors (local, Vertex AI, container, GKE, Agent Engine sandbox). GA stable release confirmed May 20, 2026 — `--pre` no longer required. |
-| 2.1.0 | May 2026 | `RunConfig` gains `tool_thread_pool_config`, `context_window_compression`, `get_session_config`; `BaseNode` schema fields (`state_schema`/`input_schema`/`output_schema`) formalized; `Context.add_memory()`. |
-| 2.2.0 | Jun 2026 | `AgentEngineSandboxComputer`, `AgentRegistry`, `GcpAuthProvider`, `ApigeeLlm`; live-audio session classes stabilized (`AudioCacheManager`, `AudioTranscriber`, `TranscriptionManager`); `ParameterManagerClient`/`SecretManagerClient`. |
-| 2.3.0 | Jun 2026 | Credential-exchange pipeline (`BaseCredentialExchanger`, `OAuth2CredentialExchanger`), `SessionStateCredentialService`, workflow error taxonomy (`NodeInterruptedError`/`NodeTimeoutError`/`DynamicNodeFailError`), conformance-testing infrastructure, `ToolConnectionAnalyzer`. |
-| 2.4.0 | Jul 2026 | `ManagedAgent` (Managed Agents API), `DaytonaEnvironment`, `ReplayManager`, injectable `platform.time`/`uuid`/`thread` for deterministic tests, `PubSubCredentialsConfig`/`PubSubToolConfig`. |
-| 2.5.0 | Jul 2026 | `SkillRegistry`/`SkillToolset`, `AgentOptimizer`/`Sampler` ABCs, `GEPARootAgentOptimizer`, `OpenAILlm` (labs), `LangGraphAgent`, `AutoFlow` vs `SingleFlow` pipeline split. |
-| 2.6.1 – 2.6.3 | Aug 2026 | `App`/`EventsCompactionConfig`/`ResumabilityConfig` refinements, `ToolConfirmation`, `McpInstructionProvider`, comprehensive `RunConfig`/`StreamingMode`/`ToolThreadPoolConfig`, `SpannerToolset`, `CachePerformanceAnalyzer`. |
-| 2.7.1 | Aug 21, 2026 | **Documentation consolidation.** The 48 sequential "class deep dive" volumes (covering versions 2.1.0 → 2.6.3) have been merged, deduplicated, and re-verified as one [Class & API Reference](./google_adk_comprehensive_guide/#class--api-reference) section on the comprehensive guide, organized into 12 subject areas. Notable import-path corrections confirmed against the installed `2.7.1` package: `EventsCompactionConfig` moved to the private `google.adk.apps._configs` (no longer re-exported from `google.adk.apps`); every `google.adk.a2a` class requires a private submodule import; GCS/Firestore session, memory, and artifact integrations relocated to `google.adk.integrations.*`; `LoopAgent`/`ParallelAgent`/`SequentialAgent` remain functional but are confirmed `@deprecated` in favor of `Workflow`. |
-| **2.8.0** | Aug 31, 2026 | **New deep-dive page** covering 10 source-verified classes: `LiveRequestQueue` (bidirectional streaming), `ExecuteBashTool`/`BashToolPolicy` (secure bash with HITL gate), `ToolConfirmation` (human-in-the-loop protocol), `App` (top-level container), `EventsCompactionConfig` (token-threshold + sliding-window), `LlmEventSummarizer` (LLM-driven session summarizer), `PreloadMemoryTool` (proactive memory injection), `ToolboxToolset` (Cloud Toolbox / MCP Toolbox), `GcsArtifactService` (GCS artifact storage), and `exit_loop`/`get_user_choice_tool` (control-flow built-ins). |
-| **2.11.0 (Vol. 6)** | Oct 2026 | **New deep-dive page Vol. 6** covering 10 more source-verified classes: `Workflow`/`Graph` (DAG orchestrator internals), `BaseNode`/`FunctionNode` (parameter_binding modes, auth_config, type coercions), `RetryConfig` (exponential back-off with per-exception filtering), `App`/`EventsCompactionConfig`/`ResumabilityConfig` (compaction trigger pairs, pause/resume), `LlmAgent` advanced fields (`static_instruction`, `mode`, `parallel_worker`, `output_schema`, `output_key`), `OpenAPIToolset` (header_provider, httpx_client_factory, preserve_property_names), `RemoteA2aAgent` (card URL/file/object, task mode), `GcsArtifactService` (blob naming scheme, user vs session scope), `PubSubToolset` (experimental publish/pull/ack tools), and `ToolboxToolset` (bound_params, auth_token_getters). |
+| 2.12.0 | 2026-10-13 | **Python 3.10 is no longer supported** (`requires-python >=3.11`). `after_tool_callback` can screen tool output. `require_confirmation` on `@node` and `FunctionNode`. `adk deploy agent_engine --service_account`. ADK moves to `google-cloud-aiplatform` 2.2 (the `agentplatform` SDK). Built-in search tools work alongside sub-agents on Gemini 3. Removed: the workflow HITL helpers `has_request_input_function_call` and `get_request_input_interrupt_ids`. |
+| 2.11.0 | 2026-10-01 | `abort_signal` on `Runner`, `Workflow` and nodes; `/run_sse` cancels the run when the client disconnects. Tool nodes in workflows pause for confirmation like `LlmAgent` tools. `ModelConsultTool`. SQLite memory service (`sqlite://`). Opt-in MCP SDK 2.x path. |
+| 2.10.0 | 2026-09-24 | OpenAI models move to `google.adk.integrations.openai` with a `google-adk[openai]` extra (`google.adk.labs.openai` re-exports them). Experimental skill lifecycles, MongoDB toolset, efficiency metrics for evals. Behaviour changes: instruction templating leaves `${var}` and `\{var}` alone; `AgentEvaluator.evaluate` raises `ValueError` when no case runs. |
+| 2.9.0 – 2.9.2 | 2026-09-10 to 09-18 | `FallbackModel` for automatic failover between models. LiveKit runner. Workflow graphs from YAML. MCP SDK 2.x support. Behaviour changes: a failed workflow node re-runs on resume; `InMemorySessionService` raises `SessionNotFoundError` when appending to an unknown session. |
+| 2.8.0 | 2026-08-25 | Model Armor guardrail plugin. Native task mode for `RemoteA2aAgent`. `ADK_MAX_LLM_CALLS` environment variable. |
+| 2.7.0 – 2.7.1 | 2026-08-13 to 08-17 | Models declare their own capabilities (output schema with tools where supported). Tools can return media. Jinja2 instruction templates via `inject_session_state(use_jinja2=True)`. Breaking: `pyarrow` moved from the `gcp` extra to the new `bigquery-analytics` extra. |
+| 2.6.0 – 2.6.3 | 2026-07-29 to 08-07 | Breaking: file artifacts are namespaced by app; LangGraph integration requires the patched async runtime. `adk deploy agent_engine --extra_packages`. |
+| 2.5.0 | 2026-07-16 | `to_mcp_server` serves an ADK agent over MCP. Cloud Run sandbox code executor. Strict input-schema validation for `LlmAgent` workflow nodes. |
+| 2.4.0 | 2026-07-07 | `ManagedAgent` (Managed Agents API). A `Workflow` can be used as a tool. Session TTL in `VertexAiSessionService`. OpenAI Responses model in labs. |
+| 2.3.0 | 2026-06-17 | `GEPARootAgentOptimizer`. GCS toolset. `ContextCacheConfig.create_http_options`. Core and CLI move to the `GOOGLE_GENAI_USE_ENTERPRISE` parameters. |
+| 2.2.0 | 2026-06-04 | `AutoTracingPlugin`, native `gen_ai.client.*` OpenTelemetry metrics, `--trigger_sources` for Agent Engine deployments, `RubricBasedMultiTurnTrajectoryEvaluator`. |
+| 2.1.0 | 2026-05-23 | Sandboxes from templates and snapshots; telemetry and transcription fixes. |
+| 2.0.0 | 2026-05-19 | General availability of ADK 2: the graph workflow engine (`Workflow`, nodes, edges), with `SequentialAgent` / `ParallelAgent` / `LoopAgent` deprecated in its favour. |
 
-**Note:** Other languages: [Go](/google-adk-guide/go/) · [TypeScript](/google-adk-guide/typescript/).
+Earlier 1.x releases (November 2025 to May 2026) are covered in the upstream changelog.
+
+**Other languages:** [Go](/google-adk-guide/go/) · [TypeScript](/google-adk-guide/typescript/).

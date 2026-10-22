@@ -1,8 +1,8 @@
 ---
 title: "Microsoft Agent Framework (.NET)"
-description: "GA 1.0 unified .NET agent SDK — ChatClientAgent, multi-agent orchestration, MCP, A2A, Azure RBAC."
-framework: microsoft-agent-framework
-language: dotnet
+description: "Unified .NET agent SDK (Microsoft.Agents.AI) — ChatClientAgent, multi-agent orchestration, MCP, A2A, Azure RBAC."
+framework: "microsoft-agent-framework"
+language: "dotnet"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,24 +10,25 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**GA 1.0 unified .NET SDK that merges Semantic Kernel and AutoGen.** Build C# agents with `ChatClientAgent`, orchestrate multi-agent workflows, integrate with Azure AI services via managed identity, and stream via SignalR or SSE.
+**Unified .NET SDK that merges Semantic Kernel and AutoGen** (generally available since 2 April 2026). Build C# agents with `ChatClientAgent`, orchestrate multi-agent workflows, integrate with Azure AI services via managed identity, and stream via SignalR or SSE.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    dotnet add package Microsoft.Agents.AI
+    dotnet add package Microsoft.Agents.AI --version %%version=Microsoft.Agents.AI%%
+    dotnet add package Microsoft.Agents.AI.OpenAI   # AsAIAgent() for OpenAI / Azure OpenAI
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.1.0** · April 2026 · .NET 8.0+
+    `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** (checked %%versions-checked%%) · .NET 8.0+, also .NET Standard 2.0 / .NET Framework 4.7.2
   </Card>
   <Card title="Best for" icon="puzzle">
     Enterprise .NET agents, Azure-native deployments, RBAC, multi-agent orchestration.
   </Card>
 </CardGrid>
 
-<Aside type="caution" title="Migrating from Preview">
-  `ChatClientAgentOptions.Instructions` is removed — pass instructions directly to the `ChatClientAgent` constructor. The `--prerelease` flag is no longer needed.
+<Aside type="caution" title="Migrating from the previews">
+  `ChatClientAgentOptions` has no `Instructions` property: pass instructions to the `ChatClientAgent` constructor or `AsAIAgent(...)`, or set `ChatOptions.Instructions`. The core packages (`Microsoft.Agents.AI`, `.OpenAI`, `.Workflows`, `.Harness`, `.Anthropic`, `.GitHub.Copilot`) are stable; hosting, Foundry, A2A, DevUI and Azure Functions packages still need `--prerelease`.
 </Aside>
 
 ## Zero → Hero
@@ -40,15 +41,16 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="5 · Tools integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#tools-integration" description="Function tools, built-ins · 20 min" />
   <LinkCard title="6 · Structured output" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#structured-output" description="Typed responses, validation · 15 min" />
   <LinkCard title="7 · MCP" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#model-context-protocol-mcp" description="MCP client + server · 20 min" />
-  <LinkCard title="8 · Agentic patterns" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="ReAct, planning, reflection · 20 min" />
-  <LinkCard title="9 · Memory systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" description="Cosmos DB, SQL, Azure Search · 20 min" />
+  <LinkCard title="8 · Agentic patterns" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="Planning, routing, reflection · 20 min" />
+  <LinkCard title="9 · Memory systems" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" description="Sessions, Cosmos DB history, RAG · 20 min" />
   <LinkCard title="10 · Azure AI integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#azure-ai-integration" description="Azure OpenAI, Content Safety · 15 min" />
-  <LinkCard title="11 · Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" description="Managed Identity, Entra ID · 20 min" />
+  <LinkCard title="11 · Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" description="Least-privilege roles for managed identity · 10 min" />
   <LinkCard title="12 · Semantic Kernel bridge" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" description="SK plugin compat · 15 min" />
-  <LinkCard title="13 · 2025 features" href="./microsoft_agent_framework_dotnet_2025_features/" description="A2A, graphs, declarative · 25 min" />
-  <LinkCard title="14 · Advanced" href="./microsoft_agent_framework_dotnet_advanced/" description="Complex patterns, customisation · 30 min" />
-  <LinkCard title="15 · Streaming (SSE)" href="./microsoft_agent_streaming_server_dotnet/" description=".NET streaming server · 20 min" />
-  <LinkCard title="16 · Production" href="./microsoft_agent_framework_dotnet_production_guide/" description="Deployment, scaling · 30 min" />
+  <LinkCard title="13 · Feature tour" href="./microsoft_agent_framework_dotnet_2025_features/" description="A2A, workflows, checkpoints, HITL, declarative agents · 25 min" />
+  <LinkCard title="14 · Harness, Anthropic, Copilot, evaluation" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#more-agent-types" description="HarnessAgent, Anthropic and GitHub Copilot agents, LocalEvaluator, DevUI · 25 min" />
+  <LinkCard title="15 · Advanced" href="./microsoft_agent_framework_dotnet_advanced/" description="Foundry agents, agent middleware, workflows as agents · 20 min" />
+  <LinkCard title="16 · Streaming (SSE)" href="./microsoft_agent_streaming_server_dotnet/" description=".NET streaming server · 20 min" />
+  <LinkCard title="17 · Production" href="./microsoft_agent_framework_dotnet_production_guide/" description="Foundry hosted agents, durable Functions, security, evaluation in CI · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -64,7 +66,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" />
   <LinkCard title="Copilot Studio" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#copilot-studio-integration" />
   <LinkCard title="Semantic Kernel integration" href="./microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" />
-  <LinkCard title="2025 features" href="./microsoft_agent_framework_dotnet_2025_features/" />
+  <LinkCard title="Feature tour" href="./microsoft_agent_framework_dotnet_2025_features/" />
   <LinkCard title="Streaming server" href="./microsoft_agent_streaming_server_dotnet/" />
 </CardGrid>
 
@@ -72,7 +74,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard title="Comprehensive (.NET)" href="./microsoft_agent_framework_dotnet_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="2025 features" href="./microsoft_agent_framework_dotnet_2025_features/" />
+  <LinkCard title="Feature tour" href="./microsoft_agent_framework_dotnet_2025_features/" />
   <LinkCard title="Advanced" href="./microsoft_agent_framework_dotnet_advanced/" />
   <LinkCard title="Azure RBAC" href="./microsoft_agent_framework_azure_rbac/" />
   <LinkCard title="Recipes" href="./microsoft_agent_framework_dotnet_recipes/" />
@@ -81,32 +83,40 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server" href="./microsoft_agent_streaming_server_dotnet/" />
 </CardGrid>
 
-## What's new in GA 1.0 (April 2026)
+## Packages
 
-- **Stable APIs** with LTS commitment.
-- **First-party service connectors** via `IChatClient`: Azure OpenAI, OpenAI, Anthropic Claude, Amazon Bedrock, Google Gemini, Ollama.
-- **Unified orchestration** — sequential, concurrent, handoff, group chat, Magentic-One.
-- **Azure App Service support**.
+- **Stable:** `Microsoft.Agents.AI` (agents, sessions, context providers, harness providers, evaluation), `Microsoft.Agents.AI.OpenAI`, `Microsoft.Agents.AI.Workflows`, `Microsoft.Agents.AI.Workflows.Declarative`, `Microsoft.Agents.AI.Harness`, `Microsoft.Agents.AI.Anthropic`, `Microsoft.Agents.AI.GitHub.Copilot`.
+- **Preview:** `Microsoft.Agents.AI.Foundry`, `.Foundry.Hosting`, `.Hosting` (and its OpenAI, A2A and AG-UI endpoints), `.A2A`, `.DevUI`, `.Hosting.AzureFunctions`, `.DurableTask`, `.CosmosNoSql`, `.CopilotStudio`, `.AzureAI.Persistent`.
+- **Other models** (Ollama, Bedrock, Gemini and so on) plug in through any `Microsoft.Extensions.AI` `IChatClient` implementation; there are no separate `Microsoft.Agents.AI.*` packages for them.
 
 ## Install, minimal example
 
 ```csharp
-using Microsoft.Agents.AI;
 using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using OpenAI.Chat;
 
 var client = new AzureOpenAIClient(
     new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
     new DefaultAzureCredential()
 );
 
-var agent = new ChatClientAgent(
-    chatClient: client.GetChatClient("gpt-4o"),
-    instructions: "You are a helpful assistant."
-);
+// AsAIAgent (Microsoft.Agents.AI.OpenAI) wraps the OpenAI SDK ChatClient in a ChatClientAgent.
+AIAgent agent = client
+    .GetChatClient("%%model=openai%%")
+    .AsAIAgent(instructions: "You are a helpful assistant.");
 
-var response = await agent.RunAsync("What is 15 + 27?");
+AgentSession session = await agent.CreateSessionAsync();   // multi-turn state
+var response = await agent.RunAsync("What is 15 + 27?", session);
 Console.WriteLine(response.Text);
 ```
+
+If you already have an `IChatClient` (from `Microsoft.Extensions.AI`), construct the agent directly: `new ChatClientAgent(chatClient, instructions: "...")`. Earlier previews used `AgentThread` / `GetNewThread()` and `CreateAIAgent(...)`; the GA names are `AgentSession` / `CreateSessionAsync()` and `AsAIAgent(...)`.
+
+<Aside type="note" title="Compiled against the current packages">
+  The comprehensive guide, recipes and feature tour were rewritten on %%versions-checked%% so that every C# example compiles against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% and its companion packages. The building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `WorkflowBuilder` / `AgentWorkflowBuilder` / `InProcessExecution` (workflows) and `MapA2AJsonRpc` (A2A hosting).
+</Aside>
 
 Ready? **[Start Zero → Hero Step 1 →](./microsoft_agent_framework_dotnet_comprehensive_guide/#introduction)**
 
@@ -116,10 +126,12 @@ Ready? **[Start Zero → Hero Step 1 →](./microsoft_agent_framework_dotnet_com
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-21 | 1.25.0 | Added `HarnessAgent`, Anthropic and GitHub Copilot agents, evaluation and DevUI to the comprehensive guide; rewrote the Azure RBAC, advanced and production pages (Foundry hosted agents, durable Azure Functions agents, prompt-injection defence, evaluation in CI). |
+| 2026-10-21 | 1.25.0 | Version sweep. Install card pins and version card now read `Microsoft.Agents.AI` from the site's version data. Minimal example fixed (`GetChatClient(...)` returns an OpenAI SDK client, not an `IChatClient` — use `AsAIAgent`); thread API updated to `AgentSession` / `CreateSessionAsync` across the .NET pages. Comprehensive guide, recipes and feature tour rewritten against the real hosting, DI and workflow APIs; every C# block compiled against 1.25.0 and the workflow examples run against a stub chat client. |
 | 2026-09-08 | 1.1.0 | Consistency sweep. Version card moved 1.0.1 → 1.1.0 to match the `Latest:` stamps already carried by the .NET pages; those stamps now name the package (`Microsoft.Agents.AI`). No package installation or symbol verification performed. |
-| 2026-04-21 | 1.0.1 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| April 10, 2026 | 1.0.1 | Patch release. |
-| April 3-7, 2026 | 1.0 GA | GA; stable APIs; first-party connectors; Azure App Service. |
-| November 2025 | 1.0 Preview | Initial .NET guide. |
+| 2026-04-21 | 1.1.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
+| 2026-04-10 | 1.1.0 | First minor release after GA (NuGet). |
+| 2026-04-02 | 1.0.0 | GA on NuGet. |
+| 2025-10-01 | 1.0.0-preview.251001.1 | First public preview on NuGet. |
 
 **Other languages:** [Python](/microsoft-agent-framework-guide/python/).

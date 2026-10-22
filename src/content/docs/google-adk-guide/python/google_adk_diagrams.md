@@ -1,30 +1,31 @@
 ---
-title: "Google ADK - Architecture Diagrams"
+title: "Google ADK Architecture Diagrams (Python)"
 description: "These diagrams provide visual representations of key ADK concepts and architectures. Refer to the comprehensive and production guides for detailed explanations."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
+sidebar:
+  label: "Diagrams"
+  order: 99
 ---
-
-# Google ADK - Architecture Diagrams
 
 ---
 
 ## ADK Core Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-│  (REST API, Webhooks, CLI, WebUI, Scheduled Tasks)          │
-└─────────────────────────────┬─────────────────────────────────┘
+│                    Application Layer                        │
+│     (adk web / api_server, your FastAPI app, A2A, CLI)      │
+└─────────────────────────────┬───────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    Runner/Executor                           │
-│  • Orchestrates agent execution                             │
-│  • Manages sessions and state                               │
-│  • Handles tool invocation                                  │
-│  • Manages concurrency and timeouts                         │
-└─────────────────────────────┬─────────────────────────────────┘
+│                    Runner (App + plugins)                   │
+│  • Drives the root agent or Workflow for one invocation     │
+│  • Loads and saves sessions and state                       │
+│  • Calls plugins around agents, models and tools            │
+│  • Yields events to the caller                              │
+└─────────────────────────────┬───────────────────────────────┘
                               │
                 ┌─────────────┼─────────────┐
                 │             │             │
@@ -49,7 +50,7 @@ language: python
 
 ## Agent Hierarchy
 
-```
+```text
                     ┌────────────────────┐
                     │  Root Coordinator  │
                     │     Agent          │
@@ -74,9 +75,11 @@ language: python
 
 ---
 
-## Sequential Agent Workflow
+## Workflow chain
 
-```
+`Workflow(edges=[(START, research, analysis, writer, editor)])`: each node receives the previous node's output.
+
+```text
 User Query
     │
     ▼
@@ -114,16 +117,18 @@ User Query
 
 ---
 
-## Parallel Agent Processing
+## Workflow fan-out and join
 
-```
+`Workflow(edges=[(START, (parser, analyser, checker), JoinNode(name="join"), aggregate)])`: the branches run concurrently and the `JoinNode` passes `{branch: output}` to the next node.
+
+```text
               User Input
                   │
         ┌─────────┼─────────┐
         │         │         │
         ▼         ▼         ▼
     ┌────────┐ ┌────────┐ ┌────────┐
-    │Parser  │ │Analyzer│ │Checker │
+    │Parser  │ │Analyser│ │Checker │
     │        │ │        │ │        │
     │Process │ │Identify│ │Verify  │
     │input   │ │patterns│ │results │
@@ -147,7 +152,7 @@ User Query
 
 ## ReAct Loop Pattern
 
-```
+```text
                     ┌─────────────────┐
                     │  Start Problem  │
                     └────────┬────────┘
@@ -198,7 +203,7 @@ User Query
 
 ## Tool Invocation Flow
 
-```
+```text
         ┌──────────────────┐
         │   Agent Decides  │
         │ to Call Tool     │
@@ -248,7 +253,7 @@ User Query
 
 ## Session Management Flow
 
-```
+```text
 ┌──────────────────────────────────────────────────────┐
 │               Session Lifecycle                       │
 └──────────────────────────────────────────────────────┘
@@ -298,7 +303,7 @@ User Query
 
 ## Memory Architecture
 
-```
+```text
                     ┌────────────────┐
                     │   Agent        │
                     └────────┬───────┘
@@ -335,7 +340,7 @@ User Query
 
 ## Google Cloud Integration Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                      ADK Application                      │
 └──────────────────────────────────────────────────────────┘
@@ -365,7 +370,7 @@ User Query
 
 ## Multi-Agent Orchestration
 
-```
+```text
                     ┌─────────────────┐
                     │  Orchestrator   │
                     │     Agent       │
@@ -393,7 +398,7 @@ User Query
 
 ## Deployment Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                    Cloud Build                           │
 │  • Test                                                  │
@@ -433,7 +438,7 @@ User Query
 
 ## Monitoring Stack
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                   ADK Application                        │
 └──────────────────────────┬───────────────────────────────┘
@@ -469,7 +474,7 @@ User Query
 
 ## Security Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │                    Request Flow                          │
 └──────────────────────────┬───────────────────────────────┘
@@ -525,7 +530,7 @@ User Query
 
 ## Cost Optimisation Flow
 
-```
+```text
 ┌────────────────────────────────────────────────────────┐
 │              Query Analysis                            │
 └────────────────────┬─────────────────────────────────┘
@@ -535,13 +540,13 @@ User Query
          ▼                        ▼
     ┌─────────┐              ┌──────────┐
     │Simple?  │              │Complex?  │
-    │<1000 T  │              │>1000 T   │
+    │(routing)│              │(analysis)│
     └────┬────┘              └────┬─────┘
          │                        │
          ▼                        ▼
     ┌───────────┐            ┌──────────┐
-    │Flash Model│            │Pro Model │
-    │$0.075/1M  │            │$3/1M     │
+    │Small model│            │Larger    │
+    │           │            │model     │
     └─────┬─────┘            └────┬─────┘
           │                       │
           └───────────┬───────────┘
@@ -562,7 +567,7 @@ User Query
 
 ## Testing Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────────────┐
 │              Test Suite Organization                    │
 └────────────────────┬─────────────────────────────────┘
@@ -594,7 +599,7 @@ User Query
 
 ## Data Flow: End-to-End Request
 
-```
+```text
 1. User Request
    │
    ▼

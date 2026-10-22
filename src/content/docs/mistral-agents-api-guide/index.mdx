@@ -1,8 +1,8 @@
 ---
 title: "Mistral Agents API"
-description: "Mistral's hosted Agents API with connectors, MCP, orchestration, and FastAPI streaming."
-framework: mistral
-language: python
+description: "Mistral's hosted Agents and Conversations APIs with built-in tools, MCP connectors, handoffs and FastAPI streaming, using the mistralai Python SDK."
+framework: "mistral-agents-api"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,122 +10,99 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Mistral's hosted Agents API.** Launched May 2025 — server-managed agents with built-in connectors (web search, code interpreter, document QA), MCP support, and multi-agent orchestration. Think OpenAI Assistants but for Mistral models.
+**Mistral's hosted Agents API.** Stored, versioned agents; server-side conversation state; built-in web search, code interpreter, image generation and document retrieval; MCP connectors; and handoffs between agents.
+
+<Aside type="note" title="Status">
+  The Agents and Conversations APIs are beta (`client.beta` in the SDK) and registered MCP connectors are a public preview, so request and response shapes may still change.
+</Aside>
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install mistralai
+    pip install "mistralai[agents]==%%version=mistralai%%"
     ```
   </Card>
   <Card title="Version" icon="information">
-    **mistralai 2.4.9** · June 2026 · Python 3.10+
+    **Current release: `mistralai` %%version=mistralai%%** · Python 3.10+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
-    Mistral-native workloads, hosted agents with connectors, MCP-heavy flows.
+    Mistral-native assistants with hosted tools and state, MCP-connected agents, EU data residency.
   </Card>
 </CardGrid>
 
-<Aside type="caution" title="v1 → v2 SDK break">
-  The v1.x and v2.x SDKs have incompatible APIs. Code on v1.x needs updating — see the revision history in the [comprehensive guide](./mistral_agents_api_comprehensive_guide/).
+<Aside type="caution" title="SDK v3">
+  `mistralai` 3.0.0 (September 2026) moved the HTTP layer to `httpx2`, requires `mcp` 2.2 for the `agents` extra, and removed built-in tools from `chat.complete()`. Imports are unchanged since v2: `from mistralai.client import Mistral`. See [Changes in SDK v3](./mistral_agents_api_comprehensive_guide/#14-changes-in-sdk-v3).
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Agent lifecycle" href="./mistral_agents_api_comprehensive_guide/#1-agent-lifecycle-diagram" description="Create, invoke, converse, destroy · 15 min" />
-  <LinkCard title="2 · Conversation flow" href="./mistral_agents_api_comprehensive_guide/#2-conversation-flow-diagram" description="Messages, threads, history · 15 min" />
-  <LinkCard title="3 · Multi-agent orchestration" href="./mistral_agents_api_orchestration_guide/" description="Supervisor, specialist routing · 25 min" />
-  <LinkCard title="4 · Tool execution" href="./mistral_agents_api_comprehensive_guide/#4-tool-execution-workflow" description="Function calling, validation · 20 min" />
-  <LinkCard title="5 · Connectors" href="./mistral_agents_api_connectors_guide/" description="Web search, code interp, doc QA · 20 min" />
-  <LinkCard title="6 · MCP integration" href="./mistral_agents_api_mcp_guide/" description="MCP client + server patterns · 20 min" />
-  <LinkCard title="7 · Memory & state" href="./mistral_agents_api_comprehensive_guide/#6-memory-persistence-architecture" description="Threads, persistence · 15 min" />
-  <LinkCard title="8 · Request/response pipeline" href="./mistral_agents_api_comprehensive_guide/#5-requestresponse-processing-pipeline" description="Under the hood · 15 min" />
-  <LinkCard title="9 · Advanced Python patterns" href="./mistral_agents_api_advanced_python/" description="Async, batching, error handling · 20 min" />
-  <LinkCard title="10 · Streaming (FastAPI)" href="./mistral_streaming_server_fastapi/" description="SSE streaming server · 20 min" />
-  <LinkCard title="11 · Production" href="./mistral_agents_api_production_guide/" description="Deployment, monitoring · 25 min" />
+  <LinkCard title="1 · Overview and setup" href="./mistral_agents_api_comprehensive_guide/#1-overview" description="Agents vs conversations, install, auth, models · 15 min" />
+  <LinkCard title="2 · Agents" href="./mistral_agents_api_comprehensive_guide/#4-agents" description="Create, update, versions, aliases · 15 min" />
+  <LinkCard title="3 · Conversations" href="./mistral_agents_api_comprehensive_guide/#5-conversations" description="Start, append, restart, history · 15 min" />
+  <LinkCard title="4 · Streaming" href="./mistral_agents_api_comprehensive_guide/#6-streaming" description="Server-sent events · 10 min" />
+  <LinkCard title="5 · Built-in tools" href="./mistral_agents_api_connectors_guide/" description="Web search, code, images, document libraries · 20 min" />
+  <LinkCard title="6 · Function calling" href="./mistral_agents_api_comprehensive_guide/#8-function-calling" description="Manual loop and RunContext · 15 min" />
+  <LinkCard title="7 · Multi-agent orchestration" href="./mistral_agents_api_orchestration_guide/" description="Pipelines, fan-out, handoffs, delegation · 25 min" />
+  <LinkCard title="8 · MCP" href="./mistral_agents_api_mcp_guide/" description="Connectors, client-side MCP, approvals · 20 min" />
+  <LinkCard title="9 · Chat completions" href="./mistral_agents_api_advanced_python/" description="Chat tool calling, structured output, async · 20 min" />
+  <LinkCard title="10 · Streaming (FastAPI)" href="./mistral_streaming_server_fastapi/" description="SSE server · 15 min" />
+  <LinkCard title="11 · Production" href="./mistral_agents_api_production_guide/" description="Retries, observability, testing, cost, deployment · 25 min" />
 </CardGrid>
 
-## Jump to a topic
+## Also in this guide
 
 <CardGrid>
-  <LinkCard title="Agent lifecycle" href="./mistral_agents_api_comprehensive_guide/#1-agent-lifecycle-diagram" />
-  <LinkCard title="Conversation flow" href="./mistral_agents_api_comprehensive_guide/#2-conversation-flow-diagram" />
-  <LinkCard title="Multi-agent orchestration" href="./mistral_agents_api_orchestration_guide/" />
-  <LinkCard title="Connectors" href="./mistral_agents_api_connectors_guide/" />
-  <LinkCard title="MCP" href="./mistral_agents_api_mcp_guide/" />
-  <LinkCard title="Tool execution workflow" href="./mistral_agents_api_comprehensive_guide/#4-tool-execution-workflow" />
-  <LinkCard title="Memory architecture" href="./mistral_agents_api_comprehensive_guide/#6-memory-persistence-architecture" />
-  <LinkCard title="Agent configuration schema" href="./mistral_agents_api_comprehensive_guide/#9-agent-configuration-schema" />
-  <LinkCard title="Advanced Python" href="./mistral_agents_api_advanced_python/" />
-  <LinkCard title="May 2025 launch updates" href="./may_2025_launch_updates/" />
+  <LinkCard title="Recipes" href="./mistral_agents_api_recipes/" description="Copy-and-adapt examples: web search, chat, routing, RAG, a CLI." />
+  <LinkCard title="Diagrams" href="./mistral_agents_api_diagrams/" description="Versions, conversation flow, function calls, approvals, handoffs, streaming events." />
 </CardGrid>
 
-## Reference
+## TypeScript
+
+The same API from Node.js, Bun, Deno or the browser with `@mistralai/mistralai` %%version=@mistralai/mistralai%% (versioned separately from the Python package). It has no `RunContext` or client-side MCP helpers; the pages show the hand-written equivalents.
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./mistral_agents_api_comprehensive_guide/" description="Single-page technical reference + diagrams." />
-  <LinkCard title="Connectors guide" href="./mistral_agents_api_connectors_guide/" description="Built-in connectors." />
-  <LinkCard title="Orchestration guide" href="./mistral_agents_api_orchestration_guide/" description="Multi-agent patterns." />
-  <LinkCard title="MCP guide" href="./mistral_agents_api_mcp_guide/" />
-  <LinkCard title="Advanced Python" href="./mistral_agents_api_advanced_python/" />
-  <LinkCard title="Recipes" href="./mistral_agents_api_recipes/" />
-  <LinkCard title="Diagrams" href="./mistral_agents_api_diagrams/" />
-  <LinkCard title="Production guide" href="./mistral_agents_api_production_guide/" />
-  <LinkCard title="Streaming server (FastAPI)" href="./mistral_streaming_server_fastapi/" />
-  <LinkCard title="May 2025 launch updates" href="./may_2025_launch_updates/" />
+  <LinkCard title="TypeScript overview" href="/mistral-agents-api-guide/typescript/" description="Install, minimal example, differences from Python." />
+  <LinkCard title="Agents and conversations" href="/mistral-agents-api-guide/typescript/agents-and-conversations/" description="Agents, versions, conversations, streaming, structured output." />
+  <LinkCard title="Tools and orchestration" href="/mistral-agents-api-guide/typescript/tools-and-orchestration/" description="Built-in tools, function calling, handoffs, MCP connectors." />
+  <LinkCard title="Production" href="/mistral-agents-api-guide/typescript/production/" description="Errors, retries, hooks, concurrency, SSE server." />
 </CardGrid>
 
-## What's new in v2.4.9 (June 2026)
-
-- **v2.4.9 (June 2026)** — Patch release; maintenance and dependency updates. `mistralai==2.4.9` confirmed latest stable on PyPI (2026-06-04); `from mistralai.client import Mistral` is the correct import path (top-level `from mistralai import Mistral` still raises `ImportError`).
-- **v2.4.8 (May 2026)** — Patch release; maintenance and dependency updates. `from mistralai.client import Mistral` verified against installed `mistralai==2.4.8` (`.routine-envs/check-0529-mistral`); `from mistralai import Mistral` still raises `ImportError`.
-- **v2.4.7 (May 2026)** — Minor feature release. New `guardrails` parameter on `client.beta.agents.create()` and `client.beta.conversations.start()`: attach `GuardrailConfig` objects with Mistral moderation v1 (`mistral-moderation-2411`) or v2 (`mistral-moderation-2603`) models, with optional `block_on_error` enforcement. New `handoff_execution` parameter on all `conversations` methods: `"client"` (you handle handoff routing) or `"server"` (Mistral platform executes handoffs automatically). New `prompt_cache_key` parameter on `agents.complete()` (GA agents API) for prompt-level caching. All symbols verified against installed `mistralai==2.4.7` (`.routine-envs/mistralai`); `from mistralai.client import Mistral` import confirmed correct; `from mistralai import Mistral` still raises `ImportError`.
-- **v2.4.6 (May 2026)** — Patch release; stability and dependency improvements.
-- **v2.4.5 (May 9)** — Patch release; stability improvements.
-- **v2.4.4 (May 1)** — Patch release; stability improvements.
-- **v2.4.3 (April 28)** — Patch release; stability improvements.
-- **v2 SDK** with refined async patterns.
-- **Connectors** — web search, code interpreter, document QA.
-- **MCP** client and server support.
-- **Orchestration** — multi-agent coordination patterns.
-
-## Install, minimal example
+## Minimal example
 
 ```python
 import os
-from mistralai.client import Mistral   # import from mistralai.client, NOT from mistralai
+from mistralai.client import Mistral   # import from mistralai.client, not from mistralai
 
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
 agent = client.beta.agents.create(
-    model="mistral-large-latest",
-    name="Assistant",
-    instructions="You are a helpful assistant.",
+    model="mistral-medium-latest",
+    name="assistant",
+    instructions="You are a helpful assistant. Search the web for anything time-sensitive.",
+    tools=[{"type": "web_search"}],
 )
 
-conversation = client.beta.conversations.start(
-    agent_id=agent.id,
-    inputs="What is 15 + 27?",
+response = client.beta.conversations.start(agent_id=agent.id, inputs="What is 15 + 27?")
+print(response.outputs[-1].content)
+
+follow_up = client.beta.conversations.append(
+    conversation_id=response.conversation_id,
+    inputs="Now double it.",
 )
-print(conversation.outputs[0].content)
+print(follow_up.outputs[-1].content)
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./mistral_agents_api_comprehensive_guide/#1-agent-lifecycle-diagram)**
+Ready? **[Start Zero → Hero step 1 →](./mistral_agents_api_comprehensive_guide/#1-overview)**
 
 ---
 
 ## Revision history
 
-| Date | Version | Changes | Reviewer |
-|------|---------|---------|----------|
-| 2026-06-04 | mistralai 2.4.9 | Version bumped 2.4.8 → 2.4.9 (patch release); version card and "What's new" updated; `mistralai==2.4.9` confirmed latest stable on PyPI (2026-06-04). `from mistralai.client import Mistral` is confirmed correct import path; `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
-| 2026-05-29 | mistralai 2.4.8 | Version bumped 2.4.7 → 2.4.8 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed `mistralai==2.4.8` (`.routine-envs/check-0529-mistral`); `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
-| 2026-05-27 | mistralai 2.4.7 | Version bumped 2.4.5 → 2.4.7; "What's new" updated for 2.4.6 and 2.4.7; new features documented: `guardrails` on `beta.agents.create()` (`GuardrailConfig` with `ModerationLlmv1Config`/`ModerationLlmv2Config`), `handoff_execution` on `conversations.start()` (`"client"`/`"server"`), `prompt_cache_key` on `agents.complete()`. Verified against installed `mistralai 2.4.7` (`.routine-envs/mistralai`); `from mistralai.client import Mistral` confirmed; `from mistralai import Mistral` still raises `ImportError`. | Claude routine |
-| 2026-05-09 | mistralai 2.4.5 | Version bumped 2.4.4 → 2.4.5 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.5 (`.routine-envs/check-0509-py`) — note: `from mistralai import Mistral` fails (top-level module is a namespace); correct path remains `from mistralai.client import Mistral`. | Claude routine |
-| 2026-05-01 | mistralai 2.4.4 | Version bumped 2.4.3 → 2.4.4 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.4 (`.routine-envs/check-mistral2-0501`). | Claude routine |
-| 2026-04-28 | mistralai 2.4.3 | Version bumped 2.4.2 → 2.4.3 (patch release); version card and "What's new" updated; `from mistralai.client import Mistral` verified against installed 2.4.3. | Claude routine |
-| 2026-04-24 | mistralai 2.4.2 | Version bumped 2.4.1 → 2.4.2 (patch release April 23); version card and "What's new" updated. | — |
-| 2026-04-21 | mistralai 2.4.1 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
-| April 2026 | mistralai 2.4.1 | v2 SDK stabilised; connectors; MCP; orchestration. | — |
-| May 2025 | Launch | Agents API public launch. | — |
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | %%version=mistralai%% | Second pass: corrected OpenTelemetry set-up (opt-in via `configure_telemetry`), the MCP server transport and the Kubernetes token advice; replaced deprecated `agents.list()` and `connectors.call_tool()`; added connector approvals (`tool_confirmations`), testing, cost and Mistral's observability APIs; folded the May 2025 history page into the core reference; trimmed the diagrams page and kept one deployment set-up in the production guide. |
+| 2026-10-21 | %%version=mistralai%% | Updated for SDK v3 and re-verified every example against the installed package. Rewrote the comprehensive guide as a code reference (diagrams moved to the diagrams page); corrected tool shapes (no `config` objects, no `document_retrieval` or `mcp` tool types), `conversation_id` usage, and `append()` (which takes no `agent_id`); rebuilt the connectors, MCP (connectors, `RunContext`, `mcp` 2.x `MCPServer`) and orchestration guides; replaced retired `mistral-medium-2505`. |
+| 2026-05-27 | 2.4.7 | `guardrails` and `handoff_execution` documented. |
+| 2026-03-12 | 2.0.1 | SDK v2: imports moved to `mistralai.client`. |
+| 2025-05-27 | — | Agents API launched. |

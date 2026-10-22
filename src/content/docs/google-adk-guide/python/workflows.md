@@ -1,13 +1,14 @@
 ---
 title: "Workflows (graph orchestration)"
 description: "Compose agents and functions into a DAG with conditional routing, retries, timeouts, HITL, and state schemas."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 25
+  label: "Workflows"
+  order: 30
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/workflow/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.4.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/workflow/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted; the human-in-the-loop helpers changed after 2.10 (see that section).
 
 `Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
 
@@ -40,13 +41,13 @@ from google.adk.workflow import Workflow, node, START
 
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write a tight 3-sentence summary of the input.",
     mode="single_turn",
 )
 polisher = LlmAgent(
     name="polisher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Shorten and sharpen the input. Return only the final text.",
     mode="single_turn",
 )
@@ -119,7 +120,7 @@ from google.adk.agents import LlmAgent
 
 writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Summarise the input in one sentence.",
 )
 
@@ -144,7 +145,7 @@ from google.adk.workflow import Workflow, START
 from google.adk.agents import LlmAgent
 
 # Explicitly set mode so build_node() preserves it rather than defaulting
-writer = LlmAgent(name="writer", model="gemini-2.5-flash",
+writer = LlmAgent(name="writer", model="%%model=gemini%%",
                   instruction="Summarise the input.", mode="single_turn")
 
 wf = Workflow(name="demo", edges=[(START, writer)])
@@ -246,6 +247,16 @@ Signatures recognised by `FunctionNode`:
 - `ctx` — the `Context` (state, `run_node`, `route`, `interrupt`, artifact helpers).
 - Any other parameter must be declared in the enclosing `Workflow.state_schema` — the framework injects its current value.
 
+That is the default `parameter_binding="state"`. With `@node(parameter_binding="node_input")` the parameters are filled from the fields of a `dict`/Pydantic `node_input` instead, and `input_schema`/`output_schema` are inferred from the signature (this is the mode used when a node acts as an agent's tool):
+
+```python
+@node(parameter_binding="node_input")
+def greet(name: str, greeting: str = "Hello") -> str:
+    return f"{greeting}, {name}!"      # called with node_input={"name": "Alice"}
+```
+
+Values are coerced to the annotations with a Pydantic `TypeAdapter`: a `dict` becomes the annotated `BaseModel`, a `list[dict]` becomes `list[Model]`, and a `types.Content` (such as the user's message reaching a START successor) becomes `str` when the parameter expects one.
+
 Return types are honoured: returning a value sets `ctx.output`; yielding values from an async generator lets you stream partials.
 
 ## `Node` subclass
@@ -284,7 +295,7 @@ All fields from `BaseNode` (`retry_config`, `timeout`, `wait_for_output`, ...) a
 
 ### `Workflow` — `max_concurrency` and `state_schema` in action
 
-Source-verified against `google.adk.workflow._workflow.Workflow` and its `_validate_state_schema` method (google-adk==2.7.1). Two fields deserve dedicated coverage because they change failure modes at graph-build time (`state_schema`) and at runtime (`max_concurrency`).
+Source-verified against `google.adk.workflow._workflow.Workflow` and its `_validate_state_schema` method (first verified in 2.7.1; re-checked against %%version=google-adk%%). Two fields deserve dedicated coverage because they change failure modes at graph-build time (`state_schema`) and at runtime (`max_concurrency`).
 
 ```python
 from pydantic import BaseModel, Field
@@ -358,6 +369,15 @@ workflow = Workflow(
 )
 ```
 
+How the next nodes are chosen after a node finishes (`Graph.get_next_pending_nodes`):
+
+1. Edges with no route are always followed (an unconditional fan-out).
+2. Edges whose route matches the emitted `ctx.route` are followed; a list route matches if any value overlaps.
+3. `DEFAULT_ROUTE` edges are followed only when no specific route matched.
+4. If a node has routing edges and none matched, the branch ends with a logged warning, not an error.
+
+Route values can be `bool`, `int` or `str`.
+
 ## Loops
 
 Replace `LoopAgent` with a routing map that either loops back to the same node or flows to a terminal node (any node with no outgoing edges). There is **no** `END_NODE` sentinel — terminality is structural.
@@ -395,8 +415,8 @@ Fan-in that waits for **all** declared predecessors. Useful after a `(START, (a,
 from google.adk.agents import LlmAgent
 from google.adk.workflow import JoinNode, Workflow, node, START
 
-a = LlmAgent(name="a", model="gemini-2.5-flash", instruction="Reply 'A'.", mode="single_turn")
-b = LlmAgent(name="b", model="gemini-2.5-flash", instruction="Reply 'B'.", mode="single_turn")
+a = LlmAgent(name="a", model="%%model=gemini%%", instruction="Reply 'A'.", mode="single_turn")
+b = LlmAgent(name="b", model="%%model=gemini%%", instruction="Reply 'B'.", mode="single_turn")
 
 join = JoinNode(name="merge")
 
@@ -415,7 +435,7 @@ wf = Workflow(
 
 ## Dynamic nodes (`ctx.run_node`)
 
-Call another node from inside a node — the result is awaited in-place. **The caller must have `rerun_on_resume=True`** or `run_node` raises `ValueError` (`agents/context.py:399-405`).
+Call another node from inside a node — the result is awaited in-place. **The caller must have `rerun_on_resume=True`** or `run_node` raises `ValueError` (`agents/context.py`).
 
 ```python
 @node(rerun_on_resume=True)
@@ -523,19 +543,19 @@ from google.adk.workflow import Workflow, node, START, DEFAULT_ROUTE
 
 billing_agent = LlmAgent(
     name="billing",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Handle billing questions. Be concise.",
     mode="single_turn",
 )
 support_agent = LlmAgent(
     name="support",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Handle technical support questions. Be concise.",
     mode="single_turn",
 )
 general_agent = LlmAgent(
     name="general",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Handle general queries. Be concise.",
     mode="single_turn",
 )
@@ -589,19 +609,19 @@ from google.adk.workflow import JoinNode, Workflow, node, START
 
 security_reviewer = LlmAgent(
     name="security",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Review the code for security issues only. List findings as bullet points.",
     mode="single_turn",
 )
 perf_reviewer = LlmAgent(
     name="performance",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Review the code for performance issues only. List findings as bullet points.",
     mode="single_turn",
 )
 style_reviewer = LlmAgent(
     name="style",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Review the code for style/readability issues only. List findings as bullet points.",
     mode="single_turn",
 )
@@ -633,7 +653,9 @@ async def main():
         app_name="review_app", user_id="u1", session_id="s1"
     )
     events = await runner.run_debug(code, user_id="u1", session_id="s1")
-    print(events[-1].content.parts[0].text)
+    # The last event comes from the `summarize` function node: its result is in
+    # `event.output`, not `event.content`.
+    print(events[-1].output)
 
 asyncio.run(main())
 ```
@@ -652,12 +674,17 @@ from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
 from google.adk.events.request_input import RequestInput
 from google.adk.workflow import Workflow, node, START
-from google.adk.workflow.utils._workflow_hitl_utils import has_request_input_function_call
 from google.genai import types
+
+REQUEST_INPUT = "adk_request_input"   # function-call name RequestInput is surfaced as
+
+def request_input_ids(event) -> list[str]:
+    """Interrupt ids of any RequestInput pauses carried by this event."""
+    return [fc.id for fc in event.get_function_calls() if fc.name == REQUEST_INPUT]
 
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Write a short marketing email for the product described in the input.",
     mode="single_turn",
 )
@@ -693,7 +720,7 @@ approval_wf = Workflow(
 
 async def main():
     session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
-    await session_svc.prepare_tables()   # public method (source: database_session_service.py:403); also called lazily on first use
+    await session_svc.prepare_tables()   # public method (source: database_session_service.py); also called lazily on first use
 
     app = App(
         name="email_app",
@@ -716,9 +743,9 @@ async def main():
         new_message=user_msg,
         user_id="u1", session_id="s1",
     ):
-        # Use has_request_input_function_call to detect a RequestInput pause
+        # A RequestInput pause arrives as an `adk_request_input` function call
         # (event.actions.requested_auth_configs is for OAuth, not HITL interrupts)
-        if has_request_input_function_call(event):
+        if request_input_ids(event):
             print("Workflow paused. Waiting for human approval.")
         if hasattr(event, "content") and event.content:
             print(event.content.parts[0].text if event.content.parts else "")
@@ -726,18 +753,15 @@ async def main():
 asyncio.run(main())
 ```
 
-To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. Use `get_request_input_interrupt_ids(event)` to capture the ID during the first run, then build the response:
+To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. The `has_request_input_function_call` / `get_request_input_interrupt_ids` helpers that `_workflow_hitl_utils` shipped up to 2.10 have been removed; read the id from the event's `adk_request_input` function call (the `request_input_ids` helper above), then build the response with `create_request_input_response`, which is still there (it is a private module, so pin your ADK version if you rely on it):
 
 ```python
-from google.adk.workflow.utils._workflow_hitl_utils import (
-    get_request_input_interrupt_ids,
-    create_request_input_response,
-)
+from google.adk.workflow.utils._workflow_hitl_utils import create_request_input_response
 
 # Collect the interrupt_id emitted during the first run
 interrupt_id = None
 async for event in runner.run_async(new_message=user_msg, user_id="u1", session_id="s1"):
-    ids = get_request_input_interrupt_ids(event)
+    ids = request_input_ids(event)
     if ids:
         interrupt_id = ids[0]
 
@@ -757,7 +781,7 @@ async for event in runner.run_async(
 ## Gotchas
 
 - Nodes are **Pydantic models** — if you subclass `Node`, annotate fields or they won't serialise.
-- `Workflow` is not a `BaseAgent`. `Runner(agent=workflow)` fails. Use `App(root_agent=workflow)` and `Runner(app=app, session_service=...)`.
+- `Workflow` is not a `BaseAgent`. `Runner(agent=workflow)` fails. Use `App(root_agent=workflow)` and `Runner(app=app, session_service=...)`, or pass it as `Runner(node=workflow, app_name=..., session_service=...)`.
 - `ctx.run_node(callable)` requires `rerun_on_resume=True` on the calling node.
 - `wait_for_output=True` means a node *must* yield output/route before it's marked complete. Forget that and the workflow deadlocks.
 - When a tuple contains only one element (e.g. `(START, single_node)`), you still get a single edge — not sugar for fan-out. Fan-out needs a **nested** tuple: `(START, (a, b))`.

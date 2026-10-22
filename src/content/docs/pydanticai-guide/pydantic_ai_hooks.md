@@ -1,13 +1,14 @@
 ---
 title: "PydanticAI: Hooks — Lifecycle Callbacks"
 description: "Decorator-based hook registration for agent run lifecycle, model requests, tool calls, and output validation using the Hooks capability."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Hooks"
+  order: 9
 ---
 
-# Hooks — Lifecycle Callbacks
-
-Verified against **pydantic-ai==2.43.0** — source module: `pydantic_ai.capabilities.hooks`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source module: `pydantic_ai.capabilities.hooks`.
 
 The `Hooks` class gives you a decorator-first API for intercepting every phase of an agent run without subclassing `AbstractCapability`. Register a function once with `@hooks.on.<event>` and it fires automatically during runs that include this capability.
 
@@ -29,7 +30,7 @@ async def log_finish(ctx, *, result):
     print(f'Run finished — output: {result.output!r}')
     return result
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 async def main():
     result = await agent.run('What is 2 + 2?')
@@ -54,7 +55,10 @@ All hooks live on `hooks.on.*`:
 | **Tool execution** | `before_tool_execute`, `after_tool_execute`, `tool_execute` (wrap), `tool_execute_error` |
 | **Output validation** | `before_output_validate`, `after_output_validate`, `output_validate` (wrap), `output_validate_error` |
 | **Output processing** | `before_output_process`, `after_output_process`, `output_process` (wrap), `output_process_error` |
-| **Deferred tools** | `handle_deferred_tool_calls` |
+| **Event stream** | `run_event_stream` (wrap), `event` |
+| **Deferred tools** | `deferred_tool_calls` |
+
+Each name is also a `Hooks(...)` constructor keyword. The wrap and error forms map onto `AbstractCapability.wrap_*` / `on_*_error` methods (e.g. `@hooks.on.model_request` implements `wrap_model_request`), but on `hooks.on` they have no prefix.
 
 ## Run lifecycle hooks
 
@@ -79,7 +83,7 @@ async def on_error(ctx: RunContext, *, error: BaseException) -> AgentRunResult:
     print(f'[run_error] {type(error).__name__}: {error}')
     raise error   # re-raise or return a fallback result
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 ## Model request hooks — observability
@@ -225,7 +229,7 @@ async def record_metric(ctx, *, result):
     metrics.increment('agent.run.completed')
     return result
 
-agent = Agent('openai:gpt-4o', capabilities=[audit_hooks, metrics_hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[audit_hooks, metrics_hooks])
 ```
 
 ## Per-run hooks
@@ -261,7 +265,7 @@ async def forward_events(ctx, event: AgentStreamEvent) -> AgentStreamEvent:
     await ws.send_json({'type': event.__class__.__name__})
     return event
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
 
 ## Complete observability pattern
@@ -318,10 +322,10 @@ def make_observability_hooks() -> tuple[Hooks, RunMetrics]:
     return hooks, m
 
 obs_hooks, metrics = make_observability_hooks()
-agent = Agent('openai:gpt-4o', capabilities=[obs_hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[obs_hooks])
 ```
 
-## `handle_deferred_tool_calls` — intercept deferred tool batches
+## `deferred_tool_calls` — intercept deferred tool batches
 
 Fires whenever the agent produces a `DeferredToolRequests` (i.e. some tool called `CallDeferred` or `ApprovalRequired`). Use it for logging, queuing, or automatically resolving deferrals in tests:
 
@@ -331,24 +335,24 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import CallDeferred
 from pydantic_ai.tools import DeferredToolRequests, DeferredToolResults
-from pydantic_ai.messages import ToolReturn
 
 hooks = Hooks()
 
-@hooks.on.handle_deferred_tool_calls
-async def log_and_auto_resolve(ctx, *, deferred: DeferredToolRequests):
+@hooks.on.deferred_tool_calls
+async def log_and_auto_resolve(ctx, *, requests: DeferredToolRequests):
     """Log every deferred call and automatically resolve them with a placeholder."""
-    print(f'[deferred] {len(deferred.calls)} call(s) deferred this step')
-    for call in deferred.calls:
+    print(f'[deferred] {len(requests.calls)} call(s) deferred this step')
+    for call in requests.calls:
         print(f'  → {call.tool_name}({call.args})')
-    # Return resolved results to continue the run automatically
+    # Return resolved results to continue the run automatically;
+    # each value is what the tool would have returned
     return DeferredToolResults(calls={
-        call.tool_call_id: ToolReturn(content=f'Auto-resolved: {call.tool_name}')
-        for call in deferred.calls
+        call.tool_call_id: f'Auto-resolved: {call.tool_name}'
+        for call in requests.calls
     })
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     output_type=[str, DeferredToolRequests],
     capabilities=[hooks],
 )
@@ -365,9 +369,9 @@ async def main():
 asyncio.run(main())
 ```
 
-## `on_run_error` — recover from run failures
+## `run_error` — recover from run failures
 
-`on_run_error` fires when an exception escapes the run. It can either re-raise the original error or return a fallback `AgentRunResult`:
+`run_error` (the `on_run_error` capability method) fires when an exception escapes the run. It can either re-raise the original error or return a fallback `AgentRunResult`:
 
 ```python
 import asyncio
@@ -380,7 +384,7 @@ from pydantic_ai.exceptions import UsageLimitExceeded
 log = logging.getLogger(__name__)
 hooks = Hooks()
 
-@hooks.on.on_run_error
+@hooks.on.run_error
 async def handle_error(ctx: RunContext, *, error: BaseException) -> AgentRunResult:
     if isinstance(error, UsageLimitExceeded):
         # Return a graceful fallback instead of crashing
@@ -389,8 +393,20 @@ async def handle_error(ctx: RunContext, *, error: BaseException) -> AgentRunResu
     log.error('Unexpected run failure', exc_info=error)
     raise error  # always re-raise unknown errors
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 ```
+
+## Bundling tools and instructions — `Capability`
+
+`Hooks` covers *behaviour*; `Capability` is the no-subclass way to package *content* — instructions, function tools and toolsets — into one reusable unit you can attach to many agents. With `defer_loading=True` (an `id` is then required) the model initially sees only the capability's `description` and a `load_capability` tool; the tools and instructions appear once the model loads it, which keeps large tool sets out of the context until needed.
+
+The example also shows `OutputContext`, which output hooks receive: it tells you *how* the output was produced (`mode` — `'tool'`, `'native'`, `'prompted'`, `'text'`, `'image'` — plus `output_type`, `tool_call`, `tool_def`, `allows_text`, `allows_image`, `allows_deferred_tools`). `@agent.output_validator` does not get it; use the `before_/after_output_validate` or `output_process` hooks.
+
+```python
+{code}
+```
+
+For anything more involved — state across hooks, configuration, serialisation into an `AgentSpec` — subclass `AbstractCapability` and override the `before_*` / `after_*` / `wrap_*` / `on_*_error` methods, `get_instructions`, `get_toolset` or `get_model_settings`.
 
 ## Complete hook lifecycle diagram
 
@@ -401,31 +417,31 @@ agent.run(prompt)
 │   │
 │   └─ [loop per model step]
 │       ├─ before_node_run
-│       ├─ wrap_node_run(handler)
+│       ├─ node_run (wrap)
 │       │   ├─ before_model_request  ← modify messages before sending
-│       │   ├─ wrap_model_request(handler)
+│       │   ├─ model_request (wrap)
 │       │   │   └─ [model API call]
 │       │   ├─ after_model_request   ← inspect/modify response
 │       │   │
 │       │   └─ [for each tool call in response]
 │       │       ├─ before_tool_validate  ← inspect raw args JSON
-│       │       ├─ wrap_tool_validate(handler)
+│       │       ├─ tool_validate (wrap)
 │       │       ├─ after_tool_validate   ← inspect validated typed args
 │       │       │
 │       │       ├─ before_tool_execute  ← last chance to skip/modify
-│       │       ├─ wrap_tool_execute(handler)
+│       │       ├─ tool_execute (wrap)
 │       │       │   └─ [tool function runs]
 │       │       └─ after_tool_execute   ← inspect/modify result
 │       │
 │       └─ after_node_run
 │
-├─ after_run (or on_run_error on failure)
+├─ after_run (or run_error on failure)
 └─ AgentRunResult returned
 ```
 
 ## Skip exceptions — short-circuit the pipeline
 
-Three exception classes let hook functions completely bypass the normal execution step and inject a synthetic result. Raise them inside `before_*` or `wrap_*` hooks.
+Three exception classes let hook functions completely bypass the normal execution step and inject a synthetic result. Raise them inside `before_*` or wrap-style hooks.
 
 ### `SkipModelRequest` — inject a cached response
 
@@ -436,21 +452,28 @@ import json
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 from pydantic_ai.exceptions import SkipModelRequest
-from pydantic_ai.messages import ModelResponse, TextPart, RequestUsage
+from pydantic_ai.messages import ModelMessagesTypeAdapter, ModelResponse, TextPart
+from pydantic_ai.usage import RequestUsage
 import datetime
 
 _cache: dict[str, ModelResponse] = {}
 
 def _cache_key(messages) -> str:
-    # Use model_dump for stable, field-aware serialisation instead of str()
-    content = json.dumps([m.model_dump(mode='json') for m in messages], sort_keys=True)
-    return hashlib.sha256(content.encode()).hexdigest()
+    # Messages are dataclasses, not Pydantic models: serialise them with the type adapter.
+    # Drop timestamps / ids so identical prompts produce identical keys.
+    dumped = ModelMessagesTypeAdapter.dump_python(
+        list(messages),
+        mode='json',
+        exclude={'__all__': {'timestamp': True, 'run_id': True, 'conversation_id': True,
+                             'parts': {'__all__': {'timestamp'}}}},
+    )
+    return hashlib.sha256(json.dumps(dumped, sort_keys=True, default=str).encode()).hexdigest()
 
 def _make_response(text: str) -> ModelResponse:
     return ModelResponse(
         parts=[TextPart(content=text)],
         model_name='cache',
-        usage=RequestUsage(request_tokens=0, response_tokens=0),
+        usage=RequestUsage(input_tokens=0, output_tokens=0),
         timestamp=datetime.datetime.now(datetime.timezone.utc),
     )
 
@@ -468,7 +491,7 @@ async def populate_cache(ctx, *, request_context, response):
     _cache[_cache_key(request_context.messages)] = response
     return response
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 async def main():
     r1 = await agent.run('What is 2 + 2?')   # API call
@@ -490,13 +513,13 @@ from pydantic_ai.exceptions import SkipToolValidation
 hooks = Hooks()
 
 @hooks.on.before_tool_validate(tools=['search'])
-async def normalise_query(ctx, *, call, tool_def, raw_args):
-    """Lowercase the query before validation so it doesn't fail enum checks."""
-    if isinstance(raw_args, dict) and 'query' in raw_args:
-        raise SkipToolValidation({**raw_args, 'query': raw_args['query'].lower()})
-    return raw_args
+async def normalise_query(ctx, *, call, tool_def, args):
+    """Lowercase the query and skip validation (args here are the raw, unvalidated arguments)."""
+    if isinstance(args, dict) and 'query' in args:
+        raise SkipToolValidation({**args, 'query': args['query'].lower()})
+    return args
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 @agent.tool_plain
 def search(query: str) -> list[str]:
@@ -520,7 +543,7 @@ async def dry_run_guard(ctx, *, call, tool_def, args):
         raise SkipToolExecution(f'[DRY RUN] {tool_def.name}({args})')
     return args
 
-agent = Agent('openai:gpt-4o', capabilities=[hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 
 @agent.tool_plain
 def delete_record(record_id: str) -> bool:
@@ -535,5 +558,5 @@ def delete_record(record_id: str) -> bool:
 - `HookTimeoutError` — raised when `timeout=` is exceeded
 - `AbstractCapability` — base class for custom capabilities (`capabilities/abstract.py`)
 - Hook function protocols (type annotations) — all `*HookFunc` classes in `capabilities/hooks.py`
-- `handle_deferred_tool_calls` hook — `capabilities/deferred_tool_handler.py`
+- `deferred_tool_calls` hook (`AbstractCapability.handle_deferred_tool_calls`) — `capabilities/hooks.py`; the standalone `HandleDeferredToolCalls` capability is in `capabilities/deferred_tool_handler.py`
 - `SkipModelRequest`, `SkipToolValidation`, `SkipToolExecution` — `exceptions.py`

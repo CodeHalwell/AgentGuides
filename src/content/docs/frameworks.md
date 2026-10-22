@@ -3,29 +3,30 @@ title: "Framework Comparison"
 description: "Compare AI agent frameworks"
 ---
 
-# 🔄 Framework Comparison
-
 Detailed comparison of all supported agent frameworks to help you choose the right one.
 
 ---
 
 ## Quick Comparison Table
 
-| Framework | Language | Best For | Complexity | Learning Curve | Community | Last Updated |
-|-----------|----------|----------|-----------|-----------------|-----------|--------------|
-| **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | Apr 2026 |
-| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | Jun 2026 |
-| **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Apr 2026 |
-| **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | Apr 2026 |
-| **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Apr 2026 |
-| **LlamaIndex** | Python | RAG systems | Medium | 6-8 hours | Active | Apr 2026 |
-| **Haystack** | Python | Search systems | Med-High | 8-10 hours | Active | Apr 2026 |
-| **AG2** | Python | Research | Med-High | 6-8 hours | Large | Apr 2026 |
-| **Semantic Kernel** | C#/Python | Enterprise | Medium | 6-8 hours | Active | Apr 2026 |
-| **Amazon Bedrock** | Python | AWS-native | Medium | 6-8 hours | Growing | Apr 2026 |
-| **Google ADK** | Python | GCP-native | Medium | 6-8 hours | Growing | Apr 2026 |
-| **Anthropic Claude** | Python/TS | Claude API | Medium | 4-6 hours | Growing | Apr 2026 |
-| **Mistral** | Python | Mistral API | Medium | 4-6 hours | Growing | Apr 2026 |
+| Framework | Language | Best For | Complexity | Learning Curve | Community | Current version |
+|-----------|----------|----------|-----------|-----------------|-----------|-----------------|
+| **SmolAgents** | Python | Simple agents | Low | 1-2 hours | Growing | %%version=smolagents%% |
+| **PydanticAI** | Python | Type safety | Low-Med | 2-3 hours | Growing | %%version=pydantic-ai%% |
+| **OpenAI Agents** | Python/TS | Multi-agent | Medium | 4-6 hours | Growing | Py %%version=openai-agents%% · TS %%version=@openai/agents%% |
+| **CrewAI** | Python | Role-based | Medium | 4-6 hours | Active | %%version=crewai%% |
+| **LangGraph** | Python/TS | Complex flows | High | 8-12 hours | Growing | Py %%version=langgraph%% · TS %%version=@langchain/langgraph%% |
+| **LlamaIndex** | Python/TS | RAG systems | Medium | 6-8 hours | Active | Py %%version=llama-index%% · TS %%version=llamaindex%% |
+| **Haystack** | Python | Search systems | Med-High | 8-10 hours | Active | %%version=haystack-ai%% |
+| **AG2** | Python | Research | Med-High | 6-8 hours | Large | %%version=ag2%% |
+| **Microsoft Agent Framework** | Python/.NET | Azure, enterprise | Medium | 6-8 hours | Growing | Py %%version=agent-framework%% · .NET %%version=Microsoft.Agents.AI%% |
+| **Semantic Kernel** | C#/Python | Enterprise | Medium | 6-8 hours | Active | Py %%version=semantic-kernel%% · .NET %%version=Microsoft.SemanticKernel%% |
+| **Amazon Bedrock** | Python | AWS-native | Medium | 6-8 hours | Growing | AgentCore %%version=bedrock-agentcore%% · Strands %%version=strands-agents%% |
+| **Google ADK** | Python/TS/Go | GCP-native | Medium | 6-8 hours | Growing | Py %%version=google-adk%% · TS %%version=@google/adk%% · Go %%version=google.golang.org/adk%% |
+| **Anthropic Claude** | Python/TS | Claude API | Medium | 4-6 hours | Growing | Py %%version=claude-agent-sdk%% · TS %%version=@anthropic-ai/claude-agent-sdk%% |
+| **Mistral** | Python | Mistral API | Medium | 4-6 hours | Growing | %%version=mistralai%% |
+
+Versions checked against PyPI, npm, NuGet and the Go module proxy on %%versions-checked%%. The source of truth is [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json).
 
 ---
 
@@ -244,33 +245,34 @@ Best For:       Search systems, Q&A, NLP pipelines
 
 ---
 
-### 🧪 Best for Research: AG2 (AutoGen)
+### 🧪 Best for Research: AG2
 
 ```
-Paradigm:      Conversation-based agents
+Paradigm:      Async agents, typed events, hub-and-channel Network
 Learning Time:  ~6-8 hours
-Best For:       Research, experimentation, flexible agent interactions
+Best For:       Research, experimentation, multi-agent systems with MCP and A2A
 ```
+
+AG2 is the community fork of AutoGen 0.2. Since **AG2 1.0** it is a new async API imported as `ag2` (`Agent`, `@tool`, `MemoryStream`, the multi-agent `Network`). The old `import autogen` API (`ConversableAgent`, `GroupChat`) lives on as **AG2 Classic** in maintenance mode. Microsoft's own AutoGen is a separate, archived project.
 
 **Strengths**:
-- Very flexible
-- Great for research
-- GroupChat for multi-agent
-- Large community (original AutoGen)
-- Powerful abstractions
+- Typed events and streams make agent turns easy to observe and test
+- The Network hub models multi-agent systems explicitly (channels, transition graphs)
+- First-class MCP and A2A support
+- Large community from the original AutoGen
 
 **Weaknesses**:
-- More complex setup
-- Learning curve
-- Community moving to AG2
+- 1.x is not a drop-in upgrade from Classic; older tutorials use the `autogen` namespace
+- Younger API than LangGraph or the OpenAI Agents SDK
+- Python only
 
 **When to Choose**:
-- You're doing research
-- You need maximum flexibility
-- You want conversation-based agents
-- You need GroupChat
+- You're doing research or experimentation with multi-agent designs
+- You want explicit, inspectable agent-to-agent routing
+- You need MCP or A2A interop
+- You already run AG2 Classic and want a supported path forward
 
-[📖 AG2 Guide](/ag2-guide/)
+[📖 AG2 Guide](/ag2-guide/) · [AG2 Classic](/ag2-guide/classic/) · [Microsoft AutoGen (archived)](/autogen-guide/)
 
 ---
 

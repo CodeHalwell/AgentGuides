@@ -1,17 +1,17 @@
 ---
 title: "Microsoft Agent Framework (Python) — Functional Workflows"
-description: "Build workflows with plain Python functions using the @workflow and @step decorators, RunContext for HITL and state, FunctionalWorkflow checkpointing, and as_agent() for multi-agent composition. Verified against agent-framework-core 1.5.0."
-framework: microsoft-agent-framework
-language: python
+description: "Build workflows with plain Python functions using the @workflow and @step decorators, RunContext for HITL and state, FunctionalWorkflow checkpointing, and as_agent() for multi-agent composition."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
 
-# Functional Workflows — Python
-
-> **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature` in `agent-framework-core==1.5.0`. The API is stable enough to build on but may change between minor releases.
+> **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`. The API is stable enough to build on but may change between minor releases.
 
 Functional workflows let you write a workflow as a plain `async` Python function — no executor classes, no graph wiring, no edge objects. Control flow is ordinary Python: `if`/`else`, `for`, `asyncio.gather`. The framework tracks step results, emits events, handles HITL pauses, and persists checkpoints automatically.
 
-Verified against `agent-framework-core==1.5.0` (`agent_framework._workflows._functional`).
+Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._workflows._functional`, re-checked %%versions-checked%%; first written for 1.5.0).
+
+> **Breaking change in 1.14.0.** `@workflow` now returns a stateless `FunctionalWorkflowDefinition`, not a runnable `FunctionalWorkflow`. Call `.build()` on it (optionally `.build(checkpoint_storage=...)`) to get the runnable instance, then `.run()` or `.as_agent()` on that. The decorator no longer accepts `checkpoint_storage=`. Code written for 1.5–1.13 that calls `my_workflow.run(...)` directly fails with `AttributeError`; the examples on this page use the current shape.
 
 ## When to choose functional vs graph workflows
 
@@ -26,7 +26,7 @@ Verified against `agent-framework-core==1.5.0` (`agent_framework._workflows._fun
 
 | API | Purpose |
 |---|---|
-| `@workflow` | Decorator that converts an `async` function into a `FunctionalWorkflow` |
+| `@workflow` | Decorator that turns an `async` function into a `FunctionalWorkflowDefinition`; `.build()` gives a runnable `FunctionalWorkflow` |
 | `@step` | Optional decorator that marks a function as a **tracked step** — enables caching, events, per-step checkpointing |
 | `RunContext` | Injected handle for HITL (`request_info`), workflow-scoped state, and custom events |
 
@@ -49,11 +49,11 @@ async def research_pipeline(topic: str) -> str:
     return article.text
 
 
-result = asyncio.run(research_pipeline.run("solar-sail propulsion"))
+result = asyncio.run(research_pipeline.build().run("solar-sail propulsion"))
 print(result.get_outputs()[-1])
 ```
 
-`@workflow` wraps the function in a `FunctionalWorkflow`. Call `.run(message)` exactly as you would a graph `Workflow`.
+`@workflow` wraps the function in a `FunctionalWorkflowDefinition`. `.build()` returns a `FunctionalWorkflow` instance; call `.run(message)` on it exactly as you would a graph `Workflow`. Build one instance per logical run when you need to resume it later — pending HITL state lives on the instance (or in checkpoint storage).
 
 ## `@workflow` decorator — both forms
 
@@ -69,16 +69,20 @@ async def my_pipeline(data: str) -> str: ...
 async def content_pipeline(topic: str) -> str: ...
 ```
 
-Constructor signature (accessed indirectly via the decorator):
+Decorator and build signatures:
 
-```python
-FunctionalWorkflow(
-    func,
+```text
+workflow(
+    func=None,
     *,
     name: str | None = None,              # defaults to func.__name__
     description: str | None = None,
+)  # -> FunctionalWorkflowDefinition
+
+FunctionalWorkflowDefinition.build(
+    *,
     checkpoint_storage: CheckpointStorage | None = None,
-)
+)  # -> FunctionalWorkflow
 ```
 
 ## `@step` — tracked execution units
@@ -126,15 +130,15 @@ async def editorial_pipeline(topic: str) -> str:
     return f"{draft}\n\n[Review: {verdict}]"
 
 
-result = asyncio.run(editorial_pipeline.run("fusion energy breakthroughs"))
+result = asyncio.run(editorial_pipeline.build().run("fusion energy breakthroughs"))
 print(result.get_outputs()[-1])
 ```
 
-`@step` supports both bare (`@step`) and parameterised (`@step(name="...")`) forms.
+`@step` supports both bare (`@step`) and parameterised (`@step(name="...")`) forms. The parameterised form also accepts `replay_key=`, a callable that derives the cache key from the step's arguments.
 
 ### Steps are independently testable
 
-`@step` returns the decorated function unchanged — you can call it directly from tests without a running workflow:
+`@step` returns a thin `StepWrapper` that is still awaitable as the original function — you can call it directly from tests without a running workflow:
 
 ```python
 import asyncio
@@ -158,7 +162,7 @@ from agent_framework import RunContext, workflow
 | `await ctx.add_event(WorkflowEvent(...))` | Emit a custom event into the run stream |
 | `ctx.get_state(key, default)` | Read workflow-scoped key/value state |
 | `ctx.set_state(key, value)` | Write workflow-scoped key/value state |
-| `ctx.is_streaming` | `True` when the caller used `run(..., stream=True)` |
+| `ctx.is_streaming()` | `True` when the caller used `run(..., stream=True)` |
 
 ### Human-in-the-loop with `request_info`
 
@@ -203,8 +207,10 @@ async def headline_pipeline(product: str, ctx: RunContext) -> str:
 
 
 async def run_with_review() -> None:
+    pipeline = headline_pipeline.build()   # one instance holds the pending request
+
     # First run — pauses at request_info and returns the pending event
-    result = await headline_pipeline.run("NebulaCloud storage service")
+    result = await pipeline.run("NebulaCloud storage service")
 
     pending = result.get_request_info_events()
     if not pending:
@@ -219,7 +225,7 @@ async def run_with_review() -> None:
     decision = input("approve or reject? ").strip().lower()
 
     # Resume with the human's answer keyed by the request ID
-    resumed = await headline_pipeline.run(responses={event.request_id: decision})
+    resumed = await pipeline.run(responses={event.request_id: decision})
     print(resumed.get_outputs()[-1])
 
 
@@ -229,7 +235,7 @@ asyncio.run(run_with_review())
 Key points:
 - `await ctx.request_info(data, response_type)` suspends the workflow on first call — the framework never exposes the internal `WorkflowInterrupted` signal to your code.
 - `WorkflowRunResult.get_request_info_events()` returns a list of pending `WorkflowEvent` objects; each has a `request_id` and `data`.
-- Resume by calling `run(responses={request_id: value})` — the same `@workflow` function re-executes and `request_info` returns `value` directly on the second pass.
+- Resume by calling `run(responses={request_id: value})` on the same built instance — the `@workflow` function re-executes and `request_info` returns `value` directly on the second pass. `result.get_final_state()` reports `WorkflowRunState.IDLE_WITH_PENDING_REQUESTS` while a request is outstanding.
 - Pass `request_id=` explicitly to `request_info(...)` when you want a stable ID (e.g. one tied to a database row) rather than a generated UUID.
 
 ### Streaming with `request_info`
@@ -237,7 +243,8 @@ Key points:
 ```python
 async def stream_with_review(topic: str) -> None:
     pending: dict[str, str] = {}
-    stream = headline_pipeline.run(topic, stream=True)
+    pipeline = headline_pipeline.build()
+    stream = pipeline.run(topic, stream=True)
 
     while True:
         async for event in stream:
@@ -252,7 +259,7 @@ async def stream_with_review(topic: str) -> None:
 
         if not pending:
             return
-        stream = headline_pipeline.run(responses=pending, stream=True)
+        stream = pipeline.run(responses=pending, stream=True)
         pending = {}
 ```
 
@@ -283,14 +290,14 @@ async def stateful_pipeline(items: list[str], ctx: RunContext) -> str:
 
 State survives checkpoints — `get_state` / `set_state` values are persisted when a checkpoint is taken.
 
-> **Reserved key prefix.** Keys that start with `_` are reserved for framework bookkeeping (e.g. `_step_cache`, `_original_message`). Passing one to `set_state` raises `ValueError` immediately:
->
-> ```python
-> ctx.set_state("_my_key", value)  # ValueError: State key '_my_key' starts with '_' ...
-> ctx.set_state("my_key", value)   # ✓ correct
-> ```
->
-> Values stored under user keys must be JSON-serialisable when checkpoint storage is configured.
+**Reserved key prefix.** Keys that start with `_` are reserved for framework bookkeeping (e.g. `_step_cache`, `_original_message`). Passing one to `set_state` raises `ValueError` immediately:
+
+```python
+ctx.set_state("_my_key", value)  # ValueError: State key '_my_key' starts with '_' ...
+ctx.set_state("my_key", value)   # correct
+```
+
+Values stored under user keys must be JSON-serialisable when checkpoint storage is configured.
 
 ### `get_run_context()` — accessing RunContext from nested helpers
 
@@ -332,7 +339,7 @@ async def analysis_pipeline(topic: str) -> str:
     return "\n".join(f"• {f}" for f in facts)
 
 
-result = asyncio.run(analysis_pipeline.run("quantum entanglement"))
+result = asyncio.run(analysis_pipeline.build().run("quantum entanglement"))
 print(result.get_outputs()[-1])
 ```
 
@@ -369,7 +376,7 @@ async def multi_angle_research(topic: str) -> str:
     return "\n".join(angles)
 
 
-result = asyncio.run(multi_angle_research.run("AI Act compliance"))
+result = asyncio.run(multi_angle_research.build().run("AI Act compliance"))
 print(result.get_outputs()[-1])
 ```
 
@@ -383,7 +390,7 @@ Pass a `CheckpointStorage` to persist step results across process restarts:
 import asyncio
 from agent_framework import FileCheckpointStorage, workflow, step
 
-storage = FileCheckpointStorage(base_path="./checkpoints")
+storage = FileCheckpointStorage("./checkpoints")
 
 
 @step
@@ -398,7 +405,7 @@ async def slow_write(facts: str) -> str:
     return f"article from: {facts}"
 
 
-@workflow(checkpoint_storage=storage)
+@workflow
 async def long_pipeline(topic: str) -> str:
     facts = await slow_research(topic)
     article = await slow_write(facts)
@@ -406,17 +413,18 @@ async def long_pipeline(topic: str) -> str:
 
 
 # First run — checkpoints every completed step
-result = asyncio.run(long_pipeline.run("climate modelling"))
+result = asyncio.run(long_pipeline.build(checkpoint_storage=storage).run("climate modelling"))
 
 # If the process dies after slow_research and before slow_write, restart and
 # resume — slow_research is not re-executed (cached in the checkpoint)
 checkpoints = asyncio.run(storage.list_checkpoints(workflow_name="long_pipeline"))
 latest = checkpoints[-1]
-result = asyncio.run(long_pipeline.run(checkpoint_id=latest.checkpoint_id))
+resumed = long_pipeline.build(checkpoint_storage=storage)
+result = asyncio.run(resumed.run(checkpoint_id=latest.checkpoint_id))
 print(result.get_outputs()[-1])
 ```
 
-Pass `checkpoint_storage=` either in `@workflow(checkpoint_storage=...)` (per-workflow default) or as a `run()` override — the `run()` argument takes precedence.
+Pass `checkpoint_storage=` either to `.build(checkpoint_storage=...)` (per-instance default) or as a `run()` override — the `run()` argument takes precedence.
 
 ### Restoring a checkpoint with a HITL response in one call
 
@@ -426,7 +434,7 @@ Combine `checkpoint_id=` and `responses=` to restore a saved checkpoint **and** 
 import asyncio
 from agent_framework import FileCheckpointStorage, RunContext, step, workflow
 
-storage = FileCheckpointStorage(base_path="./checkpoints")
+storage = FileCheckpointStorage("./checkpoints")
 
 
 @step
@@ -434,7 +442,7 @@ async def draft_article(topic: str) -> str:
     return f"Draft on {topic}"
 
 
-@workflow(checkpoint_storage=storage)
+@workflow
 async def reviewed_pipeline(topic: str, ctx: RunContext) -> str:
     draft = await draft_article(topic)
     decision = await ctx.request_info({"draft": draft}, response_type=str, request_id="review")
@@ -444,14 +452,15 @@ async def reviewed_pipeline(topic: str, ctx: RunContext) -> str:
 
 
 async def run_first_pass() -> str:
-    result = await reviewed_pipeline.run("quantum computing")
+    result = await reviewed_pipeline.build(checkpoint_storage=storage).run("quantum computing")
     # Workflow paused — save the checkpoint_id for later resumption
     checkpoints = await storage.list_checkpoints(workflow_name="reviewed_pipeline")
     return checkpoints[-1].checkpoint_id
 
 
 async def run_resume(checkpoint_id: str, decision: str) -> None:
-    result = await reviewed_pipeline.run(
+    # A fresh instance in a fresh process — state comes from the checkpoint
+    result = await reviewed_pipeline.build(checkpoint_storage=storage).run(
         checkpoint_id=checkpoint_id,
         responses={"review": decision},   # supply the human decision
     )
@@ -469,26 +478,30 @@ asyncio.run(run_resume(cp_id, decision="approve"))
 
 ### `include_status_events` — surfacing lifecycle events
 
-Pass `include_status_events=True` to include framework-generated `type='status'` events alongside your custom events in `result.events`. Status events mark lifecycle transitions such as `step_started` and `step_completed` for every `@step` function. They are excluded by default to keep the event list clean.
+Pass `include_status_events=True` to include framework-generated `type='status'` events in the result. `WorkflowRunResult` is itself a list of `WorkflowEvent`s; each `@step` call also shows up as an `executor_invoked` / `executor_completed` pair. Status events are excluded by default to keep the list short.
 
 ```python
-result = await my_workflow.run("input", include_status_events=True)
+result = await my_workflow.build().run("input", include_status_events=True)
 
-status_events = [e for e in result.events if e.type == "status"]
-for e in status_events:
-    print(e.data)   # e.g. {"phase": "step_started", "step": "research", "index": 0}
+for e in result:
+    print(e.type, e.data)
+# status None
+# executor_invoked {'args': ('input',), 'kwargs': {}}
+# executor_completed ...
+# output ...
+# status None
 ```
 
 ### `run()` parameters
 
-```python
+```text
 FunctionalWorkflow.run(
     message,                                      # workflow input (first arg of your function)
     *,
     stream: bool = False,                         # True → returns ResponseStream[WorkflowEvent, WorkflowRunResult]
     responses: dict[str, Any] | None = None,      # HITL reply dict keyed by request_id
     checkpoint_id: str | None = None,             # resume from a specific checkpoint
-    checkpoint_storage: CheckpointStorage | None = None,   # override decorator-level storage
+    checkpoint_storage: CheckpointStorage | None = None,   # override build-level storage
     include_status_events: bool = False,          # include step_started / step_completed events
     **kwargs,                                     # extra kwargs stored in RunContext._run_kwargs
 )
@@ -530,7 +543,7 @@ async def fact_checker(article: str) -> str:
 
 
 # Expose the functional workflow as a named agent
-fact_checker_agent: FunctionalWorkflowAgent = fact_checker.as_agent(
+fact_checker_agent: FunctionalWorkflowAgent = fact_checker.build().as_agent(
     name="fact-checker",
     description="Extract and score factual claims from an article.",
 )
@@ -557,7 +570,7 @@ supervisor = Agent(client=client, instructions="You coordinate research and fact
 ## `WorkflowRunResult` helpers
 
 ```python
-result = await my_workflow.run("input")
+result = await my_workflow.build().run("input")
 
 # All outputs yielded by the workflow (usually just the return value)
 outputs = result.get_outputs()          # list[Any]
@@ -566,12 +579,11 @@ final = outputs[-1]                     # the last (or only) output
 # Any pending HITL requests (non-empty when workflow paused at request_info)
 events = result.get_request_info_events()
 
-# Run state: "completed", "paused", "failed"
-print(result.state)
+# Final run state: WorkflowRunState.IDLE, IDLE_WITH_PENDING_REQUESTS, FAILED, ...
+print(result.get_final_state())
 
-# Workflow name and any custom events emitted during the run
-print(result.workflow_name)
-events_all = result.events
+# WorkflowRunResult is a list of WorkflowEvent — iterate it for custom events
+progress = [e for e in result if e.type == "progress"]
 ```
 
 ## Patterns

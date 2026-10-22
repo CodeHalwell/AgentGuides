@@ -1,10 +1,10 @@
 ---
 title: "LangGraph: Visual Architectures & Diagrams"
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
+sidebar:
+  label: "Diagrams"
 ---
-
-# LangGraph: Visual Architectures & Diagrams
 
 ## Basic State Machine
 
@@ -403,7 +403,7 @@ graph TB
     end
     
     subgraph API["API Layer"]
-        LGCloud["LangGraph Cloud<br/>REST API"]
+        LGCloud["LangSmith Deployment<br/>Agent Server API"]
     end
     
     subgraph Runtime["Runtime"]

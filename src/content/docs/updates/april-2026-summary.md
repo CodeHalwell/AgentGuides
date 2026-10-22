@@ -3,8 +3,6 @@ title: "Agent Guides Update Report — April 16, 2026"
 description: "Summary: Comprehensive update of all agent framework guides from November 2025 to April 2026. Covers version upgrades, breaking API changes, new features, deprecations, and the add"
 ---
 
-# Agent Guides Update Report — April 16, 2026
-
 **Summary**: Comprehensive update of all agent framework guides from November 2025 to April 2026. Covers version upgrades, breaking API changes, new features, deprecations, and the addition of a new Google ADK TypeScript guide.
 
 ---
@@ -152,7 +150,7 @@ Complete rewrite updating all framework version records:
 ## 8. LangGraph (TypeScript) — `LangGraph_Guide/typescript/README.md`
 
 **Breaking changes**:
-- `createReactAgent` moved to `@langgraphjs/toolkit` (deprecated in `@langchain/langgraph/prebuilt`)
+- `createReactAgent` moved to `@langgraphjs/toolkit` (deprecated in `@langchain/langgraph/prebuilt`) *(Correction, October 2026: this was wrong. `@langgraphjs/toolkit` is not a LangChain package and the npm name is now a security placeholder; do not install it. Use `createAgent` from `langchain` instead.)*
 
 **New features**:
 - Standard JSON Schema support (Zod 4, Valibot, ArkType compatible)

@@ -1,18 +1,16 @@
 ---
 title: "Chapter 9 — Advanced Patterns"
-description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, add_sequence, Overwrite, GraphOutput v2, set_node_defaults, and the Functional API — source-verified patterns for LangGraph 1.2.12."
-framework: langgraph
-language: python
+description: "RetryPolicy, CachePolicy, TimeoutPolicy, Runtime context injection, map-reduce with Send, add_sequence, Overwrite, GraphOutput v2, set_node_defaults, and the Functional API — source-verified patterns."
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "9 · Advanced patterns"
   order: 9
 ---
 
-# Chapter 9 — Advanced Patterns
-
 **What you'll learn:** the patterns you reach for when simple graphs aren't enough — `RetryPolicy` with custom callables and sequences, built-in `CachePolicy` with `InMemoryCache`, `TimeoutPolicy` with idle/heartbeat semantics, `Runtime[Context]` for type-safe run-scoped data, map-reduce fan-out with `Send` (including per-send timeouts), `add_sequence()` for concise linear pipelines, `Overwrite` for bypassing reducers, `GraphOutput` with the `version="v2"` invoke API, `set_node_defaults()` for graph-wide policies, plus the Functional API `@entrypoint`/`@task` with async, timeout, context and more.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`, `langgraph.graph.state`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.runtime`, `langgraph.cache.memory`, `langgraph.func`, `langgraph.graph.state`).
 
 **Time:** ~50 minutes. Most of this is reference — skim for patterns you need.
 
@@ -79,7 +77,7 @@ tools = [search_web, calculator]
 # Swap ChatAnthropic / ChatOpenAI / any chat model
 from langchain_anthropic import ChatAnthropic   # pip install langchain-anthropic
 
-llm = ChatAnthropic(model="claude-opus-4-7").bind_tools(tools)
+llm = ChatAnthropic(model="%%model=anthropic-flagship%%").bind_tools(tools)
 
 
 # ── Graph nodes ──────────────────────────────────────────────────────────────
@@ -130,110 +128,69 @@ The checkpointer persists the full message history per `thread_id`, enabling mul
 
 ### Pattern 2: Tree-of-Thoughts
 
-Explore multiple reasoning paths:
-
+Explore several reasoning paths in parallel, keep the best, and answer from it. The fan-out uses `Send`, which must be returned from a **routing function** (passed to `add_conditional_edges`), not from a node; a node that returns a list of `Send` objects fails with `InvalidUpdateError: Expected dict`.
 
 ```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, START, END
 from langgraph.types import Send
 
-class ThoughtState(TypedDict):
+model = init_chat_model("anthropic:%%model=anthropic%%")
+
+
+class ThoughtState(TypedDict, total=False):
     question: str
-    thoughts: Annotated[list[dict], lambda x, y: x + y]
+    thoughts: Annotated[list[dict], operator.add]   # parallel branches append here
     best_thought: dict
     final_answer: str
 
-def generate_thoughts(state: ThoughtState) -> list[Send]:
-    """Generate multiple solution approaches."""
-    
-    num_paths = 3
-    returns = []
-    
-    for i in range(num_paths):
-        returns.append(
-            Send("explore_thought", {
-                "question": state["question"],
-                "path_number": i
-            })
-        )
-    
-    return returns
 
-def explore_thought(state: ThoughtState) -> dict:
-    """Explore one reasoning path."""
-    
-    prompt = f"""
-    Question: {state['question']}
-    Path #{state.get('path_number', 0)}
-    
-    Provide your reasoning for this specific approach.
-    """
-    
-    response = model.invoke(prompt)
-    
-    return {
-        "thoughts": [{
-            "path": state.get("path_number"),
-            "reasoning": response.content,
-            "quality_score": 0.8  # Could be evaluated
-        }]
-    }
+class PathInput(TypedDict):
+    question: str
+    path_number: int
+
+
+def fan_out(state: ThoughtState) -> list[Send]:
+    """Routing function: one Send per reasoning path."""
+    return [Send("explore", {"question": state["question"], "path_number": i}) for i in range(3)]
+
+
+def explore(state: PathInput) -> dict:
+    response = model.invoke(
+        f"Question: {state['question']}\nGive approach #{state['path_number'] + 1} in two sentences."
+    )
+    score = len(response.content)            # stand-in for a real evaluator
+    return {"thoughts": [{"path": state["path_number"], "reasoning": response.content, "score": score}]}
+
 
 def select_best(state: ThoughtState) -> dict:
-    """Select the best thought."""
-    
-    if not state["thoughts"]:
-        return {"best_thought": {}}
-    
-    best = max(state["thoughts"], key=lambda x: x.get("quality_score", 0))
-    
-    return {"best_thought": best}
+    return {"best_thought": max(state["thoughts"], key=lambda t: t["score"])}
+
 
 def synthesize(state: ThoughtState) -> dict:
-    """Synthesize best thought into answer."""
-    
-    best_reasoning = state["best_thought"].get("reasoning", "")
-    
-    prompt = f"""
-    Best reasoning: {best_reasoning}
-    
-    Provide a final answer based on this reasoning.
-    """
-    
-    response = model.invoke(prompt)
-    
+    response = model.invoke(f"Using this reasoning, answer briefly:\n{state['best_thought']['reasoning']}")
     return {"final_answer": response.content}
 
-# Build tree-of-thoughts
-builder = StateGraph(ThoughtState)
-builder.add_node("generate", generate_thoughts)
-builder.add_node("explore", explore_thought)
-builder.add_node("select", select_best)
-builder.add_node("synthesize", synthesize)
 
-builder.add_conditional_edges(
-    START,
-    lambda _: "generate"
+tot_graph = (
+    StateGraph(ThoughtState)
+    .add_node("explore", explore)
+    .add_node("select", select_best)
+    .add_node("synthesize", synthesize)
+    .add_conditional_edges(START, fan_out, ["explore"])   # Send objects come from a routing function
+    .add_edge("explore", "select")                         # select runs once, after all three paths
+    .add_edge("select", "synthesize")
+    .add_edge("synthesize", END)
+    .compile()
 )
-builder.add_conditional_edges(
-    "generate",
-    lambda _: ["explore"],
-    ["explore"]
-)
-builder.add_edge("explore", "select")
-builder.add_edge("select", "synthesize")
-builder.add_edge("synthesize", END)
 
-tot_graph = builder.compile()
-
-# Use it
-result = tot_graph.invoke({
-    "question": "How should we approach climate change?"
-})
-
-print("Best thought:", result["best_thought"]["reasoning"])
+result = tot_graph.invoke({"question": "How should a small team reduce cloud costs?"})
+print(len(result["thoughts"]), "paths explored")   # 3 paths explored
 print("Final answer:", result["final_answer"])
 ```
-
 
 ### Pattern 3: Self-Reflection
 
@@ -333,334 +290,72 @@ print("Reflection iterations:", result["reflection_count"])
 
 ### Pattern 4: Structured Output with Validation
 
+`with_structured_output` asks the model for output that matches a Pydantic model. Validation can still fail, so loop back with the error as a hint, and cap the attempts: a validation loop without a cap runs until the recursion limit.
+
 ```python
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, ValidationError
+from typing_extensions import TypedDict
+from langchain.chat_models import init_chat_model
+from langgraph.graph import StateGraph, START, END
+
+model = init_chat_model("anthropic:%%model=anthropic%%")
+MAX_ATTEMPTS = 3
+
 
 class ResearchOutput(BaseModel):
-    """Structured research output."""
     topic: str
     key_findings: list[str]
-    sources: list[str]
-    confidence_score: float
-    
-    @field_validator('confidence_score')
-    def score_in_range(cls, v):
-        if not 0 <= v <= 1:
-            raise ValueError('Must be between 0 and 1')
-        return v
+    confidence_score: float = Field(ge=0, le=1)
 
-class StructuredState(TypedDict):
+
+class StructuredState(TypedDict, total=False):
     topic: str
-    raw_research: str
-    structured_output: ResearchOutput
-    validation_passed: bool
+    output: ResearchOutput
+    attempts: int
     errors: list[str]
 
-def research_node(state: StructuredState) -> dict:
-    """Conduct research."""
-    
-    result = model.invoke(f"Research: {state['topic']}")
-    
-    return {"raw_research": result.content}
 
-def structure_output(state: StructuredState) -> dict:
-    """Parse into structured format."""
-    
-    prompt = f"""
-    Research content: {state['raw_research']}
-    
-    Extract into JSON with fields:
-    - topic
-    - key_findings (list)
-    - sources (list)
-    - confidence_score (0-1)
-    """
-    
-    response = model.invoke(prompt)
-    
+structured_model = model.with_structured_output(ResearchOutput)
+
+
+def research(state: StructuredState) -> dict:
+    hint = f"\nThe previous attempt failed: {state['errors'][-1]}" if state.get("errors") else ""
     try:
-        import json
-        parsed = json.loads(response.content)
-        output = ResearchOutput(**parsed)
-        return {
-            "structured_output": output,
-            "validation_passed": True,
-            "errors": []
-        }
-    except Exception as e:
-        return {
-            "validation_passed": False,
-            "errors": [str(e)]
-        }
+        output = structured_model.invoke(f"Summarise current research on {state['topic']}.{hint}")
+        return {"output": output, "attempts": state.get("attempts", 0) + 1}
+    except (ValidationError, ValueError) as exc:          # bad or missing structured output
+        return {"errors": [*state.get("errors", []), str(exc)[:200]],
+                "attempts": state.get("attempts", 0) + 1}
 
-def decide_next(state: StructuredState) -> str:
-    """Route based on validation."""
-    if state["validation_passed"]:
-        return "success"
-    else:
-        return "retry"
 
-def retry_node(state: StructuredState) -> dict:
-    """Re-attempt with error context."""
-    
-    prompt = f"""
-    Previous errors: {', '.join(state['errors'])}
-    Retry research on: {state['topic']}
-    """
-    
-    result = model.invoke(prompt)
-    
-    return {"raw_research": result.content}
+def route(state: StructuredState) -> str:
+    if state.get("output") is not None or state["attempts"] >= MAX_ATTEMPTS:
+        return END
+    return "research"                                      # try again, with the error as a hint
 
-# Build validation graph
-builder = StateGraph(StructuredState)
-builder.add_node("research", research_node)
-builder.add_node("structure", structure_output)
-builder.add_node("retry", retry_node)
 
-builder.add_edge(START, "research")
-builder.add_edge("research", "structure")
-
-builder.add_conditional_edges(
-    "structure",
-    decide_next,
-    {"success": END, "retry": "retry"}
+graph = (
+    StateGraph(StructuredState)
+    .add_node("research", research)
+    .add_edge(START, "research")
+    .add_conditional_edges("research", route, ["research", END])
+    .compile()
 )
 
-builder.add_edge("retry", "structure")  # Loop back
-
-validation_graph = builder.compile()
-
-# Use it
-result = validation_graph.invoke({
-    "topic": "AI safety"
-})
-
-if result["validation_passed"]:
-    output = result["structured_output"]
-    print(f"Topic: {output.topic}")
-    print(f"Confidence: {output.confidence_score}")
-    print(f"Findings: {output.key_findings}")
+result = graph.invoke({"topic": "AI safety"})
+if result.get("output"):
+    print(result["output"].key_findings)
+else:
+    print(f"gave up after {result['attempts']} attempts")
 ```
 
-### Pattern 5: Node caching with `CachePolicy` and `InMemoryCache`
-
-`CachePolicy` memoizes a node's output by its input hash. The first call executes the node; subsequent calls with the same input skip it and return the cached result. Wire a `BaseCache` backend to `compile(cache=...)`.
-
-```python
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.cache.memory import InMemoryCache
-from langgraph.types import CachePolicy
-
-
-class EmbedState(TypedDict):
-    text: str
-    embedding: list[float]
-
-
-def embed_text(state: EmbedState) -> dict:
-    """Expensive embedding — cached after first call for the same input."""
-    print(f"[embed] computing embedding for: {state['text'][:30]}...")
-    # Simulate embedding (replace with a real model call)
-    return {"embedding": [len(state["text"]) * 0.01, 0.5, 0.3]}
-
-
-cache = InMemoryCache()
-
-builder = StateGraph(EmbedState)
-builder.add_node(
-    "embed",
-    embed_text,
-    cache_policy=CachePolicy(ttl=3600),   # cache for 1 hour
-)
-builder.add_edge(START, "embed")
-builder.add_edge("embed", END)
-
-graph = builder.compile(
-    cache=cache,
-    checkpointer=InMemorySaver(),
-)
-
-cfg1 = {"configurable": {"thread_id": "t1"}}
-cfg2 = {"configurable": {"thread_id": "t2"}}
-
-# First call: executes `embed_text` and stores the result in `cache`
-result1 = graph.invoke({"text": "Hello world", "embedding": []}, cfg1)
-print(result1["embedding"])   # computed
-
-# Second call with identical text (different thread): hits the cache, no print
-result2 = graph.invoke({"text": "Hello world", "embedding": []}, cfg2)
-print(result2["embedding"])   # same value, from cache
-```
-
-**Custom `key_func`** — override the cache key when you need a deterministic, human-readable key:
-
-```python
-from langgraph.types import CachePolicy
-
-def text_key(state: EmbedState) -> str:
-    return state["text"].strip().lower()
-
-builder.add_node("embed", embed_text, cache_policy=CachePolicy(key_func=text_key, ttl=600))
-```
-
-**Clearing the cache** — call `cache.clear()` to wipe all entries, or `cache.clear(namespaces=[...])` for targeted eviction.
+For `create_agent` agents, pass `response_format=ResearchOutput` instead; the result is in `result["structured_response"]`.
 
 ---
 
-### Pattern 6: `RetryPolicy` — custom predicates and layered strategies
+### Patterns 5–7: caching, retries and timeouts
 
-`RetryPolicy` is a `NamedTuple` applied per node (or per `@task`). Beyond simple exception types, you can pass a callable that returns `True` to trigger a retry.
-
-```python
-import httpx
-from langgraph.types import RetryPolicy
-from langgraph.graph import StateGraph, START, END
-from typing_extensions import TypedDict
-
-
-class FetchState(TypedDict):
-    url: str
-    body: str
-
-
-# ── Predicate-based retry ────────────────────────────────────────────────────
-def should_retry(exc: Exception) -> bool:
-    """Retry 5xx and network errors, but not 4xx client errors."""
-    if isinstance(exc, httpx.HTTPStatusError):
-        return exc.response.status_code >= 500
-    if isinstance(exc, httpx.TransportError):
-        return True
-    return False
-
-
-def fetch_node(state: FetchState) -> dict:
-    resp = httpx.get(state["url"], timeout=10)
-    resp.raise_for_status()
-    return {"body": resp.text[:200]}
-
-
-# ── Layered retry sequence ───────────────────────────────────────────────────
-# First policy handles transient HTTP errors with fast retries.
-# Second policy catches anything else with a slower, longer-lived strategy.
-fast_retry = RetryPolicy(
-    max_attempts=3,
-    initial_interval=0.5,
-    backoff_factor=2.0,
-    retry_on=should_retry,
-)
-slow_retry = RetryPolicy(
-    max_attempts=5,
-    initial_interval=2.0,
-    backoff_factor=1.5,
-    max_interval=30.0,
-    retry_on=Exception,      # fallback: any exception
-)
-
-builder = StateGraph(FetchState)
-builder.add_node(
-    "fetch",
-    fetch_node,
-    retry_policy=[fast_retry, slow_retry],   # first matching policy wins
-)
-builder.add_edge(START, "fetch")
-builder.add_edge("fetch", END)
-
-graph = builder.compile()
-```
-
-Key `RetryPolicy` fields (all have defaults):
-
-| Field | Default | Effect |
-|---|---|---|
-| `max_attempts` | `3` | Total attempts including first |
-| `initial_interval` | `0.5` | Seconds before first retry |
-| `backoff_factor` | `2.0` | Multiplier per retry |
-| `max_interval` | `128.0` | Cap on interval seconds |
-| `jitter` | `True` | Random noise added to interval |
-| `retry_on` | transient HTTP/network | Exception type(s) or `(exc) -> bool` |
-
----
-
-### Pattern 7: `TimeoutPolicy` — wall-clock and idle timeouts with heartbeat
-
-`TimeoutPolicy` applies to async nodes and `@task`s (sync tasks cannot be cancelled in-process). Set `run_timeout` for a hard wall-clock cap, `idle_timeout` for a progress-based cap, and call `runtime.heartbeat()` to refresh the idle timer from inside slow work.
-
-```python
-import asyncio
-from datetime import timedelta
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.runtime import Runtime
-from langgraph.types import TimeoutPolicy
-
-
-class ScrapeState(TypedDict):
-    urls: list[str]
-    results: list[str]
-
-
-async def slow_scrape(state: ScrapeState, runtime: Runtime) -> dict:
-    """Scrapes several URLs; heartbeat refreshes the idle timer between pages."""
-    collected = []
-    for url in state["urls"]:
-        await asyncio.sleep(1)          # simulate network I/O
-        collected.append(f"content:{url}")
-        runtime.heartbeat()             # refresh idle_timeout after each page
-    return {"results": collected}
-
-
-builder = StateGraph(ScrapeState)
-builder.add_node(
-    "scrape",
-    slow_scrape,
-    # Hard cap: whole node cannot run longer than 30 seconds total.
-    # Idle cap: if no heartbeat is received within 5 seconds, cancel.
-    # refresh_on="heartbeat" means only explicit heartbeat() calls reset the idle timer.
-    timeout=TimeoutPolicy(
-        run_timeout=30.0,
-        idle_timeout=5.0,
-        refresh_on="heartbeat",
-    ),
-)
-builder.add_edge(START, "scrape")
-builder.add_edge("scrape", END)
-
-graph = builder.compile()
-```
-
-`TimeoutPolicy` also accepts `timedelta` for both timeout fields:
-
-```python
-from datetime import timedelta
-from langgraph.types import TimeoutPolicy
-
-# Using timedelta for more readable durations
-timeout = TimeoutPolicy(
-    run_timeout=timedelta(minutes=2),   # 2-minute hard cap
-    idle_timeout=timedelta(seconds=15), # 15-second idle cap
-    refresh_on="auto",                  # default: any progress resets the idle timer
-)
-```
-
-`TimeoutPolicy` dataclass fields:
-
-| Field | Type | Default | Effect |
-|---|---|---|---|
-| `run_timeout` | `float \| timedelta \| None` | `None` | Hard wall-clock cap on total node runtime |
-| `idle_timeout` | `float \| timedelta \| None` | `None` | Max time allowed without a progress signal |
-| `refresh_on` | `"auto" \| "heartbeat"` | `"auto"` | What resets `idle_timeout` |
-
-`refresh_on` values:
-
-| Value | What resets `idle_timeout` |
-|---|---|
-| `"auto"` (default) | LangGraph progress signals **and** `runtime.heartbeat()` |
-| `"heartbeat"` | Only explicit `runtime.heartbeat()` calls |
-
-When the timeout fires, `NodeTimeoutError` is raised inside the task. If a `retry_policy` is also set, the retry machinery decides whether to retry.
+Node caching (`CachePolicy`), retries (`RetryPolicy`), timeouts (`TimeoutPolicy`) and error handlers are per-node options on `add_node`, with graph-wide defaults from `set_node_defaults()`. They are documented, with a runnable example that uses all of them, in [Node policies](/langgraph-guide/python/reference-state-graph/#node-policies); [Chapter 10](/langgraph-guide/python/chapter-10-production/#containing-loops-and-failures) covers when to use them.
 
 ---
 
@@ -694,7 +389,7 @@ def answer_node(state: QueryState, runtime: Runtime[RequestContext]) -> dict:
     ctx = runtime.context                         # type: RequestContext
 
     # Use context for access control
-    model = "claude-opus" if ctx.is_premium else "claude-haiku"
+    model = "%%model=anthropic-flagship%%" if ctx.is_premium else "%%model=anthropic-small%%"
 
     # Use store for long-term memory keyed by user
     if runtime.store:
@@ -753,7 +448,7 @@ print(result["answer"])
 | `heartbeat` | `() -> None` | Refresh `TimeoutPolicy(idle_timeout=...)` |
 | `previous` | `Any` | Functional API only: last return value for this thread |
 | `execution_info` | `ExecutionInfo \| None` | `checkpoint_id`, `thread_id`, `run_id`, `node_attempt` |
-| `server_info` | `ServerInfo \| None` | LangGraph Platform only |
+| `server_info` | `ServerInfo \| None` | Agent Server only |
 
 ---
 
@@ -814,13 +509,14 @@ print(result["items"])    # ['avg_score=0.53']
 
 ### Pattern 10: `Send` with `timeout` parameter
 
-Since LangGraph 1.2.1, `Send` accepts an optional `timeout` keyword argument. This lets each individual fan-out branch carry its own deadline independently of the node-level `TimeoutPolicy`.
+`Send` accepts an optional `timeout` keyword argument (since LangGraph 1.2.0). Each fan-out task then carries its own deadline, independent of the node-level timeout. As with node timeouts, the target node must be `async def`; with a sync node, `invoke` raises `ValueError: Node timeouts are only supported for async nodes`.
 
 ```python
 import operator
 from typing import Annotated
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
+import asyncio
 from langgraph.types import Send, TimeoutPolicy
 
 
@@ -861,9 +557,8 @@ def fan_out_with_policy(state: CrawlState) -> list[Send]:
     ]
 
 
-def fetch_page(state: PageInput) -> dict:
-    import time
-    time.sleep(0.1)   # simulate network
+async def fetch_page(state: PageInput) -> dict:
+    await asyncio.sleep(0.1)   # simulate network
     return {"results": [f"content:{state['url']}"]}
 
 
@@ -873,8 +568,8 @@ builder.add_conditional_edges(START, fan_out)
 builder.add_edge("fetch_page", END)
 
 graph = builder.compile()
-result = graph.invoke({"urls": ["a.com", "b.com", "c.com"], "results": []})
-print(result["results"])
+result = asyncio.run(graph.ainvoke({"urls": ["a.com", "b.com", "c.com"], "results": []}))
+print(result["results"])   # ['content:a.com', 'content:b.com', 'content:c.com']
 ```
 
 **When to use per-`Send` timeout vs. node-level `TimeoutPolicy`:**
@@ -889,7 +584,7 @@ print(result["results"])
 
 ### Pattern 11: `add_sequence()` — concise linear pipelines
 
-`StateGraph.add_sequence()` is a convenience method introduced in LangGraph 1.2.1. It registers a list of nodes and automatically wires them with edges — no separate `add_node` + `add_edge` calls needed. Each element is either a callable (name is derived from `__name__`) or a `("name", callable)` tuple.
+`StateGraph.add_sequence()` is a convenience method. It registers a list of nodes and automatically wires them with edges — no separate `add_node` + `add_edge` calls needed. Each element is either a callable (name is derived from `__name__`) or a `("name", callable)` tuple.
 
 ```python
 from typing_extensions import TypedDict
@@ -945,14 +640,9 @@ builder.add_sequence([
     translate,                      # name inferred: "translate"
 ])
 
-# You can still attach policies by name after the sequence is registered:
-builder.add_node(
-    "summarize_v2",
-    summarize,
-    retry_policy=RetryPolicy(max_attempts=3),
-    cache_policy=CachePolicy(ttl=300),
-)
 ```
+
+`add_sequence` takes no policy options, and adding the same node name again with `add_node` raises `ValueError: Node names must be unique`. If one step needs a retry or cache policy, register that step with `add_node(..., retry_policy=...)` and connect it with `add_edge`, or set graph-wide defaults with `set_node_defaults()` before calling `add_sequence`.
 
 > **Note:** `add_sequence` returns the `StateGraph` instance, so calls can be chained: `builder.add_sequence([...]).add_edge(START, "clean")`.
 
@@ -1074,7 +764,7 @@ print(final.interrupts)          # ()  — empty tuple, run completed
 | `value` | `dict` | The graph's state at the point of return or interrupt |
 | `interrupts` | `tuple[Interrupt, ...]` | All interrupts raised during this invoke call |
 
-**Streaming with `version="v2"`** — each emitted event in `stream_mode="values"` is also a `GraphOutput`:
+**Streaming with `version="v2"`** — each item is a `StreamPart` dict with `type`, `ns`, `data` and (for `values`) `interrupts` keys, not a `GraphOutput`:
 
 ```python
 for chunk in graph.stream(
@@ -1083,7 +773,7 @@ for chunk in graph.stream(
     stream_mode="values",
     version="v2",
 ):
-    print(chunk.value, chunk.interrupts)
+    print(chunk["data"], chunk.get("interrupts"))
 ```
 
 > **Migration note:** `version="v2"` is opt-in and backward-compatible. Existing code that omits `version=` continues to receive plain dicts.
@@ -1092,7 +782,7 @@ for chunk in graph.stream(
 
 ### Pattern 14: `context_schema` and `Runtime[Context]` — complete injection example
 
-This pattern expands on Pattern 8 to show the minimal wiring needed for context injection from scratch, including the `configurable` key used by LangGraph Platform deployments.
+This pattern expands on Pattern 8 to show the minimal wiring needed for context injection from scratch.
 
 ```python
 from dataclasses import dataclass
@@ -1171,7 +861,6 @@ print(result["result"])
 
 - The dataclass must be passed as `context=` at `invoke`/`stream` time, not embedded in state.
 - Context is immutable during a run — nodes can read it but cannot write back to it.
-- On LangGraph Platform, context can also arrive via `{"configurable": {"context": {...}}}` in the run config (the platform serialises/deserialises the dataclass automatically).
 - Any node that declares `runtime: Runtime[YourContext]` as a second parameter receives the injected context. Nodes that omit the second parameter are unaffected.
 
 ---
@@ -1301,8 +990,6 @@ for ev in review_flow.stream(Command(resume="Make it shorter"), cfg):
 
 `@task` supports an optional `timeout` parameter for async functions. When the deadline fires, `NodeTimeoutError` is raised (the retry policy decides whether to retry).
 
-> **Python 3.11+ required.** Async `@task` functions require Python 3.11 or later; they are not supported on Python 3.10.
-
 ```python
 import asyncio
 from datetime import timedelta
@@ -1323,9 +1010,8 @@ async def fetch_url(url: str) -> str:
 
 @entrypoint(checkpointer=InMemorySaver())
 async def crawl(urls: list[str]) -> list[str]:
-    futures = [fetch_url(u) for u in urls]
-    # SyncAsyncFuture.result() resolves each future; asyncio.gather is incompatible
-    return [f.result() for f in futures]
+    futures = [fetch_url(u) for u in urls]      # all three start at once
+    return list(await asyncio.gather(*futures))  # task futures are awaitable
 
 
 cfg = {"configurable": {"thread_id": "crawl-1"}}
@@ -1470,104 +1156,3 @@ print(running_stats.invoke([4.0, 5.0], cfg))
 # {'n': 5, 'mean': 3.0, 'min': 1.0, 'max': 5.0}
 ```
 
----
-
-### Pattern 15: `set_node_defaults()` — graph-wide node policies
-
-`set_node_defaults()` sets fallback retry, cache, timeout, and error-handler policies for every node in the graph. Per-node values take precedence.
-
-**Source:** `langgraph.graph.state.StateGraph.set_node_defaults`
-
-```python
-import asyncio
-import httpx
-from datetime import timedelta
-from typing_extensions import TypedDict
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.cache.memory import InMemoryCache
-from langgraph.types import RetryPolicy, CachePolicy, TimeoutPolicy, Command
-from langgraph.errors import NodeError
-
-
-class PipeState(TypedDict):
-    query: str
-    fetched: str
-    enriched: str
-    result: str
-
-
-# Retry only on transient network errors
-def network_retry(exc: Exception) -> bool:
-    return isinstance(exc, (httpx.TransportError, httpx.TimeoutException))
-
-
-async def fetch_node(state: PipeState) -> dict:
-    # Simulates an external API call — retried on network errors
-    return {"fetched": f"data:{state['query']}"}
-
-
-async def enrich_node(state: PipeState) -> dict:
-    return {"enriched": f"enriched:{state['fetched']}"}
-
-
-async def summarise_node(state: PipeState) -> dict:
-    return {"result": f"summary:{state['enriched']}"}
-
-
-async def error_fallback(state: PipeState, error: NodeError) -> Command:
-    """Graph-wide fallback: runs when any node exhausts its retries."""
-    return Command(
-        update={"result": f"fallback:{state.get('query', 'unknown')}"},
-        goto=END,
-    )
-
-
-cache = InMemoryCache()
-
-graph = (
-    StateGraph(PipeState)
-    .set_node_defaults(
-        retry_policy=RetryPolicy(
-            max_attempts=4,
-            initial_interval=1.0,
-            backoff_factor=2.0,
-            retry_on=network_retry,
-        ),
-        cache_policy=CachePolicy(ttl=600),          # 10-minute result cache
-        timeout=TimeoutPolicy(run_timeout=timedelta(seconds=20)),
-        error_handler=error_fallback,
-    )
-    # Every node inherits the defaults above
-    .add_node("fetch", fetch_node)
-    .add_node("enrich", enrich_node)
-    .add_node(
-        "summarise",
-        summarise_node,
-        retry_policy=RetryPolicy(max_attempts=2),   # override: fewer retries
-        cache_policy=CachePolicy(ttl=3600),          # override: longer cache
-    )
-    .add_edge(START, "fetch")
-    .add_edge("fetch", "enrich")
-    .add_edge("enrich", "summarise")
-    .add_edge("summarise", END)
-    .compile(checkpointer=InMemorySaver(), cache=cache)
-)
-
-result = asyncio.run(graph.ainvoke(
-    {"query": "langgraph patterns", "fetched": "", "enriched": "", "result": ""},
-    config={"configurable": {"thread_id": "pipe-1"}},
-))
-print(result["result"])   # summary:enriched:data:langgraph patterns
-```
-
-`set_node_defaults` returns `Self`, so it chains fluently with `add_node`, `add_edge`, and `compile`. It must be called before `compile()`.
-
-**Policy inheritance rules:**
-
-| Policy | Applied to | Not applied to |
-|---|---|---|
-| `retry_policy` | All regular nodes AND error-handler nodes | — |
-| `cache_policy` | Regular nodes only | Error-handler nodes (unsafe to cache) |
-| `timeout` | All regular nodes AND error-handler nodes | — |
-| `error_handler` | Regular nodes without their own handler | Other error-handler nodes |

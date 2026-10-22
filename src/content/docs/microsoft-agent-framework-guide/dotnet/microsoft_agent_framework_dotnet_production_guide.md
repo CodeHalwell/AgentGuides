@@ -1,344 +1,171 @@
 ---
-title: "Microsoft Agent Framework .NET - Production Guide"
-description: "This guide provides enterprise-level best practices for deploying, managing, and scaling applications built with the Microsoft Agent Framework for .NET."
-framework: microsoft-agent-framework
-language: dotnet
+title: "Microsoft Agent Framework (.NET) — Production Guide"
+description: "Hosting .NET agents in production (Foundry hosted agents, Azure Functions durable agents, ASP.NET Core), observability, identity, prompt-injection defence, resilience and evaluation in CI."
+framework: "microsoft-agent-framework"
+language: "dotnet"
+sidebar:
+  label: "Production guide"
 ---
 
-# Microsoft Agent Framework .NET - Production Guide
+This page covers what is specific to running `Microsoft.Agents.AI` agents in production. Container builds, networking and CI/CD pipelines are standard ASP.NET Core practice and are not repeated; see the [Azure Container Apps documentation](https://learn.microsoft.com/azure/container-apps/) for those.
 
-This guide provides enterprise-level best practices for deploying, managing, and scaling applications built with the Microsoft Agent Framework for .NET.
+## 1. Choosing a host
 
-**Target Audience:** DevOps Engineers, Infrastructure Architects, Senior .NET Developers  
-**Platform:** .NET 8.0+
+| Host | Package | What you get |
+|---|---|---|
+| Microsoft Foundry hosted agent | `Microsoft.Agents.AI.Foundry.Hosting` (preview) | Your agent behind Foundry's Responses protocol: managed sessions (`FoundryAgentSessionStore`), checkpoints, Foundry toolboxes, identity and tracing. |
+| Azure Functions durable agent | `Microsoft.Agents.AI.Hosting.AzureFunctions` (preview) | Agents as durable entities and workflows as durable orchestrations; state survives restarts and scale-in, with generated HTTP (and optional MCP) triggers. |
+| Durable Task Scheduler in any host | `Microsoft.Agents.AI.DurableTask` (preview) | The same durable agents without Functions (`services.ConfigureDurableAgents(...)`). |
+| Your own ASP.NET Core service | `Microsoft.Agents.AI.Hosting` | `AddAIAgent` registration, session stores, and protocol endpoints (`MapOpenAIResponses`, `MapA2AJsonRpc`, `MapAGUIServer`). |
 
----
-
-## 1. Production Deployment
-
-### Recommended Host: Azure Container Apps
-
-For most scenarios, **Azure Container Apps (ACA)** provides the best balance of scalability, ease of use, and power for hosting agent applications. It offers serverless containers, built-in Dapr integration for microservices, and KEDA-based scaling.
-
-### Strategy 1: Docker & Azure Container Apps
-
-**Step 1: Dockerize Your Application**
-
-Create a `Dockerfile` in your project root.
-
-```dockerfile
-# Use the official .NET 8 SDK image to build
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
-WORKDIR /src
-COPY ["MyAgentApp.csproj", "."]
-RUN dotnet restore "./MyAgentApp.csproj"
-COPY . .
-RUN dotnet build "MyAgentApp.csproj" -c Release -o /app/build
-
-# Create the final runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS publish
-WORKDIR /app
-COPY --from=build /app/build .
-ENTRYPOINT ["dotnet", "MyAgentApp.dll"]
-```
-
-**Step 2: Build and Push to Azure Container Registry (ACR)**
+### Foundry hosted agents
 
 ```bash
-# Log in to Azure
-az login
-
-# Create an Azure Container Registry (if you don't have one)
-az acr create --resource-group MyResourceGroup --name myagentregistry --sku Basic
-
-# Build and push the image
-az acr build --registry myagentregistry --image my-agent-app:v1 .
+dotnet add package Microsoft.Agents.AI.Foundry.Hosting --prerelease
 ```
-
-**Step 3: Deploy to Azure Container Apps**
-
-Use a Bicep or ARM template for infrastructure-as-code.
-
-```bicep
-// deploy.bicep
-param location string = resourceGroup().location
-param acrName string = 'myagentregistry'
-param appName string = 'my-agent-service'
-
-resource acr 'Microsoft.ContainerRegistry/registries@2023-01-01-preview' existing = {
-  name: acrName
-}
-
-resource containerAppEnv 'Microsoft.App/managedEnvironments@2023-05-01' = {
-  name: '${appName}-env'
-  location: location
-  properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-    }
-  }
-}
-
-resource containerApp 'Microsoft.App/containerApps@2023-05-01' = {
-  name: appName
-  location: location
-  properties: {
-    managedEnvironmentId: containerAppEnv.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8080
-      }
-      secrets: [
-        {
-          name: 'openai-key'
-          value: 'YOUR_OPENAI_KEY' // Use Key Vault reference in production
-        }
-      ]
-      registries: [
-        {
-          server: acr.properties.loginServer
-          identity: 'system' // Use managed identity to pull from ACR
-        }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'agent-container'
-          image: '${acr.properties.loginServer}/my-agent-app:v1'
-          resources: {
-            cpu: json('1.0')
-            memory: '2.0Gi'
-          }
-          env: [
-            {
-              name: 'ASPNETCORE_URLS'
-              value: 'http://+:8080'
-            }
-            {
-              name: 'AZURE_OPENAI_KEY'
-              secretRef: 'openai-key'
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: 1
-        maxReplicas: 10
-        rules: [
-          {
-            name: 'http-scaling-rule'
-            http: {
-              metadata: {
-                concurrentRequests: '100' // Scale up when 100 concurrent requests are hit
-              }
-            }
-          }
-        ]
-      }
-    }
-  }
-  identity: {
-    type: 'SystemAssigned'
-  }
-}
-```
-
-### Strategy 2: CI/CD with Azure DevOps or GitHub Actions
-
-Automate your deployment process to ensure consistency and reliability.
-
-**GitHub Actions Workflow Example:**
-
-
-```yaml
-# .github/workflows/deploy.yml
-name: Deploy Agent to ACA
-
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-
-    - name: 'Az CLI login'
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-    - name: 'Build and push image'
-      run: |
-        az acr build --registry myagentregistry --image my-agent-app:${{ github.sha }} .
-
-    - name: 'Deploy to Azure Container Apps'
-      uses: azure/container-apps-deploy-action@v1
-      with:
-        imageToDeploy: myagentregistry.azurecr.io/my-agent-app:${{ github.sha }}
-        containerAppName: my-agent-service
-        resourceGroup: MyResourceGroup
-```
-
-
----
-
-## 2. Scaling Strategies
-
-### Horizontal Scaling (Scale Out)
-
--   **Stateless Agents:** Design your agents to be as stateless as possible. Persist conversation history and state to an external store (like Cosmos DB or Redis). This allows you to add or remove agent instances without losing data.
--   **KEDA-Based Autoscaling:** Use the scaling rules in Azure Container Apps to automatically scale based on metrics like HTTP requests, CPU/memory usage, or queue depth.
-
-### Caching Strategies
-
--   **LLM Response Caching:** Cache responses for identical prompts to reduce latency and cost. Use a distributed cache like Azure Cache for Redis.
--   **Memory Caching:** Cache frequently accessed user profiles or memory objects to reduce database load.
 
 ```csharp
-// Program.cs - Adding Redis for distributed caching
-builder.Services.AddStackExchangeRedisCache(options =>
+using Azure.AI.Projects;
+using Azure.AI.AgentServer.Core;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Foundry.Hosting;
+
+var projectEndpoint = new Uri(Environment.GetEnvironmentVariable("FOUNDRY_PROJECT_ENDPOINT")!);
+
+AIAgent agent = new AIProjectClient(projectEndpoint, new DefaultAzureCredential())
+    .AsAIAgent(
+        model: Environment.GetEnvironmentVariable("FOUNDRY_MODEL") ?? "%%model=openai%%",
+        instructions: "You are a helpful assistant.",
+        name: "my-agent");
+
+var builder = AgentHost.CreateBuilder(args);
+builder.Services.AddFoundryResponses(agent);
+builder.RegisterProtocol("responses", endpoints => endpoints.MapFoundryResponses());
+
+var app = builder.Build();
+app.Run();
+```
+
+`AddFoundryResponses(agent, agentSessionStore)` takes an optional session store (`FoundryAgentSessionStore` in Foundry, `InMemoryAgentSessionStore` or `FileSystemAgentSessionStore` locally) and a `FoundryResponsesOptions` callback (`ResilientBackground`, `SteerableConversations`, ...). `AddFoundryToolboxes(credential, "toolbox-name")` connects Foundry toolboxes as MCP tools. Deployment with the Azure Developer CLI is described in [Microsoft's hosted-agent guide](https://learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent).
+
+### Durable agents on Azure Functions
+
+```bash
+dotnet add package Microsoft.Agents.AI.Hosting.AzureFunctions --prerelease
+```
+
+```csharp
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting.AzureFunctions;
+using Microsoft.Azure.Functions.Worker.Builder;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Hosting;
+
+AIAgent agent = new AzureOpenAIClient(
+        new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+        new DefaultAzureCredential())
+    .GetChatClient(Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "%%model=openai-small%%")
+    .AsIChatClient()
+    .AsAIAgent(instructions: "You write well-structured documents on a given topic.", name: "DocumentPublisher");
+
+using IHost app = FunctionsApplication
+    .CreateBuilder(args)
+    .ConfigureFunctionsWebApplication()
+    .ConfigureDurableAgents(options => options.AddAIAgent(agent))
+    .Build();
+
+app.Run();
+```
+
+Each registered agent gets an HTTP endpoint and its conversation state is kept by Durable Functions, so a session continues across restarts and instances. `options.AddAIAgent(agent, enableHttpTrigger: true, enableMcpToolTrigger: true)` also exposes it as an MCP tool, and `ConfigureDurableWorkflows(o => o.AddWorkflow(workflow))` hosts a workflow as a durable orchestration that can wait for human input. Inside a function, `durableClient.AsDurableAgentProxy(context, "DocumentPublisher")` returns an `AIAgent` that runs the durable agent. See Microsoft's [durable agents documentation](https://learn.microsoft.com/azure/durable-task/sdks/durable-agents-microsoft-agent-framework).
+
+### Your own ASP.NET Core service
+
+Register one `IChatClient` and the agents as singletons, keep conversations in an `AgentSessionStore` that all replicas share, and isolate sessions per user (`UseClaimsBasedAgentIsolation`). The [.NET comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#multi-tenant-isolation) shows the registration, and [Recipe 9](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-9-exposing-an-agent-through-aspnet-core) an HTTP endpoint.
+
+## 2. Observability
+
+Wrap agents with `.AsBuilder().UseOpenTelemetry(sourceName)` (and chat clients with `ChatClientBuilder.UseOpenTelemetry`), then add that source to your OpenTelemetry tracer provider with the Azure Monitor or OTLP exporter. Spans follow the GenAI semantic conventions (`invoke_agent`, `chat`, `execute_tool`) and carry token usage; prompt text is excluded unless you set `EnableSensitiveData`. Workflows have `WorkflowBuilder.WithOpenTelemetry()`. A complete set-up is in the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#opentelemetry-integration---net).
+
+## 3. Identity and secrets
+
+Use managed identity (`DefaultAzureCredential` locally, `ManagedIdentityCredential` in Azure) for Azure OpenAI, Foundry, Cosmos DB and Key Vault, with the least-privileged roles listed on the [Azure RBAC page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_azure_rbac/). Secrets for third-party services go in Key Vault:
+
+```csharp
+// Program.cs - Integrating Azure Key Vault (Azure.Extensions.AspNetCore.Configuration.Secrets)
+using Azure.Identity;
+
+var builder = WebApplication.CreateBuilder(args);
+
+var keyVaultEndpoint = new Uri(Environment.GetEnvironmentVariable("KEY_VAULT_ENDPOINT")!);
+builder.Configuration.AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential());
+
+// Secrets are now ordinary configuration values (e.g. a third-party API key used by a tool).
+// Prefer managed identity over keys for Azure OpenAI itself.
+var weatherApiKey = builder.Configuration["WeatherApiKey"];
+```
+
+
+## 4. Prompt-injection defence
+
+There is no information-flow-control layer in .NET (FIDES is Python-only). Combine:
+
+1. **Approval for consequential tools.** Wrap the function in `ApprovalRequiredAIFunction`; the run returns a `ToolApprovalRequestContent` and continues only after you answer it on the same session ([tool approval](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tool-approval)). In workflows, use a request port for the same purpose.
+2. **Prompt Shields.** Azure AI Content Safety's [Prompt Shields](https://learn.microsoft.com/azure/ai-services/content-safety/concepts/jailbreak-detection) API detects jailbreak and indirect-injection attempts in user input and in documents or tool results. Call it from agent middleware before the model call, in the same way as the text-moderation middleware on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#azure-ai-content-safety-integration).
+3. **Purview.** `Microsoft.Agents.AI.Purview` adds `.AsBuilder().WithPurview(credential, settings)` to apply your organisation's DLP policies to prompts and responses.
+4. **Least privilege for tools.** Give each tool its own scoped identity or token, and keep untrusted content out of the instructions.
+
+## 5. Resilience
+
+`Microsoft.Extensions.Http.Resilience` (built on Polly v8) adds retries, a circuit breaker and timeouts to an `HttpClient` in one call. To apply it to model calls, give the Azure OpenAI client that `HttpClient` as its transport and turn off the SDK's own retries so the two don't compound.
+
+```csharp
+// Resilience for the model client (Microsoft.Extensions.Http.Resilience)
+using System.ClientModel.Primitives;
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using OpenAI.Chat;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Retries with back-off (including 429s), a circuit breaker and timeouts, on a named HttpClient.
+builder.Services.AddHttpClient("openai").AddStandardResilienceHandler();
+
+builder.Services.AddSingleton<AIAgent>(sp =>
 {
-    options.Configuration = builder.Configuration.GetConnectionString("Redis");
-    options.InstanceName = "AgentCache_";
+    HttpClient http = sp.GetRequiredService<IHttpClientFactory>().CreateClient("openai");
+    var options = new AzureOpenAIClientOptions
+    {
+        Transport = new HttpClientPipelineTransport(http),
+        RetryPolicy = new ClientRetryPolicy(maxRetries: 0),   // let the resilience handler own retries
+    };
+
+    return new AzureOpenAIClient(new Uri(builder.Configuration["AzureOpenAI:Endpoint"]!), new DefaultAzureCredential(), options)
+        .GetChatClient("%%model=openai-small%%")
+        .AsAIAgent(instructions: "You are a helpful assistant.");
 });
 ```
 
----
 
-## 3. Monitoring & Observability
+For multi-step work that must not be lost, prefer a durable host (section 1) or workflow checkpointing over retries.
 
-### Structured Logging with Application Insights
+## 6. Evaluation in CI
 
-Configure your application to use structured logging. This allows for powerful querying and alerting in Application Insights.
+`LocalEvaluator` and `agent.EvaluateAsync(...)` are in the core package, and `AgentEvaluationResults.AssertAllPassed()` throws on failure, so a quality gate is an ordinary unit test. Keep the PR gate to deterministic checks (keywords, expected tool calls) and run model-graded `Microsoft.Extensions.AI.Evaluation` or Foundry evaluators on a schedule. Code is in the [.NET comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#evaluation).
 
-```csharp
-// Program.cs
-builder.Logging.AddApplicationInsights(
-    configureTelemetryConfiguration: (config) => 
-        config.ConnectionString = builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"],
-    configureApplicationInsightsLoggerOptions: (options) => { }
-);
-```
+## 7. Cost control
 
-**Log with context in your agents:**
+- Use the small tier (`%%model=openai-small%%`) for routing and classification; reserve the larger model for reasoning.
+- Read `AgentResponse.Usage` (or the span token attributes) and alert per agent and tenant.
+- Keep long sessions bounded with a compaction strategy (built in to `HarnessAgent` when you set `MaxContextWindowTokens`).
+- Set per-deployment quotas and Azure budgets as the hard ceiling.
 
-```csharp
-// Inside an agent or tool
-private readonly ILogger<MyTool> _logger;
+## 8. Before you deploy
 
-public MyTool(ILogger<MyTool> logger) { _logger = logger; }
-
-public void DoWork(string threadId)
-{
-    using (_logger.BeginScope(new Dictionary<string, object> { ["ThreadId"] = threadId }))
-    {
-        _logger.LogInformation("Starting work for thread.");
-        // ...
-        _logger.LogWarning("An issue occurred but was handled.");
-    }
-}
-```
-
-### Custom Metrics and Tracing
-
--   **Custom Metrics:** Use Application Insights or Prometheus to track key business and performance metrics (e.g., `agent_invocations_total`, `tool_calls_per_minute`, `average_token_count`).
--   **Distributed Tracing:** The framework is designed to integrate with OpenTelemetry. Tracing allows you to visualize the entire lifecycle of a request as it flows through multiple agents and services.
-
----
-
-## 4. Security Best Practices
-
-### Secrets Management with Azure Key Vault
-
-Never store secrets (API keys, connection strings) in code or configuration files.
-
-```csharp
-// Program.cs - Integrating Azure Key Vault
-var keyVaultEndpoint = new Uri(Environment.GetEnvironmentVariable("KEY_VAULT_ENDPOINT"));
-builder.Configuration.AddAzureKeyVault(keyVaultEndpoint, new DefaultAzureCredential());
-
-// Now you can access secrets via IConfiguration
-var apiKey = builder.Configuration["AzureOpenAIApiKey"];
-```
-
-### Network Security
-
--   **VNet Integration:** Deploy your Container Apps and dependent services (like databases and Key Vault) into a virtual network to isolate them from the public internet.
--   **Private Endpoints:** Use private endpoints to access Azure services securely over the Azure backbone network.
-
-### Authentication and Authorization
-
--   **Managed Identity:** Use managed identities for your Azure resources to authenticate with other Azure services without needing to manage credentials.
--   **API Authentication:** Secure your agent's public endpoints using OAuth 2.0 (e.g., with Microsoft Entra ID).
-
----
-
-## 5. High Availability & Disaster Recovery
-
-### Multi-Region Deployment
-
-For critical applications, deploy your agent services to multiple Azure regions. Use Azure Traffic Manager or Azure Front Door to route traffic to the nearest or healthiest region.
-
-### Database and State Replication
-
--   **Cosmos DB:** Use the globally distributed nature of Cosmos DB to replicate your agent state across multiple regions automatically.
--   **Azure SQL:** Configure active geo-replication to maintain a readable secondary database in a different region.
-
-### Resiliency with Polly
-
-Use the Polly library to implement resiliency patterns like retries, circuit breakers, and fallbacks for external dependencies (LLM calls, tool APIs).
-
-```csharp
-// Add Polly to DI container
-builder.Services.AddHttpClient("OpenAI")
-    .AddPolicyHandler(
-        HttpPolicyExtensions
-            .HandleTransientHttpError()
-            .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)))
-    )
-    .AddPolicyHandler(
-        HttpPolicyExtensions
-            .HandleTransientHttpError()
-            .CircuitBreakerAsync(5, TimeSpan.FromSeconds(30))
-    );
-
-// Use the named HttpClient in your services
-public class MyLLMService
-{
-    private readonly HttpClient _httpClient;
-    public MyLLMService(IHttpClientFactory httpClientFactory)
-    {
-        _httpClient = httpClientFactory.CreateClient("OpenAI");
-    }
-}
-```
-
----
-
-## 6. Cost Optimization
-
--   **Model Selection:** Use smaller, cheaper models (e.g., GPT-4o-mini) for simple tasks like classification or routing, and reserve larger models for complex reasoning.
--   **Prompt Engineering:** Optimize your prompts to be as concise as possible while still achieving the desired output.
--   **Caching:** Aggressively cache responses from LLMs and tools.
--   **Monitor Token Usage:** Log the token count for every LLM call. Create alerts in Application Insights to notify you of unusually high token usage, which could indicate a bug or prompt injection attack.
-
----
-
-## 7. Performance Tuning
-
--   **Asynchronous Programming:** Use `async` and `await` for all I/O-bound operations (LLM calls, database queries, API calls) to keep your application responsive.
--   **Batching:** When processing multiple requests, batch them together where possible. This is especially effective for calls to embedding models.
--   **Connection Pooling:** Ensure your database connections are being pooled correctly to avoid the overhead of establishing new connections for every request.
-
----
-
-## 8. Enterprise Governance
-
--   **Azure Policy:** Use Azure Policy to enforce organizational standards, such as requiring that all resources have specific tags, are deployed in certain regions, or have diagnostic logging enabled.
--   **Auditing:** Log all agent actions and decisions to a secure, immutable store for auditing and compliance purposes.
--   **Data Governance:** Use tools like Microsoft Purview to classify and govern the data that your agents interact with, especially in RAG scenarios.
+- Exercise agents and workflows locally with [DevUI](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#local-testing-with-devui) (development only).
+- Run the evaluation suite against the production model deployment.
+- Check that sessions survive a restart and a second replica (shared session store or durable host).

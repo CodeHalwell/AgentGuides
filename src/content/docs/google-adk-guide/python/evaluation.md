@@ -1,13 +1,14 @@
 ---
 title: "Evaluation"
 description: "Test agents programmatically with AgentEvaluator, EvalCase, EvalSet, and the built-in metric suite."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 75
+  label: "Evaluation"
+  order: 78
 ---
 
-Verified against google-adk==2.4.0 (`google/adk/evaluation/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.4.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/evaluation/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted.
 
 ADK ships a first-class evaluation framework built around three concepts: **`EvalCase`** (a single conversation to run), **`EvalSet`** (a collection of cases), and **`AgentEvaluator`** (the engine that runs cases against a live agent and scores the results). The framework integrates with `pytest` and supports custom metrics.
 
@@ -61,6 +62,23 @@ async def test_arithmetic():
         num_runs=1,
     )
 ```
+
+## From the command line
+
+`adk eval` runs eval set files against an agent folder (one whose `agent.py` defines `root_agent`) and prints a pass/fail summary per set. Results are also written under the agent's `.adk/eval_history/`.
+
+```bash
+pip install "google-adk[eval]"
+
+# Pass thresholds per metric
+echo '{"criteria": {"tool_trajectory_avg_score": 1.0, "response_match_score": 0.8}}' > my_agent/test_config.json
+
+adk eval my_agent my_agent/tests/arithmetic_suite.evalset.json --config_file_path my_agent/test_config.json
+adk eval my_agent my_agent/tests/arithmetic_suite.evalset.json:add_two_numbers   # one case only
+adk eval my_agent my_agent/tests/*.evalset.json --print_detailed_results
+```
+
+`adk eval_set create my_agent regression` creates an empty `regression.evalset.json` in the agent folder, and `adk eval_set add_eval_case` / `generate_eval_cases` add cases from conversation scenarios. In the Dev UI (`adk web`), the Eval tab saves a live session as an eval case and runs sets interactively. Without `--config_file_path`, and with a single eval set file, ADK looks for a `test_config.json` next to that file; otherwise it uses its default criteria.
 
 ## `EvalCase`
 
@@ -195,7 +213,7 @@ config = EvalConfig(
         PrebuiltMetrics.RESPONSE_EVALUATION_SCORE.value: LlmAsAJudgeCriterion(
             threshold=0.8,
             judge_model_options=JudgeModelOptions(
-                judge_model="gemini-2.5-pro",
+                judge_model="%%model=gemini-flagship%%",
                 num_samples=3,
             ),
         ),
@@ -245,7 +263,7 @@ ToolTrajectoryCriterion(threshold=1.0, match_type=ToolTrajectoryCriterion.MatchT
 
 ## `AgentEvaluator`
 
-The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (source-verified for google-adk==2.3.0).
+The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (first documented for 2.3.0; re-checked against %%version=google-adk%%).
 
 ### `evaluate_eval_set` — programmatic, in-memory
 
@@ -303,7 +321,7 @@ from google.adk.tools import google_search
 
 root_agent = LlmAgent(
     name="research_bot",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer questions using web search.",
     tools=[google_search],
 )
@@ -446,7 +464,7 @@ asyncio.run(main())
 
 ### `evaluate_eval_set` — CSV output, preloaded artifacts, results manager
 
-Source-verified against `google.adk.evaluation.agent_evaluator.evaluate_eval_set` (google-adk==2.7.1). Three params are worth calling out because they're often ignored and each solves a real reporting problem.
+Source-verified against `google.adk.evaluation.agent_evaluator.evaluate_eval_set` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Three params are worth calling out because they're often ignored and each solves a real reporting problem.
 
 ```python
 import asyncio
@@ -515,16 +533,22 @@ asyncio.run(main())
 
 ## Saving eval results
 
+`evaluate_eval_set` returns `None`; to keep results, hand it a results manager and an `app_name`. `LocalEvalSetResultsManager` writes each run to `<agents_dir>/<app_name>/.adk/eval_history/`:
+
 ```python
 from google.adk.evaluation.local_eval_set_results_manager import (
     LocalEvalSetResultsManager,
 )
 
-results_manager = LocalEvalSetResultsManager(results_dir="./eval_results")
+results_manager = LocalEvalSetResultsManager(agents_dir="./agents")
 
-# After evaluate_eval_set completes, save results
-result = await AgentEvaluator.evaluate_eval_set(...)
-await results_manager.save_eval_set_result(result)
+await AgentEvaluator.evaluate_eval_set(
+    agent_module="my_agent",
+    eval_set=eval_set,
+    eval_config=eval_config,
+    app_name="my_agent",
+    eval_set_results_manager=results_manager,
+)
 ```
 
 Or use `GcsEvalSetResultsManager` to persist to Cloud Storage:
@@ -534,7 +558,7 @@ from google.adk.evaluation.gcs_eval_set_results_manager import GcsEvalSetResults
 
 results_manager = GcsEvalSetResultsManager(
     bucket_name="my-eval-results",
-    eval_storage_dir="runs/",
+    project="my-gcp-project",   # extra kwargs go to google.cloud.storage.Client
 )
 ```
 
@@ -578,28 +602,22 @@ config = EvalConfig(
 Rubrics let you score responses against structured criteria instead of a single binary pass/fail:
 
 ```python
-from google.adk.evaluation.eval_rubrics import Rubric, RubricScore
+from google.adk.evaluation.eval_rubrics import Rubric, RubricContent
 from google.adk.evaluation.eval_metrics import RubricsBasedCriterion
 
+def rubric(rubric_id: str, text: str) -> Rubric:
+    return Rubric(rubric_id=rubric_id, rubric_content=RubricContent(text_property=text))
+
 rubrics = [
-    Rubric(
-        criterion="The response must cite at least one source URL.",
-        points=1,
-    ),
-    Rubric(
-        criterion="The response must be written in plain English, no jargon.",
-        points=1,
-    ),
-    Rubric(
-        criterion="The response must be under 200 words.",
-        points=1,
-    ),
+    rubric("cites_source", "The response cites at least one source URL."),
+    rubric("plain_english", "The response is written in plain English, without jargon."),
+    rubric("concise", "The response is under 200 words."),
 ]
 
 config = EvalConfig(
     criteria={
         "rubric_based_final_response_quality_v1": RubricsBasedCriterion(
-            threshold=0.8,          # fraction of total rubric points required
+            threshold=0.8,          # minimum mean rubric score to pass
             rubrics=rubrics,
         ),
     }
@@ -646,26 +664,26 @@ pytest tests/test_agent.py -v
 
 ## File-based eval format
 
-For tooling compatibility, save eval cases as JSON. The recommended format (new schema) is an `EvalSet` JSON:
+For tooling compatibility, save eval cases as JSON: an `EvalSet` serialised with snake_case field names (`EvalSet.model_dump_json()` produces this; camelCase keys such as `evalSetId` fail validation):
 
 ```json
 {
-  "evalSetId": "arithmetic_suite",
-  "evalCases": [
+  "eval_set_id": "arithmetic_suite",
+  "eval_cases": [
     {
-      "evalId": "add_two_numbers",
+      "eval_id": "add_two_numbers",
       "conversation": [
         {
-          "userContent": {
+          "user_content": {
             "role": "user",
             "parts": [{ "text": "What is 15 + 27?" }]
           },
-          "finalResponse": {
+          "final_response": {
             "role": "model",
             "parts": [{ "text": "42" }]
           },
-          "intermediateData": {
-            "toolUses": []
+          "intermediate_data": {
+            "tool_uses": []
           }
         }
       ]
@@ -799,6 +817,47 @@ async def main():
 asyncio.run(main())
 ```
 
+### Configuring the simulated user
+
+A scenario-driven case is played out by a simulated user. Configure it with `EvalConfig(user_simulator_config=LlmBackedUserSimulatorConfig(...))` from `google.adk.evaluation.simulation.llm_backed_user_simulator`:
+
+| Field | Default | Purpose |
+|---|---|---|
+| `model` | `"gemini-2.5-flash"` | LLM that plays the user. The default is a Gemini 2.5 model, which new Gemini API projects cannot use; set `model="%%model=gemini%%"` or another model you have access to |
+| `model_configuration` | default `GenerateContentConfig` | Generation config for that LLM |
+| `max_allowed_invocations` | `20` | Turn cap before the simulation stops |
+| `include_function_calls` | `False` | Show the agent's tool calls to the simulated user |
+| `custom_instructions` | `None` | Jinja2 template replacing the default simulator prompt |
+
+`ConversationScenario.user_persona` takes a `UserPersona` (or a registered persona name) to give the simulated user a style, with rubrics the judge checks it against:
+
+```python
+from google.adk.evaluation.simulation.llm_backed_user_simulator import LlmBackedUserSimulatorConfig
+from google.adk.evaluation.simulation.user_simulator_personas import UserBehavior, UserPersona
+
+impatient = UserPersona(
+    id="impatient_traveller",
+    description="A frequent flyer who is time-pressed and expects quick answers.",
+    behaviors=[UserBehavior(
+        name="brief_responses",
+        description="Gives very short answers.",
+        behavior_instructions=["Keep your messages under 15 words."],
+        violation_rubrics=["Response is longer than 15 words."],
+    )],
+)
+scenario = ConversationScenario(
+    starting_prompt="Book me a flight to Paris.",
+    conversation_plan="Book a one-way flight LHR→CDG on 2025-05-01. Say yes to all prompts.",
+    user_persona=impatient,
+)
+eval_config = EvalConfig(
+    criteria={PrebuiltMetrics.MULTI_TURN_TASK_SUCCESS_V1.value: 0.7},
+    user_simulator_config=LlmBackedUserSimulatorConfig(max_allowed_invocations=15),
+)
+```
+
+`AgentEvaluator` imports `agent_module` and reads its module-level `root_agent`, so keep the driver (with `asyncio.run`) in a separate script from the agent module.
+
 ### Choosing between multi-turn and per-turn metrics
 
 | Situation | Recommended approach |
@@ -825,14 +884,14 @@ os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
 travel_agent = LlmAgent(
     name="travel_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Books flights and checks weather.",
     tools=[],  # your actual tools here
 )
 
 gen_config = ConversationGenerationConfig(
     count=3,                          # number of scenarios to generate
-    model_name="gemini-2.5-flash",
+    model_name="%%model=gemini%%",
     environment_context=(
         "Available flights: LHR→NRT on 2026-08-10 at 09:00 (ANA, £620), 14:00 (BA, £580)."
     ),

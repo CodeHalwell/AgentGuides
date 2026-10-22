@@ -1,16 +1,14 @@
 ---
 title: "Checkpointers — API reference"
 description: "Every checkpointer backend LangGraph ships — InMemorySaver, SqliteSaver, AsyncSqliteSaver, PostgresSaver, AsyncPostgresSaver, ShallowPostgresSaver — with a feature matrix, setup calls, connection strings, and gotchas."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Checkpointers"
   order: 31
 ---
 
-# Checkpointers — API reference
-
-Verified against **`langgraph==1.2.14`**, **`langgraph-checkpoint==4.2.0`**, **`langgraph-checkpoint-sqlite==3.0.3`**, **`langgraph-checkpoint-postgres==3.0.5`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
+Verified against **`langgraph==%%version=langgraph%%`**, **`langgraph-checkpoint==%%version=langgraph-checkpoint%%`**, **`langgraph-checkpoint-sqlite==%%version=langgraph-checkpoint-sqlite%%`**, **`langgraph-checkpoint-postgres==%%version=langgraph-checkpoint-postgres%%`** (modules: `langgraph.checkpoint.{base,memory,sqlite,postgres}`).
 
 A checkpointer is a `BaseCheckpointSaver` subclass. It persists the per-thread history of `Checkpoint`/`CheckpointTuple` objects so the graph can pause (`interrupt`), resume (`Command(resume=...)`), replay (`get_state_history`), time-travel, and keep short-term memory across invocations.
 
@@ -240,7 +238,7 @@ A `Checkpoint` (TypedDict, `langgraph.checkpoint.base`):
 `graph.get_state(config)` returns a `StateSnapshot` namedtuple. All fields:
 
 ```python
-from langgraph.checkpoint.base import StateSnapshot
+from langgraph.types import StateSnapshot
 
 snapshot: StateSnapshot = graph.get_state(config)
 
@@ -274,24 +272,27 @@ for intr in snapshot.interrupts:
 
 ---
 
-## `Interrupt` — struct reference (source-verified, 1.2.14)
+## `Interrupt` — struct reference
 
-`Interrupt` is a frozen dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
+Checked against the langgraph %%version=langgraph%% source. `Interrupt` is the dataclass emitted by calls to `langgraph.types.interrupt()`. It is surfaced on both `StateSnapshot.interrupts` and `GraphOutput.interrupts` (when using `version="v2"`).
 
 ```python
 # langgraph.types
-from dataclasses import dataclass
-from typing import Any
-
-@dataclass(frozen=True, slots=True)
-class Interrupt:
+@final
+@dataclass(init=False, slots=True)
+class Interrupt(Generic[ResponseT]):
     value: Any
     """The value passed to interrupt() — the question or payload for the human reviewer."""
 
     id: str
     """Unique ID for this interrupt. Used to resume a specific interrupt:
     Command(resume={intr.id: answer})"""
+
+    response_schema: type[ResponseT] | dict[str, Any] | None = None
+    """JSON Schema for the expected resume value, if interrupt() was given one."""
 ```
+
+See [typed resume values](/langgraph-guide/python/reference-command-and-send/#typed-resume-values-response_schema) for how `response_schema` validates resume values.
 
 **Key usage patterns:**
 
@@ -359,9 +360,9 @@ print(result["approved"])  # True
 
 ---
 
-## `PregelTask` — task introspection (source-verified, 1.2.14)
+## `PregelTask` — task introspection
 
-`PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
+Checked against the langgraph %%version=langgraph%% source. `PregelTask` is a `NamedTuple` that appears inside `StateSnapshot.tasks`. Each entry represents one pending or completed task for the current superstep.
 
 ```python
 # langgraph.types
@@ -498,6 +499,25 @@ graph.update_state(
 # Returns a RunnableConfig pointing at the newly created checkpoint.
 ```
 
+Writes go through the channel reducers, so on an `Annotated[int, operator.add]` field `update_state(cfg, {"total": 100})` adds 100 rather than replacing the value (wrap it in `Overwrite(...)` to replace).
+
+`update_state()` is a one-step wrapper around `bulk_update_state(config, supersteps)`, which applies several supersteps in one call. Each superstep is a sequence of `StateUpdate(values, as_node=None, task_id=None)` named tuples (from `langgraph.types`), applied in order, each one creating a checkpoint:
+
+```python
+from langgraph.types import StateUpdate
+
+graph.bulk_update_state(
+    config,
+    [
+        [StateUpdate({"items": ["corrected-item"], "phase": "revised"}, as_node="process")],
+        [StateUpdate({"phase": "final"}, as_node="process")],
+    ],
+)
+graph.get_state(config).values["phase"]   # 'final'
+```
+
+Use it to replay a corrected sequence of writes after manual intervention without re-running nodes. The async twins are `aupdate_state` / `abulk_update_state`.
+
 ## `Durability` setting
 
 `Durability` controls *when* each checkpoint is flushed to the backend. Import the type or pass the literal string directly:
@@ -507,7 +527,7 @@ from langgraph.types import Durability
 # Durability = Literal["sync", "async", "exit"]
 ```
 
-| Value | Behavior |
+| Value | Behaviour |
 |---|---|
 | `"sync"` | Checkpoint is persisted **synchronously** before the next step begins. Safest, slowest. |
 | `"async"` (default) | Checkpoint is persisted **in the background** while the next step executes. Best throughput. |
@@ -552,7 +572,7 @@ Calling `graph.invoke(input, {"configurable": {}})` on a graph with a checkpoint
 
 ## `BaseCheckpointSaver` methods you'll actually use
 
-```python
+```text
 saver.get_tuple(config) -> CheckpointTuple | None
 saver.list(config, *, filter=None, before=None, limit=None) -> Iterator[CheckpointTuple]
 saver.put(config, checkpoint, metadata, new_versions) -> RunnableConfig
@@ -614,7 +634,7 @@ await graph.adelete_thread("user-42")
 
 > **Deleting a thread is permanent.** There is no soft-delete or recycle bin — the data is gone immediately. Call `get_state_history` to archive thread content before deletion if you need an audit trail.
 
-## Serializers
+## Serialisers
 
 Default: `JsonPlusSerializer` from `langgraph.checkpoint.serde.jsonplus` — handles Pydantic models, dataclasses, `datetime`, `uuid`, `Decimal`, LangChain `BaseMessage`, and plain JSON.
 
@@ -649,6 +669,32 @@ encrypted_serde = EncryptedSerializer.from_pycryptodome_aes()
 ```
 
 All savers accept `serde=...` in their constructor. `InMemorySaver` accepts it too, via kwarg only.
+
+`EncryptedSerializer` appends the cipher name to the inner serialiser's type tag (`"msgpack+aes"`), and blobs whose type has no `+` suffix are passed straight to the inner `serde`. So you can turn encryption on for an existing deployment and still read the unencrypted checkpoints written before. AES-EAX is authenticated: tampered ciphertext fails to decrypt with a `ValueError`.
+
+For KMS-backed keys or another cipher, implement `CipherProtocol` (from `langgraph.checkpoint.serde.base`) and pass it to the constructor:
+
+```python
+from langgraph.checkpoint.serde.base import CipherProtocol
+from langgraph.checkpoint.serde.encrypted import EncryptedSerializer
+
+
+class XorCipher(CipherProtocol):
+    """Toy cipher that shows the interface. Not for production."""
+
+    def encrypt(self, plaintext: bytes) -> tuple[str, bytes]:
+        return "xor", bytes(b ^ 0x42 for b in plaintext)   # (cipher name, ciphertext)
+
+    def decrypt(self, ciphername: str, ciphertext: bytes) -> bytes:
+        assert ciphername == "xor"
+        return bytes(b ^ 0x42 for b in ciphertext)
+
+
+serde = EncryptedSerializer(cipher=XorCipher())   # serde= defaults to JsonPlusSerializer()
+typ, data = serde.dumps_typed({"hello": "world"})
+print(typ)                              # 'msgpack+xor'
+print(serde.loads_typed((typ, data)))   # {'hello': 'world'}
+```
 
 ## Patterns
 
@@ -760,7 +806,7 @@ cfg = {"configurable": {"thread_id": f"user:{user_id}:conv:{conv_id}"}}
 graph.invoke({"messages": msgs}, cfg)
 ```
 
-For cross-thread (long-term) memory, pair with a `Store` — see the [Store reference](./reference-store/).
+For cross-thread (long-term) memory, pair with a `Store` — see the [Store reference](/langgraph-guide/python/reference-store/).
 
 ### 7. Listing all threads for a user (audit / GDPR)
 

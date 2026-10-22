@@ -1,15 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — Advanced Patterns"
-description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system. Verified against agent-framework-core 1.6.0."
-framework: microsoft-agent-framework
-language: python
+description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Advanced Patterns — Python
 
 This page covers the extensibility hooks in `agent-framework-core` that the feature-level pages gloss over: writing your own chat client, embedding client, or context provider, feature-detecting clients at runtime via the `Supports*` protocols, and opting into experimental/RC APIs.
 
-Verified against `agent-framework-core==1.6.0`. The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
+Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.6.0). The abstract base classes live in `agent_framework._clients` and `agent_framework._sessions` but are re-exported from the top-level `agent_framework` package.
 
 ## Custom agent — `BaseAgent` and `RawAgent`
 
@@ -214,14 +212,14 @@ What you get for free by subclassing:
 - **Middleware, telemetry, and tool loop** all wrap your implementation automatically — you never implement the function-calling protocol.
 - `_build_response_stream(...)` returns the right `ResponseStream` shape that the upstream layers expect.
 - `_prepare_messages_for_model_call` handles compaction when a `compaction_strategy` is attached.
-- `to_dict()` / serialization falls out of `SerializationMixin`.
+- `to_dict()` / serialisation falls out of `SerializationMixin`.
 
 ### Building a streaming chunk — `ChatResponseUpdate`
 
 Every streaming chat client yields `ChatResponseUpdate` instances. The class is a thin dataclass-style container — pass `Content` items, optionally a role, and any of the optional metadata fields the framework propagates downstream (`response_id`, `message_id`, `conversation_id`, `model`, `created_at`, `finish_reason`, `continuation_token`, `additional_properties`).
 
 ```python
-from agent_framework import ChatResponseUpdate, Content, FinishReason
+from agent_framework import ChatResponseUpdate, Content
 
 # Plain text chunk — what most streaming clients emit per token batch.
 chunk = ChatResponseUpdate(
@@ -229,7 +227,7 @@ chunk = ChatResponseUpdate(
     role="assistant",
     response_id="resp_1",
     message_id="msg_1",
-    model="gpt-4o-mini",
+    model="%%model=openai-small%%",
 )
 print(chunk.text)        # " Hello" — concatenates every text Content
 print(str(chunk))        # same as chunk.text — __str__ is text
@@ -240,7 +238,7 @@ final = ChatResponseUpdate(
     role="assistant",
     response_id="resp_1",
     message_id="msg_1",
-    finish_reason=FinishReason.STOP,
+    finish_reason="stop",           # FinishReason is a NewType over str
 )
 ```
 
@@ -328,7 +326,7 @@ Wrap any real client:
 ```python
 from agent_framework.openai import OpenAIChatClient
 
-cached = CachingChatClient(OpenAIChatClient(model="gpt-5"))
+cached = CachingChatClient(OpenAIChatClient(model="%%model=openai%%"))
 agent = Agent(client=cached, instructions="…")
 ```
 
@@ -412,7 +410,7 @@ class TenantContextProvider(ContextProvider):
         self._tenant_prompts = tenant_prompts
 
     async def before_run(self, *, agent, session, context, state) -> None:
-        tenant_id = context.kwargs.get("tenant_id")
+        tenant_id = session.state.get("tenant_id")      # set by the caller on the session
         prefix = self._tenant_prompts.get(tenant_id)
         if prefix:
             context.extend_instructions(self.source_id, prefix)
@@ -433,11 +431,14 @@ agent = Agent(
     ],
 )
 
-await agent.run("What's the local weather?", tenant_id="acme")
+session = agent.create_session()
+session.state["tenant_id"] = "acme"
+await agent.run("What's the local weather?", session=session)
 ```
 
 Key points:
 
+- Per-request data reaches a provider through `session.state` (as here). `agent.run()` doesn't accept arbitrary keyword arguments; `function_invocation_kwargs=` is for tools, not providers.
 - `source_id` tags everything the provider adds (messages, tools, instructions) so other providers / the `HistoryProvider` can filter by source. Keep it unique per instance.
 - `state` is a **provider-scoped** dict (isolated from other providers). Full cross-provider state is still reachable via `session.state`.
 - `context.extend_messages(...)`, `context.extend_tools(...)`, `context.extend_middleware(...)`, and `context.extend_instructions(...)` are the mutation APIs — the framework merges everything before the model call.
@@ -454,7 +455,7 @@ class DocumentContextProvider(ContextProvider):
         self._retriever = retriever
 
     async def before_run(self, *, agent, session, context, state) -> None:
-        user_msgs = [m for m in session.messages if m.role == "user"]
+        user_msgs = [m for m in context.input_messages if m.role == "user"]
         if not user_msgs:
             return
         snippets = await self._retriever.search(user_msgs[-1].text, top_k=3)
@@ -492,7 +493,7 @@ class UserProfileProvider(ContextProvider):
         self._ttl = ttl
 
     async def before_run(self, *, agent, session, context, state) -> None:
-        user_id = context.kwargs.get("user_id")
+        user_id = session.state.get("user_id")
         if not user_id:
             return
 
@@ -512,7 +513,7 @@ class UserProfileProvider(ContextProvider):
 
     async def after_run(self, *, agent, session, context, state) -> None:
         # Tally turn count against this user's profile entry.
-        user_id = context.kwargs.get("user_id")
+        user_id = session.state.get("user_id")
         if user_id:
             cache = state.setdefault("cache", {})
             if user_id in cache:
@@ -526,11 +527,12 @@ agent = Agent(
 )
 
 session = agent.create_session(session_id="user-7")
-await agent.run("What's my plan?", session=session, user_id="user-7")
-await agent.run("Upgrade me.", session=session, user_id="user-7")  # cache hit
+session.state["user_id"] = "user-7"
+await agent.run("What's my plan?", session=session)
+await agent.run("Upgrade me.", session=session)  # cache hit
 ```
 
-Note that the comments above emphasize:
+Points to note:
 
 - `state` is a **provider-scoped** dict — distinct from `session.state` (cross-provider). Mutate it freely without coordinating with other providers.
 - `state` survives across `before_run` / `after_run` of the same session. The framework persists it through `session.to_dict()` if the values implement `SerializationProtocol`.
@@ -672,16 +674,21 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 warnings.filterwarnings("error", category=FeatureStageWarning)
 ```
 
-The currently gated features (verified against `agent-framework-core==1.6.0`):
+The currently gated features (verified against `agent-framework` %%version=agent-framework%%):
 
-| Stage | Enum member | Covers |
+| Stage | Enum member | Covers (examples) |
 |---|---|---|
-| Experimental | `ExperimentalFeature.SKILLS` | `Skill`, `SkillResource`, `SkillScript`, `SkillsProvider` |
-| Experimental | `ExperimentalFeature.EVALS` | `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `@evaluator` |
+| Experimental | `ExperimentalFeature.EVALS` | `LocalEvaluator`, `evaluate_agent`, `evaluate_workflow`, `EvalItem`, `EvalResults` |
 | Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
 | Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
-| Experimental | `ExperimentalFeature.TOOLBOXES` | Toolbox APIs (preview) |
-| Release candidate | *(empty in 1.4.0)* | The enum exists but has no members in this release — features that previously sat at RC have either been promoted to stable or rolled back to experimental. |
+| Experimental | `ExperimentalFeature.HARNESS` | `MemoryContextProvider`, `MemoryStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider`, `AgentLoopMiddleware` |
+| Experimental | `ExperimentalFeature.FIDES` | `SecureAgentConfig`, `SecureMCPToolProxy`, label-tracking middleware |
+| Experimental | `ExperimentalFeature.SESSION_STORE` | `SessionStore`, `FileSessionStore` |
+| Experimental | `ExperimentalFeature.VECTOR_STORES` | `InMemoryStore`, `InMemoryCollection`, `Filter`, `FilterGroup` |
+| Experimental | `ExperimentalFeature.MCP_SKILLS`, `MCP_LONG_RUNNING_TASKS`, `AGENT_HOOKS`, `COMPUTER_USE`, ... | MCP-backed skills, MCP task options, AGENT-HOOKS middleware, computer-use safety checks |
+| Release candidate | *(empty)* | The enum exists but has no members in this release. |
+
+Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0.
 
 Both enums are stage-scoped inventories, not stable introspection surfaces. Members move or disappear as features advance — the docstring on `ReleaseCandidateFeature` is explicit about this. Always enumerate at runtime when you need an authoritative list:
 
@@ -689,11 +696,12 @@ Both enums are stage-scoped inventories, not stable introspection surfaces. Memb
 from agent_framework import ExperimentalFeature, ReleaseCandidateFeature
 
 print([f.value for f in ExperimentalFeature])
-# ['EVALS', 'FILE_HISTORY', 'FUNCTIONAL_WORKFLOWS', 'SKILLS', 'TOOLBOXES']
+# ['AGENT_HOOKS', 'COMPUTER_USE', 'DECLARATIVE_AGENTS', 'EVALS', 'FILE_HISTORY', 'FIDES', ...]
 
 print([f.value for f in ReleaseCandidateFeature])
-# []  ← empty in 1.4.0; non-empty in releases that have RC features queued
+# []  ← non-empty only in releases that have RC features queued
 ```
+
 
 Inspect any class or callable at runtime to see what stage it belongs to:
 
@@ -744,196 +752,9 @@ warnings.filterwarnings(
 )
 ```
 
-## Functional workflows — `@workflow` and `@step`
+## Functional workflows
 
-Graph-based `WorkflowBuilder` is great for fan-out/fan-in topologies that need explicit edges, but for the *vast majority* of pipelines you really just want to write Python. The `@workflow` decorator (experimental, gated behind `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`) lets you do exactly that — native `if`/`else`, `for`, `asyncio.gather`, whatever — while keeping the framework's HITL, checkpointing, and event stream on tap.
-
-### The minimum viable workflow
-
-```python
-import asyncio
-from agent_framework import workflow
-
-
-@workflow
-async def my_pipeline(data: str) -> str:
-    return data.upper()
-
-
-result = asyncio.run(my_pipeline.run("hello"))
-print(result.get_outputs())  # ['HELLO']
-```
-
-`my_pipeline` is now a `FunctionalWorkflow` instance. It exposes the same `run(message, *, stream=False, responses=..., checkpoint_id=...)` surface as graph workflows and returns a `WorkflowRunResult`.
-
-A workflow function takes **at most one** non-`RunContext` parameter. That single parameter is the message you pass to `.run()`. Bundle multiple inputs into a dict or Pydantic model.
-
-### Adding `@step` for caching, checkpointing, and events
-
-Plain async functions work inside `@workflow`, but wrapping them in `@step` gives you per-call caching keyed on `(step_name, call_index)`. On HITL replay or checkpoint restore, completed steps are skipped instead of re-run.
-
-```python
-import json
-from agent_framework import workflow, step
-
-
-@step
-async def fetch(url: str) -> dict:
-    # Real HTTP call — would re-run on every replay without @step.
-    return await http_get(url)
-
-
-@step(name="transform")  # parameterised form: explicit display name
-async def transform(raw: dict) -> str:
-    return json.dumps(raw)
-
-
-@workflow
-async def pipeline(url: str) -> str:
-    raw = await fetch(url)
-    return await transform(raw)
-```
-
-The framework only re-executes `fetch` and `transform` once per logical call site. Loops keep distinct cache keys via the call counter, so `for url in urls: await fetch(url)` works as expected.
-
-#### What `@step` actually wraps — `StepWrapper`
-
-The `@step` decorator returns a `StepWrapper`, which is transparent outside a workflow context (call it from a unit test and it just runs the function) and switched-on inside one (caching + lifecycle events + `RunContext` injection + per-step checkpointing). A few practical consequences:
-
-```python
-from agent_framework import workflow, step
-
-@step
-async def expensive(x: int) -> int:
-    print(f"running expensive({x})")
-    return x * x
-
-
-# Outside a workflow: behaves like a plain async function. No caching.
-import asyncio
-asyncio.run(expensive(5))         # prints "running expensive(5)" → returns 25
-asyncio.run(expensive(5))         # prints "running expensive(5)" again — no cache
-
-
-@workflow
-async def pipeline(x: int) -> int:
-    a = await expensive(x)        # call_index=0 → cache miss, runs
-    b = await expensive(x + 1)    # call_index=1 → distinct key, runs
-    return a + b
-
-
-# Inside a workflow: each call site is cached on (step_name, call_index).
-# A second `pipeline.run(...)` with the same input rebuilds the cache from
-# scratch — caching is per run, not global.
-```
-
-The cache is keyed on `(step_name, call_index)`, **not on arguments**. That means:
-
-- A second call to the same step inside the same run is treated as a fresh call site (it gets `call_index=1`) and will execute again, even if the arguments are identical.
-- Arguments are recorded in the cache value so HITL replay and checkpoint restore can deliver the recorded result without re-running the function. After a `request_info()` suspension, the framework replays the workflow function from the top and serves cached results until it reaches the call site that suspended.
-- `executor_bypassed` events are emitted on cache hits so you can spot replay noise in observability dashboards. `executor_invoked` / `executor_completed` events fire only on live calls.
-
-If a step needs to *always* run (e.g., it depends on the wall clock or external state), don't decorate it with `@step` — use a plain async function inside the `@workflow` body. Or use a name that varies per call:
-
-```python
-import time
-from agent_framework import step
-
-@step  # explicit name keeps the cache deterministic
-async def measure_now(label: str) -> float: ...
-
-# Want every call uncached? Skip the decorator:
-async def now_uncached() -> float:
-    return time.time()
-```
-
-### `RunContext` — HITL, custom events, and per-run state
-
-When a workflow needs human-in-the-loop input, custom events, or key/value state, declare a `RunContext` parameter (by type annotation, or by parameter name `ctx`):
-
-```python
-from agent_framework import workflow, RunContext
-
-
-@workflow
-async def review_workflow(draft: str, ctx: RunContext) -> str:
-    feedback = await ctx.request_info(
-        request_data={"draft": draft},
-        response_type=str,
-    )
-    ctx.set_state("last_feedback", feedback)
-    return f"{draft}\n\nReviewer says: {feedback}"
-```
-
-On the first call to `request_info` the workflow **suspends** by raising an internal interruption signal (caught by the framework). The caller receives a `WorkflowRunResult` whose `get_request_info_events()` lists the pending requests. To resume, pass `responses={request_id: value}`:
-
-```python
-async def main():
-    first = await review_workflow.run("draft v1")
-    pending = first.get_request_info_events()
-    request_id = pending[0].request_id
-
-    final = await review_workflow.run(
-        responses={request_id: "Tighten the third paragraph."},
-    )
-    print(final.get_outputs()[-1])
-```
-
-The same `request_id` round-trip works under streaming too — pass `stream=True` and consume `WorkflowEvent`s from the returned `ResponseStream`.
-
-`RunContext` also exposes:
-
-- `add_event(event)` — emit application-specific events alongside framework lifecycle events. Useful for progress reporting and trace correlation.
-- `get_state(key, default=None)` / `set_state(key, value)` — workflow-scoped key/value state. Persisted across HITL pauses and saved into checkpoints when checkpoint storage is configured. Keys starting with `_` are reserved.
-- `is_streaming()` — whether the current run was started with `stream=True`.
-- `get_run_context()` (module-level helper) — fetch the active `RunContext` from any function called transitively from a workflow, even when you didn't thread `ctx` through every signature.
-
-### Hooking up checkpointing
-
-Pass `checkpoint_storage=` to the decorator or to `.run()`. The framework checkpoints after each completed step:
-
-```python
-from agent_framework import workflow, step, FileCheckpointStorage
-
-storage = FileCheckpointStorage("/var/lib/checkpoints")
-
-
-@workflow(name="research", checkpoint_storage=storage)
-async def research(topic: str) -> str:
-    notes = await gather_notes(topic)
-    summary = await summarise(notes)
-    return summary
-
-
-# Resume from the latest checkpoint of this workflow definition.
-latest = await storage.get_latest(workflow_name="research")
-if latest is not None:
-    result = await research.run(checkpoint_id=latest.checkpoint_id)
-```
-
-Checkpoints are keyed on the workflow definition (name + `graph_signature_hash`), not on a specific instance — any process running the same `@workflow` function can resume them.
-
-### Adapting a functional workflow as an agent
-
-`FunctionalWorkflow.as_agent()` returns a `FunctionalWorkflowAgent` that satisfies `SupportsAgentRun`. Pending HITL requests surface as `FunctionApprovalRequestContent` items, exactly like the graph `WorkflowAgent`:
-
-```python
-agent = review_workflow.as_agent(name="reviewer")
-response = await agent.run("Please review this draft.")
-```
-
-The adapter is the right entry point when you want a functional pipeline to plug into a multi-agent supervisor or be used wherever `Agent`-shaped objects are expected.
-
-### When to choose functional vs graph workflows
-
-| Choose `@workflow` when | Choose `WorkflowBuilder` when |
-|---|---|
-| Logic is mostly sequential or uses standard Python control flow | You need explicit fan-out / fan-in / switch-case topology |
-| Branching depends on runtime values that are awkward to express as edges | You want the topology validated up-front (type compatibility, connectivity) |
-| You want minimal ceremony — one decorator, one async function | You're handing the workflow to a non-Python visualisation or runtime |
-| You need ad-hoc parallelism (`asyncio.gather`) inside the workflow | You want declarative graph export (e.g., for `WorkflowViz`) |
-
-Functional workflows are experimental — silence the `ExperimentalWarning` with the patterns from the previous section, or pin them in CI to prove no surprise breakage.
+Workflows written as plain async functions with `@workflow` and `@step` (experimental) have their own page: [functional workflows](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/) covers `RunContext`, human-in-the-loop, checkpointing, `as_agent()` and when to prefer them over graph workflows.
 
 ## Building messages with `Content` factory methods
 
@@ -946,7 +767,7 @@ from agent_framework import Content
 text = Content.from_text("Hello world.")
 
 # Reasoning trace (for models that emit chain-of-thought tokens separately)
-reasoning = Content.from_text_reasoning("Let me think step by step…")
+reasoning = Content.from_text_reasoning(text="Let me think step by step…")   # keyword-only
 
 # Inline binary data (image, audio, file). Encoded into a data: URI internally.
 with open("chart.png", "rb") as f:
@@ -1037,16 +858,14 @@ import logging
 from agent_framework import (
     AgentFrameworkException,
     MiddlewareException,
-    MiddlewareTermination,
 )
 
 log = logging.getLogger(__name__)
 
+# MiddlewareTermination is not caught here: agent.run() absorbs it and returns
+# the termination's result= (or None when none was attached).
 try:
     response = await agent.run("Hello")
-except MiddlewareTermination as exc:
-    # Short-circuit from a middleware: exc.result holds whatever was passed in.
-    fallback_text = getattr(exc, "result", None) or "Request blocked."
 except MiddlewareException as exc:
     # Anything else gone wrong inside the middleware pipeline.
     log.exception("middleware failure")
@@ -1162,8 +981,8 @@ agent = Agent(
 
 ## When to reach for each pattern
 
-- Building an **integration with a new provider** that isn't in the first-party list → subclass `BaseChatClient` + optionally `BaseEmbeddingClient`. You inherit the tool loop, middleware, telemetry, and serialization for free.
+- Building an **integration with a new provider** that isn't in the first-party list → subclass `BaseChatClient` + optionally `BaseEmbeddingClient`. You inherit the tool loop, middleware, telemetry, and serialisation for free.
 - Adding **cross-cutting behaviour** to an existing client (caching, request coalescing, shadow traffic) → wrap the client with a thin `BaseChatClient` subclass that delegates to `_inner_get_response`.
 - Injecting **domain context per run** (retrieved docs, tenant prefixes, entitlements) → subclass `ContextProvider`.
 - Switching **implementations at runtime** based on capability → `isinstance(client, Supports*)` guards.
-- Gating **in-development APIs** in CI → use `enable_experimental_feature` in a `conftest.py` and fail the build if a warning escapes.
+- Gating **in-development APIs** in CI → turn `FeatureStageWarning` into an error in `conftest.py` (`warnings.simplefilter("error", FeatureStageWarning)`) and silence only the specific staged APIs you have chosen to depend on.

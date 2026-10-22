@@ -1,0 +1,79 @@
+---
+title: "Amazon Bedrock Agents (Python)"
+description: "Build agents on AWS in Python: Strands Agents for the agent loop, Amazon Bedrock AgentCore Runtime and Harness for hosting, plus Memory, Gateway, Identity, A2A and Agents Classic."
+framework: "amazon-bedrock-agents"
+language: "python"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+Write the agent with **Strands Agents** (or LangGraph, CrewAI, the OpenAI Agents SDK and others). Run it on **AgentCore Runtime** by wrapping it in `BedrockAgentCoreApp` and deploying it with the AgentCore CLI. If you don't need your own code, declare a **managed harness** instead: model, system prompt and tools as configuration, run by AgentCore.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install strands-agents bedrock-agentcore boto3
+    npm install -g @aws/agentcore   # CLI
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    `strands-agents` %%version=strands-agents%% · `bedrock-agentcore` %%version=bedrock-agentcore%% · `boto3` %%version=boto3%% · AgentCore CLI %%version=@aws/agentcore%% · Python 3.10+ (checked %%versions-checked%%)
+  </Card>
+</CardGrid>
+
+## Minimal example
+
+A Strands agent served with the AgentCore Runtime contract (`POST /invocations` and `GET /ping` on port 8080):
+
+```python
+from bedrock_agentcore import BedrockAgentCoreApp
+from strands import Agent
+
+app = BedrockAgentCoreApp()
+agent = Agent(model="us.anthropic.%%model=anthropic%%")
+
+
+@app.entrypoint
+def invoke(payload, context):
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str):
+        raise ValueError("prompt must be a string")
+    return {"result": str(agent(prompt))}
+
+
+if __name__ == "__main__":
+    app.run()
+```
+
+Run it with `python main.py` and `curl -X POST localhost:8080/invocations -d '{"prompt": "Hello"}'`. [Getting started](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#getting-started) shows how to deploy it.
+
+## Learning path
+
+<CardGrid>
+  <LinkCard title="1 · Strands Agents" href="/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/" description="Agents, tools, providers, structured output, interrupts, sessions, multi-agent graphs and swarms." />
+  <LinkCard title="2 · AgentCore Runtime" href="/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#getting-started" description="Wrap the agent, create a project with the CLI, deploy and invoke." />
+  <LinkCard title="3 · Memory, Gateway, Identity" href="/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#integration-patterns" description="Managed memory, tools behind an MCP gateway, inbound JWT and outbound OAuth." />
+  <LinkCard title="4 · Managed harness" href="/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#managed-harness" description="A config-declared agent; AWS's recommended starting point and Classic migration target." />
+  <LinkCard title="5 · Multi-agent patterns" href="/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/" description="Agents as tools, swarms, graphs, A2A across runtimes." />
+  <LinkCard title="6 · A2A protocol" href="/amazon-bedrock-agents-guide/python/bedrock_a2a_protocol_guide/" description="Agent cards, JSON-RPC, Strands A2A servers and clients on Runtime." />
+  <LinkCard title="7 · Observability" href="/amazon-bedrock-agents-guide/python/bedrock_agents_observability_python/" description="OpenTelemetry traces in CloudWatch, custom spans and metrics." />
+  <LinkCard title="8 · Production" href="/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/" description="Deploy targets, endpoints, evaluations, IAM, quotas and cost." />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="IAM examples" href="/amazon-bedrock-agents-guide/python/bedrock_security_iam_examples/" description="Least-privilege caller, execution-role and trust policies." />
+  <LinkCard title="Error handling" href="/amazon-bedrock-agents-guide/python/bedrock_agents_error_handling_python/" />
+  <LinkCard title="Middleware" href="/amazon-bedrock-agents-guide/python/bedrock_agents_middleware_python/" />
+  <LinkCard title="Recipes" href="/amazon-bedrock-agents-guide/python/bedrock_agents_recipes/" />
+  <LinkCard title="Diagrams" href="/amazon-bedrock-agents-guide/python/bedrock_agents_diagrams/" />
+  <LinkCard title="Agents Classic reference" href="/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/" description="Bedrock Agents (maintenance mode) for existing users." />
+</CardGrid>
+
+<Aside type="note">
+  The [TypeScript pages](/amazon-bedrock-agents-guide/typescript/) cover the same stack for Node.js.
+</Aside>

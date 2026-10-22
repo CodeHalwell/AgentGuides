@@ -1,14 +1,14 @@
 ---
 title: "LLM providers and routing"
 description: "How crewai.LLM picks a native SDK vs LiteLLM, the full list of supported providers, reasoning/thinking parameters, and building a custom BaseLLM."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "LLM providers"
   order: 25
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/llm.py`, `crewai/llms/base_llm.py`, `crewai/llms/providers/`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/llm.py`, `crewai/llms/base_llm.py`, `crewai/llms/providers/`).
 
 The `LLM` factory is doing more than it looks. It's a `__new__`-time router that picks between a native provider SDK and the LiteLLM fallback based on the model name — and it's stricter than older docs suggest.
 
@@ -18,13 +18,13 @@ The `LLM` factory is doing more than it looks. It's a `__new__`-time router that
 from crewai import LLM
 
 # Native provider (OpenAI) — uses `openai` SDK directly
-gpt = LLM(model="openai/gpt-4o-mini", temperature=0.2)
+gpt = LLM(model="openai/%%model=openai-small%%", temperature=0.2)
 
 # Provider prefix omitted — LLM infers from model name
-gpt = LLM(model="gpt-4o-mini")
+gpt = LLM(model="%%model=openai-small%%")
 
 # Non-native → LiteLLM fallback (requires litellm installed)
-mistral = LLM(model="mistral/mistral-large-latest")
+mistral = LLM(model="mistral/%%model=mistral-flagship%%")
 ```
 
 The first argument **must** include a recognised provider prefix if the model name is ambiguous; otherwise `LLM._infer_provider_from_model` tries to guess.
@@ -42,7 +42,7 @@ The first argument **must** include a recognised provider prefix if the model na
             │ no
             ▼
   ┌─────────────────────────────────────┐
-  │ 2. "/" in model ("openai/gpt-4o")   │
+  │ 2. "/" in model ("openai/%%model=openai%%")   │
   │    → prefix looked up in            │
   │      provider_mapping               │
   │    → if model is in the native      │
@@ -64,22 +64,22 @@ The first argument **must** include a recognised provider prefix if the model na
 
 Native providers (source: `SUPPORTED_NATIVE_PROVIDERS`):
 
-| Prefix | Canonical provider | SDK package |
+| Prefix | Canonical provider | SDK package (extra) |
 |---|---|---|
-| `openai` | openai | `openai` |
-| `anthropic`, `claude` | anthropic | `anthropic` |
-| `azure`, `azure_openai` | azure | `openai` (Azure) |
-| `google`, `gemini` | gemini | `google-generativeai` |
-| `bedrock`, `aws` | bedrock | `boto3` |
-| `openrouter` | openrouter | `openai`-compatible |
-| `deepseek`, `ollama`, `ollama_chat`, `hosted_vllm`, `cerebras`, `dashscope` | same | `openai`-compatible |
+| `openai` | openai | `openai` (installed by default) |
+| `anthropic`, `claude` | anthropic | `anthropic` (`crewai[anthropic]`) |
+| `azure`, `azure_openai` | azure | `azure-ai-inference` (`crewai[azure-ai-inference]`) |
+| `google`, `gemini` | gemini | `google-genai` (`crewai[google-genai]`) |
+| `bedrock`, `aws` | bedrock | `boto3` (`crewai[bedrock]`) |
+| `snowflake` | snowflake | native Snowflake Cortex provider |
+| `openrouter`, `deepseek`, `ollama`, `ollama_chat`, `hosted_vllm`, `cerebras`, `dashscope`, `deepinfra` | same | `openai`-compatible |
 
-Anything else (`mistral/`, `groq/`, `cohere/`, custom prefixes) falls through to LiteLLM.
+Anything else (`mistral/`, `groq/`, `cohere/`, custom prefixes) falls through to LiteLLM, which is an optional extra (`crewai[litellm]`).
 
 ## Force LiteLLM
 
 ```python
-LLM(model="openai/gpt-4o-mini", is_litellm=True)
+LLM(model="openai/%%model=openai-small%%", is_litellm=True)
 ```
 
 Handy when you want LiteLLM's uniform interface even for natively supported models (e.g. to reuse a LiteLLM router config).
@@ -100,7 +100,7 @@ The default `LLM` class extends `BaseLLM` with LiteLLM-specific knobs:
 | `presence_penalty`, `frequency_penalty`, `logit_bias` | `float` / `dict` | OpenAI-style knobs. |
 | `base_url` | `str \| None` | Inherited from `BaseLLM`. Used by native OpenAI-compatible paths (`ollama/...`, `hosted_vllm/...`). |
 | `api_base`, `api_version`, `api_key` | `str` | `LLM`-specific. `api_base` is the LiteLLM-style endpoint override; both `base_url` and `api_base` are passed through, so either name works for the fallback path. |
-| `reasoning_effort` | `"none" \| "low" \| "medium" \| "high"` | For o1/o3/o4 and compatible reasoning models. |
+| `reasoning_effort` | `"none" \| "low" \| "medium" \| "high"` | For OpenAI reasoning models (GPT-5 and later, the o-series) and compatible providers. |
 | `thinking` | `Any` | Anthropic extended thinking config. |
 | `stream` | `bool` | Global default — `Crew(stream=True)` overrides per run. |
 | `callbacks` | `list[Any]` | Passed to LiteLLM. |
@@ -112,10 +112,10 @@ The default `LLM` class extends `BaseLLM` with LiteLLM-specific knobs:
 ```python
 from crewai import LLM
 
-o3 = LLM(model="openai/o3", reasoning_effort="medium")
+gpt = LLM(model="openai/%%model=openai-flagship%%", reasoning_effort="medium")
 
 claude = LLM(
-    model="anthropic/claude-sonnet-4-6",
+    model="anthropic/%%model=anthropic%%",
     thinking={"type": "enabled", "budget_tokens": 4096},
 )
 ```
@@ -142,12 +142,12 @@ writer = Agent(
     role="Writer",
     goal="...",
     backstory="...",
-    llm=LLM(model="openai/gpt-4o-mini"),
-    function_calling_llm=LLM(model="openai/gpt-4o"),  # tool-call formatting on a smarter model
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    function_calling_llm=LLM(model="openai/%%model=openai%%"),  # tool-call formatting on a smarter model
 )
 ```
 
-`function_calling_llm` is used **only** to format tool-call JSON arguments. Most models don't need it; leave it unset unless your primary model struggles with JSON schemas.
+`function_calling_llm` is used **only** to format tool-call JSON arguments. It is marked deprecated in the 1.15 line (on `Agent` and `Crew`); current models handle tool calls themselves, so leave it unset in new code.
 
 ## Chat / manager / planner LLMs
 
@@ -166,9 +166,9 @@ Crew(
     agents=[...],
     tasks=[...],
     process=Process.hierarchical,
-    manager_llm=LLM(model="openai/gpt-4o"),
+    manager_llm=LLM(model="openai/%%model=openai%%"),
     planning=True,
-    planning_llm=LLM(model="openai/gpt-4o-mini"),
+    planning_llm=LLM(model="openai/%%model=openai-small%%"),
 )
 ```
 
@@ -211,7 +211,7 @@ from crewai import LLM
 def default_llm():
     if os.getenv("USE_LOCAL"):
         return LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434")
-    return LLM(model="openai/gpt-4o-mini")
+    return LLM(model="openai/%%model=openai-small%%")
 
 agent = Agent(role="...", goal="...", backstory="...", llm=default_llm())
 ```
@@ -221,14 +221,14 @@ agent = Agent(role="...", goal="...", backstory="...", llm=default_llm())
 ```python
 Agent(
     role="Tool User",
-    goal="...",
-    backstory="...",
-    llm=LLM(model="openai/gpt-4o-mini"),
-    function_calling_llm=LLM(model="openai/gpt-4o"),
+    goal="Call the billing API correctly",
+    backstory="Integration engineer.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    function_calling_llm=LLM(model="openai/%%model=openai%%"),
 )
 ```
 
-Only the tool-calling round uses the expensive model.
+Only the tool-calling round uses the expensive model. `function_calling_llm` is deprecated in 1.15, so treat this as a pattern for existing code rather than new designs.
 
 ### 3. Observed latency/cost with callbacks
 
@@ -239,7 +239,7 @@ class Timing:
     def log_post_api_call(self, *a, **k):
         print("call took", time.perf_counter() - self.t0, "s")
 
-llm = LLM(model="openai/gpt-4o", callbacks=[Timing()])
+llm = LLM(model="openai/%%model=openai%%", callbacks=[Timing()])
 ```
 
 Callbacks are passed through to LiteLLM — the standard LiteLLM callback API applies.
@@ -251,15 +251,18 @@ from pydantic import BaseModel
 class Plan(BaseModel):
     steps: list[str]
 
-llm = LLM(model="openai/gpt-4o", response_format=Plan)
+llm = LLM(model="openai/%%model=openai%%", response_format=Plan)
 ```
 
-Works for OpenAI, Gemini 2, and Claude's structured-tool mode. For other providers set `Task.output_pydantic` instead.
+Works for OpenAI, Gemini, and Claude's structured-tool mode. For other providers set `Task.output_pydantic` instead.
 
 ### 5. LiteLLM routing config
 
 ```python
-LLM(model="groq/llama3-70b", is_litellm=True, api_base=os.environ["LITELLM_PROXY"])
+import os
+from crewai import LLM
+
+LLM(model="groq/llama-3.3-70b-versatile", is_litellm=True, api_base=os.environ["LITELLM_PROXY"])
 ```
 
 Forces LiteLLM so you benefit from its router, rate-limiting, and fallbacks.

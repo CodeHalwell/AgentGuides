@@ -1,11 +1,11 @@
 ---
-title: "Microsoft Agent Framework Python - Architecture Diagrams"
+title: "Microsoft Agent Framework (Python) — Architecture Diagrams"
 description: "This document provides visual references for the architecture, data flow, and deployment topology of Python-based agent systems."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
+sidebar:
+  label: "Diagrams"
 ---
-
-# Microsoft Agent Framework Python - Architecture Diagrams
 
 This document provides visual references for the architecture, data flow, and deployment topology of Python-based agent systems.
 

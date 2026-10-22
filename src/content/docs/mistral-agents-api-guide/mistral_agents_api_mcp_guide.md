@@ -1,122 +1,37 @@
 ---
 title: "Mistral Agents API: Model Context Protocol (MCP) Guide"
-description: "Version: 2.0 (May 2025 Launch Edition) Last Updated: May 27, 2025"
-framework: mistral-agents-api
+description: "Using MCP servers with Mistral agents: registered connectors, client-side MCP with RunContext, building servers with the mcp 2.x SDK, and human approval for tool calls."
+framework: "mistral-agents-api"
+language: "python"
+sidebar:
+  label: "MCP"
+  order: 4
 ---
 
-# Mistral Agents API: Model Context Protocol (MCP) Guide
+**Verified against `mistralai` %%version=mistralai%%** (checked %%versions-checked%%), with `mcp` 2.x as installed by `mistralai[agents]`.
 
-**Version**: 2.0 (May 2025 Launch Edition)
-**Last Updated**: May 27, 2025
+The [Model Context Protocol](https://modelcontextprotocol.io) is an open standard for exposing tools and data to models. Mistral supports it in two places, and choosing between them is the main design decision:
 
-## Overview
+| | Registered connector | Client-side MCP (`RunContext`) |
+|---|---|---|
+| Who calls the MCP server | Mistral's platform | your Python process |
+| Server must be reachable from | the internet | your process (stdio, localhost, private network) |
+| Transport | remote (streamable HTTP) | stdio, SSE or streamable HTTP |
+| Credentials | stored with Mistral (`create_credentials`, OAuth) | stay in your process |
+| Works with stored agents in any client | yes | only where your code runs the loop |
+| SDK surface | `client.beta.connectors`, `{"type": "connector"}` tool | `mistralai.extra.run.context.RunContext`, `mistralai.extra.mcp.*` |
 
-The May 27, 2025 Agents API launch includes **Model Context Protocol (MCP)** support, implementing Anthropic's standardized protocol for connecting AI agents to third-party tools and data sources. MCP enables seamless integration with external systems through a unified interface.
+There is no `{"type": "mcp"}` agent tool; remote MCP servers are attached as connectors. Registered connectors are a public preview, and the Agents and Conversations APIs they plug into are beta.
 
-## Table of Contents
-
-1. [MCP Architecture](#mcp-architecture)
-2. [Anthropic MCP Implementation](#anthropic-mcp-implementation)
-3. [Custom MCP Servers](#custom-mcp-servers)
-4. [Tool Exposure Patterns](#tool-exposure-patterns)
-5. [Integration Best Practices](#integration-best-practices)
-6. [Security and Authentication](#security-and-authentication)
-7. [Production Deployment](#production-deployment)
-
----
-
-## MCP Architecture
-
-### What is MCP?
-
-Model Context Protocol (MCP) is an **open standard** created by Anthropic for connecting AI assistants to external data sources and tools. Think of it as USB for AI—a universal connector that works across different systems.
-
-### Key Concepts
-
-#### 1. MCP Server
-
-An MCP server exposes tools and resources to AI agents:
-
+```bash
+pip install "mistralai[agents]==%%version=mistralai%%"   # RunContext + mcp>=2.2
 ```
-┌─────────────────────────────────────┐
-│         MCP Server                  │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │  Tool: database_query       │   │
-│  │  Tool: file_read            │   │
-│  │  Tool: api_call             │   │
-│  │  Resource: /docs/*          │   │
-│  │  Resource: /data/*          │   │
-│  └─────────────────────────────┘   │
-│                                     │
-│  ┌─────────────────────────────┐   │
-│  │  Authentication             │   │
-│  │  Rate Limiting              │   │
-│  │  Logging                    │   │
-│  └─────────────────────────────┘   │
-│                                     │
-└─────────────────────────────────────┘
-         ▲
-         │ MCP Protocol
-         │
-         ▼
-┌─────────────────────────────────────┐
-│     Mistral Agent (MCP Client)      │
-├─────────────────────────────────────┤
-│  - Discovers available tools        │
-│  - Invokes tools via MCP            │
-│  - Receives results                 │
-└─────────────────────────────────────┘
-```
-
-#### 2. MCP Client
-
-The Mistral agent acts as an MCP client, discovering and invoking tools from MCP servers.
-
-#### 3. Transport Layer
-
-MCP supports multiple transport mechanisms:
-- **HTTP/HTTPS**: Standard web protocol
-- **WebSocket**: Real-time bidirectional communication
-- **stdio**: Standard input/output for local processes
-
-### MCP vs Built-in Connectors
-
-| Feature | Built-in Connectors | MCP |
-|---------|-------------------|-----|
-| **Setup** | Zero configuration | Requires MCP server setup |
-| **Maintenance** | Managed by Mistral | Self-managed |
-| **Use Cases** | General purpose (web search, code execution) | Custom integrations (your database, APIs) |
-| **Security** | Mistral-managed sandbox | Your security implementation |
-| **Best For** | Common tasks | Custom business logic |
-
-**Use both together:** Built-in connectors for standard tasks, MCP for custom integrations.
 
 ---
 
-## Anthropic MCP Implementation
+## 1. Registered connectors
 
-### Mistral's MCP Support
-
-Mistral Agents API implements **Anthropic's MCP specification**, ensuring compatibility with the broader MCP ecosystem.
-
-### Supported MCP Features
-
-```python
-# Mistral supports these MCP capabilities:
-
-✅ Tool Discovery         # Automatic tool enumeration
-✅ Tool Invocation        # Remote tool execution
-✅ Resource Access        # Read external resources
-✅ JSON-RPC 2.0          # Standard protocol
-✅ HTTP/HTTPS Transport  # Web-based connectivity
-✅ Authentication        # Bearer tokens, API keys
-✅ Error Handling        # Standardized error responses
-✅ Streaming             # Progressive results (where supported)
-```
-
-### Configuration
+Register a remote MCP server once; then any agent or conversation can use it by name.
 
 ```python
 import os
@@ -124,1101 +39,309 @@ from mistralai.client import Mistral
 
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
-# Create agent with MCP server connection
-agent = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="MCP-Enabled Agent",
-    description="Agent connected to custom MCP server",
-    instructions="""
-    You have access to custom tools via MCP.
-    Available tools: database_query, send_email, create_ticket
-    Use these tools when appropriate for user requests.
-    """,
-    tools=[
-        {
-            "type": "mcp",
-            "config": {
-                "server_url": "https://mcp.yourcompany.com",
-                "auth": {
-                    "type": "bearer",
-                    "token": os.environ["MCP_SERVER_TOKEN"]
-                },
-                "timeout": 30
-            }
-        }
-    ]
-)
-```
-
-### Tool Discovery
-
-When an agent connects to an MCP server, it automatically discovers available tools:
-
-```python
-# Agent connects to MCP server
-# Server responds with tool definitions:
-
-{
-  "tools": [
-    {
-      "name": "database_query",
-      "description": "Query the company database",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "query": {"type": "string", "description": "SQL query"},
-          "database": {"type": "string", "enum": ["users", "products", "orders"]}
-        },
-        "required": ["query", "database"]
-      }
-    },
-    {
-      "name": "send_email",
-      "description": "Send email via company mail server",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "to": {"type": "string"},
-          "subject": {"type": "string"},
-          "body": {"type": "string"}
-        },
-        "required": ["to", "subject", "body"]
-      }
+client.beta.connectors.create(
+    request={
+        "protocol": "mcp",
+        "name": "tickets",
+        "description": "Internal ticketing system: search, read and comment on tickets",
+        "server": "https://mcp.tickets.example.com/mcp",
+        "visibility": "private",
     }
-  ]
-}
-
-# Agent can now use these tools automatically
-```
-
-### Using MCP Tools
-
-```python
-# Once configured, agents use MCP tools like built-in tools
-
-conversation = client.beta.conversations.start(
-    agent_id=agent.id,
-    inputs="Query the database for all users created in the last 7 days"
 )
 
-# Agent will:
-# 1. Recognize this requires database_query tool
-# 2. Construct appropriate SQL query
-# 3. Call MCP server's database_query tool
-# 4. Receive results
-# 5. Present results to user
+# Store credentials that Mistral will send to the server
+client.beta.connectors.create_credentials(
+    connector_id_or_name="tickets",
+    consumer_scope="workspace",
+    name="default",
+    credentials={"headers": {"Authorization": f"Bearer {os.environ['TICKETS_TOKEN']}"}},
+    is_default=True,
+)
+
+for tool in client.beta.connectors.list_tools(connector_id_or_name="tickets"):
+    print(tool.name if hasattr(tool, "name") else tool["name"])
 ```
+
+Attach it to an agent, optionally limiting which tools are exposed:
+
+```python
+triager = client.beta.agents.create(
+    model="mistral-medium-latest",
+    name="ticket-triager",
+    description="Finds and summarises related tickets.",
+    instructions="Search tickets before answering. Never post comments without being asked.",
+    tools=[{
+        "type": "connector",
+        "connector_id": "tickets",
+        "tool_configuration": {"include": ["search_tickets", "get_ticket"]},
+    }],
+)
+
+response = client.beta.conversations.start(
+    agent_id=triager.id,
+    inputs="Are there open tickets about login failures on Android?",
+)
+```
+
+Servers using OAuth get an authorisation URL to send the user to: `client.beta.connectors.get_auth_url(connector_id_or_name=..., app_return_url=...)`. Since SDK v3, credential deletion is a single call, `delete_credentials(..., consumer_scope="user" | "workspace" | "organization")`.
 
 ---
 
-## Custom MCP Servers
+## 2. Client-side MCP with `RunContext`
 
-### Building an MCP Server
+`RunContext` connects to MCP servers from your own process, advertises their tools to the model, executes the calls the model makes, and loops until it has an answer.
 
-Here's a complete MCP server implementation:
+### Local stdio server
 
 ```python
-# mcp_server.py - Custom MCP Server Example
-
-from fastapi import FastAPI, HTTPException, Header
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+import asyncio
 import os
-import sqlite3
+from mcp import StdioServerParameters
+from mistralai.client import Mistral
+from mistralai.extra.mcp.stdio import MCPClientSTDIO
+from mistralai.extra.run.context import RunContext
 
-app = FastAPI(title="Custom MCP Server")
+async def main() -> None:
+    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    filesystem = MCPClientSTDIO(
+        stdio_params=StdioServerParameters(
+            command="npx",
+            args=["-y", "@modelcontextprotocol/server-filesystem", "/srv/reports"],
+        ),
+        name="filesystem",
+    )
 
-# Authentication
-MCP_SECRET_TOKEN = os.environ["MCP_SECRET_TOKEN"]
+    async with RunContext(model="mistral-medium-latest") as run_ctx:
+        await run_ctx.register_mcp_client(
+            mcp_client=filesystem,
+            tool_configuration={"include": ["list_directory", "read_text_file"]},
+        )
+        result = await client.beta.conversations.run_async(
+            run_ctx=run_ctx,
+            inputs="Which report in /srv/reports mentions Q3 churn, and what does it conclude?",
+            instructions="Use the filesystem tools. Quote the passage you rely on.",
+        )
+        print(result.output_as_text)
 
-
-def verify_token(authorization: str = Header(None)):
-    """Verify MCP client authentication"""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-
-    token = authorization.split(" ")[1]
-    if token != MCP_SECRET_TOKEN:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
-# Tool definitions
-class ToolDefinition(BaseModel):
-    name: str
-    description: str
-    input_schema: Dict[str, Any]
-
-
-class ToolInvocation(BaseModel):
-    name: str
-    arguments: Dict[str, Any]
-
-
-class ToolResult(BaseModel):
-    success: bool
-    result: Optional[Any] = None
-    error: Optional[str] = None
-
-
-# MCP Endpoints
-
-@app.get("/mcp/v1/tools")
-async def list_tools(authorization: str = Header(None)) -> Dict[str, List[ToolDefinition]]:
-    """MCP tool discovery endpoint"""
-    verify_token(authorization)
-
-    return {
-        "tools": [
-            {
-                "name": "database_query",
-                "description": "Query SQLite database",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "SQL SELECT query"
-                        }
-                    },
-                    "required": ["query"]
-                }
-            },
-            {
-                "name": "send_notification",
-                "description": "Send notification to user",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string"},
-                        "message": {"type": "string"}
-                    },
-                    "required": ["user_id", "message"]
-                }
-            },
-            {
-                "name": "create_ticket",
-                "description": "Create support ticket",
-                "input_schema": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "description": {"type": "string"},
-                        "priority": {
-                            "type": "string",
-                            "enum": ["low", "medium", "high", "urgent"]
-                        }
-                    },
-                    "required": ["title", "description"]
-                }
-            }
-        ]
-    }
-
-
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(
-    invocation: ToolInvocation,
-    authorization: str = Header(None)
-) -> ToolResult:
-    """MCP tool invocation endpoint"""
-    verify_token(authorization)
-
-    try:
-        if invocation.name == "database_query":
-            result = execute_database_query(invocation.arguments)
-            return ToolResult(success=True, result=result)
-
-        elif invocation.name == "send_notification":
-            result = send_notification(invocation.arguments)
-            return ToolResult(success=True, result=result)
-
-        elif invocation.name == "create_ticket":
-            result = create_ticket(invocation.arguments)
-            return ToolResult(success=True, result=result)
-
-        else:
-            return ToolResult(
-                success=False,
-                error=f"Unknown tool: {invocation.name}"
-            )
-
-    except Exception as e:
-        return ToolResult(success=False, error=str(e))
-
-
-# Tool implementations
-
-def execute_database_query(args: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Execute database query"""
-    query = args["query"]
-
-    # Validate query (security!)
-    if not query.strip().upper().startswith("SELECT"):
-        raise ValueError("Only SELECT queries allowed")
-
-    # Connect to database
-    conn = sqlite3.connect("company.db")
-    cursor = conn.cursor()
-
-    try:
-        cursor.execute(query)
-        columns = [desc[0] for desc in cursor.description]
-        rows = cursor.fetchall()
-
-        results = [
-            dict(zip(columns, row))
-            for row in rows
-        ]
-
-        return results
-
-    finally:
-        conn.close()
-
-
-def send_notification(args: Dict[str, Any]) -> Dict[str, str]:
-    """Send notification to user"""
-    user_id = args["user_id"]
-    message = args["message"]
-
-    # In production: integrate with notification system
-    print(f"Sending to {user_id}: {message}")
-
-    return {
-        "status": "sent",
-        "user_id": user_id,
-        "timestamp": "2025-05-27T10:00:00Z"
-    }
-
-
-def create_ticket(args: Dict[str, Any]) -> Dict[str, Any]:
-    """Create support ticket"""
-    title = args["title"]
-    description = args["description"]
-    priority = args.get("priority", "medium")
-
-    # In production: integrate with ticketing system
-    ticket_id = f"TICK-{hash(title) % 10000:04d}"
-
-    return {
-        "ticket_id": ticket_id,
-        "title": title,
-        "priority": priority,
-        "status": "open",
-        "created_at": "2025-05-27T10:00:00Z"
-    }
-
-
-# Health check
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "version": "1.0.0"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+asyncio.run(main())
 ```
 
-### Deploying MCP Server
-
-```bash
-# Install dependencies
-pip install fastapi uvicorn pydantic
-
-# Run server
-export MCP_SECRET_TOKEN="your-secret-token"
-uvicorn mcp_server:app --host 0.0.0.0 --port 8000
-
-# Test tool discovery
-curl -H "Authorization: Bearer your-secret-token" \
-     http://localhost:8000/mcp/v1/tools
-
-# Test tool invocation
-curl -X POST \
-     -H "Authorization: Bearer your-secret-token" \
-     -H "Content-Type: application/json" \
-     -d '{"name":"database_query","arguments":{"query":"SELECT * FROM users LIMIT 5"}}' \
-     http://localhost:8000/mcp/v1/tools/invoke
-```
-
-### Connecting Agent to Custom Server
+### Remote server over streamable HTTP or SSE
 
 ```python
-# Connect Mistral agent to your MCP server
+import os
+from mistralai.extra.mcp.sse import MCPClientSSE, SSEServerParams
+from mistralai.extra.mcp.streamable_http import MCPClientStreamableHTTP, StreamableHTTPServerParams
 
-agent = client.beta.agents.create(
-    model="mistral-large-latest",
-    name="Company Agent",
-    description="Agent with access to company systems",
-    instructions="""
-    You have access to company tools via MCP:
-    - database_query: Query company database
-    - send_notification: Send notifications to users
-    - create_ticket: Create support tickets
-
-    Use these tools to help with:
-    - Looking up customer information
-    - Notifying users about updates
-    - Creating tickets for issues
-
-    Always verify information before taking action.
-    """,
-    tools=[
-        {
-            "type": "mcp",
-            "config": {
-                "server_url": "https://mcp.yourcompany.com",
-                "auth": {
-                    "type": "bearer",
-                    "token": os.environ["MCP_SERVER_TOKEN"]
-                }
-            }
-        }
-    ]
+inventory = MCPClientStreamableHTTP(
+    params=StreamableHTTPServerParams(
+        url="https://inventory.internal.example.com/mcp",
+        headers={"Authorization": f"Bearer {os.environ['INVENTORY_TOKEN']}"},
+        timeout=30,
+    ),
+    name="inventory",
 )
 
-# Use the agent
-conversation = client.beta.conversations.start(
-    agent_id=agent.id,
-    inputs="Find all customers from California and send them a notification about our new product"
-)
-
-# Agent will:
-# 1. Use database_query to find California customers
-# 2. Use send_notification for each customer
-# 3. Report results
+legacy = MCPClientSSE(sse_params=SSEServerParams(url="https://legacy.internal.example.com/sse"), name="legacy")
 ```
+
+Register several at once with `await run_ctx.register_mcp_clients([inventory, legacy])`. `MCPClientSSE` also accepts `oauth_params` for servers that implement MCP's OAuth flow.
+
+`StreamableHTTPServerParams` does not follow redirects by default, so the `headers` you set are never forwarded to another host; leave `follow_redirects=False` unless every redirect target is trusted.
+
+### Mixing MCP, your functions and built-in tools
+
+```python
+import asyncio
+import os
+from mistralai.client import Mistral
+from mistralai.extra.run.context import RunContext
+
+def convert_currency(amount: float, rate: float) -> float:
+    """Convert an amount using an exchange rate.
+
+    Args:
+        amount: The amount to convert.
+        rate: Units of the target currency per unit of the source currency.
+    """
+    return round(amount * rate, 2)
+
+async def main() -> None:
+    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    async with RunContext(model="mistral-medium-latest") as run_ctx:
+        await run_ctx.register_mcp_client(mcp_client=inventory)   # from the previous example
+        run_ctx.register_func(convert_currency)
+        result = await client.beta.conversations.run_async(
+            run_ctx=run_ctx,
+            inputs="What is our stock value of SKU 4471 in euros at today's rate?",
+            tools=[{"type": "web_search"}],     # server-side tools still work alongside
+        )
+        print(result.output_as_text)
+
+asyncio.run(main())
+```
+
+To run against a stored agent, use `RunContext(agent_id=agent.id)` instead of `model=`. To continue a conversation, set `run_ctx.conversation_id` before calling `run_async()`. `run_stream_async()` yields events as the run progresses.
 
 ---
 
-## Tool Exposure Patterns
+## 3. Human approval for tool calls
 
-### Pattern: Database Access
+Tools that change things (send email, post comments, issue refunds) should wait for a person. Mark them as requiring confirmation; the run then stops with a `DeferredToolCallsException` that you can serialise, show to a user, and resume.
 
 ```python
-# Expose safe database access via MCP
+import asyncio
+import json
+import os
+from mistralai.client import Mistral
+from mistralai.extra.exceptions import DeferredToolCallsException
+from mistralai.extra.run.context import RunContext
 
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(invocation: ToolInvocation, authorization: str = Header(None)):
-    """MCP tool invocation with security"""
+def issue_refund(order_id: str, amount: float) -> str:
+    """Issue a refund for an order.
 
-    if invocation.name == "database_query":
-        query = invocation.arguments["query"]
+    Args:
+        order_id: The order to refund.
+        amount: Amount in euros.
+    """
+    return f"Refunded {amount:.2f} EUR on {order_id}"
 
-        # Security: Whitelist approach
-        if not is_safe_query(query):
-            return ToolResult(
-                success=False,
-                error="Query not allowed. Only SELECT on allowed tables."
-            )
-
-        # Security: Read-only user
-        conn = get_readonly_db_connection()
-
+async def first_turn(client: Mistral) -> dict | None:
+    async with RunContext(model="mistral-medium-latest") as run_ctx:
+        run_ctx.register_func(issue_refund, requires_confirmation=True)
         try:
-            results = execute_query(conn, query)
-            return ToolResult(success=True, result=results)
-        except Exception as e:
-            return ToolResult(success=False, error=str(e))
+            result = await client.beta.conversations.run_async(
+                run_ctx=run_ctx,
+                inputs="Order ORD-881 arrived broken. Please refund the 49.90 EUR.",
+            )
+            print(result.output_as_text)
+            return None
+        except DeferredToolCallsException as deferred:
+            for call in deferred.deferred_calls:
+                print("needs approval:", call.tool_name, call.arguments)
+            return deferred.to_dict()          # store in your database or send to a UI
 
+async def resume(client: Mistral, state: dict, approved: bool) -> None:
+    deferred = DeferredToolCallsException.from_dict(state)
+    inputs = list(deferred.executed_results)
+    for call in deferred.deferred_calls:
+        inputs.append(call.confirm() if approved else call.reject("Refund declined by a supervisor"))
 
-def is_safe_query(query: str) -> bool:
-    """Validate query safety"""
-    query_upper = query.upper().strip()
+    async with RunContext(model="mistral-medium-latest") as run_ctx:
+        run_ctx.conversation_id = deferred.conversation_id
+        run_ctx.register_func(issue_refund, requires_confirmation=True)
+        result = await client.beta.conversations.run_async(run_ctx=run_ctx, inputs=inputs)
+        print(result.output_as_text)
 
-    # Only SELECT
-    if not query_upper.startswith("SELECT"):
-        return False
+async def main() -> None:
+    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    state = await first_turn(client)
+    if state:
+        print(json.dumps(state)[:200])
+        await resume(client, state, approved=True)
 
-    # No dangerous operations
-    dangerous = ["DROP", "DELETE", "UPDATE", "INSERT", "ALTER", "CREATE"]
-    if any(keyword in query_upper for keyword in dangerous):
-        return False
-
-    # Only allowed tables
-    allowed_tables = ["users", "products", "orders"]
-    # Parse and validate table names (simplified)
-    # In production: use SQL parser
-
-    return True
+asyncio.run(main())
 ```
 
-### Pattern: API Gateway
+For client-side MCP tools, pass `tool_configuration={"requires_confirmation": ["post_comment"]}` to `register_mcp_client()`; the run then pauses in the same way.
+
+### Approving connector and built-in tool calls
+
+Registered connectors and built-in tools run on Mistral's side, so the approval goes through the conversation itself. List the tool names in the tool's `tool_configuration.requires_confirmation`; Mistral then stops before running them and returns a `function.call` entry with `confirmation_status == "pending"`. Answer with `tool_confirmations` on the next `append()`:
 
 ```python
-# Expose internal APIs via MCP
+from mistralai.client.models import FunctionCallEntry
 
-class APIGatewayMCP:
-    """MCP server as API gateway"""
-
-    def __init__(self):
-        self.internal_apis = {
-            "crm": "http://internal-crm:8000",
-            "billing": "http://internal-billing:8000",
-            "analytics": "http://internal-analytics:8000"
-        }
-
-    async def invoke_api(self, api_name: str, endpoint: str, method: str, data: Dict):
-        """Invoke internal API"""
-        base_url = self.internal_apis.get(api_name)
-        if not base_url:
-            raise ValueError(f"Unknown API: {api_name}")
-
-        url = f"{base_url}{endpoint}"
-
-        # Make internal API call
-        async with httpx.AsyncClient() as client:
-            if method == "GET":
-                response = await client.get(url, params=data)
-            elif method == "POST":
-                response = await client.post(url, json=data)
-            else:
-                raise ValueError(f"Unsupported method: {method}")
-
-            return response.json()
-
-
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(invocation: ToolInvocation, authorization: str = Header(None)):
-    gateway = APIGatewayMCP()
-
-    if invocation.name == "crm_lookup":
-        result = await gateway.invoke_api(
-            api_name="crm",
-            endpoint="/customers/search",
-            method="POST",
-            data=invocation.arguments
-        )
-        return ToolResult(success=True, result=result)
-
-    elif invocation.name == "billing_invoice":
-        result = await gateway.invoke_api(
-            api_name="billing",
-            endpoint="/invoices/create",
-            method="POST",
-            data=invocation.arguments
-        )
-        return ToolResult(success=True, result=result)
-```
-
-### Pattern: Multi-Service Orchestration
-
-```python
-# MCP server that orchestrates multiple services
-
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(invocation: ToolInvocation, authorization: str = Header(None)):
-    """Complex multi-service tool"""
-
-    if invocation.name == "onboard_customer":
-        # This tool orchestrates multiple services
-
-        customer_data = invocation.arguments
-
-        try:
-            # Step 1: Create in CRM
-            crm_result = await create_crm_record(customer_data)
-
-            # Step 2: Setup billing
-            billing_result = await setup_billing_account(
-                customer_id=crm_result["customer_id"],
-                plan=customer_data["plan"]
-            )
-
-            # Step 3: Send welcome email
-            email_result = await send_welcome_email(
-                email=customer_data["email"],
-                customer_id=crm_result["customer_id"]
-            )
-
-            # Step 4: Create initial ticket
-            ticket_result = await create_onboarding_ticket(
-                customer_id=crm_result["customer_id"]
-            )
-
-            return ToolResult(
-                success=True,
-                result={
-                    "customer_id": crm_result["customer_id"],
-                    "billing_id": billing_result["account_id"],
-                    "welcome_email_sent": email_result["sent"],
-                    "onboarding_ticket": ticket_result["ticket_id"]
-                }
-            )
-
-        except Exception as e:
-            # Rollback on failure
-            # In production: implement proper transaction handling
-            return ToolResult(success=False, error=str(e))
-```
-
----
-
-## Integration Best Practices
-
-### 1. Tool Design
-
-```python
-# Good tool design principles
-
-# ✅ GOOD: Clear, focused tools
-{
-  "name": "get_customer_by_email",
-  "description": "Retrieve customer record by email address",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "email": {"type": "string", "format": "email"}
-    },
-    "required": ["email"]
-  }
-}
-
-# ❌ BAD: Vague, multi-purpose tools
-{
-  "name": "do_customer_stuff",
-  "description": "Does various customer operations",
-  "input_schema": {
-    "type": "object",
-    "properties": {
-      "action": {"type": "string"},
-      "data": {"type": "object"}
-    }
-  }
-}
-
-# Design principles:
-# - One tool, one purpose
-# - Clear input validation
-# - Descriptive names and descriptions
-# - Required vs optional parameters explicit
-```
-
-### 2. Error Handling
-
-```python
-# Robust error handling in MCP server
-
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(invocation: ToolInvocation, authorization: str = Header(None)):
-    try:
-        # Validate inputs
-        if invocation.name not in AVAILABLE_TOOLS:
-            return ToolResult(
-                success=False,
-                error=f"Tool not found: {invocation.name}"
-            )
-
-        # Validate arguments against schema
-        validate_arguments(invocation.name, invocation.arguments)
-
-        # Execute tool
-        result = await execute_tool(invocation.name, invocation.arguments)
-
-        return ToolResult(success=True, result=result)
-
-    except ValidationError as e:
-        # Input validation errors
-        return ToolResult(
-            success=False,
-            error=f"Invalid arguments: {str(e)}"
-        )
-
-    except TimeoutError as e:
-        # Timeout errors
-        return ToolResult(
-            success=False,
-            error="Tool execution timeout. Please try again."
-        )
-
-    except PermissionError as e:
-        # Authorization errors
-        return ToolResult(
-            success=False,
-            error="Permission denied for this operation"
-        )
-
-    except Exception as e:
-        # Unexpected errors
-        logger.exception("Tool execution failed")
-        return ToolResult(
-            success=False,
-            error="Internal server error. Please contact support."
-        )
-```
-
-### 3. Versioning
-
-```python
-# Version your MCP server for backward compatibility
-
-@app.get("/mcp/v1/tools")
-async def list_tools_v1(authorization: str = Header(None)):
-    """Version 1 tool definitions"""
-    return {"tools": [...]}
-
-
-@app.get("/mcp/v2/tools")
-async def list_tools_v2(authorization: str = Header(None)):
-    """Version 2 with enhanced tools"""
-    return {"tools": [...]}
-
-
-# Configure agent with specific version
-agent = client.beta.agents.create(
+response = client.beta.conversations.start(
     model="mistral-medium-latest",
-    name="Agent",
-    tools=[
-        {
-            "type": "mcp",
-            "config": {
-                "server_url": "https://mcp.company.com/v2",  # Explicit version
-                "auth": {"type": "bearer", "token": token}
-            }
-        }
-    ]
-)
-```
-
-### 4. Rate Limiting
-
-```python
-# Implement rate limiting in MCP server
-
-from fastapi_limiter import FastAPILimiter
-from fastapi_limiter.depends import RateLimiter
-import redis.asyncio as redis
-
-# Initialize limiter
-@app.on_event("startup")
-async def startup():
-    redis_client = redis.from_url("redis://localhost", encoding="utf-8")
-    await FastAPILimiter.init(redis_client)
-
-
-# Apply rate limits
-@app.post("/mcp/v1/tools/invoke")
-@limiter.limit("100/minute")  # 100 requests per minute
-async def invoke_tool(
-    invocation: ToolInvocation,
-    authorization: str = Header(None)
-):
-    # Tool invocation logic
-    pass
-
-
-# Or per-tool rate limiting
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(invocation: ToolInvocation, authorization: str = Header(None)):
-    # Check rate limit based on tool
-    rate_limits = {
-        "expensive_query": "10/minute",
-        "send_email": "50/hour",
-        "normal_operation": "1000/minute"
-    }
-
-    limit = rate_limits.get(invocation.name, "100/minute")
-    # Apply limit...
-```
-
----
-
-## Security and Authentication
-
-### Authentication Methods
-
-```python
-# 1. Bearer Token (Recommended)
-agent = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="Secure Agent",
-    tools=[
-        {
-            "type": "mcp",
-            "config": {
-                "server_url": "https://mcp.company.com",
-                "auth": {
-                    "type": "bearer",
-                    "token": os.environ["MCP_TOKEN"]
-                }
-            }
-        }
-    ]
+    inputs="Add a comment to ticket T-42 saying the fix is deployed.",
+    tools=[{
+        "type": "connector",
+        "connector_id": "tickets",
+        "tool_configuration": {"requires_confirmation": ["post_comment"]},
+    }],
 )
 
-
-# 2. API Key
-agent = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="API Key Agent",
-    tools=[
-        {
-            "type": "mcp",
-            "config": {
-                "server_url": "https://mcp.company.com",
-                "auth": {
-                    "type": "api_key",
-                    "key": os.environ["MCP_API_KEY"],
-                    "header": "X-API-Key"  # Custom header name
-                }
-            }
-        }
-    ]
-)
-
-
-# 3. OAuth 2.0 (for complex scenarios)
-agent = client.beta.agents.create(
-    model="mistral-medium-latest",
-    name="OAuth Agent",
-    tools=[
-        {
-            "type": "mcp",
-            "config": {
-                "server_url": "https://mcp.company.com",
-                "auth": {
-                    "type": "oauth2",
-                    "client_id": os.environ["OAUTH_CLIENT_ID"],
-                    "client_secret": os.environ["OAUTH_CLIENT_SECRET"],
-                    "token_url": "https://auth.company.com/token"
-                }
-            }
-        }
-    ]
-)
-```
-
-### Server-Side Security
-
-```python
-# Comprehensive security for MCP server
-
-from fastapi import Security, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-import hashlib
-import secrets
-
-security = HTTPBearer()
-
-
-# Token validation
-def verify_token(credentials: HTTPAuthorizationCredentials = Security(security)):
-    """Verify bearer token"""
-    token = credentials.credentials
-
-    # Check against stored token (hashed)
-    expected_hash = os.environ["MCP_TOKEN_HASH"]
-    token_hash = hashlib.sha256(token.encode()).hexdigest()
-
-    if not secrets.compare_digest(token_hash, expected_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token"
-        )
-
-    return token
-
-
-# IP whitelisting
-ALLOWED_IPS = [
-    "35.123.456.789",  # Mistral Agents API IP ranges
-    "52.234.567.890",
+pending = [
+    e for e in response.outputs
+    if isinstance(e, FunctionCallEntry) and e.confirmation_status == "pending"
 ]
-
-
-def verify_ip(request: Request):
-    """Verify request comes from allowed IP"""
-    client_ip = request.client.host
-
-    if client_ip not in ALLOWED_IPS:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="IP not whitelisted"
-        )
-
-
-# Complete endpoint with security
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(
-    invocation: ToolInvocation,
-    request: Request,
-    token: str = Depends(verify_token)
-):
-    # Verify IP
-    verify_ip(request)
-
-    # Tool invocation logic
-    # ...
+if pending:
+    confirmations = []
+    for call in pending:
+        print("needs approval:", call.name, call.arguments)
+        approved = True                                   # ask a person here
+        confirmations.append({"tool_call_id": call.tool_call_id, "confirmation": "allow" if approved else "deny"})
+    response = client.beta.conversations.append(
+        conversation_id=response.conversation_id,
+        tool_confirmations=confirmations,
+    )
+print(response.outputs[-1].content)
 ```
+
+`"deny"` tells the model the call was refused, and it answers accordingly. Because the conversation is stored, the approval can come in a later request: persist the `conversation_id` and the pending `tool_call_id`s. The same works for built-in tools, for example `{"type": "web_search_premium", "tool_configuration": {"requires_confirmation": ["web_search", "news_search"]}}`.
 
 ---
 
-## Production Deployment
+## 4. Building an MCP server
 
-### Complete Production Setup
+Any MCP server works with both routes. In Python, the `mcp` SDK (version 2.x, as installed with `mistralai[agents]`) provides `MCPServer`, which was called `FastMCP` in `mcp` 1.x:
 
 ```python
-# production_mcp_server.py
+# tickets_server.py
+from mcp.server.mcpserver import MCPServer
 
-from fastapi import FastAPI, HTTPException, Depends, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.gzip import GZipMiddleware
-import logging
-import os
-from prometheus_client import Counter, Histogram, make_asgi_app
-import time
+server = MCPServer(name="tickets", instructions="Search and read support tickets.")
 
-# Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+TICKETS = {
+    "T-101": {"title": "Login fails on Android 15", "status": "open"},
+    "T-102": {"title": "Invoice PDF missing VAT number", "status": "closed"},
+}
 
-# Metrics
-tool_invocations = Counter(
-    'mcp_tool_invocations_total',
-    'Total tool invocations',
-    ['tool_name', 'status']
-)
+@server.tool()
+def search_tickets(query: str, status: str = "open") -> list[dict]:
+    """Search tickets by text and status."""
+    q = query.lower()
+    return [
+        {"id": tid, **t} for tid, t in TICKETS.items()
+        if q in t["title"].lower() and t["status"] == status
+    ]
 
-tool_duration = Histogram(
-    'mcp_tool_duration_seconds',
-    'Tool execution duration',
-    ['tool_name']
-)
-
-# App
-app = FastAPI(
-    title="Production MCP Server",
-    version="1.0.0",
-    docs_url="/docs" if os.getenv("ENV") == "development" else None
-)
-
-# Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://api.mistral.ai"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["*"],
-)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-
-# Metrics endpoint
-metrics_app = make_asgi_app()
-app.mount("/metrics", metrics_app)
-
-
-# Tool invocation with production features
-@app.post("/mcp/v1/tools/invoke")
-async def invoke_tool(
-    invocation: ToolInvocation,
-    request: Request,
-    token: str = Depends(verify_token)
-):
-    """Production tool invocation"""
-
-    # Request ID for tracing
-    request_id = request.headers.get("X-Request-ID", "unknown")
-
-    logger.info(
-        f"Tool invocation started",
-        extra={
-            "request_id": request_id,
-            "tool_name": invocation.name,
-            "client_ip": request.client.host
-        }
-    )
-
-    start_time = time.time()
-
-    try:
-        # Execute tool
-        result = await execute_tool_with_monitoring(
-            invocation.name,
-            invocation.arguments
-        )
-
-        # Record metrics
-        duration = time.time() - start_time
-        tool_invocations.labels(tool_name=invocation.name, status="success").inc()
-        tool_duration.labels(tool_name=invocation.name).observe(duration)
-
-        logger.info(
-            f"Tool invocation completed",
-            extra={
-                "request_id": request_id,
-                "tool_name": invocation.name,
-                "duration_seconds": duration
-            }
-        )
-
-        return ToolResult(success=True, result=result)
-
-    except Exception as e:
-        # Record failure metrics
-        duration = time.time() - start_time
-        tool_invocations.labels(tool_name=invocation.name, status="error").inc()
-
-        logger.error(
-            f"Tool invocation failed",
-            extra={
-                "request_id": request_id,
-                "tool_name": invocation.name,
-                "error": str(e),
-                "duration_seconds": duration
-            },
-            exc_info=True
-        )
-
-        return ToolResult(success=False, error="Internal error")
-
-
-# Health checks
-@app.get("/health")
-async def health_check():
-    """Basic health check"""
-    return {"status": "healthy"}
-
-
-@app.get("/health/ready")
-async def readiness_check():
-    """Readiness check (checks dependencies)"""
-    try:
-        # Check database
-        await check_database()
-        # Check other dependencies
-        return {"status": "ready"}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail="Not ready")
-
+@server.tool()
+def get_ticket(ticket_id: str) -> dict:
+    """Return one ticket by ID."""
+    return {"id": ticket_id, **TICKETS[ticket_id]}
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app,
-        host="0.0.0.0",
-        port=8000,
-        workers=4,
-        log_config="logging_config.yaml"
-    )
+    server.run()      # stdio; use transport="streamable-http" to serve it over HTTP as a connector
 ```
 
-### Docker Deployment
+Run it locally with `MCPClientSTDIO(stdio_params=StdioServerParameters(command="python", args=["tickets_server.py"]))`. To use it as a registered connector instead, switch to `server.run(transport="streamable-http")` (by default it serves `/mcp` on 127.0.0.1:8000; pass `host=` and `port=` when deploying), put it behind HTTPS and register that URL. A stdio client cannot talk to the HTTP transport, and the other way round.
 
-```dockerfile
-# Dockerfile
+Design advice for tools:
 
-FROM python:3.11-slim
-
-WORKDIR /app
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application
-COPY . .
-
-# Non-root user
-RUN useradd -m -u 1000 mcp && chown -R mcp:mcp /app
-USER mcp
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-EXPOSE 8000
-
-CMD ["uvicorn", "production_mcp_server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
-```
-
-### Kubernetes Deployment
-
-```yaml
-# kubernetes/deployment.yaml
-
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mcp-server
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: mcp-server
-  template:
-    metadata:
-      labels:
-        app: mcp-server
-    spec:
-      containers:
-      - name: mcp-server
-        image: your-registry/mcp-server:1.0.0
-        ports:
-        - containerPort: 8000
-        env:
-        - name: MCP_SECRET_TOKEN
-          valueFrom:
-            secretKeyRef:
-              name: mcp-secrets
-              key: token
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "250m"
-          limits:
-            memory: "512Mi"
-            cpu: "500m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 30
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 10
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mcp-server
-spec:
-  selector:
-    app: mcp-server
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8000
-  type: LoadBalancer
-```
+- **Small, well-named tools** with clear docstrings beat one generic `run_query` tool; the model chooses tools from their names and descriptions.
+- **Typed parameters** with defaults; return structured data (dicts, lists) rather than prose.
+- **Read and write separated**, so write tools can require confirmation.
+- **Bounded results**: page or truncate large results; the model pays for every token.
+- **Errors as results**: raise or return clear messages ("ticket T-999 not found") so the model can recover.
 
 ---
 
-## Conclusion
+## 5. Security
 
-Model Context Protocol (MCP) support in Mistral Agents API enables:
-
-1. **Standardized Integration** - Anthropic MCP compatibility
-2. **Custom Tools** - Expose your business logic to agents
-3. **Secure Access** - Enterprise-grade authentication and authorization
-4. **Production Ready** - Scalable, monitored, and reliable
-
-MCP bridges the gap between Mistral's built-in connectors and your custom systems, creating a comprehensive agent platform.
-
-**Next Steps:**
-- Review [Connectors Guide](./mistral_agents_api_connectors_guide/) for built-in capabilities
-- Explore [Orchestration Guide](./mistral_agents_api_orchestration_guide/) for multi-agent patterns
-- Study [Production Guide](./mistral_agents_api_production_guide/) for deployment
+- **Authenticate the server.** Remote MCP servers should require a bearer token or OAuth; a connector stores the credentials, a client-side MCP client sends them as headers.
+- **Least privilege.** Give the server's own credentials (database users, API keys) only the permissions its tools need, and expose only the tools an agent needs with `include`.
+- **Treat tool output as untrusted.** Documents, tickets and web pages can contain prompt injection. Require confirmation for anything that writes, sends or spends.
+- **Keep secrets out of prompts.** Credentials belong in connector credentials or client headers, never in `instructions` or `inputs`.
+- **Log tool calls.** `result.entries` (from `run_async`) and `response.outputs` (from `start`) contain every tool call and its arguments.
+- **Pin versions.** `mcp` 2.x changed result field names (`structured_content` rather than `structuredContent`) and renamed `FastMCP`; pin `mistralai` and `mcp` together.
 
 ---
 
-**Documentation Version**: 2.0 (May 2025 Launch Edition)
-**Last Updated**: May 27, 2025
-**Mistral AI - Connect Everything**
+## 6. Production notes
 
+- Client-side MCP servers started over stdio live as long as the `RunContext`. For a web service, create the context per request, or keep long-lived remote servers and connect over HTTP.
+- Give remote servers health checks and timeouts; `StreamableHTTPServerParams(timeout=..., sse_read_timeout=...)` bound how long a call may take.
+- Rate-limit expensive tools on the server side, since the model may call a tool several times in one run.
+- Containerise servers like any other web service, and run them on the same network as the data they expose rather than on the agent host.

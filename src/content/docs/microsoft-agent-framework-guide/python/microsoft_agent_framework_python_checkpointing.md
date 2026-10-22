@@ -1,15 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — Checkpointing"
 description: "Persist workflow state with FileCheckpointStorage, InMemoryCheckpointStorage, or a custom CheckpointStorage backend. Resume long-running agents across process restarts."
-framework: microsoft-agent-framework
-language: python
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Checkpointing — Python
 
 Checkpointing captures the full execution state of a workflow at every superstep so you can pause, crash, redeploy, or hand off to a different process and pick up exactly where you left off. It's the backbone for long-running agent workflows, human-in-the-loop pauses that last days, and durable multi-agent orchestrations.
 
-Verified against `agent-framework-core==1.6.0` (`agent_framework._workflows._checkpoint`).
+Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._workflows._checkpoint`, re-checked %%versions-checked%%; first written for 1.6.0).
 
 ## What lives in a checkpoint
 
@@ -501,6 +499,41 @@ storage = FileCheckpointStorage(
     "/var/lib/agent-framework/checkpoints",
     allowed_checkpoint_types=["__main__:OrderState"],
 )
+```
+
+### What `AgentExecutor` saves — `AgentExecutorCheckpointState`
+
+Agent nodes use the same hooks. `AgentExecutor.on_checkpoint_save()` returns a dict shaped like the `AgentExecutorCheckpointState` TypedDict, stored at `checkpoint.state["_executor_state"][executor_id]`:
+
+| Key | Type | Holds |
+|---|---|---|
+| `cache` | `list[Message]` | Messages received since the agent last ran |
+| `full_conversation` | `list[Message]` | Every input plus the agent's outputs so far |
+| `agent_session` | `AgentSessionDict` | `AgentSession.to_dict()` (local history only when the session isn't service-backed) |
+| `pending_agent_requests` | `dict[str, Content]` | Open user-input/approval requests, by request id |
+| `pending_responses_to_agent` | `list[Content]` | Responses received but not yet delivered to the agent |
+| `pending_request_order` | `list[str]` | Original request order, so batched answers are replayed in sequence |
+
+Every key is optional (`total=False`); missing keys restore as empty, which keeps older checkpoints loadable. To checkpoint extra data on an agent node, subclass and extend the dict:
+
+```python
+from typing import Any
+from agent_framework import AgentExecutor
+
+
+class TaggedAgentExecutor(AgentExecutor):
+    def __init__(self, agent, *, tag: str, **kwargs: Any) -> None:
+        super().__init__(agent, **kwargs)
+        self._tag = tag
+
+    async def on_checkpoint_save(self) -> dict[str, Any]:
+        state = await super().on_checkpoint_save()
+        state["tag"] = self._tag
+        return state
+
+    async def on_checkpoint_restore(self, state: dict[str, Any]) -> None:
+        await super().on_checkpoint_restore(state)
+        self._tag = state.get("tag", self._tag)
 ```
 
 ## Inspecting the checkpoint chain

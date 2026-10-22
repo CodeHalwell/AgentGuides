@@ -1,13 +1,13 @@
 ---
 title: "LangGraph Observability and Monitoring (Python)"
-description: "Runtime.stream_writer for custom events, ExecutionInfo for structured logging, state history inspection, LangSmith tracing, and OpenTelemetry — source-verified for LangGraph 1.2.2."
-framework: langgraph
-language: python
+description: "Runtime.stream_writer for custom events, ExecutionInfo for structured logging, state history inspection, LangSmith tracing, and OpenTelemetry — source-verified."
+framework: "langgraph"
+language: "python"
+sidebar:
+  label: "Observability"
 ---
 
-# LangGraph Observability and Monitoring (Python)
-
-Verified against **`langgraph==1.2.2`** (modules: `langgraph.runtime`, `langgraph.types`, `langgraph.graph.state`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.types`, `langgraph.graph.state`).
 
 LangGraph provides several built-in mechanisms for observing what your graph is doing — without external instrumentation libraries:
 
@@ -44,7 +44,7 @@ class State(TypedDict):
     query: str
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="%%model=anthropic%%")
 
 
 def research_node(state: State, runtime: Runtime) -> dict:
@@ -117,7 +117,7 @@ def third_party_node(state: State) -> dict:
 `runtime.execution_info` provides structured access to IDs and counters that are otherwise scattered across `RunnableConfig` and the Pregel scratchpad. Use it for correlation IDs in logs and metrics.
 
 ```python
-# Source-verified fields (langgraph.runtime.ExecutionInfo, langgraph 1.2.2):
+# Source-verified fields (langgraph.runtime.ExecutionInfo, langgraph %%version=langgraph%%):
 @dataclass(frozen=True, slots=True)
 class ExecutionInfo:
     checkpoint_id:           str
@@ -301,8 +301,8 @@ for event in graph.stream({"query": "test"}, config, stream_mode="debug"):
 Set two environment variables and every graph run is automatically traced in LangSmith — node-by-node latency, inputs/outputs, errors, retry counts.
 
 ```bash
-export LANGCHAIN_API_KEY="ls__..."
-export LANGCHAIN_TRACING_V2="true"
+export LANGSMITH_API_KEY="lsv2_..."
+export LANGSMITH_TRACING="true"
 export LANGCHAIN_PROJECT="my-agent"   # optional; defaults to "default"
 ```
 

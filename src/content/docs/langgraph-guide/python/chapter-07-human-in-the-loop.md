@@ -1,18 +1,16 @@
 ---
 title: "Chapter 7 — Human-in-the-Loop"
 description: "Pause execution for approval, build multi-stage review workflows, multiple interrupts per node, and resume by interrupt ID."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "7 · Human-in-the-loop"
   order: 7
 ---
 
-# Chapter 7 — Human-in-the-Loop
-
 **What you'll learn:** how to pause your graph mid-execution to collect input, approval, or corrections from a human — the `interrupt()` and `Command(resume=...)` primitives, multi-stage approval workflows, multiple interrupts inside one node, and resume-by-id when a node raises several interrupts at once.
 
-Verified against **`langgraph==1.2.12`** (module: `langgraph.types`).
+Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -358,9 +356,9 @@ print(graph.get_state(cfg).values["final"])   # [PUBLISHED] Improved draft text
 ## Gotchas
 
 - **Re-execution on resume.** The node runs from the top every time. Any code before `interrupt()` executes again — make side effects idempotent or move them into `@task`s (which are cache-skipped on replay).
-- **No checkpointer = no interrupts.** Without a checkpointer, `interrupt()` raises `GraphInterrupt` uncaught. Always pass `checkpointer=InMemorySaver()` even in tests.
-- **`state.next` vs `state.interrupts`.** `state.next` shows `('__interrupt__',)` when paused; `state.interrupts` is the tuple of `Interrupt(value=..., id=...)` objects from that step.
-- **Resume by id requires the correct id.** Pass the id exactly as reported by `Interrupt.id`. An unknown id does not raise immediately — it silently skips, leaving the interrupt unresolved.
+- **No checkpointer = no resume.** Without a checkpointer, `invoke` still stops at `interrupt()` and returns the state with an `__interrupt__` key, but nothing is saved, so `Command(resume=...)` has nothing to resume. Always compile with a checkpointer (`InMemorySaver()` in tests) and pass a `thread_id`.
+- **`state.next` vs `state.interrupts`.** When paused, `graph.get_state(cfg).next` names the paused node (for example `('ask',)`); `state.interrupts` is the tuple of `Interrupt(value=..., id=...)` objects.
+- **Resume by id requires the correct id.** Pass the id exactly as reported by `Interrupt.id`. A mapping whose keys are not interrupt ids is not rejected: with a single pending interrupt, the whole dict becomes the resume value (checked against %%version=langgraph%%).
 - **`Command(resume=scalar)` answers the next interrupt in order.** Use `Command(resume={id: value})` to target a specific interrupt by id.
 
 

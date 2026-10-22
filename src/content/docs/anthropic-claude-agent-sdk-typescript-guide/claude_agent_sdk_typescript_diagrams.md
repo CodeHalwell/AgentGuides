@@ -1,560 +1,153 @@
 ---
-title: "Claude Agent SDK (TypeScript) - Architecture Diagrams and Flows"
-description: "These diagrams illustrate the complex interactions and architectural patterns within the Claude Agent SDK. Each represents a different aspect of the system's operation, from basic"
-framework: anthropic-claude-agent-sdk-typescript
+title: "Claude Agent SDK (TypeScript) — Architecture Diagrams"
+description: "How the TypeScript Claude Agent SDK works: the Claude Code child process, the message and control streams, permission order, failure surfaces, sessions, compaction and deployment."
+framework: "claude-agent-sdk"
+language: "typescript"
+sidebar:
+  label: "Diagrams"
 ---
 
-# Claude Agent SDK (TypeScript) - Architecture Diagrams and Flows
+Verified against `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%% (checked %%versions-checked%%). Each diagram shows a mechanism the [comprehensive guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/) describes in prose.
 
-## System Architecture Overview
+## Processes
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Claude Agent SDK Architecture                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-    ┌──────────────────────────────────────────────────────────────────┐
-    │                     Application Layer                            │
-    │  (Your TypeScript Code, React Frontend, Express Servers, etc.)  │
-    └────────────────────┬─────────────────────────────────────────────┘
-                         │
-    ┌────────────────────▼─────────────────────────────────────────────┐
-    │              Claude Agent SDK Interface                          │
-    │  ┌──────────────────────────────────────────────────────────┐   │
-    │  │ query() - Main async generator function                  │   │
-    │  │ createSdkMcpServer() - MCP server creation              │   │
-    │  │ tool() - Tool definition with Zod schemas              │   │
-    │  └──────────────────────────────────────────────────────────┘   │
-    └────────────────────┬─────────────────────────────────────────────┘
-                         │
-    ┌────────────────────▼─────────────────────────────────────────────┐
-    │             Core Agent Harness (Built on Claude Code)           │
-    │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
-    │  │ Agent Loop   │  │ Context Mgmt │  │ Permission System  │    │
-    │  │ Executor     │  │ Compaction   │  │ Access Control     │    │
-    │  └──────────────┘  └──────────────┘  └────────────────────┘    │
-    └────────────────────┬─────────────────────────────────────────────┘
-                         │
-    ┌────────────────────▼─────────────────────────────────────────────┐
-    │                  Tool Execution Framework                        │
-    │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
-    │  │ Built-In     │  │ Custom MCP   │  │ Computer Use API   │    │
-    │  │ Tools        │  │ Tools        │  │ (Mouse, Keyboard)  │    │
-    │  │ (File, Bash) │  │              │  │                    │    │
-    │  └──────────────┘  └──────────────┘  └────────────────────┘    │
-    └────────────────────┬─────────────────────────────────────────────┘
-                         │
-    ┌────────────────────▼─────────────────────────────────────────────┐
-    │                   External Services                              │
-    │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐    │
-    │  │ Claude API   │  │ AWS Bedrock  │  │ Google Vertex AI   │    │
-    │  │ (Direct)     │  │ (AWS Auth)   │  │ (GCP Auth)         │    │
-    │  └──────────────┘  └──────────────┘  └────────────────────┘    │
-    └─────────────────────────────────────────────────────────────────┘
-```
-
-## Query Execution Flow
+`query()` starts Claude Code as a child process (a platform-specific binary installed as an optional dependency). The agent loop, built-in tools, permission rules, compaction and session files live there, not in your Node.js process.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│              Query Execution Flow Diagram                        │
-└─────────────────────────────────────────────────────────────────┘
-
-1. INITIALISATION
-   ┌────────┐
-   │ query()│
-   └────┬───┘
-        │
-        ▼
-   ┌─────────────────────────────────┐
-   │ Create Agent Instance            │
-   │ - Session ID                      │
-   │ - Model Selection                 │
-   │ - Permission Mode                 │
-   │ - Tool Registry                   │
-   └────────────┬──────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────────────┐
-   │ Initialise Context              │
-   │ - Load system prompt            │
-   │ - Set working directory         │
-   │ - Load MCP servers              │
-   │ - Setup tools                   │
-   └────────────┬──────────────────────┘
-
-2. AGENT LOOP
-                │
-                ▼
-   ┌─────────────────────────────────┐
-   │ Process User Input              │
-   └────────────┬──────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────────────┐
-   │ Send to Claude Model            │
-   │ (with full context)             │
-   └────────────┬──────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────────────────────────┐
-   │ Receive Response from Claude               │
-   │ ┌─────────────────┬────────────────────┐   │
-   │ │ Type:           │ Action:            │   │
-   │ ├─────────────────┼────────────────────┤   │
-   │ │ Assistant       │ Stream text output │   │
-   │ │ Tool Call       │ Execute tool       │   │
-   │ │ Tool Result     │ Return to Claude   │   │
-   │ │ Error           │ Handle error       │   │
-   │ │ System          │ Manage state       │   │
-   │ └─────────────────┴────────────────────┘   │
-   └────────────┬──────────────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────────────┐
-   │ Decision Point                  │
-   │ More to do?                     │
-   └────────────┬──────────────────────┘
-                │
-        ┌───────┴────────┐
-        │                │
-       YES              NO
-        │                │
-        ▼                ▼
-   Continue Loop    Emit Completion
-        │
-        └────────────────┬───────────────┐
-                         │               │
-                    [Go to Process]   [Return Result]
-
-3. STREAM PROCESSING
-   For each message from query():
-   ┌─────────────────────────────────┐
-   │ for await (const message of    │
-   │   query(...))                   │
-   └────────────┬──────────────────────┘
-                │
-                ▼
-   ┌─────────────────────────────────┐
-   │ Check message.type              │
-   └────────────┬──────────────────────┘
-                │
-        ┌───────┼───────┬─────────┬──────┐
-        │       │       │         │      │
-        ▼       ▼       ▼         ▼      ▼
-    assistant tool_call tool_result error system
-        │       │       │         │      │
-        ▼       ▼       ▼         ▼      ▼
-    Process  Execute Collect Handle Update
-    Text    Tool     Result  Error  State
+┌──────────────── your Node.js process ───────────────┐
+│  query({ prompt, options }) → Query (AsyncGenerator) │
+│  Options → CLI flags                                 │
+│  callbacks Claude Code calls back into:              │
+│    canUseTool · hooks · createSdkMcpServer() tools   │
+└───────────────┬──────────────────────▲───────────────┘
+   stdin: prompts, control requests    │ stdout: SDKMessages, control requests
+┌───────────────▼──────────────────────┴───────────────┐
+│  Claude Code (child process)                         │
+│  agent loop · built-in tools · permission rules      │
+│  compaction · transcripts under ~/.claude/projects/  │
+│  stdio / HTTP / SSE MCP servers                      │
+└───────────────┬──────────────────────────────────────┘
+                │ HTTPS
+        Claude API · Amazon Bedrock · Google Vertex AI
 ```
 
-## Multi-Agent Orchestration Pattern
+Each `query()` is one process, so capacity is planned in concurrent processes and memory.
+
+## One `query()` call
 
 ```
-┌──────────────────────────────────────────────────────┐
-│        Multi-Agent Orchestration Architecture        │
-└──────────────────────────────────────────────────────┘
-
-                    Orchestrator
-                        │
-         ┌──────────────┼──────────────┐
-         │              │              │
-         ▼              ▼              ▼
-    ┌────────┐    ┌────────┐    ┌────────┐
-    │Agent 1 │    │Agent 2 │    │Agent 3 │
-    │        │    │        │    │        │
-    │Research│    │Analyse │    │Advise  │
-    └────┬───┘    └────┬───┘    └────┬───┘
-         │             │             │
-         ▼             ▼             ▼
-    ┌──────────────────────────────────────┐
-    │       Shared Context Manager         │
-    │                                      │
-    │  • Conversation History              │
-    │  • Extracted Information             │
-    │  • Decision Points                   │
-    │  • Resource Allocations              │
-    └──────────────────────────────────────┘
-
-Sequential vs Parallel:
-
-SEQUENTIAL:
-Agent1 ──► Agent2 ──► Agent3 ──► Final Result
-(Context flows left to right)
-
-PARALLEL:
-     ┌─► Agent1 ┐
-Agent0 ├─► Agent2 ├─► Aggregator ──► Final Result
-     └─► Agent3 ┘
-(Independent execution, then merge)
+SDK                                   Claude Code
+ │── spawn with flags ──────────────▶ │
+ │── control: initialize ───────────▶ │  hooks, agents, SDK MCP servers
+ │── user message (the prompt) ─────▶ │
+ │◀──── system (subtype: 'init') ─────│  session_id, model, tools, mcp_servers
+ │◀───────────────────── assistant ───│  message.message.content: text, thinking, tool_use
+ │◀── control: can_use_tool ──────────│  only for tools that are not pre-approved
+ │── { behavior: 'allow' | 'deny' } ▶ │
+ │◀─────────────────────────── user ──│  tool_result blocks
+ │            … more turns …          │
+ │◀───────────────────────── result ──│  total_cost_usd, modelUsage, terminal_reason
+ │                                    │  single prompt: the process exits
 ```
 
-## Session Management and Forking
+With an `AsyncIterable<SDKUserMessage>` prompt the process stays up after `result` and waits for the next message.
+
+## A failed run
 
 ```
-┌──────────────────────────────────────────────┐
-│      Session Management Architecture         │
-└──────────────────────────────────────────────┘
-
-                   Initial Query
-                        │
-                        ▼
-            ┌─────────────────────────┐
-            │ Session Created         │
-            │ ID: abc123def456        │
-            │ State: Context + History│
-            └────────┬────────────────┘
-                     │
-         ┌───────────┼───────────┐
-         │           │           │
-         ▼           ▼           ▼
-    Resume      Continue      Fork
-    (existing)  (same)        (branch)
-         │           │           │
-         ▼           ▼           ▼
-    ┌────────┐  ┌────────┐  ┌────────┐
-    │Session │  │Session │  │Session │
-    │abc123  │  │abc123  │  │def789  │
-    │Restored│  │Updated │  │Branched│
-    └────────┘  └────────┘  └────────┘
-
-State Compaction:
-    Long Conversation → Automatic Compression → 200K Token Context
-    ┌──────────────┐     ┌─────────────┐     ┌──────────────┐
-    │Recent history│     │Summarise    │     │Maintained   │
-    │Old messages  │────▶│Keep summary │────▶│within limit  │
-    │Tool outputs  │     │Remove detail│     │Token usage  │
-    └──────────────┘     └─────────────┘     └──────────────┘
+Claude Code emits result (is_error: true)     the iterator yields it
+        │                                              │
+Claude Code exits non-zero                     the iterator throws
+                                               Error('Claude Code returned an error result: …')
 ```
 
-## Tool Execution and MCP Integration
+| Cause | `subtype` | Other fields |
+|---|---|---|
+| Model API failed after Claude Code's retries | `'success'` (with `is_error: true`) | `result: 'API Error: …'`, `api_error_status`, `terminal_reason: 'api_error'` |
+| `maxTurns` | `'error_max_turns'` | `terminal_reason: 'max_turns'`, `errors` |
+| `maxBudgetUsd` | `'error_max_budget_usd'` | `errors` |
+| Structured output never validated | `'error_max_structured_output_retries'` | `errors` |
+| Crash, failed start | no result | the iterator throws |
+| `abortController.abort()` | no result | `AbortError` |
+
+Capture the result inside the loop and decide in `catch`; see [Errors and cancellation](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#errors-and-cancellation).
+
+## Permission order
 
 ```
-┌──────────────────────────────────────────────┐
-│    Tool Execution and MCP Architecture       │
-└──────────────────────────────────────────────┘
-
-Built-in Tools:
-┌─────────────────────────────────────────┐
-│ • Read (file)                           │
-│ • Write (file)                          │
-│ • Edit (file section)                   │
-│ • Delete (file/directory)               │
-│ • Bash (shell commands)                 │
-│ • Grep (text search)                    │
-│ • Glob (file patterns)                  │
-│ • WebSearch (internet search)           │
-│ • Computer Use (mouse, keyboard, vision)│
-└─────────────────────────────────────────┘
-
-MCP Servers (Custom Tools):
-┌──────────────────────────────────┐
-│ createSdkMcpServer()             │
-│ ┌───────────────────────────┐    │
-│ │ tool 1: Custom Logic      │    │
-│ │ tool 2: Database Query    │    │
-│ │ tool 3: API Integration   │    │
-│ │ tool 4: Business Logic    │    │
-│ └───────────────────────────┘    │
-└──────────────────────────────────┘
-
-Tool Call Flow:
-    Claude ──► Tool Name + Input
-                    │
-                    ▼
-            ┌──────────────────┐
-            │ Tool Registry    │
-            │ Lookup tool      │
-            │ Validate schema  │
-            │ Check permission │
-            └────────┬─────────┘
-                     │
-              ┌──────┴──────┐
-              │             │
-         Allowed        Denied
-              │             │
-              ▼             ▼
-        Execute Tool   Return Error
-              │             │
-              └──────┬──────┘
-                     ▼
-            ┌──────────────────┐
-            │ Return Result    │
-            │ Back to Claude   │
-            └──────────────────┘
+tool call requested
+  │
+  ├─ 1. PreToolUse hooks            allow · deny · ask · defer · updatedInput
+  ├─ 2. deny rules                  disallowedTools, settings
+  ├─ 3. permissionMode              bypassPermissions runs everything
+  │                                 acceptEdits auto-approves file edits
+  │                                 plan executes nothing
+  │                                 dontAsk denies whatever is not pre-approved
+  ├─ 4. allow rules                 allowedTools, settings → runs; step 5 is skipped
+  └─ 5. canUseTool                  { behavior: 'allow', updatedInput } / { behavior: 'deny' }
+  │
+tool runs (Bash optionally inside the sandbox)
+  │
+PostToolUse / PostToolUseFailure hooks   (PostToolUse may set updatedToolOutput)
 ```
 
-## Permission System Architecture
+Hooks run even for pre-approved tools, so they are the place for checks that must see every call.
+
+## Subagents
 
 ```
-┌──────────────────────────────────────────────┐
-│         Permission System Architecture       │
-└──────────────────────────────────────────────┘
-
-Permission Modes:
-
-┌─────────────────────────────────────────┐
-│ bypassPermissions                       │
-│ ✓ No checks, maximum autonomy          │
-│ ⚠ Use only for trusted environments    │
-└─────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────┐
-│ acceptEdits                             │
-│ ✓ Auto-approve file modifications      │
-│ ⚠ Suitable for development with backup │
-└─────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────┐
-│ default (Recommended for production)    │
-│ ✓ Ask for confirmation on write ops    │
-│ ✓ Allow read ops                        │
-│ ✓ Customizable via canUseTool callback  │
-└─────────────────────────────────────────┘
-
-Permission Decision Flow:
-    Tool Requested
-            │
-            ▼
-    ┌──────────────────┐
-    │ Check Permission │
-    │ Policy           │
-    └────────┬─────────┘
-             │
-        ┌────┴────┬────────┐
-        │          │        │
-        ▼          ▼        ▼
-    Allow      Ask      Deny
-     (auto)    (prompt)  (error)
-        │          │        │
-        └────┬─────┴────┬───┘
-             │          │
-             ▼          ▼
-        Execute    Return Error
-        Tool       Or Response
+main loop ── Agent tool call (subagent_type: 'security-reviewer') ──┐
+                                                                    ▼
+                                    subagent: own context window, prompt,
+                                    tools and model from options.agents
+                                                                    │
+     its messages carry parent_tool_use_id and agent_id ◀───────────┤
+main loop ◀─────────────── one tool_result: the subagent's summary ─┘
 ```
 
-## Context Management and Compaction
+Background subagents report through `system` messages with subtype `task_started`, `task_progress` and `task_notification`.
+
+## Sessions and session stores
 
 ```
-┌──────────────────────────────────────────────┐
-│    Context Management and Compaction         │
-└──────────────────────────────────────────────┘
+local (unless persistSession: false)        external (sessionStore)
+~/.claude/projects/<project>/<id>.jsonl ──▶ store.append(key, entries)
+one JSON line per transcript entry          batched per turn, or 'eager'
 
-Token Budget: 200,000 tokens
-
-As conversation grows:
-┌─────────────────────────────────────┐
-│ Message 1: User prompt              │  ~50 tokens
-├─────────────────────────────────────┤
-│ Message 2: Assistant response       │  ~200 tokens
-├─────────────────────────────────────┤
-│ Message 3: Tool result              │  ~300 tokens
-├─────────────────────────────────────┤
-│ ...many messages...                 │  ~150,000 tokens
-├─────────────────────────────────────┤
-│ Token Usage: ~165,000               │
-└─────────────────────────────────────┘
-
-Automatic Compaction Triggered:
-    When tokens reach threshold (~80% of limit)
-            │
-            ▼
-    ┌─────────────────────────────┐
-    │ Analyse conversation        │
-    │ - Identify key points       │
-    │ - Summarise early messages  │
-    │ - Keep recent context       │
-    │ - Preserve tool results     │
-    └────────────┬────────────────┘
-                 │
-                 ▼
-    ┌─────────────────────────────┐
-    │ Original: 165,000 tokens    │
-    │ Compacted: 85,000 tokens    │
-    │ Freed: 80,000 tokens        │
-    │ New buffer for continuation │
-    └─────────────────────────────┘
+resume: <id>
+  local file present  → Claude Code resumes from it
+  local file missing  → SDK calls store.load(key), writes a temporary JSONL,
+                        and Claude Code resumes from that (bounded by loadTimeoutMs)
+forkSession: true     → same history, new session ID
 ```
 
-## Error Handling and Recovery
+## Compaction
 
 ```
-┌────────────────────────────────────┐
-│    Error Handling and Recovery     │
-└────────────────────────────────────┘
-
-Error Classification:
-┌──────────────────────────────────────┐
-│ Error Type          │ Severity       │
-├──────────────────────┼────────────────┤
-│ Authentication      │ CRITICAL       │
-│ Permission Denied   │ HIGH           │
-│ Budget Exceeded     │ HIGH           │
-│ Timeout             │ MEDIUM         │
-│ Rate Limit          │ MEDIUM         │
-│ Tool Failure        │ LOW-MEDIUM     │
-│ Invalid Input       │ LOW            │
-└──────────────────────────────────────┘
-
-Error Recovery Flow:
-    Error Occurs
-            │
-            ▼
-    ┌──────────────────────┐
-    │ Classify Error       │
-    │ Determine Severity   │
-    └────────────┬─────────┘
-                 │
-        ┌────────┼────────┐
-        │        │        │
-        ▼        ▼        ▼
-    Critical  High    Medium/Low
-        │        │        │
-        ▼        ▼        ▼
-    Stop    Check   Retry
-    Log     Log     Fallback
-    Alert   Alert   Log
-        │        │        │
-        └────────┼────────┘
-                 │
-                 ▼
-         ┌──────────────┐
-         │ Return Error │
-         │ to Client    │
-         └──────────────┘
-
-Retry with Exponential Backoff:
-Attempt 1: 1 second
-    ↓ (if fails)
-Attempt 2: 2 seconds
-    ↓ (if fails)
-Attempt 3: 4 seconds
-    ↓ (if fails)
-Attempt 4: 8 seconds
-    ↓ (if all fail)
-Return Failure
+each turn: Claude Code tracks context size (q.getContextUsage())
+  │
+  ├─ below the auto-compact threshold → continue
+  └─ at the threshold
+        ├─ PreCompact hook (trigger: 'auto')
+        ├─ the earlier conversation is summarised by the model
+        ├─ system message { subtype: 'compact_boundary', compact_metadata: { pre_tokens, … } }
+        ├─ PostCompact hook
+        └─ the loop continues on the summary plus recent messages
 ```
 
-## Data Flow Diagram
+The summarisation call is included in `modelUsage`.
+
+## Deployment
 
 ```
-┌─────────────────────────────────────────────┐
-│         Complete Data Flow Diagram          │
-└─────────────────────────────────────────────┘
-
-User Input
-    │
-    ▼
-┌──────────────────┐
-│ Input Validation │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────┐
-│ Create Query     │
-│ - Prompt         │
-│ - Options        │
-│ - Context        │
-└────────┬─────────┘
-         │
-         ▼
-┌──────────────────────────────────┐
-│ Agent Execution Loop             │
-│                                  │
-│ For each message:                │
-│                                  │
-│ ┌─────────────────────────────┐  │
-│ │ if (message.type ==)        │  │
-│ │   'assistant': Stream text  │  │
-│ │   'tool_call': Execute tool │  │
-│ │   'tool_result': To context │  │
-│ │   'error': Handle error     │  │
-│ │   'system': Update state    │  │
-│ └──────────────┬──────────────┘  │
-│                │                  │
-│                ▼                  │
-│        Check loop condition      │
-│        Continue or exit?          │
-└────────────┬─────────────────────┘
-             │
-         ┌───┴────┐
-         │        │
-      More    Done
-        │        │
-        │        ▼
-        │   ┌──────────────┐
-        │   │ Aggregation  │
-        │   │ Final result │
-        │   └──────────────┘
-        │        │
-        └────────┘
-             │
-             ▼
-      ┌─────────────────┐
-      │ Output response │
-      │ to user         │
-      └─────────────────┘
+queue ─▶ worker (bounded by a semaphore)
+           │  one Claude Code process per active run
+           │  cwd: a fresh directory per job
+           ▼
+         Claude Code ──▶ Claude API
+           │
+           └─ transcripts: $HOME/.claude volume, or a sessionStore
+              (Postgres, S3, …) so any worker can resume
 ```
 
-## Performance and Scaling Architecture
-
-```
-┌──────────────────────────────────┐
-│  Performance & Scaling Diagram   │
-└──────────────────────────────────┘
-
-Single Instance:
-    User ──► Agent Instance ──► Claude API
-
-Scaled Deployment:
-    ┌─────────────────────────────────────┐
-    │         Load Balancer               │
-    │       (Round Robin / Sticky)        │
-    └────────────┬────────────────────────┘
-                 │
-    ┌────────────┼────────────────┐
-    │            │                │
-    ▼            ▼                ▼
-  Instance    Instance         Instance
-  (with       (with            (with
-   Cache)      Cache)           Cache)
-    │            │                │
-    └────────────┼────────────────┘
-                 │
-    ┌────────────▼────────────────┐
-    │      Claude API (Scaled)     │
-    │  - Rate limiting             │
-    │  - Load distribution         │
-    │  - Failover handling         │
-    └─────────────────────────────┘
-
-Caching Strategy:
-    Prompt Input
-         │
-         ▼
-    ┌─────────────────┐
-    │ Check L1 Cache  │ (In-process)
-    └────────┬────────┘
-             │
-        Not Found
-             │
-             ▼
-    ┌─────────────────┐
-    │ Check L2 Cache  │ (Redis)
-    └────────┬────────┘
-             │
-        Not Found
-             │
-             ▼
-    ┌─────────────────┐
-    │ Query Claude    │
-    │ Cache Result    │
-    └─────────────────┘
-```
-
-These diagrams illustrate the complex interactions and architectural patterns within the Claude Agent SDK. Each represents a different aspect of the system's operation, from basic execution flows to advanced orchestration patterns.
-
+Do not cache agent runs by prompt: a run reads files and calls tools, so the same prompt can legitimately produce a different result. Keep the system prompt stable instead, so the API's prompt caching applies across runs. The [production guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/) has the details.

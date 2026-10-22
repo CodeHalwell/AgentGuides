@@ -1,13 +1,14 @@
 ---
-title: "PydanticAI: Model Providers, FallbackModel & InstrumentationSettings"
-description: "Every supported provider, provider prefixes, FallbackModel with exception and response handlers, FallbackExceptionGroup, InstrumentedModel, InstrumentationSettings versions 1-5, OTel token/cost histograms, gateway routing, and local models."
-framework: pydanticai
-language: python
+title: "PydanticAI: Model Providers, FallbackModel & Instrumentation"
+description: "Every supported provider, provider prefixes, FallbackModel with exception and response handlers, FallbackExceptionGroup, InstrumentedModel, InstrumentationSettings versions 2-6, OTel token/cost histograms, gateway routing, and local models."
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Model providers"
+  order: 5
 ---
 
-# Model Providers, FallbackModel & InstrumentationSettings
-
-Verified against **pydantic-ai==1.103.0** — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.providers`, `pydantic_ai.models`, `pydantic_ai.models.fallback`, `pydantic_ai.models.instrumented`.
 
 A PydanticAI `Agent` talks to an `LLM` through a `Model` backed by a `Provider`. The quickest way to wire one up is the `'provider:model-name'` string; the full way is constructing `SpecificModel(..., provider=SpecificProvider(...))` yourself. This page lists every prefix the installed source recognises and how to compose, gateway, or fall back between them.
 
@@ -16,56 +17,57 @@ A PydanticAI `Agent` talks to an `LLM` through a `Model` backed by a `Provider`.
 ```python
 from pydantic_ai import Agent
 
-agent = Agent('openai:gpt-5.2')
+agent = Agent('openai:%%model=openai%%')
 print(agent.run_sync('Hello!').output)
 
-# Same thing, constructed explicitly:
-from pydantic_ai.models.openai import OpenAIChatModel
+# Same thing, constructed explicitly (`openai:` means the Responses API):
+from pydantic_ai.models.openai import OpenAIResponsesModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-agent = Agent(OpenAIChatModel('gpt-5.2', provider=OpenAIProvider(api_key='sk-...')))
+agent = Agent(OpenAIResponsesModel('%%model=openai%%', provider=OpenAIProvider(api_key='sk-...')))
 ```
 
-The string `'openai:gpt-5.2'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py:100`, `:234`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
+A string such as `'openai:%%model=openai%%'` is parsed by `infer_provider_class` + `infer_provider` (`providers/__init__.py`). The first token before `:` selects the provider; the remainder is the model name, verbatim.
 
 ## Provider prefixes
 
-Verified from `providers/__init__.py:100`:
+Verified from `infer_provider_class` in `providers/__init__.py`:
 
 | Prefix                  | Model class                         | Notes                                                                   |
 | ----------------------- | ----------------------------------- | ----------------------------------------------------------------------- |
-| `openai`                | `OpenAIChatModel`                   | Default. `OPENAI_API_KEY` env var.                                      |
-| `openai-chat`           | `OpenAIChatModel`                   | Forces the Chat Completions API.                                        |
-| `openai-responses`      | `OpenAIResponsesModel`              | Forces the Responses API (reasoning, built-in tools).                   |
+| `openai`                | `OpenAIResponsesModel`              | `OPENAI_API_KEY`. **Since 2.0 the bare prefix means the Responses API** (it meant Chat Completions in V1). |
+| `openai-chat`           | `OpenAIChatModel`                   | Chat Completions API — use this to keep the V1 behaviour.               |
+| `openai-responses`      | `OpenAIResponsesModel`              | Explicit form of the default.                                           |
+| `azure` / `azure-responses` | Azure OpenAI                    | `AzureProvider(endpoint=..., api_key=...)`.                             |
 | `anthropic`             | `AnthropicModel`                    | `ANTHROPIC_API_KEY`.                                                    |
-| `google-gla`            | `GoogleModel` (Gemini API)          | `GEMINI_API_KEY`. Formerly `google`.                                    |
-| `google-vertex` / `vertexai` | `GoogleModel` (Vertex AI)      | Uses ADC / service-account credentials.                                 |
-| `bedrock`               | `BedrockConverseModel`              | AWS credentials resolution.                                             |
-| `groq`                  | `GroqModel`                         | `GROQ_API_KEY`.                                                         |
-| `mistral`               | `MistralModel`                      | `MISTRAL_API_KEY`.                                                      |
-| `cohere`                | `CohereModel`                       | `COHERE_API_KEY`.                                                       |
-| `xai`                   | `OpenAI*`-compatible xAI model      | `XAI_API_KEY`. Supports `XSearchTool`.                                  |
-| `grok`                  | deprecated alias of `xai`           | Prefer `xai:`.                                                          |
+| `google`                | `GoogleModel` (Gemini API)          | `GOOGLE_API_KEY` / `GEMINI_API_KEY`. Replaces V1's `google-gla:`.       |
+| `google-cloud`          | `GoogleModel` (Vertex AI)           | ADC / service-account credentials. Replaces V1's `google-vertex:` / `vertexai:`. |
+| `bedrock`               | `BedrockConverseModel`              | AWS credentials resolution. Needs the `bedrock` extra.                  |
+| `bedrock-mantle`        | Bedrock Mantle                      | Needs the `bedrock-mantle` extra.                                       |
+| `groq`                  | `GroqModel`                         | `GROQ_API_KEY`. Needs the `groq` extra.                                 |
+| `mistral`               | `MistralModel`                      | `MISTRAL_API_KEY`. Needs the `mistral` extra.                           |
+| `cohere`                | `CohereModel`                       | `COHERE_API_KEY`. Needs the `cohere` extra.                             |
+| `xai`                   | `XaiModel`                          | `XAI_API_KEY`. Supports `XSearchTool`. Replaces V1's `grok:`. Needs the `xai` extra. |
 | `deepseek`              | OpenAI-compatible DeepSeek          |                                                                         |
-| `openrouter`            | OpenAI-compatible OpenRouter        | Route to any OR model.                                                  |
+| `openrouter`            | `OpenRouterModel`                   | Route to any OpenRouter model.                                          |
 | `vercel`                | Vercel AI Gateway                   |                                                                         |
-| `azure`                 | Azure OpenAI                        | `AzureProvider(endpoint=..., api_key=...)`.                             |
 | `cerebras`              | Cerebras                            |                                                                         |
 | `moonshotai`            | Moonshot / Kimi                     |                                                                         |
-| `fireworks`             | Fireworks AI                        |                                                                         |
-| `together`              | Together AI                         |                                                                         |
-| `heroku`                | Heroku Inference                    |                                                                         |
-| `huggingface`           | HF Inference API                    |                                                                         |
-| `ollama`                | `OllamaModel` (local)               | OpenAI-chat-compatible, no API key.                                     |
-| `github`                | GitHub Models                       |                                                                         |
-| `litellm`               | LiteLLM gateway                     |                                                                         |
-| `nebius`, `ovhcloud`, `alibaba`, `sambanova` | OpenAI-compatible  | regional/cloud providers                                                |
-| `outlines`              | Outlines (Transformers, vLLM, ...)  | Local constrained decoding.                                             |
-| `sentence-transformers` | Embeddings only                     | `pydantic_ai.embeddings`.                                               |
-| `voyageai`              | Embeddings only                     | `pydantic_ai.embeddings`.                                               |
-| `gateway/<upstream>`    | Any upstream via Pydantic AI Gateway| e.g. `'gateway/openai:gpt-5.2'`.                                        |
+| `zai`                   | Z.AI                                |                                                                         |
+| `fireworks`, `together`, `heroku`, `crusoe`, `nebius`, `ovhcloud`, `alibaba`, `sambanova`, `meta`, `snowflake` | OpenAI-compatible | hosted / regional providers |
+| `huggingface`           | HF Inference Providers              | Needs the `huggingface` extra.                                          |
+| `ollama`                | `OllamaModel` (local)               | Set `OLLAMA_BASE_URL`; no API key.                                      |
+| `vllm`, `litellm`       | OpenAI-compatible                   | Self-hosted server / LiteLLM proxy.                                     |
+| `github`, `github-copilot` | GitHub Models / Copilot          |                                                                         |
+| `sentence-transformers`, `voyageai` | Embeddings only         | `pydantic_ai.embeddings`.                                               |
+| `gateway/<upstream>`    | Any upstream via Pydantic AI Gateway| e.g. `'gateway/openai:<model>'`.                                       |
+| `test`                  | `TestModel`                         | No network; `Agent('test')`.                                            |
 
-The full list of `KnownModelName` literals (200+ entries) is in `models/__init__.py`. An unknown string with a known prefix still works — it's passed through to the provider.
+Removed in 2.0: the `grok:`, `google-gla:`, `google-vertex:` / `vertexai:` prefixes and the Outlines integration. A bare model name with no prefix (`Agent('gpt-5')`) now raises `UserError`.
+
+Since 2.0 a bare `pip install pydantic-ai` installs only the OpenAI, Anthropic and Google providers (plus CLI, MCP, evals, web and Logfire); the `retries` extra is separate. Add the extras you use, e.g. `pip install "pydantic-ai[bedrock,groq]"`.
+
+The `KnownModelName` literal in `pydantic_ai.models` lists several hundred model names. An unknown string with a known prefix still works — it's passed through to the provider.
 
 ## Explicit provider construction
 
@@ -77,7 +79,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 
 model = AnthropicModel(
-    'claude-sonnet-4-6',
+    '%%model=anthropic%%',
     provider=AnthropicProvider(api_key='...'),
 )
 agent = Agent(model)
@@ -93,18 +95,107 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 
 ## `ModelSettings` — provider-agnostic knobs
 
-`pydantic_ai.settings.ModelSettings` is a `TypedDict`. Common fields verified in `settings.py`:
+`pydantic_ai.settings.ModelSettings` is a `TypedDict`; every key is optional and a provider silently ignores keys it does not support. Settings merge in order agent → run → capability, later wins.
 
-`max_tokens`, `temperature`, `top_p`, `timeout`, `parallel_tool_calls`, `seed`, `presence_penalty`, `frequency_penalty`, `logit_bias`, `stop_sequences`, `extra_headers`, `extra_body`, `thinking` (`True` / `False` / `'minimal' | 'low' | 'medium' | 'high' | 'xhigh'`).
+| Key | Notes |
+|---|---|
+| `max_tokens`, `temperature`, `top_p`, `top_k`, `seed`, `stop_sequences`, `presence_penalty`, `frequency_penalty`, `logit_bias` | The usual sampling controls. |
+| `thinking` | `ThinkingLevel = bool \| Literal['minimal', 'low', 'medium', 'high', 'xhigh']`. `True` = provider default effort; `False` disables thinking where the model allows it (always-on reasoning models ignore it); unmapped levels round to the nearest the provider has. |
+| `service_tier` | `ServiceTier = Literal['auto', 'default', 'flex', 'priority']`. Provider-specific keys (`openai_service_tier`, …) take precedence. |
+| `cache` | Library-managed prompt caching: `True`, `False`, a retention (`'5m'`, `'30m'`, `'1h'`) or `CacheConfig(retention=..., messages=False)`. Provider-specific cache keys win if set. See also `CachePoint` in the [message history guide](/pydanticai-guide/pydantic_ai_message_history/). |
+| `tool_choice` | `None`/`'auto'`, `'none'`, `'required'`, a list of tool names, or `ToolOrOutput(function_tools=[...])`. |
+| `parallel_tool_calls` | `False` asks the model for one tool call per response. |
+| `timeout` | Per-attempt timeout applied by the provider client. |
+| `request_timeout` | One deadline, enforced by PydanticAI, covering every SDK retry and the whole streamed response. |
+| `max_retries` | Override the provider SDK's retry count for one request (`0` = single attempt). |
+| `extra_headers`, `extra_body` | Escape hatches for provider features without a first-class key. |
 
 ```python
+from pydantic_ai import Agent, ModelSettings
+
 agent = Agent(
-    'openai:gpt-5.2',
-    model_settings=ModelSettings(temperature=0.1, max_tokens=1024),
+    'anthropic:%%model=anthropic-flagship%%',
+    model_settings=ModelSettings(temperature=0.1, max_tokens=4096, thinking='high', service_tier='priority'),
 )
 ```
 
-Provider-specific extensions (`OpenAIChatModelSettings`, `AnthropicModelSettings`, `GoogleModelSettings`) subclass it and add provider keys (e.g. `openai_reasoning_effort`, `anthropic_thinking`).
+Provider-specific extensions (`OpenAIChatModelSettings`, `OpenAIResponsesModelSettings`, `AnthropicModelSettings`, `GoogleModelSettings`, …) subclass it and add prefixed keys (e.g. `openai_reasoning_effort`, `anthropic_thinking`). V1's `OpenAIModelSettings` is now `OpenAIChatModelSettings`.
+
+### `tool_choice` and `ToolOrOutput`
+
+A static `tool_choice=['search']` would also hide the output tools, so the run could never finish (PydanticAI raises `UserError` for that, and for a static `'required'`). `ToolOrOutput` restricts the *function* tools while keeping output available:
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.settings import ToolOrOutput
+
+agent = Agent('openai:%%model=openai%%')
+
+
+@agent.tool_plain
+def search_web(query: str) -> str:
+    """Search the web."""
+    return f'Results for {query!r}'
+
+
+@agent.tool_plain
+def delete_cache() -> str:
+    """Clear the cache."""
+    return 'cleared'
+
+
+result = agent.run_sync(
+    'What is the population of France?',
+    model_settings={'tool_choice': ToolOrOutput(function_tools=['search_web'])},  # delete_cache hidden
+)
+```
+
+To force a particular tool on one step only (say, the first), return the setting from a capability's `get_model_settings` callable rather than setting it statically.
+
+## Model-level capabilities
+
+These capabilities change *which* model is used or *how* it is called, without touching your agent code.
+
+| Capability | What it does |
+|---|---|
+| `Thinking(effort=True)` | Sets `thinking` portably; provider-specific thinking settings still win. |
+| `Caching(retention=True, messages=True)` | Sets `cache` (library-managed prompt caching). |
+| `SelectModel(selector)` | Picks the model before each model-request step from a `ModelSelectionContext` (`deps`, `prompt`, `messages`, `usage`, `run_step`, the lower-precedence `model`). |
+| `ResolveModelId(resolver)` | Turns a model-ID string into a `Model` (custom names, per-tenant credentials); return `None` to fall through to the normal lookup. Replaces Temporal's old `provider_factory=`. |
+| `RaiseContentFilterError()` | Raises `ContentFilterError` (an `UnexpectedModelBehavior`) when a response finishes with `finish_reason='content_filter'`, instead of returning an empty or partial output. |
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Caching, RaiseContentFilterError, ResolveModelId, SelectModel, Thinking
+from pydantic_ai.models import ModelResolutionContext, ModelSelectionContext
+from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.providers.anthropic import AnthropicProvider
+
+
+def route(ctx: ModelSelectionContext) -> str:
+    # cheap model for the first step, stronger one once tools have produced results
+    return 'anthropic:%%model=anthropic-small%%' if ctx.run_step == 1 else 'anthropic:%%model=anthropic%%'
+
+
+def resolve(ctx: ModelResolutionContext, model_id: str):
+    if model_id == 'tenant-default':
+        return AnthropicModel('%%model=anthropic%%', provider=AnthropicProvider(api_key='per-tenant-key'))
+    return None  # fall through to the standard 'provider:model' lookup
+
+
+agent = Agent(
+    'tenant-default',
+    capabilities=[
+        ResolveModelId(resolve),
+        SelectModel(route),
+        Thinking(effort='low'),
+        Caching('1h'),
+        RaiseContentFilterError(),
+    ],
+)
+```
+
+Capabilities can also be passed per run (`agent.run(..., capabilities=[Thinking(effort='xhigh')])`) for a one-off change.
 
 ## `FallbackModel` — wrap primaries with backups
 
@@ -116,9 +207,9 @@ from pydantic_ai.models.fallback import FallbackModel
 from pydantic_ai.exceptions import ModelAPIError
 
 model = FallbackModel(
-    'openai:gpt-4o',                    # primary
-    'anthropic:claude-sonnet-4-6',      # first fallback
-    'google-gla:gemini-2.0-flash',      # second fallback
+    'openai:%%model=openai%%',                    # primary
+    'anthropic:%%model=anthropic%%',      # first fallback
+    'google:%%model=gemini%%',      # second fallback
     fallback_on=(ModelAPIError,),
 )
 agent = Agent(model)
@@ -167,8 +258,8 @@ async def async_exc_handler(exc: Exception) -> bool:
     return isinstance(exc, ModelAPIError)
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=async_exc_handler,
 )
 ```
@@ -192,8 +283,8 @@ async def async_quality_check(resp: ModelResponse) -> bool:
     return not any(texts)  # fall back on empty response
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-sonnet-4-6',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic%%',
     fallback_on=[too_short, ModelAPIError],
 )
 ```
@@ -215,9 +306,9 @@ def empty_reply(resp: ModelResponse) -> bool:
     return not any(p.part_kind == 'text' for p in resp.parts)
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-sonnet-4-6',
-    'google-gla:gemini-2.0-flash',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic%%',
+    'google:%%model=gemini%%',
     fallback_on=[
         ModelAPIError,        # exception type
         is_rate_limited,      # exception handler
@@ -238,8 +329,8 @@ from pydantic_ai.models.fallback import FallbackModel, FallbackExceptionGroup
 from pydantic_ai.exceptions import ModelAPIError
 
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=(ModelAPIError,),
 )
 agent = Agent(model)
@@ -247,27 +338,26 @@ agent = Agent(model)
 async def main():
     try:
         await agent.run('Hello')
-    except* ModelAPIError as eg:
-        for exc in eg.exceptions:
-            print(f'Provider failed: {exc}')
     except FallbackExceptionGroup as eg:
-        print(f'All {len(eg.exceptions)} models failed.')
+        print(f'All {len(eg.exceptions)} models failed:')
+        for exc in eg.exceptions:
+            print(f'  {type(exc).__name__}: {exc}')
 
 asyncio.run(main())
 ```
 
-`except*` is Python 3.11+ ExceptionGroup syntax. For 3.10, use `except FallbackExceptionGroup` and inspect `.exceptions` manually.
+`FallbackExceptionGroup` is an `ExceptionGroup`, so `except* ModelAPIError` also works (Python 3.11+, which PydanticAI requires) — but a single `try` cannot mix `except` and `except*` clauses; pick one style.
 
 ### `FallbackModel.models` — inspecting the chain
 
 ```python
 model = FallbackModel(
-    'openai:gpt-4o',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=(ModelAPIError,),
 )
 print([m.model_name for m in model.models])
-# ['gpt-4o', 'claude-haiku-4-5']
+# ['%%model=openai%%', '%%model=anthropic-small%%']
 ```
 
 ### Gotchas
@@ -292,28 +382,27 @@ from pydantic_ai.models.instrumented import InstrumentedModel, InstrumentationSe
 # Wrap a single agent
 agent = Agent(
     InstrumentedModel(
-        'openai:gpt-4o',
-        options=InstrumentationSettings(version=4, include_content=True),
+        'openai:%%model=openai%%',
+        options=InstrumentationSettings(include_content=True),
     )
 )
 
 # Or apply globally to every agent in the process
-Agent.instrument_all(InstrumentationSettings(version=4))
+Agent.instrument_all(InstrumentationSettings())
 ```
 
-### `InstrumentationSettings` constructor (source-verified)
+### `InstrumentationSettings` constructor
 
 ```python
 InstrumentationSettings(
     *,
     tracer_provider: TracerProvider | None = None,        # default: global provider
     meter_provider: MeterProvider | None = None,          # default: global provider
-    logger_provider: LoggerProvider | None = None,        # default: global provider
     include_binary_content: bool = True,
     include_content: bool = True,
-    version: Literal[1, 2, 3, 4, 5] = 5,   # default changed in 1.103.0
-    event_mode: Literal['attributes', 'logs'] = 'attributes',   # only for version=1
-    use_aggregated_usage_attribute_names: bool = False,
+    include_model_request_parameters: bool = True,
+    version: Literal[2, 3, 4, 5, 6] = 5,
+    use_aggregated_usage_attribute_names: bool = True,
 )
 ```
 
@@ -321,22 +410,24 @@ InstrumentationSettings(
 |-----------|---------|-------|
 | `tracer_provider` | global | Pass to scope spans to a custom provider |
 | `meter_provider` | global | Token + cost histograms |
-| `logger_provider` | global | OTel log events (version 1 only) |
 | `include_binary_content` | `True` | Whether to encode base64 images/files in spans |
 | `include_content` | `True` | Set `False` to strip prompts & completions from spans (PII) |
+| `include_model_request_parameters` | `True` | Record the full request parameters (tool definitions etc.) on spans; set `False` if large tool schemas bloat spans |
 | `version` | `5` | Wire format version (see table below) |
-| `event_mode` | `'attributes'` | `'logs'` emits OTel log-based events (version 1 only) |
-| `use_aggregated_usage_attribute_names` | `False` | Use `gen_ai.aggregated_usage.*` to avoid double-counting in backends that aggregate child+parent spans |
+| `use_aggregated_usage_attribute_names` | `True` | Agent-run spans report `gen_ai.aggregated_usage.*` to avoid double-counting in backends that aggregate child+parent spans. Default flipped to `True` in 2.0 |
+
+Version 1 and its `event_mode=` / `logger_provider=` arguments were removed in 2.0.
 
 ### Data format versions
 
 | Version | Notes |
 |---------|-------|
-| `1` | Legacy event-based GenAI spec — **deprecated**, will be removed. Use `event_mode` / `logger_provider` with this version. |
-| `2` | Newer OTel GenAI spec. Messages in `gen_ai.input.messages` / `gen_ai.output.messages` span attributes; system instructions in `gen_ai.system_instructions`. |
+| `1` | Legacy event-based spec — **removed in 2.0**. |
+| `2` | Newer OTel GenAI spec (deprecated since 2.0 — emits `PydanticAIDeprecationWarning`, as do 3 and 4). Messages in `gen_ai.input.messages` / `gen_ai.output.messages` span attributes; system instructions in `gen_ai.system_instructions`. |
 | `3` | Same as v2 + thinking tokens (e.g. Claude extended thinking, o-series reasoning tokens). |
 | `4` | Same as v3 + GenAI semantic conventions for multimodal content. URL media uses `type='uri'`; inline binaries use `type='blob'` with `modality`. |
-| `5` | Same as v4 + `CallDeferred` and `ApprovalRequired` control-flow exceptions no longer set the span to `ERROR` — spans are left `UNSET` since deferrals are not failures. **Default from 1.103.0.** |
+| `5` | Same as v4 + `CallDeferred` and `ApprovalRequired` control-flow exceptions no longer set the span to `ERROR` — spans are left `UNSET` since deferrals are not failures. **Default** (since 1.103.0). |
+| `6` | Same as v5, but tool results are emitted in a message with `role='tool'` instead of `role='user'`. Opt-in. |
 
 ```python
 from pydantic_ai.models.instrumented import InstrumentationSettings
@@ -354,11 +445,6 @@ dev_settings = InstrumentationSettings(
     version=5,
 )
 
-# Legacy Logfire setup still on version 1
-legacy = InstrumentationSettings(
-    version=1,
-    event_mode='logs',
-)
 ```
 
 ### OTel metrics emitted
@@ -378,11 +464,10 @@ legacy = InstrumentationSettings(
 To avoid double-counting on observability backends that sum child+parent spans:
 
 ```python
-settings = InstrumentationSettings(
-    use_aggregated_usage_attribute_names=True,
-    # => uses gen_ai.aggregated_usage.input_tokens / gen_ai.aggregated_usage.output_tokens
-    # on agent-run spans instead of gen_ai.usage.*
-)
+# Already the default since 2.0: agent-run spans use
+# gen_ai.aggregated_usage.input_tokens / output_tokens, model-request spans keep gen_ai.usage.*.
+# To keep the V1 attribute names on run spans (e.g. for existing dashboards):
+settings = InstrumentationSettings(use_aggregated_usage_attribute_names=False)
 ```
 
 ### `include_content=False` — PII scrubbing
@@ -396,11 +481,13 @@ pii_safe = InstrumentationSettings(
     include_binary_content=False,   # no base64-encoded images/files
 )
 
-agent = Agent(InstrumentedModel('openai:gpt-4o', options=pii_safe))
+agent = Agent(InstrumentedModel('openai:%%model=openai%%', options=pii_safe))
 # Spans will contain timing, token counts, and model name — but NO text content.
 ```
 
-### `messages_to_otel_events` — inspect span events manually
+### `messages_to_otel_messages` — see what lands on the span
+
+The V1 `messages_to_otel_events()` helper went with version 1. To see the GenAI-convention message list that version 2+ writes to `gen_ai.input.messages`, call `messages_to_otel_messages()`:
 
 ```python
 from pydantic_ai.models.instrumented import InstrumentationSettings
@@ -408,9 +495,7 @@ from pydantic_ai.messages import ModelRequest, UserPromptPart
 
 settings = InstrumentationSettings()
 messages = [ModelRequest(parts=[UserPromptPart(content='Hello')])]
-events = settings.messages_to_otel_events(messages)
-for event in events:
-    print(event.attributes.get('event.name'), event.body)
+print(settings.messages_to_otel_messages(messages))
 ```
 
 ### `instrument_model` helper function
@@ -421,7 +506,7 @@ for event in events:
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.models.instrumented import instrument_model, InstrumentationSettings
 
-raw_model = OpenAIChatModel('gpt-4o')
+raw_model = OpenAIChatModel('%%model=openai%%')
 model = instrument_model(raw_model, instrument=InstrumentationSettings(version=5))
 # If raw_model were already an InstrumentedModel, it's returned unchanged.
 ```
@@ -442,8 +527,8 @@ Agent.instrument_all(InstrumentationSettings(
 ))
 
 # Every Agent created after this call will have spans emitted
-agent1 = Agent('openai:gpt-4o')
-agent2 = Agent('anthropic:claude-sonnet-4-6')
+agent1 = Agent('openai:%%model=openai%%')
+agent2 = Agent('anthropic:%%model=anthropic%%')
 ```
 
 ### Per-provider tracing with custom TracerProvider
@@ -461,15 +546,15 @@ model_provider.add_span_processor(
 )
 
 settings = InstrumentationSettings(tracer_provider=model_provider, include_content=True)
-model = InstrumentedModel('openai:gpt-4o', options=settings)
+model = InstrumentedModel('openai:%%model=openai%%', options=settings)
 ```
 
 ## Gateway routing
 
-Prefix a known provider with `gateway/` to route it through the [Pydantic AI Gateway](https://ai.pydantic.dev/gateway/):
+Prefix a known provider with `gateway/` to route it through the [Pydantic AI Gateway](https://pydantic.dev/docs/ai/overview/gateway/):
 
 ```python
-agent = Agent('gateway/openai:gpt-5.2')
+agent = Agent('gateway/openai:%%model=openai%%')
 # => uses the gateway provider, normalising to the upstream OpenAI profile
 ```
 
@@ -500,7 +585,7 @@ model = OpenAIChatModel(
 ```python
 from pydantic_ai import limit_model_concurrency
 
-model = limit_model_concurrency(OpenAIChatModel('gpt-5.2'), limit=8)
+model = limit_model_concurrency(OpenAIChatModel('%%model=openai%%'), 8)   # or ConcurrencyLimit(max_running=8, max_queued=100)
 ```
 
 Enforces a max of 8 concurrent in-flight requests at the model layer.
@@ -509,8 +594,8 @@ Enforces a max of 8 concurrent in-flight requests at the model layer.
 
 ```python
 model = FallbackModel(
-    'bedrock:us.anthropic.claude-sonnet-4-6',
-    'bedrock:eu.anthropic.claude-sonnet-4-6',
+    'bedrock:us.anthropic.%%model=anthropic%%',
+    'bedrock:eu.anthropic.%%model=anthropic%%',
     fallback_on=(ModelAPIError,),
 )
 ```
@@ -524,7 +609,7 @@ def empty_or_short(resp: ModelResponse) -> bool:
             return False
     return True
 
-model = FallbackModel('openai:gpt-5.2', 'anthropic:claude-sonnet-4-6',
+model = FallbackModel('openai:%%model=openai%%', 'anthropic:%%model=anthropic%%',
                      fallback_on=[empty_or_short, ModelAPIError])
 ```
 
@@ -542,9 +627,9 @@ model = OpenAIChatModel('meta-llama/Llama-3.1-8B-Instruct', provider=provider)
 
 ```python
 if env == 'production':
-    ctx = agent.override(model='openai:gpt-5.2')
+    ctx = agent.override(model='openai:%%model=openai%%')
 elif env == 'canary':
-    ctx = agent.override(model=FallbackModel('openai:gpt-5.2', 'anthropic:claude-sonnet-4-6'))
+    ctx = agent.override(model=FallbackModel('openai:%%model=openai%%', 'anthropic:%%model=anthropic%%'))
 else:
     from pydantic_ai.models.test import TestModel
     ctx = agent.override(model=TestModel())
@@ -574,8 +659,8 @@ async def quality_check(resp: ModelResponse) -> bool:
         return False  # don't fall back if scorer is down
 
 model = FallbackModel(
-    'openai:gpt-4o-mini',
-    'anthropic:claude-haiku-4-5',
+    'openai:%%model=openai-small%%',
+    'anthropic:%%model=anthropic-small%%',
     fallback_on=[quality_check, ModelAPIError],
 )
 agent = Agent(model)
@@ -583,12 +668,12 @@ agent = Agent(model)
 
 ## Reference
 
-- `infer_provider`, `infer_provider_class` — `providers/__init__.py:100`, `:234`
+- `infer_provider`, `infer_provider_class` — `providers/__init__.py`
 - `KnownModelName` — `models/__init__.py` (near the top)
 - `FallbackModel` — `models/fallback.py`
 - `FallbackExceptionGroup` — `models/fallback.py`
 - `InstrumentedModel` — `models/instrumented.py`
 - `InstrumentationSettings` — `models/instrumented.py`
 - `instrument_model` — `models/instrumented.py`
-- `ModelSettings` base — `settings.py:24`
+- `ModelSettings` base — `settings.py`
 - `limit_model_concurrency` — `models/concurrency.py`

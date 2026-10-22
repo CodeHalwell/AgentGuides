@@ -1,10 +1,14 @@
 ---
 title: "Haystack Recipes: Production-Ready Use Cases and Examples"
-description: "Production-ready Haystack pipelines — knowledge-base Q&A, multi-tenant support, document analysis, real-time retrieval and multi-agent collaboration."
-framework: haystack
+description: "Haystack 3 recipes — knowledge-base Q&A, multi-tenant support, document summarisation, live-data agents, multi-agent collaboration, research agents and a conversational code assistant."
+framework: "haystack"
+language: "python"
+sidebar:
+  label: "Recipes"
+  order: 5
 ---
 
-# Haystack Recipes: Production-Ready Use Cases and Examples
+> Verified against `haystack-ai` %%version=haystack-ai%% (checked %%versions-checked%%). Each recipe runs as written with `OPENAI_API_KEY` set; to try one offline, replace `OpenAIChatGenerator(...)` with `MockChatGenerator()` from `haystack.components.generators.chat`.
 
 ## Table of Contents
 
@@ -20,891 +24,440 @@ framework: haystack
 
 ## Knowledge Base Question Answering System
 
-A complete RAG system for answering questions from an enterprise knowledge base.
-
+An indexing pipeline that cleans and splits documents (word-based splitting needs no extra dependencies; `split_by="sentence"` needs `pip install "nltk>=3.9.1"`), and a query pipeline that retrieves, prompts and returns a `GeneratedAnswer` with its source documents. The in-memory store keeps the recipe self-contained; the Elasticsearch variant is shown at the end.
 
 ```python
-
-from haystack import Pipeline, component
-from haystack.document_stores.elasticsearch import ElasticsearchDocumentStore
-from haystack.components.retrievers.elasticsearch import ElasticsearchBM25Retriever
-from haystack.components.builders import PromptBuilder
+from haystack import Document, Pipeline
+from haystack.components.builders import AnswerBuilder, ChatPromptBuilder
 from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.dataclasses import Document
-from typing import List
-import logging
+from haystack.components.preprocessors import DocumentCleaner, DocumentSplitter
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+from haystack.components.writers import DocumentWriter
+from haystack.dataclasses import ChatMessage
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+from haystack.document_stores.types import DuplicatePolicy
 
-logger = logging.getLogger(__name__)
+store = InMemoryDocumentStore()
 
-class KnowledgeBaseQA:
-    """
-    Complete knowledge base Q&A system using Haystack.
-    """
-    
-    def __init__(self, elasticsearch_url: str, openai_api_key: str):
-        self.setup_document_store(elasticsearch_url)
-        self.setup_pipeline(openai_api_key)
-        self.document_metadata = {}
-    
-    def setup_document_store(self, elasticsearch_url: str):
-        """Initialize document store."""
-        self.doc_store = ElasticsearchDocumentStore(
-            hosts=elasticsearch_url,
-            index="knowledge_base",
-            embedding_dim=384  # Using small embeddings for speed
-        )
-        logger.info("Document store initialised")
-    
-    def setup_pipeline(self, openai_api_key: str):
-        """Setup RAG pipeline."""
-        pipeline = Pipeline()
-        
-        # Retriever
-        retriever = ElasticsearchBM25Retriever(document_store=self.doc_store)
-        pipeline.add_component("retriever", retriever)
-        
-        # Prompt builder
-        prompt_template = """
-        Based on the following documents, answer the question.
-        
-        Documents:
-        
-        - {{ doc.content }}
-        
-        
-        Question: {{ question }}
-        Answer:
-        """
-        
-        prompt_builder = PromptBuilder(template=prompt_template)
-        pipeline.add_component("prompt_builder", prompt_builder)
-        
-        # Generator
-        generator = OpenAIChatGenerator(
-            model="gpt-4o",
-            api_key=openai_api_key
-        )
-        pipeline.add_component("generator", generator)
-        
-        # Connect components
-        pipeline.connect("retriever.documents", "prompt_builder.documents")
-        pipeline.connect("prompt_builder.prompt", "generator.prompt")
-        
-        self.pipeline = pipeline
-        logger.info("Pipeline setup complete")
-    
-    def index_documents(self, documents: List[Document]):
-        """Index documents into knowledge base."""
-        logger.info(f"Indexing {len(documents)} documents")
-        self.doc_store.write_documents(documents)
-        logger.info("Indexing complete")
-    
-    def query(self, question: str, top_k: int = 5) -> dict:
-        """
-        Query knowledge base for answer.
-        
-        Args:
-            question: Question to ask
-            top_k: Number of documents to retrieve
-            
-        Returns:
-            Query results with answer
-        """
-        try:
-            result = self.pipeline.run({
-                "retriever": {"query": question, "top_k": top_k},
-                "prompt_builder": {"question": question}
-            })
-            
-            return {
-                "question": question,
-                "answer": result.get("generator", {}).get("reply", ""),
-                "success": True
-            }
-        except Exception as e:
-            logger.error(f"Query failed: {str(e)}")
-            return {
-                "question": question,
-                "error": str(e),
-                "success": False
-            }
+# --- Indexing -------------------------------------------------------------
+indexing = Pipeline()
+indexing.add_component("cleaner", DocumentCleaner())
+indexing.add_component("splitter", DocumentSplitter(split_by="word", split_length=150, split_overlap=20))
+indexing.add_component("writer", DocumentWriter(document_store=store, policy=DuplicatePolicy.OVERWRITE))
+indexing.connect("cleaner.documents", "splitter.documents")
+indexing.connect("splitter.documents", "writer.documents")
 
-# Usage
-qa_system = KnowledgeBaseQA(
-    elasticsearch_url="http://localhost:9200",
-    openai_api_key="sk-..."
-)
+indexing.run({"cleaner": {"documents": [
+    Document(content="Our return policy allows returns within 30 days for a full refund.", meta={"source": "policies.md"}),
+    Document(content="Standard shipping takes 5-7 business days.", meta={"source": "shipping.md"}),
+    Document(content="All products carry a one-year warranty.", meta={"source": "warranty.md"}),
+]}})
 
-# Index sample documents
-sample_docs = [
-    Document(content="Our return policy allows returns within 30 days for full refund"),
-    Document(content="Shipping takes 5-7 business days for standard delivery"),
-    Document(content="We offer 1-year warranty on all products")
+# --- Querying -------------------------------------------------------------
+template = [
+    ChatMessage.from_system(
+        "Answer only from the documents. If they do not contain the answer, say so. "
+        "Cite sources as [source]."
+    ),
+    ChatMessage.from_user(
+        "{% for doc in documents %}[{{ doc.meta.source }}] {{ doc.content }}\n{% endfor %}\n"
+        "Question: {{ question }}"
+    ),
 ]
-qa_system.index_documents(sample_docs)
 
-# Query
-result = qa_system.query("What's your return policy?")
-print(f"Answer: {result['answer']}")
+qa = Pipeline()
+qa.add_component("retriever", InMemoryBM25Retriever(document_store=store, top_k=5))
+qa.add_component("prompt", ChatPromptBuilder(template=template, required_variables=["question", "documents"]))
+qa.add_component("llm", OpenAIChatGenerator(model="%%model=openai-small%%"))
+qa.add_component("answer", AnswerBuilder())
 
+qa.connect("retriever.documents", "prompt.documents")
+qa.connect("prompt.prompt", "llm.messages")
+qa.connect("llm.replies", "answer.replies")
+qa.connect("retriever.documents", "answer.documents")
+
+
+def ask(question: str) -> dict:
+    result = qa.run({
+        "retriever": {"query": question},
+        "prompt": {"question": question},
+        "answer": {"query": question},
+    })
+    answer = result["answer"]["answers"][0]
+    return {"answer": answer.data, "sources": [d.meta.get("source") for d in answer.documents]}
+
+
+print(ask("What's your return policy?"))
 ```
 
+**Swapping in Elasticsearch** (`pip install elasticsearch-haystack`) changes only the store and retriever:
+
+```python
+from haystack_integrations.document_stores.elasticsearch import ElasticsearchDocumentStore
+from haystack_integrations.components.retrievers.elasticsearch import ElasticsearchBM25Retriever
+
+store = ElasticsearchDocumentStore(hosts="http://localhost:9200", index="knowledge_base")
+retriever = ElasticsearchBM25Retriever(document_store=store, top_k=5)
+```
+
+For semantic search, add `OpenAIDocumentEmbedder` before the writer, `OpenAITextEmbedder` before an embedding retriever, and join BM25 and embedding results with `DocumentJoiner(join_mode="reciprocal_rank_fusion")`.
 
 ---
 
 ## Multi-Tenant Customer Support Agent
 
-Customer support agent handling multiple customers with isolated data.
+One agent definition serves every tenant. The tenant ID is passed to `run()` as a state value, and each data-access tool reads it from a parameter typed as `State`. The Agent always injects that parameter itself, so the model can neither see nor replace the tenant ID.
 
 ```python
-from haystack.components.agents import Agent
+from typing import Annotated
+
+from haystack import Document
+from haystack.components.agents import Agent, State
 from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.tools import Tool
-from typing import Dict, Optional
-import logging
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+from haystack.dataclasses import ChatMessage
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+from haystack.tools import tool
 
-logger = logging.getLogger(__name__)
+kb = InMemoryDocumentStore()
+kb.write_documents([
+    Document(content="Acme: refunds are processed within 3 days.", meta={"tenant_id": "acme"}),
+    Document(content="Globex: refunds require a receipt.", meta={"tenant_id": "globex"}),
+])
+kb_retriever = InMemoryBM25Retriever(document_store=kb, top_k=3)
 
-class MultiTenantSupportAgent:
-    """
-    Customer support agent supporting multiple tenants with data isolation.
-    """
-    
-    def __init__(self):
-        self.agents: Dict[str, Agent] = {}
-        self.tenant_tools: Dict[str, list] = {}
-        self.llm = OpenAIChatGenerator(model="gpt-4o")
-    
-    def create_tenant_agent(self, tenant_id: str, tenant_config: dict):
-        """
-        Create isolated agent for tenant.
-        
-        Args:
-            tenant_id: Unique tenant identifier
-            tenant_config: Tenant-specific configuration
-        """
-        # Create tenant-specific tools
-        tools = self._create_tenant_tools(tenant_id, tenant_config)
-        self.tenant_tools[tenant_id] = tools
-        
-        # Create agent with tenant-specific system prompt
-        system_prompt = f"""
-        You are a customer support specialist for {tenant_config.get('company_name', 'our company')}.
-        
-        Guidelines:
-        - Always be professional and courteous
-        - Use tenant-specific knowledge base and policies
-        - Escalate complex issues when necessary
-        - Respect data privacy and isolation
-        """
-        
-        agent = Agent(
-            tools=tools,
-            llm=self.llm,
-            system_prompt=system_prompt
-        )
-        
-        self.agents[tenant_id] = agent
-        logger.info(f"Agent created for tenant: {tenant_id}")
-    
-    def _create_tenant_tools(self, tenant_id: str, config: dict) -> list:
-        """Create tenant-specific tools."""
-        
-        def lookup_customer_info(customer_id: str) -> dict:
-            """Look up customer information."""
-            # Fetch from tenant-specific database
-            return {
-                "customer_id": customer_id,
-                "name": "John Doe",
-                "account_status": "active",
-                "tenant_id": tenant_id  # Ensure isolation
-            }
-        
-        def create_support_ticket(issue: str, priority: str) -> dict:
-            """Create support ticket."""
-            return {
-                "ticket_id": f"{tenant_id}-TICKET-001",
-                "issue": issue,
-                "priority": priority,
-                "tenant_id": tenant_id
-            }
-        
-        def check_knowledge_base(query: str) -> dict:
-            """Check tenant knowledge base."""
-            # Search tenant-specific KB
-            return {
-                "results": ["KB Article 1", "KB Article 2"],
-                "tenant_id": tenant_id
-            }
-        
-        return [
-            Tool(function=lookup_customer_info, description="Lookup customer information"),
-            Tool(function=create_support_ticket, description="Create support ticket"),
-            Tool(function=check_knowledge_base, description="Search knowledge base")
-        ]
-    
-    def handle_customer_query(
-        self,
-        tenant_id: str,
-        customer_query: str,
-        customer_id: Optional[str] = None
-    ) -> dict:
-        """
-        Handle customer query with tenant isolation.
-        
-        Args:
-            tenant_id: Customer's tenant ID
-            customer_query: Customer question
-            customer_id: Optional customer ID for context
-            
-        Returns:
-            Agent response
-        """
-        if tenant_id not in self.agents:
-            return {
-                "success": False,
-                "error": f"Tenant {tenant_id} not configured"
-            }
-        
-        agent = self.agents[tenant_id]
-        
-        # Include customer context if available
-        enhanced_query = customer_query
-        if customer_id:
-            enhanced_query = f"Customer ID: {customer_id}\nQuery: {customer_query}"
-        
-        try:
-            response = agent.run(query=enhanced_query, max_iterations=10)
-            
-            return {
-                "success": True,
-                "tenant_id": tenant_id,
-                "response": response,
-                "customer_id": customer_id
-            }
-        except Exception as e:
-            logger.error(f"Query processing failed for tenant {tenant_id}: {str(e)}")
-            return {
-                "success": False,
-                "tenant_id": tenant_id,
-                "error": str(e)
-            }
+CUSTOMERS = {("acme", "C-1"): {"name": "Ada", "plan": "pro"}, ("globex", "C-9"): {"name": "Hank", "plan": "free"}}
 
-# Usage
-support_system = MultiTenantSupportAgent()
 
-# Create agents for different tenants
-support_system.create_tenant_agent("tenant-001", {
-    "company_name": "Acme Corp",
-    "support_email": "support@acme.com"
-})
+@tool
+def search_kb(query: Annotated[str, "What to look up"], state: State) -> str:
+    """Search this company's support knowledge base."""
+    filters = {"field": "meta.tenant_id", "operator": "==", "value": state.get("tenant_id")}
+    docs = kb_retriever.run(query=query, filters=filters)["documents"]
+    return "\n".join(d.content for d in docs) or "Nothing found."
 
-support_system.create_tenant_agent("tenant-002", {
-    "company_name": "TechStart Inc",
-    "support_email": "help@techstart.io"
-})
 
-# Handle customer queries
-response = support_system.handle_customer_query(
-    tenant_id="tenant-001",
-    customer_query="I want to return my order",
-    customer_id="CUST-12345"
+@tool
+def lookup_customer(customer_id: Annotated[str, "Customer ID"], state: State) -> dict:
+    """Look up a customer record."""
+    return CUSTOMERS.get((state.get("tenant_id"), customer_id), {"error": "Unknown customer"})
+
+
+@tool
+def create_ticket(summary: Annotated[str, "Issue summary"], state: State) -> str:
+    """Open a support ticket."""
+    return f"Ticket {state.get('tenant_id').upper()}-1042 created: {summary}"
+
+
+support_agent = Agent(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    tools=[search_kb, lookup_customer, create_ticket],
+    system_prompt="You are a support agent for {{ company_name }}. Be concise and polite.",
+    state_schema={"tenant_id": {"type": str}},
+    max_agent_steps=8,
 )
-print(response)
+
+TENANTS = {"acme": "Acme Ltd", "globex": "Globex Corp"}
+
+
+def handle(tenant_id: str, text: str) -> str:
+    if tenant_id not in TENANTS:
+        raise ValueError("Unknown tenant")
+    result = support_agent.run(
+        messages=[ChatMessage.from_user(text)],
+        tenant_id=tenant_id,                  # state value, invisible to the model
+        company_name=TENANTS[tenant_id],      # system_prompt variable
+    )
+    return result["last_message"].text
+
+
+print(handle("acme", "How long do refunds take? I'm customer C-1."))
 ```
+
+A `State`-typed parameter is left out of the tool's JSON schema and is always filled by the Agent, even if the model sends an argument with the same name. If a prompt-injected request makes the model add `tenant_id` to a call, the tool fails with an unexpected-argument error (reported back to the model) instead of switching tenant. Apply the same filter in every data-access tool.
+
+Do not use `inputs_from_state` for this. It is a convenience for filling arguments from state, not a security boundary: in Haystack 3, arguments the model supplies take precedence over the state lookup, so a tool declared with `inputs_from_state={"tenant_id": "tenant_id"}` will happily run against whatever tenant the model names.
 
 ---
 
 ## Document Analysis and Summarisation Pipeline
 
-Analyse and summarise large document collections.
-
+Convert files, split them into chunks, summarise each chunk with an `LLM` component, then combine the summaries (map-reduce).
 
 ```python
+import tempfile
+from pathlib import Path
 
-from haystack import Pipeline, component
-from haystack.components.builders import PromptBuilder
-from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.dataclasses import Document
-from typing import List
-import logging
+from haystack import Pipeline
+from haystack.components.converters import TextFileToDocument
+from haystack.components.generators.chat import LLM, OpenAIChatGenerator
+from haystack.components.preprocessors import DocumentSplitter
 
-logger = logging.getLogger(__name__)
 
-class DocumentAnalyser:
-    """
-    Analyse and summarise documents using Haystack.
-    """
-    
-    def __init__(self, openai_api_key: str):
-        self.setup_pipeline(openai_api_key)
-    
-    def setup_pipeline(self, openai_api_key: str):
-        """Setup analysis pipeline."""
-        pipeline = Pipeline()
-        
-        # Text chunker (simulated)
-        @component
-        class TextChunker:
-            @component.output_types(chunks=list)
-            def run(self, documents: List[Document]):
-                chunks = []
-                for doc in documents:
-                    # Split document into chunks
-                    text = doc.content
-                    chunk_size = 1000
-                    for i in range(0, len(text), chunk_size):
-                        chunks.append(text[i:i+chunk_size])
-                return {"chunks": chunks}
-        
-        # Summary generator
-        summary_prompt = """
-        Summarise the following text in 3-5 sentences:
-        
-        Text:
-        {{ chunk }}
-        
-        Summary:
-        """
-        
-        summary_builder = PromptBuilder(template=summary_prompt)
-        generator = OpenAIChatGenerator(
-            model="gpt-4o",
-            api_key=openai_api_key
-        )
-        
-        # Add components
-        pipeline.add_component("chunker", TextChunker())
-        pipeline.add_component("summary_builder", summary_builder)
-        pipeline.add_component("generator", generator)
-        
-        self.pipeline = pipeline
-        logger.info("Analysis pipeline ready")
-    
-    def analyse_documents(self, documents: List[Document]) -> dict:
-        """
-        Analyse collection of documents.
-        
-        Args:
-            documents: Documents to analyse
-            
-        Returns:
-            Analysis results
-        """
-        try:
-            results = []
-            
-            for doc in documents:
-                result = {
-                    "document_id": doc.id,
-                    "title": doc.meta.get("title", "Untitled"),
-                    "length": len(doc.content),
-                    "summary": self._summarise_document(doc)
-                }
-                results.append(result)
-            
-            return {
-                "success": True,
-                "documents_processed": len(documents),
-                "analyses": results
-            }
-        
-        except Exception as e:
-            logger.error(f"Analysis failed: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-    
-    def _summarise_document(self, doc: Document) -> str:
-        """Summarise a single document."""
-        # Implementation would use the pipeline
-        return "This document discusses..."
+preprocess = Pipeline()
+preprocess.add_component("convert", TextFileToDocument())
+preprocess.add_component("split", DocumentSplitter(split_by="word", split_length=300, split_overlap=30))
+preprocess.connect("convert.documents", "split.documents")
 
-# Usage
-analyser = DocumentAnalyser(openai_api_key="sk-...")
+chunk_summariser = LLM(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    system_prompt="You summarise business documents accurately and briefly.",
+    user_prompt="Summarise this excerpt in 2-3 bullet points:\n\n{{ text }}",
+)
+final_summariser = LLM(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    system_prompt="You write executive summaries.",
+    user_prompt="Combine these partial summaries into one {{ length }} summary:\n\n{{ partials }}",
+)
 
-documents = [
-    Document(content="Long document 1...", meta={"title": "Document 1"}),
-    Document(content="Long document 2...", meta={"title": "Document 2"})
-]
 
-results = analyser.analyse_documents(documents)
-print(results)
+def summarise(path: str, length: str = "150-word") -> str:
+    chunks = preprocess.run({"convert": {"sources": [path]}})["split"]["documents"]
+    partials = [chunk_summariser.run(text=c.content)["last_message"].text for c in chunks]
+    return final_summariser.run(partials="\n".join(partials), length=length)["last_message"].text
 
+
+with tempfile.TemporaryDirectory() as tmp:
+    report = Path(tmp) / "report.txt"
+    report.write_text("Revenue grew 12% in Q3. Costs fell 3%. " * 50)
+    print(summarise(str(report)))
 ```
 
+`PyPDFToDocument`, `DOCXToDocument`, `HTMLToDocument`, `MarkdownToDocument` and `MultiFileConverter` (routes by file type) are drop-in replacements for the converter. For many chunks, call `await chunk_summariser.run_async(...)` concurrently with `asyncio.gather`.
 
 ---
 
 ## Real-Time Data Retrieval Agent
 
-Agent that retrieves and processes real-time data from multiple sources.
+Live data comes from tools. `HTMLToDocument` needs `pip install trafilatura`. Here a small fetch-and-convert pipeline is exposed as a single tool with `PipelineTool`, alongside a function tool for prices.
 
 ```python
+from typing import Annotated
+
+from haystack import Pipeline
 from haystack.components.agents import Agent
+from haystack.components.converters import HTMLToDocument
+from haystack.components.fetchers import LinkContentFetcher
 from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.tools import Tool
-import aiohttp
-import asyncio
-from datetime import datetime
-import logging
+from haystack.dataclasses import ChatMessage
+from haystack.tools import PipelineTool, tool
 
-logger = logging.getLogger(__name__)
+fetch_pipe = Pipeline()
+fetch_pipe.add_component("fetch", LinkContentFetcher(timeout=10))
+fetch_pipe.add_component("to_doc", HTMLToDocument())
+fetch_pipe.connect("fetch.streams", "to_doc.sources")
 
-class RealTimeDataAgent:
-    """
-    Agent for retrieving and processing real-time data.
-    """
-    
-    def __init__(self):
-        self.llm = OpenAIChatGenerator(model="gpt-4o")
-        self.tools = self._create_tools()
-        self.agent = Agent(tools=self.tools, llm=self.llm)
-    
-    def _create_tools(self) -> list:
-        """Create real-time data retrieval tools."""
-        
-        def get_stock_price(symbol: str) -> dict:
-            """Get current stock price."""
-            # Simulate API call
-            return {
-                "symbol": symbol,
-                "price": 150.25,
-                "timestamp": datetime.now().isoformat()
-            }
-        
-        def get_weather_data(location: str) -> dict:
-            """Get current weather data."""
-            return {
-                "location": location,
-                "temperature": 22,
-                "condition": "Cloudy",
-                "timestamp": datetime.now().isoformat()
-            }
-        
-        def search_news(query: str) -> dict:
-            """Search for recent news."""
-            return {
-                "query": query,
-                "results": [
-                    "News headline 1",
-                    "News headline 2",
-                    "News headline 3"
-                ],
-                "timestamp": datetime.now().isoformat()
-            }
-        
-        return [
-            Tool(function=get_stock_price, description="Get current stock price"),
-            Tool(function=get_weather_data, description="Get weather data for location"),
-            Tool(function=search_news, description="Search for news articles")
-        ]
-    
-    def query_data(self, query: str) -> dict:
-        """
-        Query for real-time data.
-        
-        Args:
-            query: Data query
-            
-        Returns:
-            Data results
-        """
-        try:
-            logger.info(f"Processing data query: {query}")
-            result = self.agent.run(query=query, max_iterations=10)
-            
-            return {
-                "success": True,
-                "query": query,
-                "result": result,
-                "timestamp": datetime.now().isoformat()
-            }
-        except Exception as e:
-            logger.error(f"Data query failed: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
-
-# Usage
-data_agent = RealTimeDataAgent()
-
-# Query for real-time data
-result = data_agent.query_data(
-    "What's the current stock price for AAPL and the weather in London?"
+fetch_page = PipelineTool(
+    pipeline=fetch_pipe,
+    name="fetch_page",
+    description="Fetch web pages and return their text.",
+    input_mapping={"urls": ["fetch.urls"]},
+    output_mapping={"to_doc.documents": "documents"},
+    outputs_to_string={"source": "documents", "handler": lambda docs: "\n\n".join(d.content[:4000] for d in docs)},
 )
-print(result)
+
+
+@tool
+def get_stock_price(symbol: Annotated[str, "Ticker symbol, e.g. MSFT"]) -> dict:
+    """Get the latest stock price."""
+    # Replace with a real market-data API call
+    return {"symbol": symbol.upper(), "price": 412.30, "currency": "USD"}
+
+
+live_agent = Agent(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    tools=[fetch_page, get_stock_price],
+    system_prompt="Answer with up-to-date information from your tools and say where it came from.",
+    max_agent_steps=6,
+)
+
+result = live_agent.run(messages=[ChatMessage.from_user("What is MSFT trading at?")])
+print(result["last_message"].text)
 ```
+
+For general web search, add `ComponentTool(component=SerperDevWebSearch(top_k=5), ...)` from `serperdev-haystack`.
 
 ---
 
 ## Multi-Agent Collaboration System
 
-Complex system with multiple agents collaborating to solve problems.
+A complete report-writing app: a coordinator delegates to researcher, analyst, writer and critic agents exposed through `AgentTool`, and loops writer and critic until the draft is approved. The patterns it combines (coordinator, specialists, shared state, refinement) are explained in the [multi-agent guide](/haystack-guide/haystack_multi_agent_guide/).
 
 ```python
+from typing import Annotated
+
 from haystack.components.agents import Agent
 from haystack.components.generators.chat import OpenAIChatGenerator
-from typing import Dict, List
-import logging
+from haystack.dataclasses import ChatMessage
+from haystack.tools import AgentTool, tool
 
-logger = logging.getLogger(__name__)
 
-class ResearchTeam:
-    """
-    Multi-agent research team collaborating on complex tasks.
-    """
-    
-    def __init__(self):
-        self.llm = OpenAIChatGenerator(model="gpt-4o")
-        self.agents = self._create_agents()
-        self.collaboration_history: List[dict] = []
-    
-    def _create_agents(self) -> Dict[str, Agent]:
-        """Create specialised agents."""
-        
-        agents = {
-            "researcher": Agent(
-                tools=[],
-                llm=self.llm,
-                system_prompt="You are a research expert. Analyse topics deeply and provide comprehensive information."
-            ),
-            "analyst": Agent(
-                tools=[],
-                llm=self.llm,
-                system_prompt="You are a data analyst. Identify patterns, trends, and insights in data."
-            ),
-            "writer": Agent(
-                tools=[],
-                llm=self.llm,
-                system_prompt="You are a professional writer. Create clear, concise, well-structured content."
-            ),
-            "critic": Agent(
-                tools=[],
-                llm=self.llm,
-                system_prompt="You are a critical reviewer. Identify weaknesses, gaps, and areas for improvement."
-            )
-        }
-        
-        return agents
-    
-    def collaborate_on_task(self, task: str) -> dict:
-        """
-        Collaborate on complex task with multiple agents.
-        
-        Args:
-            task: Task to complete
-            
-        Returns:
-            Collaborative result
-        """
-        logger.info(f"Starting collaboration on task: {task}")
-        
-        collaboration_log = []
-        
-        try:
-            # Phase 1: Research
-            research_result = self.agents["researcher"].run(
-                query=f"Research and provide comprehensive information on: {task}",
-                max_iterations=5
-            )
-            collaboration_log.append({
-                "agent": "researcher",
-                "phase": 1,
-                "result": research_result
-            })
-            
-            # Phase 2: Analysis
-            analysis_result = self.agents["analyst"].run(
-                query=f"Analyse the research on: {task}\nResearch summary: {research_result}",
-                max_iterations=5
-            )
-            collaboration_log.append({
-                "agent": "analyst",
-                "phase": 2,
-                "result": analysis_result
-            })
-            
-            # Phase 3: Writing
-            writing_result = self.agents["writer"].run(
-                query=f"Write a professional summary of: {task}\nAnalysis: {analysis_result}",
-                max_iterations=5
-            )
-            collaboration_log.append({
-                "agent": "writer",
-                "phase": 3,
-                "result": writing_result
-            })
-            
-            # Phase 4: Critical Review
-            review_result = self.agents["critic"].run(
-                query=f"Review the following content for: {task}\nContent: {writing_result}",
-                max_iterations=5
-            )
-            collaboration_log.append({
-                "agent": "critic",
-                "phase": 4,
-                "result": review_result
-            })
-            
-            self.collaboration_history.append({
-                "task": task,
-                "log": collaboration_log
-            })
-            
-            return {
-                "success": True,
-                "task": task,
-                "final_result": writing_result,
-                "review": review_result,
-                "collaboration_phases": 4
-            }
-        
-        except Exception as e:
-            logger.error(f"Collaboration failed: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "partial_log": collaboration_log
-            }
+@tool
+def web_search(query: Annotated[str, "Search query"]) -> str:
+    """Search the web."""
+    return f"(stub) results for {query!r}"
 
-# Usage
-team = ResearchTeam()
-result = team.collaborate_on_task("Analyse the impact of AI on employment")
-print(result)
+
+def specialist(prompt: str, tools=None) -> Agent:
+    return Agent(
+        chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+        tools=tools,
+        system_prompt=prompt,
+        max_agent_steps=6,
+    )
+
+
+team = [
+    AgentTool(agent=specialist("Research the task and list facts with sources.", [web_search]),
+              name="researcher", description="Finds facts and sources on a topic."),
+    AgentTool(agent=specialist("Analyse the facts you are given; identify trends and risks."),
+              name="analyst", description="Analyses research findings."),
+    AgentTool(agent=specialist("Write clear, structured prose from the material you are given."),
+              name="writer", description="Drafts the report."),
+    AgentTool(agent=specialist("Critique the draft; list concrete improvements, or reply APPROVED."),
+              name="critic", description="Reviews a draft."),
+]
+
+coordinator = Agent(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    tools=team,
+    system_prompt=(
+        "You lead a small team. Use the researcher, then the analyst, then the writer. "
+        "Send the draft to the critic and revise with the writer until the critic replies APPROVED "
+        "(at most two revisions). Return the final report."
+    ),
+    max_agent_steps=15,
+    tool_concurrency_limit=2,
+)
+
+result = coordinator.run(messages=[ChatMessage.from_user("Report on the European heat-pump market.")])
+print(result["last_message"].text)
+print(result["tool_call_counts"])
 ```
 
 ---
 
 ## Autonomous Research Agent
 
-Self-directed agent that conducts research autonomously.
+The agent accumulates findings in `State` and finishes by calling a `submit_report` tool, which is also its exit condition. An `on_exit` hook stops it from finishing with too few findings.
 
 ```python
-from haystack.components.agents import Agent
+from typing import Annotated
+
+from haystack.components.agents import Agent, State
 from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.tools import Tool
-import logging
-from datetime import datetime
+from haystack.dataclasses import ChatMessage
+from haystack.hooks import hook
+from haystack.tools import tool
 
-logger = logging.getLogger(__name__)
 
-class AutonomousResearchAgent:
-    """
-    Self-directed research agent with iterative refinement.
-    """
-    
-    def __init__(self):
-        self.llm = OpenAIChatGenerator(model="gpt-4o")
-        self.tools = self._create_research_tools()
-        self.agent = Agent(tools=self.tools, llm=self.llm)
-        self.research_log: List[dict] = []
-    
-    def _create_research_tools(self) -> list:
-        """Create research tools."""
-        
-        def search_academic_databases(query: str) -> dict:
-            """Search academic papers."""
-            return {
-                "results": ["Paper 1", "Paper 2", "Paper 3"],
-                "source": "Academic Databases"
-            }
-        
-        def extract_key_findings(text: str) -> dict:
-            """Extract key findings from text."""
-            return {
-                "findings": ["Finding 1", "Finding 2"],
-                "confidence": 0.85
-            }
-        
-        def synthesise_information(*sources) -> dict:
-            """Synthesise information from multiple sources."""
-            return {
-                "synthesis": "Combined insights...",
-                "sources_processed": len(sources)
-            }
-        
-        return [
-            Tool(function=search_academic_databases, description="Search academic databases"),
-            Tool(function=extract_key_findings, description="Extract findings"),
-            Tool(function=synthesise_information, description="Synthesise information")
-        ]
-    
-    def conduct_research(self, research_question: str, iterations: int = 3) -> dict:
-        """
-        Conduct autonomous research.
-        
-        Args:
-            research_question: Question to research
-            iterations: Number of refinement iterations
-            
-        Returns:
-            Research findings
-        """
-        logger.info(f"Starting autonomous research on: {research_question}")
-        
-        findings = []
-        
-        try:
-            for iteration in range(iterations):
-                # Conduct research iteration
-                logger.info(f"Research iteration {iteration + 1}/{iterations}")
-                
-                result = self.agent.run(
-                    query=f"{research_question}\nIteration: {iteration + 1}",
-                    max_iterations=10
-                )
-                
-                iteration_log = {
-                    "iteration": iteration + 1,
-                    "timestamp": datetime.now().isoformat(),
-                    "findings": result
-                }
-                
-                findings.append(iteration_log)
-                self.research_log.append(iteration_log)
-            
-            return {
-                "success": True,
-                "research_question": research_question,
-                "total_iterations": iterations,
-                "findings": findings
-            }
-        
-        except Exception as e:
-            logger.error(f"Research failed: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e),
-                "partial_findings": findings
-            }
+@tool
+def search_papers(query: Annotated[str, "Search query"]) -> str:
+    """Search academic databases."""
+    return f"(stub) three abstracts about {query}"
 
-# Usage
-researcher = AutonomousResearchAgent()
-results = researcher.conduct_research(
-    "What are emerging trends in quantum computing?",
-    iterations=3
+
+@tool(outputs_to_state={"findings": {"source": "findings"}})
+def record_finding(finding: Annotated[str, "One finding with its source"]) -> dict:
+    """Record a key finding."""
+    return {"findings": [finding]}
+
+
+@tool(inputs_from_state={"findings": "findings"})
+def submit_report(summary: Annotated[str, "Final synthesis"], findings: list[str]) -> dict:
+    """Submit the final research report."""
+    return {"summary": summary, "findings": findings}
+
+
+@hook
+def need_three_findings(state: State) -> None:
+    if len(state.get("findings") or []) < 3 and state.get("step_count", 0) < 10:
+        state.set("messages", [ChatMessage.from_user("Record at least three findings before submitting.")])
+        state.set("continue_run", True)
+
+
+researcher = Agent(
+    chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+    tools=[search_papers, record_finding, submit_report],
+    system_prompt="Research the question, record each finding, then call submit_report.",
+    state_schema={"findings": {"type": list[str]}},
+    exit_conditions=["submit_report"],
+    hooks={"on_exit": [need_three_findings]},
+    max_agent_steps=15,
 )
-print(results)
+
+result = researcher.run(messages=[ChatMessage.from_user("What limits solid-state battery adoption?")])
+print(result.get("findings", []))
+print(result["exit_reason"])   # "submit_report" when it finished normally
 ```
 
 ---
 
 ## Conversational Code Assistant
 
-AI assistant for helping with coding tasks.
+A code-review assistant with a syntax-check tool and per-session history. History is stored as JSON via `ChatMessage.to_dict()`, so the same code works with Redis or any key-value store.
 
 ```python
+import ast
+import json
+from typing import Annotated, Protocol
+
 from haystack.components.agents import Agent
 from haystack.components.generators.chat import OpenAIChatGenerator
-from haystack.tools import Tool
-from typing import Optional
-import logging
+from haystack.dataclasses import ChatMessage, ChatRole
+from haystack.tools import tool
 
-logger = logging.getLogger(__name__)
+
+@tool
+def check_syntax(code: Annotated[str, "Python source code"]) -> str:
+    """Check Python code for syntax errors."""
+    try:
+        ast.parse(code)
+        return "No syntax errors."
+    except SyntaxError as exc:
+        return f"SyntaxError on line {exc.lineno}: {exc.msg}"
+
+
+class KV(Protocol):
+    def get(self, key: str) -> str | None: ...
+    def set(self, key: str, value: str) -> None: ...
+
+
+class DictKV(dict):
+    """In-process stand-in; use redis.Redis(decode_responses=True) in production."""
+    def set(self, key, value):
+        self[key] = value
+
 
 class CodeAssistant:
-    """
-    Conversational AI assistant for coding help.
-    """
-    
-    def __init__(self):
-        self.llm = OpenAIChatGenerator(model="gpt-4o")
-        self.tools = self._create_code_tools()
+    def __init__(self, store: KV, max_messages: int = 30):
+        self.store = store
+        self.max_messages = max_messages
         self.agent = Agent(
-            tools=self.tools,
-            llm=self.llm,
-            system_prompt="You are an expert code assistant. Provide clear, well-commented code examples."
+            chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"),
+            tools=[check_syntax],
+            system_prompt="You are a senior Python reviewer. Check syntax before commenting on code.",
+            max_agent_steps=5,
         )
-        self.conversation_context: List[dict] = []
-    
-    def _create_code_tools(self) -> list:
-        """Create code-related tools."""
-        
-        def check_syntax(code: str, language: str) -> dict:
-            """Check code syntax."""
-            return {
-                "valid": True,
-                "language": language,
-                "errors": []
-            }
-        
-        def explain_code(code: str) -> dict:
-            """Explain what code does."""
-            return {
-                "explanation": "This code does...",
-                "time_complexity": "O(n)",
-                "space_complexity": "O(1)"
-            }
-        
-        def suggest_improvements(code: str) -> dict:
-            """Suggest code improvements."""
-            return {
-                "improvements": [
-                    "Use list comprehension for brevity",
-                    "Add type hints"
-                ],
-                "refactored_code": "def improved_function()..."
-            }
-        
-        return [
-            Tool(function=check_syntax, description="Check code syntax"),
-            Tool(function=explain_code, description="Explain code functionality"),
-            Tool(function=suggest_improvements, description="Suggest code improvements")
-        ]
-    
-    def assist(self, query: str, context: Optional[str] = None) -> dict:
-        """
-        Provide coding assistance.
-        
-        Args:
-            query: Coding question or request
-            context: Optional code context
-            
-        Returns:
-            Assistance response
-        """
-        # Build full query with context
-        full_query = query
-        if context:
-            full_query = f"Code context:\n{context}\n\nQuestion: {query}"
-        
-        try:
-            response = self.agent.run(query=full_query, max_iterations=5)
-            
-            self.conversation_context.append({
-                "query": query,
-                "context": context,
-                "response": response
-            })
-            
-            return {
-                "success": True,
-                "assistance": response,
-                "conversation_length": len(self.conversation_context)
-            }
-        
-        except Exception as e:
-            logger.error(f"Assistance failed: {str(e)}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
 
-# Usage
-assistant = CodeAssistant()
+    def _load(self, session: str) -> list[ChatMessage]:
+        raw = self.store.get(f"chat:{session}")
+        return [ChatMessage.from_dict(m) for m in json.loads(raw)] if raw else []
 
-result = assistant.assist(
-    query="How can I optimise this function for better performance?",
-    context="def sum_all_numbers(nums):\n    total = 0\n    for num in nums:\n        total += num\n    return total"
-)
-print(result)
+    def _save(self, session: str, messages: list[ChatMessage]) -> None:
+        kept = [m for m in messages if not m.is_from(ChatRole.SYSTEM)][-self.max_messages:]
+        self.store.set(f"chat:{session}", json.dumps([m.to_dict() for m in kept]))
+
+    def chat(self, session: str, text: str) -> str:
+        history = self._load(session) + [ChatMessage.from_user(text)]
+        result = self.agent.run(messages=history)
+        self._save(session, result["messages"])
+        return result["last_message"].text
+
+
+assistant = CodeAssistant(DictKV())
+print(assistant.chat("s1", "Review this: def f(x) return x*2"))
+print(assistant.chat("s1", "And how would you add type hints?"))
 ```
 
----
-
-These recipes provide production-ready patterns for common Haystack use cases. Each recipe demonstrates best practices, error handling, and integration patterns suitable for enterprise deployments.
-
-
+With Redis: `import redis; assistant = CodeAssistant(redis.Redis(decode_responses=True))`. Add an expiry (`store.set(key, value, ex=86400)`) if sessions should lapse.

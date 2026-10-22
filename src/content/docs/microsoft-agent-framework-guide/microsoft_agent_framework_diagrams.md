@@ -1,14 +1,15 @@
 ---
-title: "Microsoft Agent Framework - Architecture Diagrams & Visualisations"
-description: "Document Version: 1.0 Purpose: Visual representation of Agent Framework architecture and system design"
-framework: microsoft-agent-framework
+title: "Microsoft Agent Framework — Architecture Diagrams"
+description: "Architecture and flow diagrams for the Microsoft Agent Framework — agent lifecycle, orchestration patterns, workflows and Azure deployment topology."
+framework: "microsoft-agent-framework"
+sidebar:
+  label: "Diagrams"
 ---
 
-# Microsoft Agent Framework - Architecture Diagrams & Visualisations
-## October 2025 Release
-
-**Document Version:** 1.0  
 **Purpose:** Visual representation of Agent Framework architecture and system design
+**First drawn:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)
+
+> Diagrams are conceptual. Where a box names an API, check it against the [Python](/microsoft-agent-framework-guide/python/) or [.NET](/microsoft-agent-framework-guide/dotnet/) guide.
 
 ---
 
@@ -45,7 +46,7 @@ framework: microsoft-agent-framework
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │            Agent Execution Engine                          │ │
 │  │  ┌──────────────┐  ┌────────────┐  ┌────────────────────┐ │ │
-│  │  │ ChatAgent    │  │ AIAgent    │  │ Custom Agents      │ │ │
+│  │  │ Agent (Py)   │  │ AIAgent    │  │ Custom Agents      │ │ │
 │  │  │              │  │ (Stateless)│  │ (Extended Runtime) │ │ │
 │  │  └──────────────┘  └────────────┘  └────────────────────┘ │ │
 │  └────────────────────────────────────────────────────────────┘ │
@@ -99,7 +100,7 @@ Layer 1 (Presentation)
 Layer 2 (Application)
     ↓
 ┌─────────────────────────────┐
-│   ChatAgent / AIAgent       │  Core agent types
+│   Agent / AIAgent           │  Core agent types
 │   Workflow Orchestration    │
 │   Task Management           │
 └─────────────────────────────┘
@@ -432,9 +433,9 @@ Output Response
 │  │                                                          │  │
 │  │  Function Tools (User-Defined Functions)                │  │
 │  │  ┌──────────────────────────────────────────────────┐  │  │
-│  │  │ @ai_function decorated methods                   │  │  │
+│  │  │ @tool functions (Py) / AIFunction (.NET)         │  │  │
 │  │  │ Python functions with type hints                 │  │  │
-│  │  │ C# methods with [Function] attributes            │  │  │
+│  │  │ C# methods via AIFunctionFactory.Create          │  │  │
 │  │  └──────────────────────────────────────────────────┘  │  │
 │  │                                                          │  │
 │  └──────────────────────────────────────────────────────────┘  │
@@ -600,7 +601,7 @@ Query
 │         AZURE OPENAI SERVICE                               │
 ├────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Deployment: gpt-4o, gpt-4o-mini, gpt-4-turbo            │
+│  Deployments: flagship, standard and small models        │
 │  Purpose: LLM inference, embeddings                        │
 │  Integration: ChatClient, EmbeddingsClient                │
 │                                                             │

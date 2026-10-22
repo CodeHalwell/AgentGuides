@@ -1,8 +1,8 @@
 ---
 title: "Anthropic Claude Agent SDK (TypeScript)"
-description: "The TypeScript port — Claude-native agent SDK with Computer Use, MCP, middleware, and Express streaming."
-framework: anthropic-claude-sdk
-language: typescript
+description: "Claude Code as a TypeScript library — built-in tools, MCP, subagents, hooks, permissions and resumable sessions for Node.js."
+framework: "claude-agent-sdk"
+language: "typescript"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,158 +10,102 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**TypeScript port of the Claude Agent SDK.** Same Computer Use, MCP, tool-use, and streaming capabilities — built for Node and browser environments.
+**Claude Code as a library for Node.js.** `query()` gives TypeScript code the agent loop, built-in tools, permission system and sessions that power Claude Code, with custom tools defined in Zod.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    npm install @anthropic-ai/claude-agent-sdk
+    npm install @anthropic-ai/claude-agent-sdk@%%version=@anthropic-ai/claude-agent-sdk%% zod
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.3.165** · June 2026 · Node 18+
+    **Current release: `@anthropic-ai/claude-agent-sdk` %%version=@anthropic-ai/claude-agent-sdk%%** · Node 18+ · ESM · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
-    Full-stack Claude apps, Node streaming servers, MCP-rich workflows.
+    Node services and tools whose agents read and change files, run commands and call MCP tools.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Migrating from Code SDK?">
-  The package was renamed from `@anthropic-ai/claude-code-sdk` to `@anthropic-ai/claude-agent-sdk`. See the [migration guide](./claude_agent_sdk_typescript_migration_guide/).
+<Aside type="tip" title="Upgrading from 0.2.x or the Claude Code SDK?">
+  0.3.142 removed the `unstable_v2_*` session API and changed MCP start-up. The SDK previously shipped inside `@anthropic-ai/claude-code`. See the [migration guide](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_migration_guide/).
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Core fundamentals" href="./claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals" description="Install, auth, first agent · 15 min" />
-  <LinkCard title="2 · Simple agents" href="./claude_agent_sdk_typescript_comprehensive_guide/#simple-agents" description="Chat, streaming, async · 25 min" />
-  <LinkCard title="3 · Multi-agent systems" href="./claude_agent_sdk_typescript_comprehensive_guide/#multi-agent-systems" description="Sub-agents, delegation · 25 min" />
-  <LinkCard title="4 · Tools integration" href="./claude_agent_sdk_typescript_comprehensive_guide/#tools-integration" description="Custom tools, tool-use loop · 25 min" />
-  <LinkCard title="5 · Computer Use API" href="./claude_agent_sdk_typescript_comprehensive_guide/#computer-use-api" description="Screenshots, input events · 30 min" />
-  <LinkCard title="6 · Advanced multi-agent" href="./claude_agent_sdk_typescript_advanced_multi_agent/" description="Complex topologies · 30 min" />
-  <LinkCard title="7 · Middleware" href="./claude_agent_sdk_typescript_middleware/" description="Hooks, interceptors · 20 min" />
-  <LinkCard title="8 · Streaming (Express)" href="./claude_streaming_server_express/" description="SSE streaming · 20 min" />
-  <LinkCard title="9 · Production" href="./claude_agent_sdk_typescript_production_guide/" description="Deployment, monitoring · 30 min" />
-</CardGrid>
-
-## Jump to a topic
-
-<CardGrid>
-  <LinkCard title="Core fundamentals" href="./claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals" />
-  <LinkCard title="Simple agents" href="./claude_agent_sdk_typescript_comprehensive_guide/#simple-agents" />
-  <LinkCard title="Multi-agent systems" href="./claude_agent_sdk_typescript_comprehensive_guide/#multi-agent-systems" />
-  <LinkCard title="Tools integration" href="./claude_agent_sdk_typescript_comprehensive_guide/#tools-integration" />
-  <LinkCard title="Computer Use" href="./claude_agent_sdk_typescript_comprehensive_guide/#computer-use-api" />
-  <LinkCard title="Middleware" href="./claude_agent_sdk_typescript_middleware/" />
-  <LinkCard title="Advanced multi-agent" href="./claude_agent_sdk_typescript_advanced_multi_agent/" />
-  <LinkCard title="Code SDK migration" href="./claude_agent_sdk_typescript_migration_guide/" />
+  <LinkCard title="1 · Core fundamentals" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals" description="Install, auth, first agent, models · 15 min" />
+  <LinkCard title="2 · Messages" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#messages" description="The SDKMessage union and result subtypes · 10 min" />
+  <LinkCard title="3 · Simple agents" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#simple-agents" description="System prompts, streaming, cost · 20 min" />
+  <LinkCard title="4 · Multi-turn conversations" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#multi-turn-conversations" description="Streaming input and resume · 15 min" />
+  <LinkCard title="5 · Tools integration" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#tools-integration" description="Built-in tools, tool() and createSdkMcpServer() · 20 min" />
+  <LinkCard title="6 · Permissions and hooks" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#permissions" description="Modes, canUseTool, sandbox, hooks · 25 min" />
+  <LinkCard title="7 · User input and approvals" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#user-input-and-approvals" description="AskUserQuestion, always-allow rules · 10 min" />
+  <LinkCard title="8 · Multi-agent systems" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
+  <LinkCard title="9 · Advanced multi-agent" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_advanced_multi_agent/" description="Routing, guardrails, human approval · 25 min" />
+  <LinkCard title="10 · Middleware" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/" description="Policy, redaction and audit with hooks · 20 min" />
+  <LinkCard title="11 · Streaming (Express)" href="/anthropic-claude-agent-sdk-typescript-guide/claude_streaming_server_express/" description="Agent runs over SSE · 20 min" />
+  <LinkCard title="12 · Production" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/" description="Errors, cost, logging, deployment · 30 min" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./claude_agent_sdk_typescript_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Migration guide" href="./claude_agent_sdk_typescript_migration_guide/" description="Code SDK → Agent SDK." />
-  <LinkCard title="Advanced multi-agent" href="./claude_agent_sdk_typescript_advanced_multi_agent/" />
-  <LinkCard title="Middleware" href="./claude_agent_sdk_typescript_middleware/" />
-  <LinkCard title="Recipes" href="./claude_agent_sdk_typescript_recipes/" />
-  <LinkCard title="Diagrams" href="./claude_agent_sdk_typescript_diagrams/" />
-  <LinkCard title="Production guide" href="./claude_agent_sdk_typescript_production_guide/" />
-  <LinkCard title="Streaming server (Express)" href="./claude_streaming_server_express/" />
+  <LinkCard title="Comprehensive guide" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_recipes/" description="Eight type-checked examples, including testing with a stub executable." />
+  <LinkCard title="Production guide" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_production_guide/" description="Errors and retries, cost, logging, deployment." />
+  <LinkCard title="Migration guide" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_migration_guide/" description="Claude Code SDK → Agent SDK; 0.2 → 0.3." />
+  <LinkCard title="Diagrams" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_diagrams/" description="Process model, control protocol, permission order, failures." />
+  <LinkCard title="Middleware" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/" />
+  <LinkCard title="Advanced multi-agent" href="/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_advanced_multi_agent/" />
+  <LinkCard title="Streaming server (Express)" href="/anthropic-claude-agent-sdk-typescript-guide/claude_streaming_server_express/" />
 </CardGrid>
 
-## What's new in v0.3.165 (June 2026)
+## Notable changes
 
-- **v0.3.165 (June 2026)** — Patch release; no API changes; same 25-export surface as 0.3.162. `@anthropic-ai/claude-agent-sdk@0.3.165` confirmed latest stable via npm registry (2026-06-05); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants unchanged.
-- **v0.3.164 (June 2026)** — Patch release; stability and dependency updates.
-- **v0.3.163 (June 2026)** — Patch release; stability and dependency updates.
-- **v0.3.162 (June 2026)** — Patch release; no API changes; same 25-export surface as 0.3.161. `@anthropic-ai/claude-agent-sdk@0.3.162` confirmed latest stable via npm registry (2026-06-04); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants unchanged.
-- **v0.3.161 (June 2026)** — Patch release; no API changes; same 25-export surface as 0.3.160. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.161` (`/tmp/npm-0603`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.160 (June 2026)** — Patch releases 0.3.159–0.3.160; no API changes; same 25-export surface as 0.3.158. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.160` (`/tmp/npm-0602`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.159 (June 2026)** — Patch release; stability and dependency updates.
-- **v0.3.158 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.156. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.158` (`/tmp/npm-check-0530`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.157 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.156 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.153. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.156` (`/tmp/npm-check-0529`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.155 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.154 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.153 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.152. Version confirmed latest from npm registry (2026-05-28); export surface unchanged at 25 symbols (`query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants).
-- **v0.3.152 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.150. Version confirmed latest from npm registry (2026-05-27); export surface unchanged at 25 symbols (`query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants).
-- **v0.3.151 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.150 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.148. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.150` (`.routine-envs/check-0523-node`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.149 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.148 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.145. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.148` (`.routine-envs/check-0522-node`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.147 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.146 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.3.145 (May 2026)** — Patch release. No API changes; same 25-export surface as 0.3.144. All exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.145` (`.routine-envs/check-0520-node`); `query`, `tool`, `createSdkMcpServer`, session helpers, and all constants confirmed present.
-- **v0.3.144 (May 2026)** — Major minor-version bump (0.2 → 0.3). Three `unstable_v2_*` preview exports (`unstable_v2_createSession`, `unstable_v2_prompt`, `unstable_v2_resumeSession`) that were present in 0.2.x have been removed; the package now exports 25 stable symbols. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.3.144` (`.routine-envs/check-0519-node`): `query`, `tool`, `createSdkMcpServer`, session helpers (`forkSession`, `listSessions`, `getSessionInfo`, `getSessionMessages`, `InMemorySessionStore`, `renameSession`, `tagSession`, `deleteSession`, `importSessionToStore`, `listSubagents`, `getSubagentMessages`), error types (`AbortError`, `DirectConnectError`), transport (`DirectConnectTransport`, `parseDirectConnectUrl`), constants (`EXIT_REASONS`, `HOOK_EVENTS`, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`), and utilities (`resolveSettings`, `startup`, `filterEscalatingDefaultMode`, `foldSessionSummary`) all confirmed present. If your code referenced any `unstable_v2_*` export, remove or replace it.
-- **v0.2.141 (May 14)** — Final 0.2.x release; stability and dependency updates. 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, and the three `unstable_v2_*` preview exports (now removed in 0.3.x).
-- **v0.2.140 (May 13)** — Patch release; stability and dependency updates.
-- **v0.2.139 (May 12)** — Patch release; stability and dependency updates. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.139` (`.routine-envs/check-0512-node`).
-- **v0.2.129–0.2.138 (May 6–9)** — Ten patch releases promoting session management APIs to stable. New stable exports: `InMemorySessionStore`, `createSdkMcpServer`, `forkSession`, `deleteSession`, `listSessions`, `getSessionInfo`, `getSessionMessages`, `getSubagentMessages`, `importSessionToStore`, `listSubagents`, `renameSession`, `tagSession`, `resolveSettings`, `startup`. New error types: `AbortError`, `DirectConnectError`. New transport: `DirectConnectTransport` with `parseDirectConnectUrl`. New constants: `EXIT_REASONS`, `HOOK_EVENTS`, `SYSTEM_PROMPT_DYNAMIC_BOUNDARY`.
-- **v0.2.127–0.2.128 (May 5)** — Patch releases; dependency updates.
-- **v0.2.124–0.2.126 (May 1)** — Patch releases; dependency updates. Note: 0.2.125 was not published.
-- **v0.2.122–0.2.123 (April 29)** — Patch releases; dependency updates.
-- **v0.2.120–0.2.121 (April 26–28)** — Patch releases; dependency updates.
-- **v0.2.118–0.2.119 (April 23–24)** — Patch releases; dependency updates.
-- **v0.2.117 (April 21)** — Patch release; dependency updates.
-- **v0.2.116 (April 20)** — Stability improvements.
-- **v0.2.111–0.2.114 (April 16–17)** — Patch series: MCP protocol alignment, extended-thinking type alignment with Python SDK, performance improvements.
-- **v0.2.110** — Multibyte character fix; MCP cleanup; extended thinking config types.
-- Prior: package rename (`@anthropic-ai/claude-code-sdk` → `@anthropic-ai/claude-agent-sdk`); Computer Use; MCP; session management; hooks.
+Most releases track Claude Code and leave the API alone. The ones that matter:
 
-## Install, minimal example
+- **0.3.301** — `BUILTIN_TOOL_NAMES` / `LEGACY_TOOL_NAME_ALIASES` exports; per-tool permission policies on SDK MCP servers.
+- **0.3.282** — `@anthropic-ai/claude-agent-sdk/core`, a smaller entry point for bundled apps.
+- **0.3.280** — `verbatimPrompts`: prompts are delivered literally, with no `@file` expansion or slash commands.
+- **0.3.259** — `permissionPrompts: 'none'` for unattended sessions.
+- **0.3.257** — `getContextUsage({ detail: 'summary' })`.
+- **0.3.223** — `resumeDropsTurn` for safe truncating resume.
+- **0.3.142 (breaking)** — `unstable_v2_*` session API removed; MCP servers connect in the background; Task tools replace `TodoWrite`.
 
-There is no `Agent` class in `@anthropic-ai/claude-agent-sdk` 0.2.117. The public entry points are `query()` (one-shot) and the lower-level exports listed on the package. Earlier drafts of this page documented a `new Agent({...})` constructor — it does not exist.
+Full list: the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-typescript/blob/main/CHANGELOG.md).
+
+## Minimal example
+
+There is no `Agent` class. `query()` is the entry point; it returns an async generator of typed messages.
 
 ```typescript
-// One-shot query
 import { query } from '@anthropic-ai/claude-agent-sdk';
 
 for await (const message of query({
   prompt: 'What is 15 + 27?',
   options: {
-    model: 'claude-3-5-sonnet-latest',
+    model: '%%model=anthropic-flagship%%',
     systemPrompt: 'You are a helpful assistant.',
   },
 })) {
-  console.log(message);
+  if (message.type === 'result' && message.subtype === 'success') {
+    console.log(message.result);
+  }
 }
 ```
 
-For richer session flows use the session helpers (`forkSession`, `listSessions`, `InMemorySessionStore`) or the MCP server factory `createSdkMcpServer`.
-
-Ready? **[Start Zero → Hero Step 1 →](./claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals)**
+Ready? **[Start Zero → Hero step 1 →](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_comprehensive_guide/#core-fundamentals)**
 
 ---
 
 ## Revision history
 
-| Date | Framework version (installed) | Summary of changes | Reviewer |
-|------|-------------------------------|--------------------|----------|
-| 2026-06-05 | @anthropic-ai/claude-agent-sdk 0.3.165 | Patch releases 0.3.163–0.3.165; "What's new" heading updated to v0.3.165; three patch bullets added; comprehensive guide header updated; revision history entry added. `@anthropic-ai/claude-agent-sdk@0.3.165` confirmed latest stable via npm registry (2026-06-05); 25-export surface unchanged. | Claude routine |
-| 2026-06-04 | @anthropic-ai/claude-agent-sdk 0.3.162 | Patch release 0.3.162; "What's new" heading updated to v0.3.162; patch bullet added; revision history entry added. `@anthropic-ai/claude-agent-sdk@0.3.162` confirmed latest stable via npm registry (2026-06-04); 25-export surface unchanged. | Claude routine |
-| 2026-06-03 | @anthropic-ai/claude-agent-sdk 0.3.161 | Patch release 0.3.161; "What's new" heading updated to v0.3.161; patch bullet added; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.161` (`/tmp/npm-0603`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
-| 2026-06-02 | @anthropic-ai/claude-agent-sdk 0.3.160 | Patch releases 0.3.159–0.3.160; "What's new" heading updated to v0.3.160; two patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.160` (`/tmp/npm-0602`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
-| 2026-05-30 | @anthropic-ai/claude-agent-sdk 0.3.158 | Patch releases 0.3.157–0.3.158; "What's new" heading updated to v0.3.158; two patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.158` (`/tmp/npm-check-0530`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
-| 2026-05-29 | @anthropic-ai/claude-agent-sdk 0.3.156 | Patch releases 0.3.154–0.3.156; "What's new" heading updated to v0.3.156; three patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.156` (`/tmp/npm-check-0529`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
-| 2026-05-28 | @anthropic-ai/claude-agent-sdk 0.3.153 | Patch release 0.3.153; no API changes. `Latest:` header updated 0.3.152 → 0.3.153; revision history entry added. npm `@anthropic-ai/claude-agent-sdk@0.3.153` confirmed latest (2026-05-28); export surface unchanged at 25 symbols. | Claude routine |
-| 2026-05-27 | @anthropic-ai/claude-agent-sdk 0.3.152 | Patch releases 0.3.151–0.3.152; "What's new" heading updated to v0.3.152; two patch bullets added; comprehensive guide header updated; revision history entry added. npm `@anthropic-ai/claude-agent-sdk@0.3.152` confirmed latest. Export surface unchanged at 25 symbols. | Claude routine |
-| 2026-05-23 | @anthropic-ai/claude-agent-sdk 0.3.150 | Patch releases 0.3.149–0.3.150; "What's new" heading updated to v0.3.150; two patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.150` (`.routine-envs/check-0523-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
-| 2026-05-22 | @anthropic-ai/claude-agent-sdk 0.3.148 | Patch releases 0.3.146–0.3.148; "What's new" heading updated to v0.3.148; three patch bullets added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.148` (`.routine-envs/check-0522-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. Export count: 25 — PASS. | Claude routine |
-| 2026-05-20 | @anthropic-ai/claude-agent-sdk 0.3.145 | Patch release bump 0.3.144 → 0.3.145; "What's new" heading updated to v0.3.145; v0.3.145 bullet added; comprehensive guide header updated; revision history entry added. All 25 exports verified against installed `@anthropic-ai/claude-agent-sdk@0.3.145` (`.routine-envs/check-0520-node`); `query`, `tool`, `createSdkMcpServer`, session helpers all PASS. | Claude routine |
-| 2026-05-19 | @anthropic-ai/claude-agent-sdk 0.3.144 | Major version bump 0.2.141 → 0.3.144; "What's new" updated; comprehensive guide header updated; revision history entry added. Three `unstable_v2_*` exports removed from public API. Full 25-export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.3.144` (`.routine-envs/check-0519-node`). | Claude routine |
-| 2026-05-14 | @anthropic-ai/claude-agent-sdk 0.2.141 | Version bumped 0.2.140 → 0.2.141; "What's new" updated; comprehensive guide header updated; revision history entry added. Full export surface verified against installed `@anthropic-ai/claude-agent-sdk@0.2.141` (`.routine-envs/check-0514-node`): 28 exports confirmed including `query`, `tool`, `createSdkMcpServer`, session helpers, error types, and constants. | Claude routine |
-| 2026-05-13 | @anthropic-ai/claude-agent-sdk 0.2.140 | Version bumped 0.2.139 → 0.2.140; "What's new" updated; comprehensive guide header updated; revision history entry added. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.140` (`.routine-envs/check-0513-node`). | Claude routine |
-| 2026-05-12 | @anthropic-ai/claude-agent-sdk 0.2.139 | Version bumped 0.2.138 → 0.2.139; "What's new" updated; revision history entry added. Runtime exports (`query`, `tool`, `createSdkMcpServer`) verified against installed `@anthropic-ai/claude-agent-sdk@0.2.139` (`.routine-envs/check-0512-node`). | Claude routine |
-| 2026-05-09 | @anthropic-ai/claude-agent-sdk 0.2.138 | Version bumped 0.2.128 → 0.2.138 (ten patch releases 0.2.129–0.2.138); "What's new" updated; all exports verified against npm `@anthropic-ai/claude-agent-sdk@0.2.138` (2026-05-09, `.routine-envs/check-0509-node`). | Claude routine |
-| 2026-05-05 | @anthropic-ai/claude-agent-sdk 0.2.128 | Version bumped 0.2.126 → 0.2.128 (two patch releases: 0.2.127, 0.2.128); "What's new" updated; revision history entry added. `query` (runtime export), `PermissionMode`/`McpServerConfig` (TypeScript type exports in `sdk.d.ts`) verified against npm `@anthropic-ai/claude-agent-sdk@latest` (0.2.128, 2026-05-05, `.routine-envs/check-0505-node`). | Claude routine |
-| 2026-05-01 | @anthropic-ai/claude-agent-sdk 0.2.126 | Version bumped 0.2.123 → 0.2.126 (two patch releases: 0.2.124, 0.2.126; 0.2.125 not published); "What's new" section updated for 0.2.124–0.2.126 patch series. Version confirmed against npm `@anthropic-ai/claude-agent-sdk@latest` (0.2.126, 2026-05-01). | Claude routine |
-| 2026-04-29 | @anthropic-ai/claude-agent-sdk 0.2.123 | Version bumped 0.2.121 → 0.2.123 (two patch releases: 0.2.122, 0.2.123); "What's new" section updated for 0.2.122–0.2.123 patch series. Version confirmed against npm. | Claude routine |
-| 2026-04-28 | @anthropic-ai/claude-agent-sdk 0.2.121 | Version bumped 0.2.119 → 0.2.121 (two patch releases); "What's new" section updated for 0.2.120–0.2.121 patch series. Version confirmed against npm. | Claude routine |
-| 2026-04-24 | @anthropic-ai/claude-agent-sdk 0.2.119 | Version bumped 0.2.117 → 0.2.119; "What's new" section updated for 0.2.118–0.2.119 patch series. | Claude routine |
-| 2026-04-22 | @anthropic-ai/claude-agent-sdk 0.2.117 | Version bumped 0.2.116 → 0.2.117; "What's new" section updated; revision history entries added for 0.2.111–0.2.117 patch series. | Claude routine |
-| 2026-04-21 | @anthropic-ai/claude-agent-sdk 0.2.116 | Minimal example rewritten after pkg introspection: `new Agent(...)` does not exist; use `query()` / session helpers. Banner bumped to 0.2.116. | — |
-| 2026-04-18 | @anthropic-ai/claude-agent-sdk 0.2.113 | Stability fixes; SDK rename stabilised. | — |
-| 2025 | — | Renamed from `@anthropic-ai/claude-code-sdk` to `@anthropic-ai/claude-agent-sdk`. | — |
+| Date | Version | Summary |
+|------|---------|---------|
+| 2026-10-21 | %%version=@anthropic-ai/claude-agent-sdk%% | Failure handling corrected: the iterator throws after yielding an error `result`, so `run()`, `runResilient()` and the router now capture the result and decide from `is_error`, `subtype` and `api_error_status` (tested against a stub executable). Fixed `usage` vs `modelUsage`, `updatedToolOutput` redaction in the middleware page and the Dockerfiles' missing build stage. Added user input and approvals, image prompts, a SQLite `SessionStore`, a testing recipe and hosting patterns; rewrote the diagrams page. |
+| 2026-10-21 | 0.3.306 | Guide rewritten and every code block type-checked (strict mode) against the installed package: fixed `message.message.content`, removed invented options (`workingDirectory`, `temperature`, `maxTokens`, `apiKey`) and message types (`tool_call`, `tool_result`, `error`), rewrote the middleware, multi-agent and Express pages around the Agent SDK instead of the base API client, added 0.3.142 migration notes, updated models to the Claude 5 family. |
+| 2026-05-19 | 0.3.144 | 0.2.x → 0.3.x series (breaking changes in 0.3.142). |
+| 2026-04-21 | 0.2.116 | Removed a fictional `new Agent(...)` constructor from the overview. |
+| 2025 | 0.1.0 | Renamed from the SDK in `@anthropic-ai/claude-code` to `@anthropic-ai/claude-agent-sdk`. |
 
-**Note:** Python implementation lives at [Claude Agent SDK (Python)](/anthropic-claude-agent-sdk-guide/).
+**Note:** the Python package has its own guide: [Claude Agent SDK (Python)](/anthropic-claude-agent-sdk-guide/).

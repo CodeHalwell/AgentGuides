@@ -3,8 +3,6 @@ title: "Agent Guides"
 description: "Comprehensive AI Agent Framework Documentation"
 ---
 
-# 🤖 Agent Guides
-
 **Comprehensive, production-ready documentation for building AI agents across 16+ frameworks.**
 
 Welcome to the Agent Guides collection—your complete resource for mastering AI agent development. Whether you're building your first chatbot or deploying enterprise-scale multi-agent systems, you'll find detailed guides, practical recipes, and production patterns here.
@@ -220,9 +218,9 @@ All guides follow consistent standards:
 
 ---
 
-## 📅 Last Updated
+## 📅 Versions
 
-April 2026
+Every guide targets the current release of its framework, recorded in one place: [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json). Last checked %%versions-checked%%. Pages read their version numbers from that file at build time, so a version bump is a one-line change.
 
 ---
 

@@ -1,41 +1,40 @@
 ---
-title: "Microsoft Agent Framework (Python) — 2025 / 2026 Features"
-description: "Verified feature set in agent-framework-core 1.5.0 and beta sub-packages (a2a, declarative, copilotstudio, observability) as of April 2026."
-framework: microsoft-agent-framework
-language: python
+title: "Microsoft Agent Framework (Python) — Feature Tour"
+description: "Verified feature set across agent-framework-core and its stable and beta sub-packages: A2A, graph workflows, declarative agents, MCP, Magentic orchestration and custom executors."
+framework: "microsoft-agent-framework"
+language: "python"
+sidebar:
+  label: "Feature tour"
 ---
 
-# 2025 / 2026 Features — Python
+## Package status
 
-> **Errata (April 2026).** An earlier draft of this page documented `from agent_framework.a2a import A2AProtocolAdapter, A2AClient, A2AMessage` and `from agent_framework.graphs import AgentGraph, GraphNode, CheckpointConfig, HITLConfig` — **none of those classes exist**. This page has been rewritten after direct introspection of the installed packages.
->
-> For the real graph/workflow API and A2A integration, see the dedicated pages:
-> - [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/)
-> - [A2A Protocol](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/)
+Checked %%versions-checked%% by installing `agent-framework` %%version=agent-framework%% and reading the resolved sub-package versions. Sub-packages version independently of the meta package; run `pip index versions <package>` for today's numbers.
 
-## Package status (April 2026)
+| Package | Status |
+|---|---|
+| `agent-framework-core` | Stable — always released in lockstep with `agent-framework` |
+| `agent-framework-foundry` | Stable |
+| `agent-framework-openai` | Stable |
+| `agent-framework-declarative` | Stable (left beta during 2026) |
+| `agent-framework-orchestrations` | Stable (left beta during 2026) |
+| `agent-framework-ag-ui` | Stable |
+| `agent-framework-github-copilot` | Stable |
+| `agent-framework-a2a` | Beta (`1.0.0bYYMMDD` line) |
+| `agent-framework-copilotstudio` | Beta |
+| `agent-framework-mem0` | Beta |
+| `agent-framework-anthropic` | Beta |
+| `agent-framework-bedrock` | Beta |
+| `agent-framework-gemini`, `agent-framework-mistral`, `agent-framework-ollama` | Beta |
+| `agent-framework-azurefunctions` | Beta |
+| `agent-framework-durabletask` | Beta |
+| `agent-framework-redis` | Beta |
 
-| Package | Version | Status |
-|---|---|---|
-| `agent-framework-core` | 1.4.0 | Stable |
-| `agent-framework-foundry` | 1.4.0 | Stable |
-| `agent-framework-openai` | 1.4.0 | Stable |
-| `agent-framework-a2a` | 1.0.0b260514 | Beta |
-| `agent-framework-declarative` | 1.0.0b260514 | Beta |
-| `agent-framework-copilotstudio` | 1.0.0b260514 | Beta |
-| `agent-framework-mem0` | 1.0.0b260514 | Beta |
-| `agent-framework-anthropic` | 1.0.0b260514 | Beta |
-| `agent-framework-bedrock` | 1.0.0b260514 | Beta |
-| `agent-framework-azurefunctions` | 1.0.0b260514 | Beta |
-| `agent-framework-durabletask` | 1.0.0b260514 | Beta |
-| `agent-framework-orchestrations` | 1.0.0b260514 | Beta |
-| `agent-framework-redis` | 1.0.0b260514 | Beta |
-
-The `agent-framework` meta package (1.4.0) installs core + provider packages in one go. When you're ready to prune dependencies, install the sub-packages directly (e.g. `pip install --pre agent-framework-foundry agent-framework-mem0`).
+The `agent-framework` meta package installs core plus the provider packages above in one go — including the beta ones, so no `--pre` flag is needed for the meta package. When you're ready to prune dependencies, install the sub-packages directly (stable ones plainly, beta ones with `--pre`, e.g. `pip install agent-framework-foundry` and `pip install --pre agent-framework-mem0`).
 
 ## Agent2Agent (A2A) protocol
 
-`agent-framework-a2a` exposes exactly one class — `A2AAgent` — which wraps a remote A2A-compliant agent as a local framework `Agent`. Full detail on the [A2A protocol page](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/).
+`agent-framework-a2a` works in both directions: `A2AAgent` wraps a remote A2A agent as a local agent, and `A2AExecutor` serves a framework agent (or workflow agent) over A2A. `A2AAgentSession` and `A2AServiceSessionId` carry the conversation state. Serving and auth examples are on the [A2A protocol page](/microsoft-agent-framework-guide/microsoft_agent_framework_a2a_protocol/).
 
 ```python
 from agent_framework.a2a import A2AAgent
@@ -49,10 +48,19 @@ response = await remote.run("Summarise Q3")
 The real workflow API is `WorkflowBuilder` + `Executor`/`FunctionExecutor` + `Edge` groups, all exported from top-level `agent_framework`. See [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) for the full reference. One-glance example:
 
 ```python
-from agent_framework import WorkflowBuilder, FunctionExecutor
+from typing_extensions import Never
+from agent_framework import WorkflowBuilder, WorkflowContext, executor
 
-research = FunctionExecutor(lambda q: {"data": q}, id="research")
-write    = FunctionExecutor(lambda d: f"report: {d['data']}", id="write")
+
+@executor(id="research")
+async def research(query: str, ctx: WorkflowContext[dict]) -> None:
+    await ctx.send_message({"data": query})
+
+
+@executor(id="write")
+async def write(d: dict, ctx: WorkflowContext[Never, str]) -> None:
+    await ctx.yield_output(f"report: {d['data']}")
+
 
 workflow = (
     WorkflowBuilder(start_executor=research, name="ContentPipeline")
@@ -87,7 +95,7 @@ kind: Prompt
 name: GreetingAgent
 instructions: You are a friendly assistant.
 model:
-  id: gpt-4o
+  id: %%model=openai%%
   provider: AzureOpenAI
 """
 agent = factory.create_agent_from_yaml(yaml_content)
@@ -102,7 +110,7 @@ If you've already constructed a chat client (shared connection pool, custom cred
 
 ### `WorkflowFactory` — load a multi-action workflow from YAML
 
-`WorkflowFactory` parses `kind: Workflow` YAML and returns a real `Workflow` object — every action becomes a node in the graph, so checkpointing, visualization, and pause/resume work the same as a code-built workflow.
+`WorkflowFactory` parses `kind: Workflow` YAML and returns a real `Workflow` object — every action becomes a node in the graph, so checkpointing, visualisation, and pause/resume work the same as a code-built workflow.
 
 ```python
 from agent_framework import FileCheckpointStorage
@@ -147,7 +155,7 @@ async def logging_middleware(context: ChatContext, next):
     print(f"after: {context.result}")
 
 agent = Agent(
-    client=FoundryChatClient(credential=DefaultAzureCredential(), model="gpt-4o"),
+    client=FoundryChatClient(credential=DefaultAzureCredential(), model="%%model=openai%%"),
     instructions="You are a helpful assistant.",
     middleware=[logging_middleware],  # must be a list in 2026 releases
 )
@@ -370,19 +378,26 @@ For hosted MCP (the provider runs the MCP client server-side), feature-detect vi
 `MagenticBuilder` is the most sophisticated of the orchestration patterns: a manager agent maintains a task ledger, dispatches to workers, and can replan when a stall is detected.
 
 ```python
-from agent_framework_orchestrations import MagenticBuilder, StandardMagenticManager
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+from agent_framework_orchestrations import MagenticBuilder
 
-workflow = (
-    MagenticBuilder(
-        participants=[researcher, analyst, writer],
-        manager_agent=StandardMagenticManager(client=OpenAIChatClient(model="gpt-4o")),
-        enable_plan_review=True,        # pause after the initial plan for human review
-        checkpoint_storage=storage,     # resume across process restarts
-    )
-    .with_human_input_on_stall()        # ask a human when the manager loops
-    .build()
+manager = Agent(
+    client=OpenAIChatClient(),
+    name="manager",
+    instructions="You coordinate a research team. Plan, delegate, and verify.",
 )
+
+workflow = MagenticBuilder(
+    participants=[researcher, analyst, writer],
+    manager_agent=manager,          # wrapped in a StandardMagenticManager for you
+    max_stall_count=3,              # replan after three rounds without progress
+    enable_plan_review=True,        # pause after the initial plan for human review
+    checkpoint_storage=storage,     # resume across process restarts
+).build()
 ```
+
+To tune the ledger prompts, pass `StandardMagenticManager(agent=manager, ...)` as `manager=` instead of `manager_agent=`. Stall handling is `max_stall_count` / `max_reset_count` and the manager's replanning.
 
 The plan-review HITL event is durable — combined with checkpointing, a user can come back hours later in a different pod and approve the plan, and the workflow resumes from the exact superstep that paused.
 

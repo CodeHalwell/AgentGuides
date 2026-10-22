@@ -1,857 +1,415 @@
 ---
-title: "Microsoft Agent Framework - Production & Deployment Guide"
-description: "Document Version: 1.0 Target Audience: DevOps, Infrastructure, and Senior Engineers Focus: Enterprise-grade deployment, scaling, monitoring, and security"
-framework: microsoft-agent-framework
+title: "Microsoft Agent Framework — Production & Deployment Guide"
+description: "Running Microsoft Agent Framework services in production: choosing a host (Foundry hosted agents, Azure Functions durable agents, Container Apps), scaling, observability, security, prompt-injection defence, evaluation in CI, resilience and cost."
+framework: "microsoft-agent-framework"
+sidebar:
+  label: "Production guide"
 ---
 
-# Microsoft Agent Framework - Production & Deployment Guide
-## October 2025 Release
+Reviewed %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET). Language-specific detail is in the [Python](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/) and [.NET](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/) production guides.
 
-**Document Version:** 1.0  
-**Target Audience:** DevOps, Infrastructure, and Senior Engineers  
-**Focus:** Enterprise-grade deployment, scaling, monitoring, and security
+## Choosing a host
 
----
+| Host | Python | .NET | Choose it when |
+|---|---|---|---|
+| Microsoft Foundry hosted agent | `agent-framework-foundry-hosting`: `ResponsesHostServer` | `Microsoft.Agents.AI.Foundry.Hosting`: `AddFoundryResponses` | You want Foundry to run, scale and secure the agent, keep conversation state, and show traces and evaluations in the portal. |
+| Azure Functions durable agent | `agent-framework-azurefunctions`: `AgentFunctionApp` | `Microsoft.Agents.AI.Hosting.AzureFunctions`: `ConfigureDurableAgents` | Conversations and workflows must survive restarts and scale-in, or wait hours for a person; you want consumption billing. |
+| Your own service on Container Apps, App Service or AKS | FastAPI (or similar) over `agent-framework-core` | ASP.NET Core with `Microsoft.Agents.AI.Hosting` | You need full control of the HTTP surface, networking and state stores. |
 
-## Table of Contents
+The Foundry and Azure Functions host packages are preview (.NET) or beta (Python) at the time of writing. Container images, Bicep and Kubernetes manifests for your own service are standard practice and not specific to the framework; Microsoft's [Container Apps documentation](https://learn.microsoft.com/azure/container-apps/) covers them.
 
-1. [Production Deployment](#production-deployment)
-2. [Scaling Strategies](#scaling-strategies)
-3. [Monitoring & Observability](#monitoring--observability)
-4. [Security Best Practices](#security-best-practices)
-5. [High Availability & Disaster Recovery](#high-availability--disaster-recovery)
-6. [Cost Optimisation](#cost-optimisation)
-7. [Performance Tuning](#performance-tuning)
-8. [Enterprise Governance](#enterprise-governance)
+### Foundry hosted agents
 
----
+Python:
 
-## Production Deployment
+```python
+import os
 
-### Azure Container Apps Deployment
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient, ResponsesHostServer
+from azure.identity import DefaultAzureCredential
 
-#### **Infrastructure as Code - Bicep**
+agent = Agent(
+    client=FoundryChatClient(
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ["FOUNDRY_MODEL"],
+        credential=DefaultAzureCredential(),
+    ),
+    instructions="You are a friendly assistant. Keep your answers brief.",
+    default_options={"store": False},     # the host keeps the conversation, not the model service
+)
 
-```bicep
-param environment string = 'prod'
-param location string = resourceGroup().location
-param agentImageUri string
-param replicaCount int = 3
-
-resource containerApp 'Microsoft.App/containerApps@2022-03-01' = {
-  name: 'agent-framework-${environment}'
-  location: location
-  properties: {
-    managedEnvironmentId: containerEnvironment.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8080
-        allowInsecure: false
-        traffic: [
-          {
-            latestRevision: true
-            weight: 100
-          }
-        ]
-      }
-      dapr: {
-        enabled: true
-        appId: 'agent-framework'
-      }
-      secrets: [
-        {
-          name: 'azure-openai-key'
-          value: listKeys(openaiAccount.id, '2023-05-01').keys[0].value
-        }
-        {
-          name: 'cosmos-connection'
-          value: 'AccountEndpoint=${cosmosAccount.properties.documentEndpoint};'
-        }
-      ]
-    }
-    template: {
-      containers: [
-        {
-          name: 'agent-framework'
-          image: agentImageUri
-          resources: {
-            cpu: '1'
-            memory: '2Gi'
-          }
-          env: [
-            {
-              name: 'AZURE_OPENAI_ENDPOINT'
-              value: openaiAccount.properties.endpoint
-            }
-            {
-              name: 'AZURE_OPENAI_KEY'
-              secretRef: 'azure-openai-key'
-            }
-            {
-              name: 'COSMOS_CONNECTION'
-              secretRef: 'cosmos-connection'
-            }
-          ]
-          probes: [
-            {
-              type: 'liveness'
-              httpGet: {
-                path: '/health/live'
-                port: 8080
-              }
-              initialDelaySeconds: 30
-              periodSeconds: 10
-            }
-            {
-              type: 'readiness'
-              httpGet: {
-                path: '/health/ready'
-                port: 8080
-              }
-              initialDelaySeconds: 10
-              periodSeconds: 5
-            }
-          ]
-        }
-      ]
-      scale: {
-        minReplicas: replicaCount
-        maxReplicas: replicaCount * 3
-        rules: [
-          {
-            name: 'cpu-scaling'
-            custom: {
-              query: 'cpu'
-              metadata: {
-                type: 'Utilization'
-                value: '70'
-              }
-            }
-          }
-          {
-            name: 'memory-scaling'
-            custom: {
-              query: 'memory'
-              metadata: {
-                type: 'Utilization'
-                value: '80'
-              }
-            }
-          }
-        ]
-      }
-    }
-  }
-}
+if __name__ == "__main__":
+    ResponsesHostServer(agent).run()      # POST /responses
 ```
 
-#### **Docker Configuration**
+.NET:
 
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:8.0 as base
-WORKDIR /app
-EXPOSE 8080
+```csharp
+using Azure.AI.Projects;
+using Azure.AI.AgentServer.Core;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Foundry.Hosting;
 
-FROM mcr.microsoft.com/dotnet/sdk:8.0 as build
-WORKDIR /src
-COPY ["AgentFramework.csproj", "./"]
-RUN dotnet restore "AgentFramework.csproj"
-COPY . .
-RUN dotnet build "AgentFramework.csproj" -c Release -o /app/build
+var projectEndpoint = new Uri(Environment.GetEnvironmentVariable("FOUNDRY_PROJECT_ENDPOINT")!);
 
-FROM build as publish
-RUN dotnet publish "AgentFramework.csproj" -c Release -o /app/publish
+AIAgent agent = new AIProjectClient(projectEndpoint, new DefaultAzureCredential())
+    .AsAIAgent(
+        model: Environment.GetEnvironmentVariable("FOUNDRY_MODEL") ?? "%%model=openai%%",
+        instructions: "You are a helpful assistant.",
+        name: "my-agent");
 
-FROM base as final
-WORKDIR /app
-COPY --from=publish /app/publish .
+var builder = AgentHost.CreateBuilder(args);
+builder.Services.AddFoundryResponses(agent);
+builder.RegisterProtocol("responses", endpoints => endpoints.MapFoundryResponses());
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8080/health/live || exit 1
-
-ENTRYPOINT ["dotnet", "AgentFramework.dll"]
+var app = builder.Build();
+app.Run();
 ```
 
-#### **Azure CLI Deployment**
+### Durable agents on Azure Functions
 
-```bash
-#!/bin/bash
+Python (`function_app.py`):
 
-# Variables
-RESOURCE_GROUP="rg-agent-framework"
-CONTAINER_APP_NAME="agent-framework-app"
-CONTAINER_APP_ENV="agent-env"
-IMAGE_URI="your-registry.azurecr.io/agent-framework:latest"
+```python
+import os
 
-# Create resource group
-az group create \
-  --name $RESOURCE_GROUP \
-  --location eastus
+from agent_framework import Agent
+from agent_framework.azure import AgentFunctionApp
+from agent_framework.foundry import FoundryChatClient
+from azure.identity import DefaultAzureCredential
 
-# Create container app environment
-az containerapp env create \
-  --name $CONTAINER_APP_ENV \
-  --resource-group $RESOURCE_GROUP \
-  --location eastus
+writer = Agent(
+    client=FoundryChatClient(
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ["FOUNDRY_MODEL"],
+        credential=DefaultAzureCredential(),
+    ),
+    name="DocumentPublisher",
+    instructions="You write well-structured documents on a given topic.",
+)
 
-# Create container app
-az containerapp create \
-  --name $CONTAINER_APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --environment $CONTAINER_APP_ENV \
-  --image $IMAGE_URI \
-  --target-port 8080 \
-  --ingress 'external' \
-  --min-replicas 3 \
-  --max-replicas 10 \
-  --cpu 1.0 \
-  --memory 2Gi \
-  --set-env-vars \
-    AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT \
-    ENVIRONMENT=production
-
-# Configure scaling rules
-az containerapp update \
-  --name $CONTAINER_APP_NAME \
-  --resource-group $RESOURCE_GROUP \
-  --yaml - <<EOF
-apiVersion: apps/core.io/v1alpha1
-kind: ContainerApp
-metadata:
-  name: $CONTAINER_APP_NAME
-  namespace: $RESOURCE_GROUP
-spec:
-  template:
-    scale:
-      minReplicas: 3
-      maxReplicas: 10
-      rules:
-      - name: cpu-scaling
-        custom:
-          query: cpu
-          metadata:
-            type: Utilization
-            value: '70'
-      - name: http-scaling
-        http:
-          metadata:
-            concurrentRequests: '100'
-EOF
+app = AgentFunctionApp(agents=[writer])   # the Functions entry point (function_app.py)
 ```
 
-### Kubernetes Deployment
+.NET:
 
-#### **Helm Chart Values**
+```csharp
+using Azure.AI.OpenAI;
+using Azure.Identity;
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting.AzureFunctions;
+using Microsoft.Azure.Functions.Worker.Builder;
+using Microsoft.Extensions.AI;
+using Microsoft.Extensions.Hosting;
 
-```yaml
-# helm values for Agent Framework
-replicaCount: 3
+AIAgent agent = new AzureOpenAIClient(
+        new Uri(Environment.GetEnvironmentVariable("AZURE_OPENAI_ENDPOINT")!),
+        new DefaultAzureCredential())
+    .GetChatClient(Environment.GetEnvironmentVariable("AZURE_OPENAI_DEPLOYMENT") ?? "%%model=openai-small%%")
+    .AsIChatClient()
+    .AsAIAgent(instructions: "You write well-structured documents on a given topic.", name: "DocumentPublisher");
 
-image:
-  repository: your-registry.azurecr.io/agent-framework
-  pullPolicy: IfNotPresent
-  tag: "1.0.0"
+using IHost app = FunctionsApplication
+    .CreateBuilder(args)
+    .ConfigureFunctionsWebApplication()
+    .ConfigureDurableAgents(options => options.AddAIAgent(agent))
+    .Build();
 
-imagePullSecrets:
-  - name: acr-secret
-
-service:
-  type: LoadBalancer
-  port: 80
-  targetPort: 8080
-
-ingress:
-  enabled: true
-  className: nginx
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    nginx.ingress.kubernetes.io/rate-limit: "100"
-  hosts:
-    - host: agent-framework.example.com
-      paths:
-        - path: /
-          pathType: Prefix
-  tls:
-    - secretName: agent-framework-tls
-      hosts:
-        - agent-framework.example.com
-
-resources:
-  requests:
-    memory: "2Gi"
-    cpu: "1000m"
-  limits:
-    memory: "4Gi"
-    cpu: "2000m"
-
-autoscaling:
-  enabled: true
-  minReplicas: 3
-  maxReplicas: 10
-  targetCPUUtilisationPercentage: 70
-  targetMemoryUtilisationPercentage: 80
-
-healthChecks:
-  liveness:
-    enabled: true
-    initialDelaySeconds: 30
-    periodSeconds: 10
-  readiness:
-    enabled: true
-    initialDelaySeconds: 10
-    periodSeconds: 5
-
-env:
-  - name: AZURE_OPENAI_ENDPOINT
-    valueFrom:
-      secretKeyRef:
-        name: agent-secrets
-        key: azure-openai-endpoint
-  - name: COSMOS_CONNECTION
-    valueFrom:
-      secretKeyRef:
-        name: agent-secrets
-        key: cosmos-connection
-
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchExpressions:
-              - key: app
-                operator: In
-                values:
-                  - agent-framework
-          topologyKey: kubernetes.io/hostname
+app.Run();
 ```
 
-#### **Kubernetes Manifest**
+In both, each agent becomes a durable entity with its own HTTP endpoint, and conversation state lives in Durable Functions storage. Workflows can be hosted as durable orchestrations (`AgentFunctionApp(workflow=...)` in Python, `ConfigureDurableWorkflows` in .NET), so a `request_info` / request-port pause can last as long as the person needs.
 
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: agent-framework
+### Your own service
 
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: agent-config
-  namespace: agent-framework
-data:
-  config.json: |
-    {
-      "environment": "production",
-      "logging": {
-        "level": "Information",
-        "format": "json"
-      }
-    }
+- One agent per role per process, built at start-up; one session per conversation.
+- A shared session or history store (Cosmos DB or Redis) once you run more than one replica.
+- Liveness probes that don't call the model.
+- Timeouts around workflow runs and a cap on concurrent model calls (below).
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: agent-secrets
-  namespace: agent-framework
-type: Opaque
-stringData:
-  azure-openai-endpoint: https://your-resource.openai.azure.com
-  cosmos-connection: AccountEndpoint=https://...;AccountKey=...
+## Prompt-injection defence
 
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: agent-framework
-  namespace: agent-framework
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: agent-framework
-  template:
-    metadata:
-      labels:
-        app: agent-framework
-    spec:
-      serviceAccountName: agent-framework
-      containers:
-      - name: agent-framework
-        image: your-registry.azurecr.io/agent-framework:latest
-        imagePullPolicy: Always
-        ports:
-        - containerPort: 8080
-          name: http
-        env:
-        - name: AZURE_OPENAI_ENDPOINT
-          valueFrom:
-            secretKeyRef:
-              name: agent-secrets
-              key: azure-openai-endpoint
-        resources:
-          requests:
-            memory: "2Gi"
-            cpu: "1000m"
-          limits:
-            memory: "4Gi"
-            cpu: "2000m"
-        livenessProbe:
-          httpGet:
-            path: /health/live
-            port: 8080
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health/ready
-            port: 8080
-          initialDelaySeconds: 10
-          periodSeconds: 5
+Untrusted text reaches the model through user input, retrieved documents, tool results and MCP servers. Layer the defences:
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: agent-framework-service
-  namespace: agent-framework
-spec:
-  type: LoadBalancer
-  selector:
-    app: agent-framework
-  ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 8080
+1. **Human approval for consequential tools.** Python: `@tool(approval_mode="always_require")`. .NET: wrap the function in `ApprovalRequiredAIFunction`. The run stops with an approval request and resumes when you answer on the same session.
+2. **Information-flow control (Python, experimental).** FIDES (`agent_framework.security.SecureAgentConfig`) labels tool output as trusted or untrusted, hides untrusted content behind variable references, and blocks privileged tools, or asks for approval, once untrusted data is in context. See the [Python comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides). There is no .NET equivalent.
+3. **Prompt Shields.** Azure AI Content Safety's [Prompt Shields](https://learn.microsoft.com/azure/ai-services/content-safety/concepts/jailbreak-detection) API detects jailbreaks and indirect injection in prompts and documents; call it from agent middleware, following the content-safety middleware on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#azure-ai-content-safety-integration).
+4. **Least privilege.** Scope each tool's credentials to what it needs; never put secrets or other users' data in instructions.
 
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: agent-framework-hpa
-  namespace: agent-framework
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: agent-framework
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilisation
-        averageUtilisation: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilisation
-        averageUtilisation: 80
-```
+## Evaluation in CI
+
+Both SDKs ship a local evaluator whose checks are plain functions, so a quality gate runs as an ordinary unit test:
+
+- Python: `evaluate_agent(agent=..., queries=[...], evaluators=LocalEvaluator(keyword_check(...), tool_called_check(...)))`, then `result.assert_no_failed_items()` ([evaluation page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/)).
+- .NET: `agent.EvaluateAsync(queries, new LocalEvaluator(EvalChecks.KeywordCheck(...), ...))`, then `results.AssertAllPassed()` ([.NET guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#evaluation)).
+
+Keep the pull-request gate deterministic and cheap; run model-graded and Foundry evaluators nightly against recorded production conversations, and alert on regressions.
 
 ---
 
 ## Scaling Strategies
 
-### Horizontal Scaling Configuration
+Agent services are I/O-bound: almost all of a request's time is spent waiting for the model. Two consequences follow. Scale on **concurrent requests**, not CPU; and remember that the model deployment's tokens-per-minute (TPM) quota is usually the real ceiling, long before your containers are busy.
 
-```python
-# Kubernetes HPA configuration class
-class HorizontalScalingConfig:
-    """Production-grade horizontal scaling configuration"""
-    
-    def __init__(self):
-        self.min_replicas = 3  # Minimum availability
-        self.max_replicas = 20  # Cost control
-        
-        # CPU-based scaling
-        self.cpu_target = 70  # Scale up at 70% CPU
-        self.cpu_scale_up_period = 60  # Check every 60s
-        self.cpu_scale_down_period = 300  # Conservative downscale
-        
-        # Memory-based scaling
-        self.memory_target = 80  # Scale up at 80% memory
-        
-        # Request-based scaling
-        self.concurrent_requests_target = 100
-        self.requests_per_second_target = 500
-```
+### Horizontal scaling
 
-### Vertical Scaling
+In Azure Container Apps, scale on HTTP concurrency:
 
 ```bicep
-# Vertical scaling via container resource adjustment
-resource scalingPolicy 'Microsoft.Insights/autoscaleSettings@2021-05-01-preview' = {
-  name: 'agent-vertical-scaling'
-  location: location
-  properties: {
-    enabled: true
-    targetResourceUri: containerApp.id
-    profiles: [
-      {
-        name: 'Auto scale based on Load'
-        capacity: {
-          minimum: '1'
-          maximum: '4'
-          default: '1'
+scale: {
+  minReplicas: 2           // keep two warm for availability
+  maxReplicas: 20          // cap cost, and stay inside the model's TPM quota
+  rules: [
+    {
+      name: 'http-concurrency'
+      http: {
+        metadata: {
+          concurrentRequests: '20'
         }
-        rules: [
-          {
-            metricTrigger: {
-              metricName: 'CpuPercentage'
-              metricResourceUri: containerApp.id
-              timeGrain: 'PT1M'
-              statistic: 'Average'
-              timeWindow: 'PT5M'
-              timeAggregation: 'Average'
-              operator: 'GreaterThan'
-              threshold: 70
-            }
-            scaleAction: {
-              direction: 'Increase'
-              type: 'ChangeCount'
-              value: '1'
-              cooldown: 'PT5M'
-            }
-          }
-        ]
       }
-    ]
-  }
+    }
+  ]
 }
 ```
 
-### Caching & Rate Limiting
+On AKS, the equivalent is a KEDA `ScaledObject` on request rate, or an HPA on a custom "in-flight requests" metric.
+
+### Vertical sizing
+
+Each replica needs little CPU (it is mostly awaiting HTTP responses) but enough memory for in-flight conversations and any local tokenisation. 0.5–1 vCPU and 1–2 GiB is a sensible starting point; measure, then adjust the `resources` block. Container Apps does not resize a running replica — change the template and roll a new revision.
+
+### Concurrency limits inside a replica
+
+Bound the number of simultaneous model calls per replica so a burst queues locally instead of tripping the model's rate limit:
 
 ```python
-from functools import lru_cache
-from datetime import timedelta
 import asyncio
 
-class ProductionCachingStrategy:
-    """Multi-level caching for production performance"""
-    
-    def __init__(self):
-        self.local_cache = {}
-        self.cache_ttl = timedelta(minutes=5)
-        self.rate_limiter = RateLimiter(
-            calls_per_second=1000,
-            time_window=1
-        )
-    
-    async def get_cached_response(self, key: str):
-        """Retrieve from cache with TTL"""
-        if key in self.local_cache:
-            cached_item = self.local_cache[key]
-            if datetime.utcnow() < cached_item['expiry']:
-                return cached_item['value']
-        return None
-    
-    async def cache_response(self, key: str, value: Any):
-        """Store in cache with TTL"""
-        self.local_cache[key] = {
-            'value': value,
-            'expiry': datetime.utcnow() + self.cache_ttl
-        }
-    
-    async def apply_rate_limit(self):
-        """Apply rate limiting to prevent abuse"""
-        await self.rate_limiter.wait()
+from agent_framework import Agent, AgentContext, AgentMiddleware
+
+
+class ConcurrencyLimit(AgentMiddleware):
+    """Allow at most `limit` agent runs at once in this process; the rest wait their turn."""
+
+    def __init__(self, limit: int) -> None:
+        self._gate = asyncio.Semaphore(limit)
+
+    async def process(self, context: AgentContext, call_next) -> None:
+        async with self._gate:
+            await call_next()
+
+
+limiter = ConcurrencyLimit(limit=16)   # share one instance across all agents in the process
+# agent = Agent(client=..., instructions=..., middleware=[limiter])
 ```
+
+### Caching
+
+Caching full answers is only safe for deterministic, non-personalised questions (FAQ-style lookups, classification of identical inputs). Do it in middleware, keyed on the agent and the exact input, and keep the TTL short. In a multi-replica deployment, use Redis rather than process memory.
+
+```python
+import hashlib
+import time
+
+from agent_framework import AgentContext, AgentMiddleware, AgentResponse
+
+
+class ResponseCache(AgentMiddleware):
+    def __init__(self, ttl_seconds: float = 300) -> None:
+        self.ttl = ttl_seconds
+        self._store: dict[str, tuple[float, AgentResponse]] = {}
+
+    def _key(self, context: AgentContext) -> str:
+        text = "\n".join(f"{m.role}:{m.text}" for m in context.messages)
+        return hashlib.sha256(f"{context.agent.name}|{text}".encode()).hexdigest()
+
+    async def process(self, context: AgentContext, call_next) -> None:
+        if context.session is not None or context.stream:
+            await call_next()          # never cache conversational or streaming runs
+            return
+
+        key = self._key(context)
+        hit = self._store.get(key)
+        if hit and time.monotonic() - hit[0] < self.ttl:
+            context.result = hit[1]    # short-circuit: the model is not called
+            return
+
+        await call_next()
+        if isinstance(context.result, AgentResponse):
+            self._store[key] = (time.monotonic(), context.result)
+```
+
+Provider-side prompt caching (automatic on recent OpenAI and Azure OpenAI models for long, repeated prefixes) is the cheaper win: keep stable instructions and tool definitions at the start of the prompt and it applies without any code.
 
 ---
 
 ## Monitoring & Observability
 
-### Application Insights Configuration
+### Application Insights
+
+`configure_azure_monitor()` (package `azure-monitor-opentelemetry`) sets up traces, metrics and logs to Application Insights; `enable_instrumentation()` turns on the framework's GenAI spans and metrics inside it.
 
 ```python
-from opentelemetry import trace, metrics
-from opentelemetry.exporter.azuremonitor import AzureMonitorTraceExporter
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
+import os
+
+from agent_framework.observability import enable_instrumentation
 from azure.monitor.opentelemetry import configure_azure_monitor
 
-class ProductionObservability:
-    """Enterprise-grade observability setup"""
-    
-    def __init__(self, connection_string: str):
-        # Configure Azure Monitor
-        configure_azure_monitor(connection_string=connection_string)
-        
-        self.tracer = trace.get_tracer(__name__)
-        self.meter = metrics.get_meter(__name__)
-        
-        # Create metrics
-        self.request_counter = self.meter.create_counter(
-            name="agent.requests.total",
-            description="Total number of requests",
-            unit="1"
-        )
-        
-        self.request_duration = self.meter.create_histogram(
-            name="agent.request.duration",
-            description="Request duration in ms",
-            unit="ms"
-        )
-        
-        self.error_counter = self.meter.create_counter(
-            name="agent.errors.total",
-            description="Total number of errors",
-            unit="1"
-        )
-    
-    async def trace_request(self, request_id: str, query: str):
-        """Trace individual request"""
-        with self.tracer.start_as_current_span(f"agent_request_{request_id}") as span:
-            span.set_attribute("request.id", request_id)
-            span.set_attribute("request.query", query)
-            
-            # Track duration
-            start = time.perf_counter()
-            try:
-                # Process request
-                duration = (time.perf_counter() - start) * 1000
-                self.request_duration.record(duration)
-                self.request_counter.add(1)
-            except Exception as e:
-                self.error_counter.add(1)
-                span.set_attribute("error", True)
-                span.set_attribute("error.type", type(e).__name__)
-                raise
+
+def setup_observability() -> None:
+    configure_azure_monitor(connection_string=os.environ["APPLICATIONINSIGHTS_CONNECTION_STRING"])
+    enable_instrumentation(enable_sensitive_data=False)   # spans carry metadata, not prompt text
+
+# Call once at start-up, before creating agents. Every agent.run() then produces
+# invoke_agent / chat / execute_tool spans and gen_ai.client.token.usage and
+# gen_ai.client.operation.duration metrics, tagged with agent and model names.
 ```
 
-### Custom Metrics
+For .NET, wrap agents with `.AsBuilder().UseOpenTelemetry(sourceName)` and add the Azure Monitor exporter; see the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#net-opentelemetry-integration).
+
+### Custom metrics
+
+The built-in metrics cover model calls. Add business metrics — per-tenant usage, outcome counts — with middleware so every agent reports them the same way.
 
 ```python
-class AgentMetrics:
-    """Track agent-specific metrics"""
-    
-    def __init__(self, meter):
-        self.meter = meter
-        
-        # Agent lifecycle metrics
-        self.agents_created = meter.create_counter(
-            "agent.created.total",
-            description="Number of agents created"
-        )
-        
-        self.agents_executed = meter.create_counter(
-            "agent.executed.total",
-            description="Number of agent executions"
-        )
-        
-        # Tool metrics
-        self.tools_invoked = meter.create_counter(
-            "agent.tools.invoked.total",
-            description="Number of tool invocations"
-        )
-        
-        self.tool_duration = meter.create_histogram(
-            "agent.tool.duration",
-            description="Tool execution duration (ms)"
-        )
-        
-        # Memory metrics
-        self.memory_operations = meter.create_counter(
-            "agent.memory.operations.total",
-            description="Memory operations (read/write)"
-        )
-        
-        # LLM metrics
-        self.llm_calls = meter.create_counter(
-            "agent.llm.calls.total",
-            description="Number of LLM API calls"
-        )
-        
-        self.token_usage = meter.create_histogram(
-            "agent.tokens.used",
-            description="Token usage per request"
-        )
+import time
+
+from agent_framework import AgentContext, AgentMiddleware, AgentResponse
+from opentelemetry import metrics
+
+meter = metrics.get_meter("contoso.agents")
+runs = meter.create_counter("agent.runs", unit="1", description="Agent runs by outcome")
+duration = meter.create_histogram("agent.run.duration", unit="ms", description="Agent run duration")
+tokens = meter.create_counter("agent.tokens", unit="1", description="Tokens used, by tenant")
+
+
+class AgentMetricsMiddleware(AgentMiddleware):
+    def __init__(self, tenant_id: str) -> None:
+        self.tenant_id = tenant_id
+
+    async def process(self, context: AgentContext, call_next) -> None:
+        attrs = {"agent": context.agent.name or "unnamed", "tenant": self.tenant_id}
+        start = time.perf_counter()
+        try:
+            await call_next()
+            runs.add(1, {**attrs, "outcome": "success"})
+            if isinstance(context.result, AgentResponse) and context.result.usage_details:
+                tokens.add(context.result.usage_details.get("total_token_count") or 0, attrs)
+        except Exception:
+            runs.add(1, {**attrs, "outcome": "error"})
+            raise
+        finally:
+            duration.record((time.perf_counter() - start) * 1000, attrs)
+
+
+# await agent.run(question, middleware=[AgentMetricsMiddleware(tenant_id=claims["tid"])])
 ```
 
-### Log Aggregation
+### Log aggregation
+
+With `configure_azure_monitor()` in place, standard `logging` records are exported too; `extra=` fields become custom dimensions you can query. Log identifiers and sizes, not prompt content.
 
 ```python
 import logging
-from azure.monitor.opentelemetry.exporter import AzureMonitorLogExporter
 
-class ProductionLogger:
-    """Production-grade logging"""
-    
-    def __init__(self):
-        # Configure root logger
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-        )
-        
-        # Create logger
-        self.logger = logging.getLogger("agent_framework")
-        
-        # Add structured logging
-        self.logger.info(
-            "Agent Framework initialised",
-            extra={
-                "component": "core",
-                "version": "1.0.0",
-                "environment": "production"
-            }
-        )
-    
-    def log_agent_execution(self, agent_id: str, query: str, result: str):
-        """Log agent execution"""
-        self.logger.info(
-            f"Agent {agent_id} executed",
-            extra={
-                "agent_id": agent_id,
-                "query": query[:100],  # Truncate for security
-                "result_length": len(result),
-                "timestamp": datetime.utcnow().isoformat()
-            }
-        )
-    
-    def log_error(self, agent_id: str, error: Exception):
-        """Log errors with full context"""
-        self.logger.error(
-            f"Agent {agent_id} error: {str(error)}",
-            extra={
-                "agent_id": agent_id,
-                "error_type": type(error).__name__,
-                "error_details": str(error)
-            },
-            exc_info=True
-        )
+logger = logging.getLogger("contoso.agents")
+logger.setLevel(logging.INFO)
+
+
+def log_agent_execution(agent_name: str, request_id: str, result_text: str, elapsed_ms: float) -> None:
+    logger.info(
+        "agent run completed",
+        extra={"agent": agent_name, "request_id": request_id, "result_length": len(result_text), "elapsed_ms": elapsed_ms},
+    )
+
+
+def log_agent_error(agent_name: str, request_id: str, error: Exception) -> None:
+    logger.error(
+        "agent run failed",
+        extra={"agent": agent_name, "request_id": request_id, "error_type": type(error).__name__},
+        exc_info=error,
+    )
 ```
 
-### Alerting Strategy
+### Alerting
 
-```yaml
-# Azure Monitor Alert Rules
-alerts:
-  - name: HighErrorRate
-    description: Alert when error rate exceeds 5%
-    condition:
-      metric: agent.errors.total
-      threshold: 5
-      operator: GreaterThan
-      window: 5m
-    actions:
-      - type: email
-        recipients:
-          - ops-team@company.com
-      - type: webhook
-        url: https://alerts.company.com/hooks/agent-errors
+Create alerts as Azure Monitor log search alerts over the exported telemetry. Useful starting points (KQL against the Application Insights workspace):
 
-  - name: HighLatency
-    description: Alert when p99 latency exceeds 5s
-    condition:
-      metric: agent.request.duration
-      percentile: 99
-      threshold: 5000
-      operator: GreaterThan
-      window: 10m
-    actions:
-      - type: pagerduty
-        service_id: agent-framework-service
+```kusto
+// Error rate above 5% over 5 minutes (from the agent.runs counter above)
+customMetrics
+| where name == "agent.runs"
+| summarize errors = sumif(valueSum, tostring(customDimensions.outcome) == "error"), total = sum(valueSum) by bin(timestamp, 5m)
+| extend error_rate = errors / total
+| where error_rate > 0.05
 
-  - name: HighMemoryUsage
-    description: Alert when memory usage exceeds 85%
-    condition:
-      metric: container_memory_usage_bytes
-      threshold: 85
-      operator: GreaterThan
-      window: 5m
-    actions:
-      - type: auto_scale
-        action: increase_replicas
+// p99 model latency above 5 s (framework span)
+dependencies
+| where name startswith "chat"
+| summarize p99 = percentile(duration, 99) by bin(timestamp, 10m)
+| where p99 > 5000
+
+// Throttling from the model endpoint
+dependencies
+| where name startswith "chat" and resultCode == "429"
+| summarize throttled = count() by bin(timestamp, 5m)
+| where throttled > 10
+```
+
+```bash
+az monitor scheduled-query create \
+  --name agent-high-error-rate --resource-group rg-agents \
+  --scopes "$APP_INSIGHTS_ID" --evaluation-frequency 5m --window-size 5m \
+  --condition "count 'ErrorRate' > 0" \
+  --condition-query ErrorRate="customMetrics | where name == 'agent.runs' | summarize e=sumif(valueSum, tostring(customDimensions.outcome)=='error'), t=sum(valueSum) | where e/t > 0.05" \
+  --action-groups "$ACTION_GROUP_ID"
 ```
 
 ---
 
 ## Security Best Practices
 
-### Secrets Management
+### Secrets management
+
+The best secret is the one you don't have: use managed identity for Azure OpenAI / Foundry, Cosmos DB, Storage, AI Search and Key Vault, and disable key-based auth on those resources. For the secrets that remain (third-party API keys used by tools), read them from Key Vault at start-up with the async client and cache them in memory.
 
 ```python
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+from azure.identity.aio import DefaultAzureCredential
+from azure.keyvault.secrets.aio import SecretClient
 
-class SecureSecretsManagement:
-    """Production-grade secrets management"""
-    
-    def __init__(self, vault_url: str):
-        credential = DefaultAzureCredential()
-        self.client = SecretClient(vault_url=vault_url, credential=credential)
-    
-    async def get_secret(self, secret_name: str) -> str:
-        """Retrieve secret from Key Vault"""
-        try:
-            secret = self.client.get_secret(secret_name)
-            return secret.value
-        except Exception as e:
-            self.logger.error(f"Failed to retrieve secret: {secret_name}")
-            raise
-    
-    async def set_secret(self, secret_name: str, value: str, tags: dict = None):
-        """Store secret in Key Vault"""
-        self.client.set_secret(secret_name, value, tags=tags)
-    
-    async def rotate_secret(self, secret_name: str):
-        """Initiate secret rotation"""
-        # Implementation triggers Azure Key Vault rotation
-        pass
 
-# Usage
-secrets_manager = SecureSecretsManagement(
-    vault_url="https://your-keyvault.vault.azure.net/"
-)
+async def load_tool_secrets(vault_url: str, names: list[str]) -> dict[str, str]:
+    """Fetch the named secrets once at start-up."""
+    async with DefaultAzureCredential() as credential, SecretClient(vault_url=vault_url, credential=credential) as client:
+        return {name: (await client.get_secret(name)).value for name in names}
 
-# Load secrets
-azure_openai_key = await secrets_manager.get_secret("azure-openai-key")
-cosmos_connection = await secrets_manager.get_secret("cosmos-connection-string")
+# secrets = await load_tool_secrets("https://your-keyvault.vault.azure.net/", ["weather-api-key"])
 ```
 
-### Network Security
+In Container Apps you can also reference Key Vault secrets directly from the app's `secrets` configuration (`keyVaultUrl` plus the app's managed identity), so they arrive as environment variables without any code.
+
+### Network security
+
+Put the model, data and search services behind private endpoints with public network access disabled, and integrate the Container Apps environment (or AKS cluster) with the same virtual network. Then restrict inbound traffic to the front door:
 
 ```bicep
-# Network Security Group for Agent Framework
-resource agentNsg 'Microsoft.Network/networkSecurityGroups@2021-02-01' = {
+resource agentNsg 'Microsoft.Network/networkSecurityGroups@2023-09-01' = {
   name: 'agent-framework-nsg'
   location: location
   properties: {
     securityRules: [
       {
-        name: 'AllowHTTPSInbound'
+        name: 'AllowHttpsFromFrontDoor'
         properties: {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '443'
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: 'AzureFrontDoor.Backend'
           destinationAddressPrefix: '*'
           access: 'Allow'
           priority: 100
-          direction: 'Inbound'
-        }
-      }
-      {
-        name: 'AllowAzureServicesInbound'
-        properties: {
-          protocol: '*'
-          sourcePortRange: '*'
-          destinationPortRange: '*'
-          sourceAddressPrefix: 'AzureCloud'
-          destinationAddressPrefix: '*'
-          access: 'Allow'
-          priority: 110
           direction: 'Inbound'
         }
       }
@@ -864,7 +422,7 @@ resource agentNsg 'Microsoft.Network/networkSecurityGroups@2021-02-01' = {
           sourceAddressPrefix: '*'
           destinationAddressPrefix: '*'
           access: 'Deny'
-          priority: 1000
+          priority: 4096
           direction: 'Inbound'
         }
       }
@@ -873,430 +431,268 @@ resource agentNsg 'Microsoft.Network/networkSecurityGroups@2021-02-01' = {
 }
 ```
 
-### Data Encryption
+### Data encryption
+
+Azure services encrypt data at rest by default, and can use customer-managed keys where policy requires it. Application-level encryption is worth adding for one thing in particular: **serialised conversation sessions** you store yourself, which contain the full conversation.
 
 ```python
-from cryptography.fernet import Fernet
-from azure.storage.blob.aio import BlobClient
+import json
 
-class DataEncryption:
-    """Production data encryption"""
-    
-    def __init__(self, encryption_key: str):
-        self.cipher_suite = Fernet(encryption_key.encode())
-    
-    def encrypt_sensitive_data(self, data: str) -> str:
-        """Encrypt sensitive information"""
-        return self.cipher_suite.encrypt(data.encode()).decode()
-    
-    def decrypt_sensitive_data(self, encrypted_data: str) -> str:
-        """Decrypt sensitive information"""
-        return self.cipher_suite.decrypt(encrypted_data.encode()).decode()
-    
-    async def upload_encrypted_blob(self, container: str, blob_name: str, data: str):
-        """Upload encrypted data to blob storage"""
-        encrypted = self.encrypt_sensitive_data(data)
-        
-        async with BlobClient.from_connection_string(
-            conn_str=self.connection_string,
-            container_name=container,
-            blob_name=blob_name
-        ) as blob_client:
-            await blob_client.upload_blob(encrypted, overwrite=True)
+from agent_framework import AgentSession
+from cryptography.fernet import Fernet
+
+
+class EncryptedSessionStore:
+    """Encrypts AgentSession state before it leaves the process. Keep the key in Key Vault."""
+
+    def __init__(self, key: bytes, backend: dict[str, bytes]) -> None:
+        self._fernet = Fernet(key)
+        self._backend = backend               # stand-in for Blob Storage / Redis / Cosmos DB
+
+    def save(self, session: AgentSession) -> None:
+        payload = json.dumps(session.to_dict()).encode()
+        self._backend[session.session_id] = self._fernet.encrypt(payload)
+
+    def load(self, session_id: str) -> AgentSession | None:
+        blob = self._backend.get(session_id)
+        if blob is None:
+            return None
+        return AgentSession.from_dict(json.loads(self._fernet.decrypt(blob)))
+
+
+# store = EncryptedSessionStore(Fernet.generate_key(), backend={})
+# store.save(session); restored = store.load(session.session_id)
 ```
 
 ---
 
 ## High Availability & Disaster Recovery
 
-### Multi-Region Deployment
+### Multi-region deployment
 
-```yaml
-# Multi-region configuration
-primary_region: eastus
-secondary_region: westus
+- **Model endpoints:** deploy the model in two regions (or use a Global / Data Zone deployment, which Azure routes across regions for you). Put Azure API Management or Front Door in front if you need explicit failover between deployments.
+- **Compute:** run the agent service in two regions behind Azure Front Door with health probes.
+- **State:** Cosmos DB with multi-region writes (or a failover region) for sessions and workflow checkpoints; geo-redundant storage for anything in Blob Storage.
+- **Targets:** decide RPO and RTO explicitly. With Cosmos DB multi-region and stateless compute, an RPO of seconds and an RTO of a few minutes is realistic.
 
-deployment:
-  primary:
-    location: eastus
-    replicas: 3
-    database: cosmos-db-primary
-    storage: blob-primary
-  secondary:
-    location: westus
-    replicas: 3
-    database: cosmos-db-secondary
-    storage: blob-secondary
+### Failing over between model deployments
 
-failover_strategy:
-  type: automatic
-  detection_threshold: 30s
-  switching_time: 60s
-  
-recovery_point_objective: 1 minute
-recovery_time_objective: 5 minutes
-```
-
-### Backup Strategy
+The simplest model-level failover is two agents with the same instructions on different deployments, trying the second when the first fails with a service error:
 
 ```python
-class BackupStrategy:
-    """Production backup and recovery"""
-    
-    async def backup_agent_state(self, agent_id: str):
-        """Regular state backups"""
-        state = await self.load_agent_state(agent_id)
-        
-        # Create backup
-        backup_id = f"backup-{agent_id}-{datetime.utcnow().isoformat()}"
-        await self.storage_client.upload_blob(
-            container="agent-backups",
-            name=backup_id,
-            data=json.dumps(state)
-        )
-        
-        return backup_id
-    
-    async def restore_from_backup(self, backup_id: str):
-        """Restore from backup"""
-        blob_client = await self.storage_client.get_blob_client(
-            container="agent-backups",
-            blob=backup_id
-        )
-        
-        backup_data = await blob_client.download_blob()
-        return json.loads(await backup_data.readall())
-    
-    async def scheduled_backup_job(self):
-        """Run periodic backups"""
-        while True:
-            agents = await self.list_all_agents()
-            for agent in agents:
-                await self.backup_agent_state(agent.id)
-            
-            # Backup every hour
-            await asyncio.sleep(3600)
+from agent_framework import Agent, AgentResponse
+from agent_framework.exceptions import ChatClientException
+from agent_framework.openai import OpenAIChatClient
+from azure.identity.aio import DefaultAzureCredential
+
+credential = DefaultAzureCredential()
+INSTRUCTIONS = "You are a support assistant."
+
+primary = Agent(
+    client=OpenAIChatClient(model="%%model=openai-small%%", azure_endpoint="https://contoso-uksouth.openai.azure.com", credential=credential),
+    name="support", instructions=INSTRUCTIONS,
+)
+secondary = Agent(
+    client=OpenAIChatClient(model="%%model=openai-small%%", azure_endpoint="https://contoso-swedencentral.openai.azure.com", credential=credential),
+    name="support", instructions=INSTRUCTIONS,
+)
+
+
+async def run_with_failover(question: str) -> AgentResponse:
+    try:
+        return await primary.run(question)
+    except ChatClientException:
+        return await secondary.run(question)
 ```
 
-### Circuit Breaker Pattern
+Server-side conversation state (Responses API `previous_response_id`, Foundry threads) lives in one region. If you need conversations to survive a regional failover, keep history client-side (in the session or a Cosmos DB history provider) rather than on the service.
+
+### Backups
+
+What needs backing up is the state you own: stored sessions, chat history and workflow checkpoints. Keep them in Cosmos DB with **continuous backup** (point-in-time restore) or in Blob Storage with soft delete and versioning, rather than writing your own backup loop. Agents themselves are code and configuration; rebuild them from source control.
+
+### Circuit breaker
+
+When the model endpoint is failing, a circuit breaker stops every request from waiting for its own timeout. As chat middleware it protects every agent on the client:
 
 ```python
-from enum import Enum
-import asyncio
+import time
 
-class CircuitState(Enum):
-    CLOSED = "closed"  # Normal operation
-    OPEN = "open"      # Fail fast
-    HALF_OPEN = "half_open"  # Testing recovery
+from agent_framework import ChatContext, ChatMiddleware
+from agent_framework.exceptions import ChatClientException
 
-class CircuitBreaker:
-    """Resilience pattern for production"""
-    
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
-        self.state = CircuitState.CLOSED
-        self.failure_count = 0
+
+class CircuitOpenError(Exception):
+    pass
+
+
+class CircuitBreaker(ChatMiddleware):
+    def __init__(self, failure_threshold: int = 5, reset_after_seconds: float = 60) -> None:
         self.failure_threshold = failure_threshold
-        self.timeout = timeout
-        self.last_failure_time = None
-    
-    async def execute(self, func, *args, **kwargs):
-        """Execute with circuit breaker protection"""
-        
-        if self.state == CircuitState.OPEN:
-            if time.time() - self.last_failure_time > self.timeout:
-                self.state = CircuitState.HALF_OPEN
-            else:
-                raise Exception("Circuit breaker is OPEN")
-        
+        self.reset_after = reset_after_seconds
+        self.failures = 0
+        self.opened_at: float | None = None
+
+    async def process(self, context: ChatContext, call_next) -> None:
+        if self.opened_at is not None:
+            if time.monotonic() - self.opened_at < self.reset_after:
+                raise CircuitOpenError("model endpoint circuit is open; failing fast")
+            self.opened_at = None              # half-open: let one call through
+
         try:
-            result = await func(*args, **kwargs)
-            
-            # Success - reset
-            if self.state == CircuitState.HALF_OPEN:
-                self.state = CircuitState.CLOSED
-                self.failure_count = 0
-            
-            return result
-            
-        except Exception as e:
-            self.failure_count += 1
-            self.last_failure_time = time.time()
-            
-            if self.failure_count >= self.failure_threshold:
-                self.state = CircuitState.OPEN
-                self.logger.error(f"Circuit breaker opened: {e}")
-            
+            await call_next()
+        except ChatClientException:
+            self.failures += 1
+            if self.failures >= self.failure_threshold:
+                self.opened_at = time.monotonic()
             raise
+        else:
+            self.failures = 0
+
+
+breaker = CircuitBreaker()
+# client = OpenAIChatClient(middleware=[breaker])   # every agent using this client is protected
 ```
+
+The OpenAI SDK underneath already retries transient errors with back-off (`max_retries`, default 2); the breaker is for sustained outages, where retrying only adds load.
 
 ---
 
 ## Cost Optimisation
 
-### Cost Analysis Framework
+### Where the money goes
+
+For most agent services, model tokens dominate; compute, storage and networking are small by comparison. So cost work is mostly token work:
+
+- **Measure** tokens per request, per agent and per tenant (the `agent.tokens` metric above, or the built-in `gen_ai.client.token.usage`).
+- **Right-size the model:** route simple tasks (classification, extraction, short answers) to a small model and keep the large one for reasoning.
+- **Trim context:** long histories are re-sent every turn. Use compaction (`compaction_strategy=` on `Agent`) or a history limit.
+- **Use prompt caching:** stable instructions and tool definitions first.
+- **Cap output:** set `max_tokens` in `default_options` where answers should be short.
 
 ```python
-class CostAnalysis:
-    """Track and optimise costs"""
-    
-    def __init__(self, subscription_id: str):
-        self.subscription_id = subscription_id
-        self.cost_management_client = CostManagementClient(...)
-    
-    async def calculate_monthly_cost(self):
-        """Calculate cost breakdown"""
-        costs = {
-            "azure_openai": await self._calculate_llm_costs(),
-            "compute": await self._calculate_compute_costs(),
-            "storage": await self._calculate_storage_costs(),
-            "networking": await self._calculate_networking_costs()
-        }
-        
-        costs["total"] = sum(costs.values())
-        return costs
-    
-    async def _calculate_llm_costs(self):
-        """LLM API costs"""
-        # Estimate based on:
-        # - Token usage
-        # - Model type
-        # - API pricing
-        
-        tokens_per_month = await self._estimate_token_usage()
-        model_prices = {
-            "gpt-4": 0.03,  # per 1K tokens
-            "gpt-4o": 0.015,
-            "gpt-4o-mini": 0.0005
-        }
-        
-        return sum(
-            tokens_per_month.get(model, 0) * model_prices[model]
-            for model in model_prices
-        )
-    
-    async def _calculate_compute_costs(self):
-        """Container instance costs"""
-        # Based on CPU, memory, running hours
-        cpu_hours = 3 * 24 * 30  # 3 replicas, 24/7, 30 days
-        memory_gb_hours = 6 * 24 * 30  # 2GB per replica
-        
-        return (cpu_hours * 0.048) + (memory_gb_hours * 0.0050)
-    
-    async def optimise_costs(self):
-        """Generate cost optimisation recommendations"""
-        recommendations = []
-        
-        # Check reserved instances
-        if self.compute_utilisation < 60:
-            recommendations.append({
-                "area": "compute",
-                "recommendation": "Reduce minimum replicas",
-                "potential_savings": "15-20%"
-            })
-        
-        # Check LLM model efficiency
-        if self.token_efficiency < 80:
-            recommendations.append({
-                "area": "llm",
-                "recommendation": "Use gpt-4o-mini for simpler tasks",
-                "potential_savings": "70%"
-            })
-        
-        return recommendations
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
+from azure.identity.aio import ManagedIdentityCredential
+
+credential = ManagedIdentityCredential()
+
+classifier = Agent(
+    client=FoundryChatClient(model="%%model=openai-small%%", credential=credential),
+    name="classifier",
+    instructions="Classify the request as billing, technical or general. Reply with one word.",
+    default_options={"max_tokens": 5, "temperature": 0},
+)
+
+specialist = Agent(
+    client=FoundryChatClient(model="%%model=openai%%", credential=credential),
+    name="specialist",
+    instructions="You resolve complex technical support cases.",
+)
+
+
+async def answer(question: str) -> str:
+    category = (await classifier.run(question)).text.strip().lower()
+    if category == "technical":
+        return (await specialist.run(question)).text
+    return f"Routing to the {category} team."
 ```
 
-### Resource Optimisation
+Then set budgets: Azure Cost Management budgets with alerts on the resource group, and per-deployment TPM quotas as a hard ceiling.
 
-```python
-class ResourceOptimisation:
-    """Optimise resource allocation"""
-    
-    async def right_size_compute(self):
-        """Adjust compute resources based on actual usage"""
-        
-        # Analyze historical metrics
-        usage_metrics = await self.get_usage_metrics(days=30)
-        
-        # Calculate optimal sizing
-        p95_cpu = numpy.percentile(usage_metrics['cpu'], 95)
-        p95_memory = numpy.percentile(usage_metrics['memory'], 95)
-        
-        # Add 20% buffer
-        recommended_cpu = p95_cpu * 1.2
-        recommended_memory = p95_memory * 1.2
-        
-        # Update resource limits
-        await self.update_container_app_resources(
-            cpu=recommended_cpu,
-            memory=recommended_memory
-        )
-    
-    async def optimise_caching(self):
-        """Maximise cache hit rates"""
-        
-        # Analyse cache patterns
-        stats = await self.get_cache_statistics()
-        
-        if stats['hit_rate'] < 0.7:
-            # Increase cache TTL or size
-            await self.update_cache_config(
-                ttl=600,  # Increase to 10 minutes
-                max_size=1000  # Increase to 1000 items
-            )
-```
+### Compute
+
+Use the Container Apps consumption profile (scale to the minimum replica count when idle), set `maxReplicas` to what the model quota can actually serve, and review p95 CPU and memory monthly to right-size the container.
 
 ---
 
 ## Performance Tuning
 
-### Connection Pooling
+### Client reuse and connection pooling
+
+Create chat clients once per process and share them between agents; each client holds an HTTP connection pool. Creating a client (or a credential) per request defeats pooling and adds a token fetch to every call. To tune the pool, pass your own `AsyncOpenAI` client with a configured `httpx` client:
 
 ```python
-from asyncpg import create_pool
+import httpx
+from agent_framework.openai import OpenAIChatClient
+from openai import AsyncOpenAI
 
-class OptimisedConnections:
-    """Optimised connection management"""
-    
-    async def init_pools(self):
-        """Initialise connection pools"""
-        
-        # Azure OpenAI client pool
-        self.openai_pool = aiohttp.ClientSession()
-        
-        # Cosmos DB pool
-        self.cosmos_pool = await create_pool(
-            dsn="cosmosdb://...",
-            min_size=10,
-            max_size=50
-        )
-        
-        # Azure Search pool
-        self.search_client = SearchClient(...)
-    
-    async def cleanup(self):
-        """Clean up pools"""
-        await self.openai_pool.close()
-        await self.cosmos_pool.close()
+http_client = httpx.AsyncClient(
+    limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+    timeout=httpx.Timeout(60.0, connect=5.0),
+)
+
+shared_client = OpenAIChatClient(
+    model="%%model=openai-small%%",
+    async_client=AsyncOpenAI(http_client=http_client, max_retries=3),
+)
+# Every Agent(client=shared_client, ...) reuses the same pool.
 ```
 
-### Batch Processing
+The same applies to Cosmos DB, AI Search and Storage clients used by tools and context providers: one instance per process.
+
+### Batch processing
+
+Run independent requests concurrently, bounded so a large batch doesn't exceed the model's rate limit, and collect failures instead of aborting the batch:
 
 ```python
-class BatchProcessing:
-    """Efficient batch operations"""
-    
-    async def batch_agent_executions(self, queries: List[str], batch_size: int = 10):
-        """Process queries in batches"""
-        
-        results = []
-        
-        for i in range(0, len(queries), batch_size):
-            batch = queries[i:i+batch_size]
-            
-            # Process batch concurrently
-            batch_results = await asyncio.gather(
-                *[self.agent.run(query) for query in batch],
-                return_exceptions=True
-            )
-            
-            results.extend(batch_results)
-        
-        return results
-    
-    async def batch_vector_upsert(self, embeddings: List[Dict], batch_size: int = 100):
-        """Batch insert embeddings"""
-        
-        for i in range(0, len(embeddings), batch_size):
-            batch = embeddings[i:i+batch_size]
-            
-            # Upsert to search index
-            await self.search_client.upload_documents(batch)
+import asyncio
+
+from agent_framework import Agent, AgentResponse
+
+
+async def batch_agent_executions(
+    agent: Agent, queries: list[str], max_concurrency: int = 10
+) -> list[AgentResponse | BaseException]:
+    gate = asyncio.Semaphore(max_concurrency)
+
+    async def one(query: str) -> AgentResponse:
+        async with gate:
+            return await agent.run(query)
+
+    return await asyncio.gather(*(one(q) for q in queries), return_exceptions=True)
+
+# results = await batch_agent_executions(agent, queries)
+# failed = [q for q, r in zip(queries, results) if isinstance(r, BaseException)]
 ```
+
+For large offline jobs where latency doesn't matter, the Azure OpenAI Batch API is roughly half the price of synchronous calls; call it directly through the `openai` SDK rather than through an agent.
 
 ---
 
 ## Enterprise Governance
 
-### Compliance & Auditing
+### Compliance and auditing
 
-```python
-class ComplianceFramework:
-    """Enterprise compliance tracking"""
-    
-    async def log_data_access(self, user_id: str, resource_id: str, action: str):
-        """Audit trail for data access"""
-        
-        audit_entry = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "user_id": user_id,
-            "resource_id": resource_id,
-            "action": action,
-            "ip_address": self.request_context.client_ip,
-            "session_id": self.request_context.session_id
-        }
-        
-        # Store in immutable log
-        await self.audit_log_storage.append(audit_entry)
-    
-    async def compliance_report(self, start_date: datetime, end_date: datetime):
-        """Generate compliance report"""
-        
-        audit_entries = await self.audit_log_storage.query(
-            start=start_date,
-            end=end_date
-        )
-        
-        report = {
-            "period": f"{start_date} to {end_date}",
-            "total_accesses": len(audit_entries),
-            "unique_users": len(set(e['user_id'] for e in audit_entries)),
-            "sensitive_access_count": len([
-                e for e in audit_entries
-                if e['resource_id'].startswith('sensitive_')
-            ]),
-            "anomalies": self._detect_anomalies(audit_entries)
-        }
-        
-        return report
+Audit records for agent runs and tool calls are best produced by middleware, so no code path can skip them. The [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#audit-and-compliance-logging) has complete `AgentAuditMiddleware` and `ToolAuditMiddleware` examples, plus Microsoft Purview integration for DLP and the Sentinel query that reads the resulting records.
+
+For retention, send audit logs to a Log Analytics workspace with the retention your regulator requires, and archive to Storage with an immutability (WORM) policy where records must be tamper-proof.
+
+### Policy enforcement
+
+Use Azure Policy for the platform rules, assigned at the subscription or management group so new resources inherit them. Built-in definitions cover most of what agent workloads need:
+
+- Azure AI services should have key access disabled (managed identity only).
+- Azure AI services should restrict network access / use private link.
+- Cosmos DB accounts should disable public network access.
+- Require tags (`cost-centre`, `environment`, `owner`) on resource groups.
+- Allowed locations, for data residency.
+
+```bash
+# Example: require managed identity (no keys) on Azure AI services in a subscription
+az policy assignment create \
+  --name deny-ai-local-auth \
+  --display-name "Azure AI services should have key access disabled" \
+  --policy 71ef260a-8f18-47b7-abcb-62d0673d94dc \
+  --scope "/subscriptions/$SUBSCRIPTION_ID"
 ```
 
-### Policy Enforcement
-
-```yaml
-# Azure Policy for Agent Framework governance
-policies:
-  - name: EnforceTagging
-    description: Require specific tags on all resources
-    rules:
-      - resource_type: containerApp
-        required_tags:
-          - cost-centre
-          - environment
-          - owner
-          - application
-  
-  - name: EnforceEncryption
-    description: Enforce encryption at rest
-    rules:
-      - service: cosmosdb
-        encryption_enabled: true
-      - service: blob_storage
-        encryption_type: "AES-256"
-  
-  - name: EnforceNetworkPolicy
-    description: Enforce network security
-    rules:
-      - no_public_ips: true
-      - require_service_endpoints: true
-      - allowed_inbound_ports: [443]
-```
+Policies inside the agent — which tools a user may call, which models a team may use, per-tenant budgets — are middleware; see [Enterprise Governance](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#enterprise-governance).
 
 ---
 
-**This production guide provides enterprise-ready patterns for deploying and managing Agent Framework applications at scale.**
+For code-level detail, see:
 
-For detailed code examples and implementation patterns, refer to:
-- `microsoft_agent_framework_comprehensive_guide.md` - Core concepts
-- `microsoft_agent_framework_recipes.md` - Practical code examples
-- `microsoft_agent_framework_diagrams.md` - Architecture visualisations
-
+- [Comprehensive guide](/microsoft-agent-framework-guide/microsoft_agent_framework_comprehensive_guide/) — core concepts
+- [Recipes](/microsoft-agent-framework-guide/microsoft_agent_framework_recipes/) — practical examples
+- [Diagrams](/microsoft-agent-framework-guide/microsoft_agent_framework_diagrams/) — architecture visualisations

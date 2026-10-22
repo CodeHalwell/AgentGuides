@@ -1,16 +1,14 @@
 ---
 title: "BaseCache & InMemoryCache — cache backend API reference"
-description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration for LangGraph 1.2.14."
-framework: langgraph
-language: python
+description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration."
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Cache backends"
   order: 42
 ---
 
-# BaseCache & InMemoryCache — cache backends
-
-Verified against **`langgraph==1.2.14`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
 
 LangGraph node caching is a two-part system:
 
@@ -32,7 +30,7 @@ This page covers the backend side. See [chapter 9 — Advanced Patterns](/langgr
 from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Generic, TypeVar
-from langgraph.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol
 
 ValueT = TypeVar("ValueT")
 Namespace = tuple[str, ...]      # e.g. ("my_graph", "embed_node")
@@ -71,7 +69,7 @@ class BaseCache(ABC, Generic[ValueT]):
 # langgraph.cache.memory
 import threading
 from langgraph.cache.base import BaseCache, FullKey, Namespace, ValueT
-from langgraph.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
 class InMemoryCache(BaseCache[ValueT]):
@@ -187,7 +185,7 @@ cache.clear()
 
 ## `InMemoryCache` internals
 
-`InMemoryCache` stores entries as `(encoding, bytes, expiry_timestamp)` tuples, serialized with `JsonPlusSerializer`. The `RLock` makes it safe to call from multiple threads (e.g. when `ToolNode` runs tool calls in parallel).
+`InMemoryCache` stores entries as `(encoding, bytes, expiry_timestamp)` tuples, serialised with `JsonPlusSerializer`. The `RLock` makes it safe to call from multiple threads (e.g. when `ToolNode` runs tool calls in parallel).
 
 TTL expiry is lazy: expired entries are detected and removed on the next `get()` rather than on a background timer.
 
@@ -495,7 +493,7 @@ LangGraph constructs these automatically. You only need them when building a cus
 - **TTL is wall-clock, not access-time.** `InMemoryCache` uses absolute expiry timestamps, not LRU/LFU. An entry set with `ttl=60` expires 60 seconds after insertion regardless of access pattern.
 - **Expired entries are evicted lazily.** They are removed on the next `get()` for their key, not on a background timer.
 - **`InMemoryCache` is process-local.** It does not survive process restarts and is not shared between workers. Use a networked backend (Redis, Memcached) for multi-worker deployments.
-- **Pickle fallback is disabled** in the default `JsonPlusSerializer`. If your node returns a non-JSON-serializable value, you'll get a serialization error. Pass a custom `serde` to enable pickle: `InMemoryCache(serde=JsonPlusSerializer(pickle_fallback=True))`.
+- **Pickle fallback is disabled** in the default `JsonPlusSerializer`. If your node returns a non-JSON-serialisable value, you'll get a serialisation error. Pass a custom `serde` to enable pickle: `InMemoryCache(serde=JsonPlusSerializer(pickle_fallback=True))`.
 - **`cache_policy` without `compile(cache=...)` is silently ignored.** The node will execute on every call.
 
 ---

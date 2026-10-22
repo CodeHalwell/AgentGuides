@@ -1,8 +1,8 @@
 ---
-title: "AutoGen / AG2 (Python)"
-description: "Microsoft AutoGen (now AG2) — research-grade multi-agent framework with GroupChat and event-driven architecture."
-framework: autogen
-language: python
+title: "Microsoft AutoGen (Python)"
+description: "Python pages for Microsoft AutoGen 0.7 (autogen-agentchat / autogen-core), which is archived: AgentChat and Core reference, advanced multi-agent patterns and observability."
+framework: "autogen"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,103 +10,55 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Research-grade multi-agent framework.** AutoGen pioneered GroupChat-style multi-agent conversations; AG2 is the community continuation with event-driven architecture and A2A protocol.
-
 <CardGrid>
-  <Card title="Install" icon="rocket">
+  <Card title="Install (Microsoft AutoGen)" icon="rocket">
     ```bash
-    pip install "ag2[openai]"
+    pip install "autogen-agentchat" "autogen-ext[openai]"
     ```
   </Card>
   <Card title="Version" icon="information">
-    **ag2 0.13.3** · June 2026 · Python 3.10+
+    **autogen-agentchat v%%version=autogen-agentchat%%** (with matching `autogen-core` / `autogen-ext`) · checked %%versions-checked%% · Python 3.10+ · **archived**
   </Card>
-  <Card title="Best for" icon="puzzle">
-    Research, experimentation, GroupChat, human-proxy workflows.
+  <Card title="Successor" icon="puzzle">
+    [Microsoft Agent Framework](/microsoft-agent-framework-guide/) for new Microsoft-stack work; [AG2](/ag2-guide/) for the community fork.
   </Card>
 </CardGrid>
 
-<Aside type="caution" title="AutoGen → AG2">
-  AutoGen has been rebranded to AG2 under community stewardship. The package is `ag2`; the legacy `autogen` imports are aliased. See the [migration guide](./autogen_to_ag2_migration_guide/).
+<Aside type="caution" title="Not AG2">
+  These pages cover **Microsoft AutoGen** (`from autogen_agentchat ...`). The AG2 community fork's `import autogen` API (`ConversableAgent`, `GroupChat`) is **AG2 Classic**. It is documented in the [AG2 guide](/ag2-guide/classic/), and its pages used to live in this section. The two APIs are not interchangeable.
 </Aside>
 
-## Zero → Hero
+## Microsoft AutoGen (autogen-agentchat / autogen-core)
 
 <CardGrid>
-  <LinkCard title="1 · Introduction & overview" href="./autogen_comprehensive_guide/#introduction-and-overview" description="Core ideas, mental model · 10 min" />
-  <LinkCard title="2 · Core fundamentals" href="./autogen_comprehensive_guide/#core-fundamentals" description="ConversableAgent, LLM config · 25 min" />
-  <LinkCard title="3 · Simple agents" href="./autogen_comprehensive_guide/#simple-agents" description="First agent, chat, code execution · 25 min" />
-  <LinkCard title="4 · Multi-agent systems" href="./autogen_comprehensive_guide/#multi-agent-systems" description="GroupChat, speaker selection · 30 min" />
-  <LinkCard title="5 · Tools & function integration" href="./autogen_comprehensive_guide/#tools-and-function-integration" description="Registered functions, async tools · 20 min" />
-  <LinkCard title="6 · Structured output" href="./autogen_comprehensive_guide/#structured-output-and-data-validation" description="Pydantic validation · 15 min" />
-  <LinkCard title="7 · Agentic patterns" href="./autogen_comprehensive_guide/#agentic-patterns-and-workflows" description="Reflection, debate, planning · 20 min" />
-  <LinkCard title="8 · Memory & context" href="./autogen_comprehensive_guide/#memory-systems-and-context-management" description="Conversation memory · 15 min" />
-  <LinkCard title="9 · Context engineering" href="./autogen_comprehensive_guide/#context-engineering" description="Summaries, compression · 15 min" />
-  <LinkCard title="10 · AG2 2025 features" href="./autogen_comprehensive_guide/#ag2-2025-features" description="Event-driven, A2A, CLI · 25 min" />
-  <LinkCard title="11 · AutoGen → AG2 migration" href="./autogen_to_ag2_migration_guide/" description="Renames, breaking changes · 15 min" />
-  <LinkCard title="12 · Advanced multi-agent" href="./autogen_advanced_multi_agent/" description="Complex topologies · 30 min" />
-  <LinkCard title="13 · Production" href="./autogen_production_guide/" description="Deployment, monitoring · 25 min" />
+  <LinkCard title="1 · AgentChat & Core reference" href="./autogen_agentchat_guide/" description="Status, install, AssistantAgent, tools, structured output, teams, MCP, state, Core runtime · 30 min" />
+  <LinkCard title="2 · Advanced multi-agent" href="./autogen_advanced_multi_agent/" description="Selector, Swarm handoffs, GraphFlow branches, HITL · 25 min" />
+  <LinkCard title="3 · Observability & recovery" href="./autogen_observability_python/" description="Logging, OpenTelemetry, cancellation, state checkpoints · 15 min" />
 </CardGrid>
 
-## Jump to a topic
-
-<CardGrid>
-  <LinkCard title="ConversableAgent" href="./autogen_comprehensive_guide/#core-fundamentals" />
-  <LinkCard title="GroupChat" href="./autogen_comprehensive_guide/#multi-agent-systems" />
-  <LinkCard title="Function integration" href="./autogen_comprehensive_guide/#tools-and-function-integration" />
-  <LinkCard title="Structured output" href="./autogen_comprehensive_guide/#structured-output-and-data-validation" />
-  <LinkCard title="Agentic patterns" href="./autogen_comprehensive_guide/#agentic-patterns-and-workflows" />
-  <LinkCard title="Memory systems" href="./autogen_comprehensive_guide/#memory-systems-and-context-management" />
-  <LinkCard title="AG2 2025 features" href="./autogen_comprehensive_guide/#ag2-2025-features" />
-  <LinkCard title="AutoGen → AG2 migration" href="./autogen_to_ag2_migration_guide/" />
-  <LinkCard title="Observability" href="./autogen_observability_python/" />
-  <LinkCard title="Advanced multi-agent" href="./autogen_advanced_multi_agent/" />
-</CardGrid>
-
-## Reference
-
-<CardGrid>
-  <LinkCard title="Comprehensive guide" href="./autogen_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Advanced multi-agent" href="./autogen_advanced_multi_agent/" />
-  <LinkCard title="AutoGen → AG2 migration" href="./autogen_to_ag2_migration_guide/" />
-  <LinkCard title="Observability" href="./autogen_observability_python/" />
-  <LinkCard title="Recipes" href="./autogen_recipes/" />
-  <LinkCard title="Diagrams" href="./autogen_diagrams/" />
-  <LinkCard title="Production guide" href="./autogen_production_guide/" />
-</CardGrid>
-
-## What's new
-
-- **AG2 rebrand** (Nov 2024) — community continuation; legacy `autogen` imports preserved via aliases.
-- **Event-driven architecture** (`autogen.beta`) — typed events for complex conversations.
-- **A2A protocol** — cross-framework interop.
-- **AG2 CLI** — scaffolding and deploy helpers.
-
-## Install, minimal example
+### Minimal example
 
 ```python
-from autogen import ConversableAgent, LLMConfig
+import asyncio
 
-# Option A — inline
-llm_config = LLMConfig({"api_type": "openai", "model": "gpt-4o"})
+from autogen_agentchat.agents import AssistantAgent
+from autogen_ext.models.openai import OpenAIChatCompletionClient
 
-# Option B — load a classic OAI_CONFIG_LIST file or env var
-# llm_config = LLMConfig.from_json(env="OAI_CONFIG_LIST")
-# llm_config = LLMConfig.from_json(path="OAI_CONFIG_LIST.json")
 
-agent = ConversableAgent(
-    name="assistant",
-    llm_config=llm_config,
-    system_message="You are a helpful assistant.",
-)
+async def main() -> None:
+    model_client = OpenAIChatCompletionClient(model="gpt-5-mini")  # 0.7.5 only knows models released before it
+    agent = AssistantAgent("assistant", model_client=model_client)
+    result = await agent.run(task="What is 2 + 2?")
+    print(result.messages[-1].content)
+    await model_client.close()
 
-reply = agent.generate_reply(
-    messages=[{"role": "user", "content": "What is 2 + 2?"}]
-)
-print(reply)
+
+asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./autogen_comprehensive_guide/#introduction-and-overview)**
+## Moving off Microsoft AutoGen
+
+Because AutoGen is archived, plan a move to [Microsoft Agent Framework](/microsoft-agent-framework-guide/) or [AG2 1.x](/ag2-guide/). The [migration guide](/ag2-guide/classic/ag2_classic_migration_guide/#path-c-microsoft-autogen-04--agent-framework-or-ag2) (path C) maps the main concepts.
 
 ---
 
@@ -114,8 +66,7 @@ Ready? **[Start Zero → Hero Step 1 →](./autogen_comprehensive_guide/#introdu
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-09-08 | ag2 0.13.3 | Consistency sweep. Version card now names a package and version instead of a bare "AG2"; comprehensive-guide header reads `Latest: ag2 0.13.3 (autogen-agentchat 0.11.5)`. Removed the unlinked duplicate `autogen_comprehensive_guide_updated.md`, whose content was a subset of the linked guide. No package installation or symbol verification performed. |
-| 2026-04-21 | AG2 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| November 2024 | AG2 | Rebranded from AutoGen to AG2. |
-
-**Note:** For the newer [AG2 guide](/ag2-guide/), focusing on 2025 features (event-driven, A2A, CLI), visit that framework's page.
+| 2026-10-21 | autogen-agentchat 0.7.5 | AG2 Classic pages (comprehensive guide, recipes, production, diagrams, migration) moved to `/ag2-guide/classic/`; this section now covers Microsoft AutoGen only. |
+| 2026-10-21 | autogen-agentchat 0.7.5 | Section split into Microsoft AutoGen pages (new AgentChat & Core reference; advanced and observability pages rewritten) and labelled AG2 Classic pages. Corrected the claim that Microsoft AutoGen was rebranded as AG2, and the non-existent "autogen-agentchat 0.11.5" version. Archived status added. |
+| 2026-09-08 | ag2 0.13.3 | Consistency sweep; removed a duplicate page. |
+| 2026-04-21 | AG2 | Index redesigned with Zero → Hero grid. |

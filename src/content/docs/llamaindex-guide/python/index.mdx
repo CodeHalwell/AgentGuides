@@ -1,8 +1,8 @@
 ---
 title: "LlamaIndex (Python)"
-description: "RAG-first agent framework — data connectors, vector indexing, query engines, and multi-agent workflows."
-framework: llamaindex
-language: python
+description: "RAG-first agent framework — data connectors, vector indexing, query engines, and workflow-based agents."
+framework: "llamaindex"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,56 +10,64 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**The data framework for LLM apps.** LlamaIndex turns unstructured data into agent-queryable knowledge — document loaders, vector indices, query engines, tools, and multi-agent orchestration via `llama-agents`.
+**The data framework for LLM apps.** LlamaIndex turns unstructured data into agent-queryable knowledge — document loaders, vector indices, query engines, tools, and event-driven workflows with prebuilt agents.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install llama-index llama-index-core
+    pip install llama-index==%%version=llama-index%%
     ```
   </Card>
   <Card title="Version" icon="information">
-    **llama-index-core v0.14.22** · May 2026 · Python 3.10+
+    **llama-index %%version=llama-index%%** (core and bundle share a version) · Python 3.10+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
     RAG systems, document Q&A, enterprise knowledge agents.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Where to start">
-  Need a RAG system in 10 minutes? Start at **Creating basic ReAct agents** + **Query engine tools**. Doing production-scale ingestion? Jump to **Advanced implementations**.
+<Aside type="caution" title="Old agent API removed">
+  `llama-index-core` 0.13.0 removed the legacy agents (`OpenAIAgent`, `FunctionCallingAgent`, `AgentRunner`, the old `ReActAgent.from_tools(...)` / `.chat()`). Current agents — `FunctionAgent`, `ReActAgent`, `CodeActAgent`, `AgentWorkflow` — live in `llama_index.core.agent.workflow` and are run with `await agent.run(...)`. See the [migration table](/llamaindex-guide/python/llamaindex_comprehensive_guide/#22-migrating-from-the-legacy-agent-api).
 </Aside>
 
 ## Zero → Hero
 
+Numbers are the comprehensive guide's section numbers; the last two steps are separate pages.
+
 <CardGrid>
-  <LinkCard title="1 · Installation & setup" href="./llamaindex_comprehensive_guide/#1-installation-and-setup" description="Install, configure LLM + embedding · 15 min" />
-  <LinkCard title="2 · Architecture overview" href="./llamaindex_comprehensive_guide/#2-architecture-overview" description="Stack layers, core abstractions · 15 min" />
-  <LinkCard title="3 · Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts-deep-dive" description="Documents, nodes, indices, retrievers · 25 min" />
-  <LinkCard title="4 · Agent classes & types" href="./llamaindex_comprehensive_guide/#4-agent-classes-and-types" description="ReActAgent, FunctionCallingAgent · 20 min" />
-  <LinkCard title="5 · LLM & embedding config" href="./llamaindex_comprehensive_guide/#5-llm-and-embedding-configuration" description="Providers, customisation · 15 min" />
-  <LinkCard title="6 · Basic ReAct agents" href="./llamaindex_comprehensive_guide/#6-creating-basic-react-agents" description="First agent walkthrough · 20 min" />
-  <LinkCard title="7 · Tool integration" href="./llamaindex_comprehensive_guide/#7-tool-integration-with-agents" description="FunctionTool, QueryEngineTool · 20 min" />
-  <LinkCard title="8 · Query engine tools" href="./llamaindex_comprehensive_guide/#8-query-engine-tools" description="RAG as a tool · 20 min" />
-  <LinkCard title="9 · Streaming responses" href="./llamaindex_comprehensive_guide/#11-streaming-responses" description="Token-level streaming · 10 min" />
-  <LinkCard title="10 · llama-agents package" href="./llamaindex_comprehensive_guide/#12-llama-agents-package-overview" description="Multi-agent package · 15 min" />
-  <LinkCard title="11 · Multi-agent orchestration" href="./llamaindex_comprehensive_guide/#13-multi-agent-orchestration" description="Orchestrator, task queues · 25 min" />
-  <LinkCard title="12 · Advanced implementations" href="./llamaindex_advanced_implementations/" description="Production patterns · 30 min" />
-  <LinkCard title="13 · Production" href="./llamaindex_production_guide/" description="Deployment, scaling, cost · 30 min" />
+  <LinkCard title="§1 · Installation & setup" href="./llamaindex_comprehensive_guide/#1-installation-and-setup" description="Install, configure LLM + embedding · 15 min" />
+  <LinkCard title="§2 · Architecture overview" href="./llamaindex_comprehensive_guide/#2-architecture-overview" description="Stack layers, core abstractions · 15 min" />
+  <LinkCard title="§3 · Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts" description="Documents, nodes, indexes, retrievers, query engines · 25 min" />
+  <LinkCard title="§4 · Agent classes" href="./llamaindex_comprehensive_guide/#4-agent-classes-and-types" description="FunctionAgent, ReActAgent, CodeActAgent, AgentWorkflow · 20 min" />
+  <LinkCard title="§5 · LLM & embedding config" href="./llamaindex_comprehensive_guide/#5-llm-and-embedding-configuration" description="Providers, Settings, mock models · 15 min" />
+  <LinkCard title="§6 · Basic agents" href="./llamaindex_comprehensive_guide/#6-creating-basic-agents" description="First agent walkthrough · 20 min" />
+  <LinkCard title="§7 · Tool integration" href="./llamaindex_comprehensive_guide/#7-tool-integration-with-agents" description="FunctionTool, chaining, parallel calls · 20 min" />
+  <LinkCard title="§8 · Query engine tools" href="./llamaindex_comprehensive_guide/#8-query-engine-tools" description="RAG as a tool · 20 min" />
+  <LinkCard title="§9 · Context, state & memory" href="./llamaindex_comprehensive_guide/#9-context-state-and-memory" description="Multi-turn, shared state · 15 min" />
+  <LinkCard title="§10 · Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" description="Pydantic output from agents and LLMs · 10 min" />
+  <LinkCard title="§11 · Streaming" href="./llamaindex_comprehensive_guide/#11-streaming-responses" description="Token and event streaming · 10 min" />
+  <LinkCard title="§12 · Multi-agent" href="./llamaindex_comprehensive_guide/#12-multi-agent-systems-with-agentworkflow" description="AgentWorkflow hand-off, orchestrators · 25 min" />
+  <LinkCard title="§13 · Custom workflows" href="./llamaindex_comprehensive_guide/#13-custom-workflows" description="Steps, events, fan-out · 25 min" />
+  <LinkCard title="§14 · Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" description="WorkflowServer, WorkflowClient, llamactl · 15 min" />
+  <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" description="Human-in-the-loop, persistence, routing · 30 min" />
+  <LinkCard title="Production" href="./llamaindex_production_guide/" description="Ingestion jobs, serving, evaluation, testing · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts-deep-dive" />
+  <LinkCard title="Core concepts" href="./llamaindex_comprehensive_guide/#3-core-concepts" />
+  <LinkCard title="Property graphs" href="./llamaindex_comprehensive_guide/#39-property-graphs" />
+  <LinkCard title="Multimodal" href="./llamaindex_comprehensive_guide/#310-multimodal-documents-and-queries" />
+  <LinkCard title="LlamaParse" href="./llamaindex_comprehensive_guide/#182-llamaparse-and-llamacloud" />
   <LinkCard title="Agent classes" href="./llamaindex_comprehensive_guide/#4-agent-classes-and-types" />
-  <LinkCard title="ReAct agents" href="./llamaindex_comprehensive_guide/#6-creating-basic-react-agents" />
-  <LinkCard title="FunctionTool" href="./llamaindex_comprehensive_guide/#16-functiontool-creation" />
-  <LinkCard title="QueryEngineTool" href="./llamaindex_comprehensive_guide/#15-queryenginetool-and-tool-classes" />
-  <LinkCard title="LlamaHub tools" href="./llamaindex_comprehensive_guide/#17-llamahub-tools" />
-  <LinkCard title="Multi-agent orchestration" href="./llamaindex_comprehensive_guide/#13-multi-agent-orchestration" />
-  <LinkCard title="Distributed systems" href="./llamaindex_comprehensive_guide/#14-distributed-agent-systems" />
-  <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" />
+  <LinkCard title="FunctionTool" href="./llamaindex_comprehensive_guide/#16-functiontool-in-detail" />
+  <LinkCard title="QueryEngineTool" href="./llamaindex_comprehensive_guide/#8-query-engine-tools" />
+  <LinkCard title="LlamaHub tools & MCP" href="./llamaindex_comprehensive_guide/#17-llamahub-tools-and-mcp" />
+  <LinkCard title="Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" />
+  <LinkCard title="Advanced retrieval" href="./llamaindex_comprehensive_guide/#19-advanced-retrieval" />
+  <LinkCard title="Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" />
+  <LinkCard title="Evaluation datasets" href="./llamaindex_comprehensive_guide/#212-evaluation-datasets" />
   <LinkCard title="Observability" href="./llamaindex_observability_python/" />
   <LinkCard title="Streaming server" href="./llamaindex_streaming_server_fastapi/" />
 </CardGrid>
@@ -68,27 +76,34 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 <CardGrid>
   <LinkCard title="Comprehensive guide" href="./llamaindex_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" />
-  <LinkCard title="Advanced implementations" href="./llamaindex_advanced_implementations/" />
+  <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" description="HITL, persistence, routing, orchestration." />
+  <LinkCard title="Advanced implementations" href="./llamaindex_advanced_implementations/" description="Workflow patterns: fan-out, retries, resilient tools." />
   <LinkCard title="Observability" href="./llamaindex_observability_python/" />
   <LinkCard title="Recipes" href="./llamaindex_recipes/" />
   <LinkCard title="Diagrams" href="./llamaindex_diagrams/" />
-  <LinkCard title="Production guide" href="./llamaindex_production_guide/" />
+  <LinkCard title="Production guide" href="./llamaindex_production_guide/" description="Ingestion, vector stores, serving, evaluation gates, tests." />
   <LinkCard title="Streaming server (FastAPI)" href="./llamaindex_streaming_server_fastapi/" />
 </CardGrid>
 
-## What's new in v0.14.22 (May 2026)
+## Recent changes in llama-index-core
 
-- **v0.14.22 (May 2026)** — Patch release; stability and dependency updates. `VectorStoreIndex`, `SimpleDirectoryReader`, `Workflow`, `StartEvent`, `StopEvent`, `AgentWorkflow`, `FunctionAgent`, `ReActAgent` confirmed present in installed `llama-index-core==0.14.22` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions.
-- **v0.14.21 (April 2026)** — Patch release; stability and dependency updates.
-- **v0.14.20 (April 2026):** Stabilised `llama-agents` package for multi-agent orchestration; enhanced streaming support with token-level events; expanded `LlamaHub` integrations (100+ data connectors); improved query-engine-as-tool patterns.
+Patch releases since the guide was last revised (from the upstream changelog):
+
+- **0.14.25 (September 2026)** — restored streaming for the `compact` and `refine` response modes; native async for `StructuredLLMRerank`; removed the deprecated IPEX integrations; security dependency updates.
+- **0.14.24 (August 2026)** — `AgentWorkflow` now honours an agent's `output_cls` / `structured_output_fn`; `Memory` accepts any `AsyncDBChatStore`; async `LLMRerank`; many ingestion and retrieval fixes.
+- **0.14.23 (June 2026)** — multimodal query engines and synthesis; a tool-calling mock LLM for tests; `initial_state` is deep-copied per run.
+- **0.14.22 (May 2026)** — multimodal synthesis groundwork; ingestion cache and instrumentation fixes.
+
+No breaking API changes in this range. The last breaking releases were 0.13.0 (legacy agents and `QueryPipeline` removed) and 0.14.0 (moved to `llama-index-workflows` 2.x).
 
 ## Install, minimal example
 
 ```python
+import asyncio
 from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
-from llama_index.core.agent import ReActAgent
+from llama_index.core.agent.workflow import FunctionAgent
 from llama_index.core.tools import QueryEngineTool
+from llama_index.llms.openai import OpenAI
 
 documents = SimpleDirectoryReader("data").load_data()
 index = VectorStoreIndex.from_documents(documents)
@@ -99,12 +114,16 @@ tool = QueryEngineTool.from_defaults(
     description="Answer questions about the documents",
 )
 
-agent = ReActAgent.from_tools([tool])
-response = agent.chat("What are the key findings?")
-print(response)
+agent = FunctionAgent(tools=[tool], llm=OpenAI(model="%%model=openai-small%%"))
+
+async def main():
+    response = await agent.run(user_msg="What are the key findings?")
+    print(response)
+
+asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./llamaindex_comprehensive_guide/#1-installation-and-setup)**
+Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/python/llamaindex_comprehensive_guide/#1-installation-and-setup)**
 
 ---
 
@@ -112,9 +131,10 @@ Ready? **[Start Zero → Hero Step 1 →](./llamaindex_comprehensive_guide/#1-in
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-05-19 | 0.14.22 | Version bumped 0.14.21 → 0.14.22 (two patch releases: 0.14.21, 0.14.22); "What's new" updated; comprehensive guide header updated; revision history entry added. Key symbols verified against installed `llama-index-core==0.14.22` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
+| 2026-10-21 | 0.14.25 | Zero → Hero cards now carry the comprehensive guide's section numbers; links added for the new property graph, multimodal, LlamaParse, serving and evaluation-dataset sections; production guide rewritten. |
+| 2026-10-21 | 0.14.25 | Version now read from the site's version registry. Minimal example rewritten for `FunctionAgent` (the previous one used the removed `ReActAgent.from_tools` / `.chat()` API). `llama-agents` references replaced with `AgentWorkflow` and LlamaAgents/`llamactl`. Comprehensive guide, advanced pages and recipes re-verified against an installed copy. |
+| 2026-05-19 | 0.14.22 | Version bump. |
 | 2026-04-21 | 0.14.20 | Index redesigned with Zero → Hero + Jump-to-topic grid. |
-| April 3, 2026 | 0.14.20 | llama-agents stabilisation; streaming; LlamaHub growth. |
 | November 2025 | 0.14.8 | Initial documented version. |
 
-**Note:** TypeScript implementation lives at [LlamaIndex (TypeScript)](/llamaindex-guide/typescript/).
+**Note:** TypeScript implementation lives at [LlamaIndex (TypeScript)](/llamaindex-guide/typescript/) — that project has since been deprecated upstream.

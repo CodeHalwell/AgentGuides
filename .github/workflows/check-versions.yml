@@ -1,0 +1,37 @@
+name: Check guide versions
+
+on:
+  pull_request:
+    paths:
+      - 'src/content/docs/**'
+      - 'src/data/versions.json'
+      - 'scripts/check-versions.mjs'
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pins:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pins match src/data/versions.json
+        run: node scripts/check-versions.mjs
+
+  registries:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: versions.json is up to date with PyPI / npm / NuGet / Go
+        run: node scripts/check-versions.mjs --latest

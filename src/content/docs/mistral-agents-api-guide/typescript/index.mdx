@@ -1,0 +1,97 @@
+---
+title: "Mistral Agents API (TypeScript)"
+description: "Mistral's hosted Agents and Conversations APIs from TypeScript with @mistralai/mistralai: agents, conversations, streaming, built-in tools, function calling, handoffs, MCP connectors and error handling."
+framework: "mistral-agents-api"
+language: "typescript"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**The Mistral Agents API from TypeScript.** The same hosted service as the [Python guide](/mistral-agents-api-guide/) — stored, versioned agents; server-side conversation state; built-in web search, code interpreter, image generation and document libraries; MCP connectors; handoffs — called through the official `@mistralai/mistralai` client.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @mistralai/mistralai@%%version=@mistralai/mistralai%% zod
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **`@mistralai/mistralai` %%version=@mistralai/mistralai%%** · Node.js 20+, Bun, Deno or browsers · checked %%versions-checked%%
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Node services, serverless functions and front-end back ends that want Mistral-hosted agents and state.
+  </Card>
+</CardGrid>
+
+<Aside type="note" title="Versioned separately from Python">
+  The npm package and the Python `mistralai` package (%%version=mistralai%%) are generated from the same API description but released independently, so their version numbers do not line up. Every example on these pages was type-checked with `tsc --strict` against `@mistralai/mistralai` %%version=@mistralai/mistralai%%, and the request objects were run through the SDK's own Zod schemas.
+</Aside>
+
+## Minimal example
+
+```typescript
+import { Mistral } from "@mistralai/mistralai";
+
+const client = new Mistral({ apiKey: process.env["MISTRAL_API_KEY"] ?? "" });
+
+const agent = await client.beta.agents.create({
+  model: "mistral-medium-latest",
+  name: "assistant",
+  instructions: "You are a helpful assistant. Search the web for anything time-sensitive.",
+  tools: [{ type: "web_search" }],
+});
+
+const response = await client.beta.conversations.start({
+  agentId: agent.id,
+  inputs: "What is 15 + 27?",
+});
+console.log(response.outputs.at(-1));
+
+const followUp = await client.beta.conversations.append({
+  conversationId: response.conversationId,
+  conversationAppendRequest: { inputs: "Now double it." },
+});
+console.log(followUp.outputs.at(-1));
+```
+
+The package is ESM-first and the examples use top-level `await`, so run them as ES modules (`"type": "module"` in `package.json`, or `.mts` files) with `"module": "NodeNext"` in `tsconfig.json`. `npx tsx file.ts` is the quickest way to try one.
+
+## Key concepts
+
+- **Same API, camelCase names.** Every Python keyword argument has a camelCase property: `agent_id` → `agentId`, `handoff_execution` → `handoffExecution`, `tool_configuration` → `toolConfiguration`, `library_ids` → `libraryIds`. The SDK converts to the wire format for you.
+- **One request object per call.** Methods take a single object. Where an endpoint has both a path parameter and a body, the body is nested: `append({ conversationId, conversationAppendRequest: { inputs } })`, `update({ agentId, updateAgentRequest: { ... } })`, `restart({ conversationId, conversationRestartRequest: { fromEntryId, inputs } })`. The compiler catches a flattened body.
+- **Typed unions you can narrow.** `response.outputs` is a union of `message.output`, `tool.execution`, `function.call` and `agent.handoff` entries; checking `entry.type` narrows it. Streaming events narrow the same way on `event.data.type`.
+- **Validated at runtime.** Requests are parsed with the SDK's Zod schemas before they are sent (a bad request throws `SDKValidationError` without a network call), and responses are parsed on the way back.
+- **Everything returns a promise.** There are no separate async twins and no context manager; streams are async iterables.
+
+## What the TypeScript SDK does not have
+
+The HTTP API is fully covered, but the Python SDK's agent helpers in `mistralai.extra` have no TypeScript counterpart:
+
+| Python | TypeScript |
+|---|---|
+| `RunContext` and `conversations.run_async()` (schemas from Python functions, automatic tool loop) | Not available. Write the loop yourself; it is about fifteen lines and shown on the [tools page](/mistral-agents-api-guide/typescript/tools-and-orchestration/#function-calling). |
+| Client-side MCP (`mistralai.extra.mcp`, stdio/SSE servers driven by `RunContext`) | Not available. Bridge a local server yourself with `@modelcontextprotocol/sdk`, or register it as a connector. `connectors.mcpClient()` opens an MCP client to a *registered* connector through Mistral's gateway. |
+| `DeferredToolCallsException` for human approval | Not available as a helper. Server-side approval for connector tools works through `toolConfirmations`; for your own functions, your loop decides whether to run them. |
+| `response_format_from_pydantic_model` | `responseFormatFromZodObject` from `@mistralai/mistralai/extra/structChat.js`, and `chat.parse()` with a Zod schema. |
+
+## Pages
+
+<CardGrid>
+  <LinkCard title="Agents and conversations" href="/mistral-agents-api-guide/typescript/agents-and-conversations/" description="Create, update, versions and aliases; start, append, restart, history; streaming; structured output; guardrails." />
+  <LinkCard title="Tools and orchestration" href="/mistral-agents-api-guide/typescript/tools-and-orchestration/" description="Built-in tools, function calling with Zod, approvals, handoffs, manager-worker delegation, MCP connectors." />
+  <LinkCard title="Production" href="/mistral-agents-api-guide/typescript/production/" description="Errors, retries, timeouts, cancellation, logging hooks, concurrency and an SSE streaming server." />
+</CardGrid>
+
+Concepts that do not depend on the language — which models to use, how handoff graphs behave, connector security — are covered in more depth in the Python pages: [models](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#3-models), [orchestration patterns](/mistral-agents-api-guide/mistral_agents_api_orchestration_guide/) and [connectors](/mistral-agents-api-guide/mistral_agents_api_connectors_guide/).
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-21 | %%version=@mistralai/mistralai%% | First TypeScript edition. All examples type-checked with `tsc --strict` and request shapes validated against the SDK's Zod schemas. |

@@ -1,13 +1,15 @@
 ---
 title: "LangChain.js and LangGraph.js Recipes"
-description: "Production-Ready Code Examples and Practical Implementations"
-framework: langgraph
-language: typescript
+description: "LangGraph.js recipes: RAG chatbot, multi-agent supervisor, document analysis, streaming chat API, cached RAG, content moderation, cross-thread memory and deferred aggregation."
+framework: "langgraph"
+language: "typescript"
+sidebar:
+  label: "Recipes"
 ---
 
-# LangChain.js and LangGraph.js Recipes
-
 **Production-Ready Code Examples and Practical Implementations**
+
+> Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).
 
 ---
 
@@ -20,7 +22,7 @@ language: typescript
 5. [RAG Chatbot](#rag-chatbot)
 6. [Streaming Chat API](#streaming-chat-api)
 7. [Error Recovery Agent](#error-recovery-agent)
-8. [Advanced Streaming Agent (v0.3+)](#advanced-streaming-agent-v03)
+8. [Advanced Streaming Agent](#advanced-streaming-agent)
 9. [Cached RAG Pipeline](#cached-rag-pipeline)
 10. [Parallel Data Processing with Deferred Aggregation](#parallel-data-processing-with-deferred-aggregation)
 11. [Content Moderation Pipeline with Pre/Post Hooks](#content-moderation-pipeline-with-prepost-hooks)
@@ -31,77 +33,15 @@ language: typescript
 
 ## Basic Chatbot
 
-### Simple Conversational Chatbot with Memory
+### LangGraph Chatbot with Persistent Messages
+
+The legacy `ConversationChain` + `BufferMemory` combination is not part of LangChain.js v1 (it survives only in `@langchain/classic`). In current code, conversation memory is a checkpointer plus a `thread_id`: the graph stores the message history, and each call sends only the new user message.
 
 ```typescript
-// recipes/basicChatbot.ts
+// recipes/langgraphChatbot.ts
+import { StateGraph, MessagesAnnotation, MemorySaver, START, END } from '@langchain/langgraph';
 import { ChatOpenAI } from '@langchain/openai';
-import { BufferMemory } from '@langchain/core/memory';
-import { ConversationChain } from '@langchain/core/chains';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { HumanMessage } from '@langchain/core/messages';
-
-export async function basicChatbot(): Promise<void> {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    temperature: 0.7,
-  });
-
-  const memory = new BufferMemory({
-    memoryKey: 'history',
-    inputKey: 'input',
-  });
-
-  const template = `You are a helpful and friendly assistant.
-
-Previous conversation:
-{history}
-
-Current input: {input}`;
-
-  const prompt = new PromptTemplate({
-    inputVariables: ['history', 'input'],
-    template,
-  });
-
-  const chain = new ConversationChain({
-    llm: model,
-    memory,
-    prompt,
-  });
-
-  // Run conversation
-  const conversations = [
-    'What is TypeScript?',
-    'How does it differ from JavaScript?',
-    'Can you give me an example of using types?',
-  ];
-
-  for (const userInput of conversations) {
-    console.log(`\nUser: ${userInput}`);
-    const response = await chain.call({ input: userInput });
-    console.log(`Assistant: ${response.response}`);
-  }
-}
-
-// Usage
-// basicChatbot().catch(console.error);
-```
-
-### LangGraph-based Chatbot with Stateful Messages
-
-```typescript
-// recipes/langraphChatbot.ts
-import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { ChatOpenAI } from '@langchain/openai';
-import { HumanMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
-
-const ChatStateAnnotation = Annotation.Root({
-  messages: Annotation<BaseMessage[]>({
-    default: () => [],
-    reducer: (x, y) => [...x, ...y],
-  }),
-});
+import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 
 export async function langgraphChatbot(): Promise<void> {
   const model = new ChatOpenAI({
@@ -109,36 +49,28 @@ export async function langgraphChatbot(): Promise<void> {
     temperature: 0.7,
   });
 
-  const graph = new StateGraph(ChatStateAnnotation);
+  const compiled = new StateGraph(MessagesAnnotation)
+    .addNode('chatNode', async (state) => {
+      const response = await model.invoke([
+        new SystemMessage('You are a helpful and friendly assistant.'),
+        ...state.messages,
+      ]);
+      return { messages: [response] };
+    })
+    .addEdge(START, 'chatNode')
+    .addEdge('chatNode', END)
+    .compile({ checkpointer: new MemorySaver() });
 
-  graph.addNode('chatNode', async (state) => {
-    const response = await model.invoke(state.messages);
-    return {
-      messages: [response],
-    };
-  });
+  const config = { configurable: { thread_id: 'chat-1' } };
 
-  graph.addEdge(START, 'chatNode');
-  graph.addEdge('chatNode', END);
-
-  const compiled = graph.compile();
-
-  const messages: BaseMessage[] = [];
-
-  const userInputs = [
-    'Hello, how are you?',
-    'Tell me about LangChain',
-  ];
-
-  for (const userInput of userInputs) {
-    messages.push(new HumanMessage(userInput));
-    const result = await compiled.invoke({ messages });
-    
-    const lastMessage = result.messages[result.messages.length - 1];
+  for (const userInput of [
+    'What is TypeScript?',
+    'How does it differ from JavaScript?',
+    'Can you give me an example of using types?',
+  ]) {
+    const result = await compiled.invoke({ messages: [new HumanMessage(userInput)] }, config);
     console.log(`User: ${userInput}`);
-    console.log(`Assistant: ${lastMessage.content}`);
-    
-    messages.push(...result.messages);
+    console.log(`Assistant: ${result.messages.at(-1)?.content}`);
   }
 }
 ```
@@ -151,28 +83,30 @@ export async function langgraphChatbot(): Promise<void> {
 
 ```typescript
 // recipes/researchAgent.ts
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent, tool } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
-import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 
 export async function researchAgent(): Promise<void> {
   // Define research tools
   const searchWikipedia = tool(
+    async ({ query }) => {
+      // Simulate Wikipedia search
+      return `Wikipedia results for "${query}": [Mock search results]`;
+    },
     {
       name: 'search_wikipedia',
       description: 'Search Wikipedia for information about a topic',
       schema: z.object({
         query: z.string().describe('Search query'),
       }),
-    },
-    async ({ query }) => {
-      // Simulate Wikipedia search
-      return `Wikipedia results for "${query}": [Mock search results]`;
     }
   );
 
   const synthesizeInformation = tool(
+    async ({ sources, topic }) => {
+      return `Synthesised report on ${topic}: [Summary combining all sources]`;
+    },
     {
       name: 'synthesise_information',
       description: 'Combine information from multiple sources',
@@ -180,9 +114,6 @@ export async function researchAgent(): Promise<void> {
         sources: z.array(z.string()).describe('Information sources'),
         topic: z.string().describe('Topic to synthesise'),
       }),
-    },
-    async ({ sources, topic }) => {
-      return `Synthesised report on ${topic}: [Summary combining all sources]`;
     }
   );
 
@@ -190,16 +121,18 @@ export async function researchAgent(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const agent = createReactAgent({
-    llm: model,
+  const agent = createAgent({
+    model,
     tools: [searchWikipedia, synthesizeInformation],
   });
 
   const result = await agent.invoke({
-    input: 'Research the history of TypeScript and provide a comprehensive report',
+    messages: [
+      { role: 'user', content: 'Research the history of TypeScript and provide a comprehensive report' },
+    ],
   });
 
-  console.log('Research Result:', result.output);
+  console.log('Research Result:', result.messages.at(-1)?.content);
 }
 ```
 
@@ -228,8 +161,9 @@ const DocumentStateAnnotation = Annotation.Root({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
   }),
-  summary: Annotation<string>({ default: () => '' }),
+  summary: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
   sentiment: Annotation<'positive' | 'negative' | 'neutral'>({
+    reducer: (_prev, next) => next,
     default: () => 'neutral',
   }),
 });
@@ -239,42 +173,38 @@ export async function documentAnalysisAgent(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const graph = new StateGraph(DocumentStateAnnotation);
-
-  // Entity extraction node
-  graph.addNode('extractEntities', async (state) => {
-    const prompt = `Extract named entities (people, organisations, locations) from this text:\n\n${state.document}`;
-    const response = await model.invoke(prompt);
-    return {
-      extractedEntities: [response.content as string],
-    };
-  });
-
-  // Summarisation node
-  graph.addNode('summarise', async (state) => {
-    const prompt = `Summarise this document in 2-3 sentences:\n\n${state.document}`;
-    const response = await model.invoke(prompt);
-    return {
-      summary: response.content as string,
-    };
-  });
-
-  // Sentiment analysis node
-  graph.addNode('analyseSentiment', async (state) => {
-    const prompt = `Analyse the sentiment of this text. Respond with only: positive, negative, or neutral.\n\n${state.document}`;
-    const response = await model.invoke(prompt);
-    const sentiment = (response.content as string).toLowerCase().trim() as any;
-    return {
-      sentiment: ['positive', 'negative', 'neutral'].includes(sentiment) 
-        ? sentiment 
-        : 'neutral',
-    };
-  });
-
-  graph.addEdge(START, 'extractEntities');
-  graph.addEdge('extractEntities', 'summarise');
-  graph.addEdge('summarise', 'analyseSentiment');
-  graph.addEdge('analyseSentiment', END);
+  const graph = new StateGraph(DocumentStateAnnotation)
+    // Entity extraction node
+    .addNode('extractEntities', async (state) => {
+      const prompt = `Extract named entities (people, organisations, locations) from this text:\n\n${state.document}`;
+      const response = await model.invoke(prompt);
+      return {
+        extractedEntities: [response.content as string],
+      };
+    })
+    // Summarisation node
+    .addNode('summarise', async (state) => {
+      const prompt = `Summarise this document in 2-3 sentences:\n\n${state.document}`;
+      const response = await model.invoke(prompt);
+      return {
+        summary: response.content as string,
+      };
+    })
+    // Sentiment analysis node
+    .addNode('analyseSentiment', async (state) => {
+      const prompt = `Analyse the sentiment of this text. Respond with only: positive, negative, or neutral.\n\n${state.document}`;
+      const response = await model.invoke(prompt);
+      const sentiment = (response.content as string).toLowerCase().trim() as any;
+      return {
+        sentiment: ['positive', 'negative', 'neutral'].includes(sentiment) 
+          ? sentiment 
+          : 'neutral',
+      };
+    })
+    .addEdge(START, 'extractEntities')
+    .addEdge('extractEntities', 'summarise')
+    .addEdge('summarise', 'analyseSentiment')
+    .addEdge('analyseSentiment', END);
 
   const compiled = graph.compile();
 
@@ -322,8 +252,8 @@ const SupervisorStateAnnotation = Annotation.Root({
     default: () => ({}),
     reducer: (x, y) => ({ ...x, ...y }),
   }),
-  supervisorDecision: Annotation<string>({ default: () => '' }),
-  finalOutput: Annotation<string>({ default: () => '' }),
+  supervisorDecision: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
+  finalOutput: Annotation<string>({ reducer: (_prev, next) => next, default: () => '' }),
 });
 
 export async function multiAgentSupervisor(): Promise<void> {
@@ -331,11 +261,10 @@ export async function multiAgentSupervisor(): Promise<void> {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const graph = new StateGraph(SupervisorStateAnnotation);
-
-  // Supervisor node
-  graph.addNode('supervisor', async (state) => {
-    const coordinationPrompt = `
+  const graph = new StateGraph(SupervisorStateAnnotation)
+    // Supervisor node
+    .addNode('supervisor', async (state) => {
+      const coordinationPrompt = `
       You are a supervisor managing multiple agents.
       Task: ${state.task}
       
@@ -344,77 +273,71 @@ export async function multiAgentSupervisor(): Promise<void> {
       Decide which agent should work next or if we should finish.
       Respond with: AGENT_RESEARCH, AGENT_ANALYSIS, AGENT_WRITING, or COMPLETE
     `;
-
-    const response = await model.invoke(coordinationPrompt);
-    return {
-      supervisorDecision: (response.content as string).trim(),
-    };
-  });
-
-  // Research agent node
-  graph.addNode('researchAgent', async (state) => {
-    const response = await model.invoke(`Research this topic: ${state.task}`);
-    return {
-      agentResults: {
-        research: response.content as string,
+  
+      const response = await model.invoke(coordinationPrompt);
+      return {
+        supervisorDecision: (response.content as string).trim(),
+      };
+    })
+    // Research agent node
+    .addNode('researchAgent', async (state) => {
+      const response = await model.invoke(`Research this topic: ${state.task}`);
+      return {
+        agentResults: {
+          research: response.content as string,
+        },
+      };
+    })
+    // Analysis agent node
+    .addNode('analysisAgent', async (state) => {
+      const research = state.agentResults.research || '';
+      const response = await model.invoke(`Analyse this research: ${research}`);
+      return {
+        agentResults: {
+          analysis: response.content as string,
+        },
+      };
+    })
+    // Writing agent node
+    .addNode('writingAgent', async (state) => {
+      const research = state.agentResults.research || '';
+      const analysis = state.agentResults.analysis || '';
+      const response = await model.invoke(
+        `Write a summary combining this research and analysis:\nResearch: ${research}\nAnalysis: ${analysis}`
+      );
+      return {
+        finalOutput: response.content as string,
+      };
+    })
+    // Edge routing
+    .addEdge(START, 'supervisor')
+    .addConditionalEdges(
+      'supervisor',
+      (state) => {
+        if (state.supervisorDecision.includes('RESEARCH')) {
+          return 'researchAgent';
+        } else if (state.supervisorDecision.includes('ANALYSIS')) {
+          return 'analysisAgent';
+        } else if (state.supervisorDecision.includes('WRITING')) {
+          return 'writingAgent';
+        }
+        return 'END';
       },
-    };
-  });
-
-  // Analysis agent node
-  graph.addNode('analysisAgent', async (state) => {
-    const research = state.agentResults.research || '';
-    const response = await model.invoke(`Analyse this research: ${research}`);
-    return {
-      agentResults: {
-        analysis: response.content as string,
-      },
-    };
-  });
-
-  // Writing agent node
-  graph.addNode('writingAgent', async (state) => {
-    const research = state.agentResults.research || '';
-    const analysis = state.agentResults.analysis || '';
-    const response = await model.invoke(
-      `Write a summary combining this research and analysis:\nResearch: ${research}\nAnalysis: ${analysis}`
-    );
-    return {
-      finalOutput: response.content as string,
-    };
-  });
-
-  // Edge routing
-  graph.addEdge(START, 'supervisor');
-
-  graph.addConditionalEdges(
-    'supervisor',
-    (state) => {
-      if (state.supervisorDecision.includes('RESEARCH')) {
-        return 'researchAgent';
-      } else if (state.supervisorDecision.includes('ANALYSIS')) {
-        return 'analysisAgent';
-      } else if (state.supervisorDecision.includes('WRITING')) {
-        return 'writingAgent';
+      {
+        researchAgent: 'researchAgent',
+        analysisAgent: 'analysisAgent',
+        writingAgent: 'writingAgent',
+        END: END,
       }
-      return 'END';
-    },
-    {
-      researchAgent: 'researchAgent',
-      analysisAgent: 'analysisAgent',
-      writingAgent: 'writingAgent',
-      END: END,
-    }
-  );
-
-  graph.addEdge('researchAgent', 'supervisor');
-  graph.addEdge('analysisAgent', 'supervisor');
-  graph.addEdge('writingAgent', 'supervisor');
+    )
+    .addEdge('researchAgent', 'supervisor')
+    .addEdge('analysisAgent', 'supervisor')
+    .addEdge('writingAgent', 'supervisor');
 
   const compiled = graph.compile();
 
   const result = await compiled.invoke({
-    task: 'Provide a comprehensive analysis of artificial intelligence trends in 2024',
+    task: 'Provide a comprehensive analysis of current artificial intelligence trends',
     agentResults: {},
     supervisorDecision: '',
     finalOutput: '',
@@ -433,7 +356,7 @@ export async function multiAgentSupervisor(): Promise<void> {
 ```typescript
 // recipes/ragChatbot.ts
 import { ChatOpenAI } from '@langchain/openai';
-import { MemoryVectorStore } from '@langchain/core/vectorstores';
+import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory'; // npm install @langchain/classic
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { Document } from '@langchain/core/documents';
 
@@ -508,7 +431,7 @@ export async function ragChatbot(): Promise<void> {
 ```typescript
 // recipes/streamingAPI.ts
 import express from 'express';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent } from 'langchain';
 import { ChatOpenAI } from '@langchain/openai';
 
 export function setupStreamingAPI(): express.Application {
@@ -519,8 +442,8 @@ export function setupStreamingAPI(): express.Application {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
-  const agent = createReactAgent({
-    llm: model,
+  const agent = createAgent({
+    model,
     tools: [],
   });
 
@@ -532,11 +455,16 @@ export function setupStreamingAPI(): express.Application {
     res.setHeader('Connection', 'keep-alive');
 
     try {
-      // Stream from agent
-      const stream = await agent.stream({ input: message });
+      // Stream tokens from the agent: "messages" mode yields [chunk, metadata] tuples
+      const stream = await agent.stream(
+        { messages: [{ role: 'user', content: message }] },
+        { streamMode: 'messages' }
+      );
 
-      for await (const chunk of stream) {
-        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+      for await (const [chunk] of stream) {
+        if (chunk.content) {
+          res.write(`data: ${JSON.stringify({ token: chunk.content })}\n\n`);
+        }
       }
 
       res.write('data: [DONE]\n\n');
@@ -574,19 +502,19 @@ interface RetryConfig {
 export async function errorRecoveryAgent(): Promise<void> {
   // Unreliable tool that sometimes fails
   const unreliableTool = tool(
-    {
-      name: 'unreliable_operation',
-      description: 'Performs an operation that may fail',
-      schema: z.object({
-        operation: z.string(),
-      }),
-    },
     async ({ operation }) => {
       const random = Math.random();
       if (random < 0.5) {
         throw new Error('Random operation failure');
       }
       return `Successfully completed: ${operation}`;
+    },
+    {
+      name: 'unreliable_operation',
+      description: 'Performs an operation that may fail',
+      schema: z.object({
+        operation: z.string(),
+      }),
     }
   );
 
@@ -644,7 +572,7 @@ export async function errorRecoveryAgent(): Promise<void> {
 
 ---
 
-## Advanced Streaming Agent (v0.3+)
+## Advanced Streaming Agent
 
 ### Real-Time Progress Tracking with Type-Safe Streaming
 
@@ -664,47 +592,44 @@ interface AnalysisState {
 
 const AnalysisStateAnnotation = Annotation.Root({
   documentUrl: Annotation<string>,
-  downloadStatus: Annotation<string | null>({ default: () => null }),
-  processStatus: Annotation<string | null>({ default: () => null }),
-  analysisResult: Annotation<string | null>({ default: () => null }),
-  error: Annotation<string | null>({ default: () => null }),
+  downloadStatus: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  processStatus: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  analysisResult: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  error: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
-const analysisGraph = new StateGraph(AnalysisStateAnnotation);
-
-analysisGraph
+const analysisGraph = new StateGraph(AnalysisStateAnnotation)
   .addNode('download', async (state) => {
-    // Simulate document download
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    return {
-      downloadStatus: `Downloaded from ${state.documentUrl}`,
-    };
-  })
+      // Simulate document download
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return {
+        downloadStatus: `Downloaded from ${state.documentUrl}`,
+      };
+    })
   .addNode('process', async (state) => {
-    // Simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    return {
-      processStatus: 'Document processed successfully',
-    };
-  })
+      // Simulate processing
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      return {
+        processStatus: 'Document processed successfully',
+      };
+    })
   .addNode('analyze', async (state) => {
-    const model = new ChatOpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
-
-    const response = await model.invoke(
-      `Analyze this document: ${state.processStatus}`
-    );
-
-    return {
-      analysisResult: response.content as string,
-    };
-  });
-
-analysisGraph.addEdge(START, 'download');
-analysisGraph.addEdge('download', 'process');
-analysisGraph.addEdge('process', 'analyze');
-analysisGraph.addEdge('analyze', END);
+      const model = new ChatOpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+  
+      const response = await model.invoke(
+        `Analyze this document: ${state.processStatus}`
+      );
+  
+      return {
+        analysisResult: response.content as string,
+      };
+    })
+  .addEdge(START, 'download')
+  .addEdge('download', 'process')
+  .addEdge('process', 'analyze')
+  .addEdge('analyze', END);
 
 const analysisWorkflow = analysisGraph.compile();
 
@@ -720,7 +645,7 @@ app.post('/analyze', async (req, res) => {
   const { documentUrl } = req.body;
 
   try {
-    const stream = analysisWorkflow.stream(
+    const stream = await analysisWorkflow.stream(
       {
         documentUrl,
         downloadStatus: null,
@@ -734,8 +659,7 @@ app.post('/analyze', async (req, res) => {
     );
 
     for await (const update of stream) {
-      const nodeName = Object.keys(update)[0];
-      const nodeData = update[nodeName];
+      const [nodeName, nodeData] = Object.entries(update)[0];
 
       res.write(
         `data: ${JSON.stringify({
@@ -765,13 +689,15 @@ export default app;
 
 ## Cached RAG Pipeline
 
-### Implementing Node Caching for Expensive Embeddings
+### Caching Expensive Embeddings
+
+This recipe caches embeddings explicitly in Redis so the cache is shared across processes and survives restarts. For per-process caching of whole node results, the built-in `cachePolicy` node option with `compile({ cache: new InMemoryCache() })` needs no extra code (see the comprehensive guide's Node Caching section).
 
 ```typescript
 // recipes/cachedRagPipeline.ts
 import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { MemoryVectorStore } from '@langchain/core/vectorstores';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
+import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory'; // npm install @langchain/classic
 import { Document } from '@langchain/core/documents';
 import Redis from 'ioredis';
 
@@ -784,9 +710,9 @@ interface RAGState {
 
 const RAGStateAnnotation = Annotation.Root({
   query: Annotation<string>,
-  embedding: Annotation<number[] | null>({ default: () => null }),
-  retrievedDocs: Annotation<Document[]>({ default: () => [] }),
-  answer: Annotation<string | null>({ default: () => null }),
+  embedding: Annotation<number[] | null>({ reducer: (_prev, next) => next, default: () => null }),
+  retrievedDocs: Annotation<Document[]>({ reducer: (_prev, next) => next, default: () => [] }),
+  answer: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 // Redis cache for embeddings
@@ -805,65 +731,61 @@ async function cacheEmbedding(text: string, embedding: number[]): Promise<void> 
   );
 }
 
-const ragGraph = new StateGraph(RAGStateAnnotation);
-
-// Cached embedding generation node
-ragGraph.addNode('generateEmbedding', async (state) => {
-  // Check cache first
-  const cached = await getCachedEmbedding(state.query);
-  if (cached) {
-    console.log('Using cached embedding');
-    return { embedding: cached };
-  }
-
-  console.log('Generating new embedding');
-  const embeddings = new OpenAIEmbeddings({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const embedding = await embeddings.embedQuery(state.query);
-
-  // Cache for future use
-  await cacheEmbedding(state.query, embedding);
-
-  return { embedding };
-});
-
-// Retrieve relevant documents
-ragGraph.addNode('retrieve', async (state) => {
-  // Simulate vector store search
-  const vectorStore = new MemoryVectorStore(
-    new OpenAIEmbeddings({
+const ragGraph = new StateGraph(RAGStateAnnotation)
+  // Cached embedding generation node
+  .addNode('generateEmbedding', async (state) => {
+    // Check cache first
+    const cached = await getCachedEmbedding(state.query);
+    if (cached) {
+      console.log('Using cached embedding');
+      return { embedding: cached };
+    }
+  
+    console.log('Generating new embedding');
+    const embeddings = new OpenAIEmbeddings({
       apiKey: process.env.OPENAI_API_KEY,
-    })
-  );
-
-  const docs = await vectorStore.similaritySearch(state.query, 3);
-
-  return { retrievedDocs: docs };
-});
-
-// Generate answer
-ragGraph.addNode('generateAnswer', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const context = state.retrievedDocs
-    .map((doc) => doc.pageContent)
-    .join('\n\n');
-
-  const response = await model.invoke(
-    `Context:\n${context}\n\nQuestion: ${state.query}\n\nAnswer:`
-  );
-
-  return { answer: response.content as string };
-});
-
-ragGraph.addEdge(START, 'generateEmbedding');
-ragGraph.addEdge('generateEmbedding', 'retrieve');
-ragGraph.addEdge('retrieve', 'generateAnswer');
-ragGraph.addEdge('generateAnswer', END);
+    });
+  
+    const embedding = await embeddings.embedQuery(state.query);
+  
+    // Cache for future use
+    await cacheEmbedding(state.query, embedding);
+  
+    return { embedding };
+  })
+  // Retrieve relevant documents
+  .addNode('retrieve', async (state) => {
+    // Illustrative only: in practice, build and populate the vector store once, outside the node
+    const vectorStore = new MemoryVectorStore(
+      new OpenAIEmbeddings({
+        apiKey: process.env.OPENAI_API_KEY,
+      })
+    );
+  
+    const docs = await vectorStore.similaritySearch(state.query, 3);
+  
+    return { retrievedDocs: docs };
+  })
+  // Generate answer
+  .addNode('generateAnswer', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const context = state.retrievedDocs
+      .map((doc) => doc.pageContent)
+      .join('\n\n');
+  
+    const response = await model.invoke(
+      `Context:\n${context}\n\nQuestion: ${state.query}\n\nAnswer:`
+    );
+  
+    return { answer: response.content as string };
+  })
+  .addEdge(START, 'generateEmbedding')
+  .addEdge('generateEmbedding', 'retrieve')
+  .addEdge('retrieve', 'generateAnswer')
+  .addEdge('generateAnswer', END);
 
 export const cachedRAGWorkflow = ragGraph.compile();
 ```
@@ -885,17 +807,20 @@ interface DataBatch {
 
 interface ParallelProcessingState {
   batches: DataBatch[];
-  processedBatches: Map<string, any>;
+  processedBatches: Record<string, any[]>;
   aggregatedResult: any | null;
   errors: Array<{ batchId: string; error: string }>;
 }
 
 const ParallelStateAnnotation = Annotation.Root({
   batches: Annotation<DataBatch[]>,
-  processedBatches: Annotation<Map<string, any>>({
-    default: () => new Map(),
+  // Parallel branches write in the same step, so merge their updates.
+  // Use plain objects rather than Map: state must be serialisable for checkpointing.
+  processedBatches: Annotation<Record<string, any[]>>({
+    reducer: (prev, next) => ({ ...prev, ...next }),
+    default: () => ({}),
   }),
-  aggregatedResult: Annotation<any | null>({ default: () => null }),
+  aggregatedResult: Annotation<any | null>({ reducer: (_prev, next) => next, default: () => null }),
   errors: Annotation<Array<{ batchId: string; error: string }>>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
@@ -903,7 +828,6 @@ const ParallelStateAnnotation = Annotation.Root({
 });
 
 function createProcessingGraph() {
-  const graph = new StateGraph(ParallelStateAnnotation);
 
   // Create dynamic processing nodes for each batch
   const createBatchProcessor = (batchIndex: number) => {
@@ -920,11 +844,8 @@ function createProcessingGraph() {
           timestamp: Date.now(),
         }));
 
-        const newMap = new Map(state.processedBatches);
-        newMap.set(batch.id, processed);
-
         return {
-          processedBatches: newMap,
+          processedBatches: { [batch.id]: processed },
         };
       } catch (error) {
         return {
@@ -938,41 +859,38 @@ function createProcessingGraph() {
   };
 
   // Add batch processing nodes
-  graph.addNode('batch0', createBatchProcessor(0));
-  graph.addNode('batch1', createBatchProcessor(1));
-  graph.addNode('batch2', createBatchProcessor(2));
-
-  // Deferred aggregation node
-  graph.addNode(
-    'aggregate',
-    async (state) => {
-      const allProcessed = Array.from(state.processedBatches.values()).flat();
-
-      return {
-        aggregatedResult: {
-          totalItems: allProcessed.length,
-          successful: allProcessed.filter((item) => item.processed).length,
-          errors: state.errors.length,
-          data: allProcessed,
-        },
-      };
-    },
-    {
-      deferred: true, // Wait for all batch processors
-    }
-  );
-
-  // Fan-out: Start all batch processors in parallel
-  graph.addEdge(START, 'batch0');
-  graph.addEdge(START, 'batch1');
-  graph.addEdge(START, 'batch2');
-
-  // Fan-in: All processors feed into aggregator
-  graph.addEdge('batch0', 'aggregate');
-  graph.addEdge('batch1', 'aggregate');
-  graph.addEdge('batch2', 'aggregate');
-
-  graph.addEdge('aggregate', END);
+    const graph = new StateGraph(ParallelStateAnnotation)
+      .addNode('batch0', createBatchProcessor(0))
+      .addNode('batch1', createBatchProcessor(1))
+      .addNode('batch2', createBatchProcessor(2))
+      // Deferred aggregation node
+      .addNode(
+      'aggregate',
+      async (state) => {
+        const allProcessed = Object.values(state.processedBatches as Record<string, Array<{ processed?: boolean }>>).flat();
+  
+        return {
+          aggregatedResult: {
+            totalItems: allProcessed.length,
+            successful: allProcessed.filter((item) => item.processed).length,
+            errors: state.errors.length,
+            data: allProcessed,
+          },
+        };
+      },
+      {
+        defer: true, // Wait for all batch processors
+      }
+    )
+      // Fan-out: Start all batch processors in parallel
+      .addEdge(START, 'batch0')
+      .addEdge(START, 'batch1')
+      .addEdge(START, 'batch2')
+      // Fan-in: All processors feed into aggregator
+      .addEdge('batch0', 'aggregate')
+      .addEdge('batch1', 'aggregate')
+      .addEdge('batch2', 'aggregate')
+      .addEdge('aggregate', END);
 
   return graph.compile();
 }
@@ -980,7 +898,7 @@ function createProcessingGraph() {
 export const parallelProcessor = createProcessingGraph();
 
 // Usage
-async function processLargeDatasset(dataset: any[]): Promise<any> {
+async function processLargeDataset(dataset: any[]): Promise<any> {
   const batchSize = Math.ceil(dataset.length / 3);
 
   const batches: DataBatch[] = [
@@ -991,9 +909,6 @@ async function processLargeDatasset(dataset: any[]): Promise<any> {
 
   const result = await parallelProcessor.invoke({
     batches,
-    processedBatches: new Map(),
-    aggregatedResult: null,
-    errors: [],
   });
 
   return result.aggregatedResult;
@@ -1021,88 +936,84 @@ interface ModeratedChatState {
 
 const ModeratedStateAnnotation = Annotation.Root({
   userMessage: Annotation<string>,
-  moderatedInput: Annotation<string | null>({ default: () => null }),
-  aiResponse: Annotation<string | null>({ default: () => null }),
-  moderatedOutput: Annotation<string | null>({ default: () => null }),
+  moderatedInput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  aiResponse: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
+  moderatedOutput: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
   flags: Annotation<string[]>({
     default: () => [],
     reducer: (x, y) => [...x, ...y],
   }),
 });
 
-const moderatedGraph = new StateGraph(ModeratedStateAnnotation);
-
-// Pre-hook: Input moderation
-moderatedGraph.addNode('moderateInput', async (state) => {
-  const sensitivePatterns = [
-    /\b\d{3}-\d{2}-\d{4}\b/, // SSN
-    /\b\d{16}\b/, // Credit card
-    /\b(password|api[_-]?key)\s*[:=]/i,
-  ];
-
-  const flags: string[] = [];
-  let moderatedInput = state.userMessage;
-
-  for (const pattern of sensitivePatterns) {
-    if (pattern.test(state.userMessage)) {
-      flags.push('sensitive-data-detected');
-      moderatedInput = state.userMessage.replace(pattern, '[REDACTED]');
+const moderatedGraph = new StateGraph(ModeratedStateAnnotation)
+  // Pre-hook: Input moderation
+  .addNode('moderateInput', async (state) => {
+    const sensitivePatterns = [
+      /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+      /\b\d{16}\b/, // Credit card
+      /\b(password|api[_-]?key)\s*[:=]/i,
+    ];
+  
+    const flags: string[] = [];
+    let moderatedInput = state.userMessage;
+  
+    for (const pattern of sensitivePatterns) {
+      if (pattern.test(state.userMessage)) {
+        flags.push('sensitive-data-detected');
+        moderatedInput = state.userMessage.replace(pattern, '[REDACTED]');
+      }
     }
-  }
-
-  if (flags.length > 0) {
-    console.warn('Input moderation flags:', flags);
-  }
-
-  return {
-    moderatedInput,
-    flags,
-  };
-});
-
-// Model invocation
-moderatedGraph.addNode('generateResponse', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const response = await model.invoke(state.moderatedInput || state.userMessage);
-
-  return {
-    aiResponse: response.content as string,
-  };
-});
-
-// Post-hook: Output moderation
-moderatedGraph.addNode('moderateOutput', async (state) => {
-  let moderatedOutput = state.aiResponse || '';
-
-  // Check for leaked sensitive info
-  const sensitivePatterns = [
-    /\b\d{3}-\d{2}-\d{4}\b/,
-    /\b\d{16}\b/,
-  ];
-
-  const flags: string[] = [];
-
-  for (const pattern of sensitivePatterns) {
-    if (pattern.test(moderatedOutput)) {
-      flags.push('output-contains-sensitive-data');
-      moderatedOutput =
-        'I apologize, but I cannot provide that information as it may contain sensitive data.';
+  
+    if (flags.length > 0) {
+      console.warn('Input moderation flags:', flags);
     }
-  }
-
-  return {
-    moderatedOutput,
-    flags,
-  };
-});
-
-moderatedGraph.addEdge(START, 'moderateInput');
-moderatedGraph.addEdge('moderateInput', 'generateResponse');
-moderatedGraph.addEdge('generateResponse', 'moderateOutput');
-moderatedGraph.addEdge('moderateOutput', END);
+  
+    return {
+      moderatedInput,
+      flags,
+    };
+  })
+  // Model invocation
+  .addNode('generateResponse', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const response = await model.invoke(state.moderatedInput || state.userMessage);
+  
+    return {
+      aiResponse: response.content as string,
+    };
+  })
+  // Post-hook: Output moderation
+  .addNode('moderateOutput', async (state) => {
+    let moderatedOutput = state.aiResponse || '';
+  
+    // Check for leaked sensitive info
+    const sensitivePatterns = [
+      /\b\d{3}-\d{2}-\d{4}\b/,
+      /\b\d{16}\b/,
+    ];
+  
+    const flags: string[] = [];
+  
+    for (const pattern of sensitivePatterns) {
+      if (pattern.test(moderatedOutput)) {
+        flags.push('output-contains-sensitive-data');
+        moderatedOutput =
+          'I apologize, but I cannot provide that information as it may contain sensitive data.';
+      }
+    }
+  
+    return {
+      moderatedOutput,
+      flags,
+    };
+  })
+  .addEdge(START, 'moderateInput')
+  .addEdge('moderateInput', 'generateResponse')
+  .addEdge('generateResponse', 'moderateOutput')
+  .addEdge('moderateOutput', END);
 
 export const moderatedChatbot = moderatedGraph.compile();
 ```
@@ -1132,9 +1043,9 @@ const UserConversationAnnotation = Annotation.Root({
   userId: Annotation<string>,
   threadId: Annotation<string>,
   message: Annotation<string>,
-  userProfile: Annotation<Record<string, any>>({ default: () => ({}) }),
-  conversationHistory: Annotation<string[]>({ default: () => [] }),
-  response: Annotation<string | null>({ default: () => null }),
+  userProfile: Annotation<Record<string, any>>({ reducer: (_prev, next) => next, default: () => ({}) }),
+  conversationHistory: Annotation<string[]>({ reducer: (_prev, next) => next, default: () => [] }),
+  response: Annotation<string | null>({ reducer: (_prev, next) => next, default: () => null }),
 });
 
 class MultiUserMemorySystem {
@@ -1196,26 +1107,24 @@ class MultiUserMemorySystem {
 
 const memorySystem = new MultiUserMemorySystem(process.env.DATABASE_URL!);
 
-const conversationGraph = new StateGraph(UserConversationAnnotation);
-
-conversationGraph.addNode('loadUserContext', async (state) => {
-  const [profile, history] = await Promise.all([
-    memorySystem.getUserProfile(state.userId),
-    memorySystem.getConversationHistory(state.userId, state.threadId),
-  ]);
-
-  return {
-    userProfile: profile,
-    conversationHistory: history,
-  };
-});
-
-conversationGraph.addNode('generateResponse', async (state) => {
-  const model = new ChatOpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-
-  const context = `
+const conversationGraph = new StateGraph(UserConversationAnnotation)
+  .addNode('loadUserContext', async (state) => {
+    const [profile, history] = await Promise.all([
+      memorySystem.getUserProfile(state.userId),
+      memorySystem.getConversationHistory(state.userId, state.threadId),
+    ]);
+  
+    return {
+      userProfile: profile,
+      conversationHistory: history,
+    };
+  })
+  .addNode('generateResponse', async (state) => {
+    const model = new ChatOpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  
+    const context = `
 User Profile: ${JSON.stringify(state.userProfile, null, 2)}
 
 Previous Conversations:
@@ -1223,36 +1132,34 @@ ${state.conversationHistory.join('\n\n')}
 
 Current Message: ${state.message}
   `.trim();
-
-  const response = await model.invoke(context);
-
-  return {
-    response: response.content as string,
-  };
-});
-
-conversationGraph.addNode('saveContext', async (state) => {
-  await memorySystem.saveConversation(
-    state.userId,
-    state.threadId,
-    state.message,
-    state.response!
-  );
-
-  // Extract and save preferences if mentioned
-  if (state.message.toLowerCase().includes('prefer')) {
-    await memorySystem.updateUserProfile(state.userId, {
-      lastPreferenceUpdate: new Date().toISOString(),
-    });
-  }
-
-  return state;
-});
-
-conversationGraph.addEdge(START, 'loadUserContext');
-conversationGraph.addEdge('loadUserContext', 'generateResponse');
-conversationGraph.addEdge('generateResponse', 'saveContext');
-conversationGraph.addEdge('saveContext', END);
+  
+    const response = await model.invoke(context);
+  
+    return {
+      response: response.content as string,
+    };
+  })
+  .addNode('saveContext', async (state) => {
+    await memorySystem.saveConversation(
+      state.userId,
+      state.threadId,
+      state.message,
+      state.response!
+    );
+  
+    // Extract and save preferences if mentioned
+    if (state.message.toLowerCase().includes('prefer')) {
+      await memorySystem.updateUserProfile(state.userId, {
+        lastPreferenceUpdate: new Date().toISOString(),
+      });
+    }
+  
+    return {};
+  })
+  .addEdge(START, 'loadUserContext')
+  .addEdge('loadUserContext', 'generateResponse')
+  .addEdge('generateResponse', 'saveContext')
+  .addEdge('saveContext', END);
 
 export const multiUserConversation = conversationGraph.compile();
 ```
@@ -1386,4 +1293,4 @@ export function createMonitoredWorkflow<T>(
 
 ---
 
-These recipes provide practical, production-ready implementations that you can adapt to your specific use cases. Each recipe demonstrates key patterns and best practices for building with LangChain.js and LangGraph.js, including the latest v1.0+ and v0.3+ features such as type-safe streaming, node caching, deferred nodes, model hooks, and cross-thread memory support.
+These recipes are starting points to adapt rather than drop-in production code. They were checked against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).

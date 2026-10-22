@@ -1,25 +1,24 @@
 ---
 title: "LangGraph (Python)"
 description: "Stateful, graph-based agents for Python — zero to hero with chaptered tutorials and topic-jump references."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
 ---
 
-import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlight/components';
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 **Low-level orchestration for stateful, long-running LLM agents.** LangGraph models your agent as a graph of nodes and edges with explicit state, durable checkpoints, and first-class human-in-the-loop.
+
+**Current version: `langgraph` %%version=langgraph%%** (checked %%versions-checked%%) · Python 3.10+.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install langgraph langchain-anthropic
+    pip install langgraph langchain langchain-anthropic
     ```
-  </Card>
-  <Card title="Version" icon="information">
-    **v1.2.16** · October 2026 · Python 3.10 – 3.14
   </Card>
   <Card title="Best for" icon="puzzle">
     Cycles, conditional routing, multi-agent coordination, HITL workflows.
@@ -27,7 +26,7 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  New to LangGraph? Follow the **Zero → Hero** path below in order (~3–4 hours). Already building? Use **Jump to a topic** to land on the chapter you need.
+  New to LangGraph? Follow the **Zero → Hero** path below in order (about four and a half hours). Already building? Use **Jump to a topic**, or the [API map](/langgraph-guide/python/langgraph_comprehensive_guide/) for which page covers what.
 </Aside>
 
 ## Zero → Hero
@@ -35,34 +34,24 @@ import { Card, CardGrid, LinkCard, Aside, Tabs, TabItem } from '@astrojs/starlig
 A chaptered tutorial that takes you from a first graph to a production-ready agent. Each chapter has its own page with **Next →** pagination.
 
 <CardGrid>
-  <LinkCard title="1 · Setup & core concepts" href="/langgraph-guide/python/chapter-01-setup-and-core-concepts/" description="Install, state, nodes, edges, compilation · 15 min" />
-  <LinkCard title="2 · Your first agent" href="/langgraph-guide/python/chapter-02-simple-agents/" description="Linear chat, conditional routing, looping, streaming · 20 min" />
-  <LinkCard title="3 · Multi-agent systems" href="/langgraph-guide/python/chapter-03-multi-agent/" description="Supervisor, parallel workers, handoff · 25 min" />
-  <LinkCard title="4 · Tools" href="/langgraph-guide/python/chapter-04-tools/" description="ToolNode, custom executors, conditional tool use · 20 min" />
-  <LinkCard title="5 · Memory & persistence" href="/langgraph-guide/python/chapter-05-memory/" description="Checkpointers, Store, cross-thread memory · 25 min" />
-  <LinkCard title="6 · Streaming & debugging" href="/langgraph-guide/python/chapter-06-streaming-and-debugging/" description="All 7 stream modes, typed StreamPart v2, GraphOutput, token streaming, custom events · 30 min" />
+  <LinkCard title="1 · Setup & core concepts" href="/langgraph-guide/python/chapter-01-setup-and-core-concepts/" description="Install, state, nodes, edges, compilation · 20 min" />
+  <LinkCard title="2 · Your first agent" href="/langgraph-guide/python/chapter-02-simple-agents/" description="Linear chat, routing, loops, create_agent, streaming · 25 min" />
+  <LinkCard title="3 · Multi-agent systems" href="/langgraph-guide/python/chapter-03-multi-agent/" description="Supervisor, parallel workers, handoff, subgraphs · 30 min" />
+  <LinkCard title="4 · Tools" href="/langgraph-guide/python/chapter-04-tools/" description="ToolNode, tool errors, injected state and store, ToolRuntime · 25 min" />
+  <LinkCard title="5 · Memory & persistence" href="/langgraph-guide/python/chapter-05-memory/" description="Checkpointers, Store, cross-thread memory, TTL · 25 min" />
+  <LinkCard title="6 · Streaming & debugging" href="/langgraph-guide/python/chapter-06-streaming-and-debugging/" description="Stream modes, typed v2 output, token streaming, custom events · 30 min" />
   <LinkCard title="7 · Human-in-the-loop" href="/langgraph-guide/python/chapter-07-human-in-the-loop/" description="Interrupts, multi-stage approval, interactive debug · 25 min" />
-  <LinkCard title="8 · Middleware" href="/langgraph-guide/python/chapter-08-middleware-hooks/" description="pre_model_hook, post_model_hook, RetryPolicy, TimeoutPolicy, error_handler, ToolNode(handle_tool_errors) · 25 min" />
-  <LinkCard title="9 · Advanced patterns" href="/langgraph-guide/python/chapter-09-advanced-patterns/" description="ReAct, Tree-of-Thoughts, reflection, structured output, caching, Functional API · 25 min" />
-  <LinkCard title="10 · Production & troubleshooting" href="/langgraph-guide/python/chapter-10-production/" description="RetryPolicy, TimeoutPolicy, CachePolicy, Durability, IsLastStep, Topic channels, Docker, CLI · 30 min" />
+  <LinkCard title="8 · Agent middleware" href="/langgraph-guide/python/chapter-08-middleware-hooks/" description="create_agent middleware: hooks, wrappers, approvals, summarisation, limits · 25 min" />
+  <LinkCard title="9 · Advanced patterns" href="/langgraph-guide/python/chapter-09-advanced-patterns/" description="ReAct, Tree-of-Thoughts, reflection, structured output, Send, Functional API · 50 min" />
+  <LinkCard title="10 · Production & troubleshooting" href="/langgraph-guide/python/chapter-10-production/" description="Checkpointer choice, durability, loop limits, testing, langgraph CLI · 30 min" />
 </CardGrid>
 
-<Aside type="note" title="Looking for a reference?">
-  The Zero → Hero chapters are task-oriented tutorials. If you already know the
-  shape of LangGraph and want exact signatures, feature tables, and breaking-change
-  history for a single primitive, jump to the **Reference** section near the bottom
-  of this page — one page per API (StateGraph, Checkpointers, Store, Functional
-  API, Command/Send, streaming modes). Each is verified line-by-line against the
-  installed `langgraph==1.2.14` source.
-</Aside>
-
 ## Jump to a topic
-
-Need one specific concept? Land directly on the chapter that owns it.
 
 <CardGrid>
   <LinkCard title="State graph" href="/langgraph-guide/python/chapter-01-setup-and-core-concepts/#core-concepts" />
   <LinkCard title="Conditional routing" href="/langgraph-guide/python/chapter-02-simple-agents/#example-2-conditional-routing" />
+  <LinkCard title="create_agent" href="/langgraph-guide/python/chapter-02-simple-agents/#example-4-tool-calling-agent-with-create_agent" />
   <LinkCard title="Supervisor pattern" href="/langgraph-guide/python/chapter-03-multi-agent/#example-1-command-based-supervisor-pattern" />
   <LinkCard title="Parallel workers" href="/langgraph-guide/python/chapter-03-multi-agent/#example-2-parallel-worker-pattern-fan-out--fan-in" />
   <LinkCard title="ToolNode" href="/langgraph-guide/python/chapter-04-tools/#example-1-basic-toolnode-with-tools_condition" />
@@ -70,97 +59,55 @@ Need one specific concept? Land directly on the chapter that owns it.
   <LinkCard title="Store (long-term memory)" href="/langgraph-guide/python/chapter-05-memory/#long-term-memory-store" />
   <LinkCard title="Type-safe v2 API" href="/langgraph-guide/python/chapter-06-streaming-and-debugging/#type-safe-v2-streaming-api" />
   <LinkCard title="Interrupts (HITL)" href="/langgraph-guide/python/chapter-07-human-in-the-loop/#how-interrupt-works" />
-  <LinkCard title="Middleware &amp; hooks" href="/langgraph-guide/python/chapter-08-middleware-hooks/" />
-  <LinkCard title="ReAct pattern" href="/langgraph-guide/python/chapter-09-advanced-patterns/#pattern-1-react-reasoning--acting-with-native-langgraph" />
-  <LinkCard title="Functional API" href="/langgraph-guide/python/reference-functional-api/" />
-  <LinkCard title="Command / Send" href="/langgraph-guide/python/reference-command-and-send/" />
-  <LinkCard title="IsLastStep / RemainingSteps" href="/langgraph-guide/python/reference-managed-values/" />
-  <LinkCard title="Runtime / ToolRuntime injection" href="/langgraph-guide/python/reference-runtime-and-managed-values/" />
-  <LinkCard title="Stream modes (v1 / v2)" href="/langgraph-guide/python/reference-streaming-modes/" />
-  <LinkCard title="StateGraph API" href="/langgraph-guide/python/reference-state-graph/" />
-  <LinkCard title="Checkpointers matrix" href="/langgraph-guide/python/reference-checkpointers/" />
-  <LinkCard title="Store (long-term memory)" href="/langgraph-guide/python/reference-store/" />
-  <LinkCard title="Prebuilt Nodes" href="/langgraph-guide/python/reference-prebuilt-nodes/" />
-  <LinkCard title="Channels" href="/langgraph-guide/python/reference-channels/" />
-  <LinkCard title="RemoteGraph" href="/langgraph-guide/python/reference-remote-graph/" />
-  <LinkCard title="Class & API reference (all symbols)" href="/langgraph-guide/python/langgraph_comprehensive_guide/#class--api-reference" />
-  <LinkCard title="Class Deep Dives Vol. 1" href="/langgraph-guide/python/reference-class-deep-dives-vol1/" />
-  <LinkCard title="Class Deep Dives Vol. 2" href="/langgraph-guide/python/reference-class-deep-dives-vol2/" />
-  <LinkCard title="Class Deep Dives Vol. 3" href="/langgraph-guide/python/reference-class-deep-dives-vol3/" />
+  <LinkCard title="Agent middleware" href="/langgraph-guide/python/chapter-08-middleware-hooks/" />
+  <LinkCard title="Retry, timeout, cache policies" href="/langgraph-guide/python/reference-state-graph/#node-policies" />
+  <LinkCard title="Testing with scripted models" href="/langgraph-guide/python/chapter-10-production/#testing-with-scripted-models" />
+  <LinkCard title="Deployment" href="/langgraph-guide/python/langgraph_production_guide/" />
 </CardGrid>
 
 ## Reference
 
-The API reference pages below are introspected against the installed `langgraph==1.2.14` /
-`langgraph-checkpoint==4.2.0` / `langgraph-checkpoint-sqlite==3.0.3` /
-`langgraph-checkpoint-postgres==3.0.5` source. If a signature disagrees with an
-older blog post or docs page, the source wins.
+Signatures and behaviour checked against `langgraph` %%version=langgraph%%, `langgraph-checkpoint` %%version=langgraph-checkpoint%%, `langgraph-prebuilt` %%version=langgraph-prebuilt%%, `langgraph-checkpoint-sqlite` %%version=langgraph-checkpoint-sqlite%%, `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%% and `langchain` %%version=langchain%%. Where a signature disagrees with an older blog post, the source wins.
 
 <CardGrid>
-  <LinkCard title="StateGraph API reference" href="/langgraph-guide/python/reference-state-graph/" description="Constructor, add_node (all 4 overloads), add_edge, add_conditional_edges, add_sequence, compile, Runtime, RetryPolicy, CachePolicy, TimeoutPolicy, RunControl, ExecutionInfo." />
-  <LinkCard title="Checkpointers reference" href="/langgraph-guide/python/reference-checkpointers/" description="Feature matrix for InMemorySaver, Sqlite, AsyncSqlite, Postgres, AsyncPostgres, ShallowPostgres — plus durability modes and connection strings." />
-  <LinkCard title="Store (long-term memory) reference" href="/langgraph-guide/python/reference-store/" description="BaseStore, InMemoryStore, namespaces, IndexConfig (vector search), TTLConfig, InjectedStore for tools." />
-  <LinkCard title="Functional API reference" href="/langgraph-guide/python/reference-functional-api/" description="@entrypoint, @task, entrypoint.final, previous, injecting Runtime, feature matrix vs StateGraph." />
-  <LinkCard title="Command / Send reference" href="/langgraph-guide/python/reference-command-and-send/" description="Command(update, goto, resume, graph), Send for fan-out, interrupt + resume, Command.PARENT, Overwrite." />
-  <LinkCard title="Streaming modes reference" href="/langgraph-guide/python/reference-streaming-modes/" description="All eight stream_mode values (including tools + ToolCallTransformer), v1 vs v2 typing, StreamPart discriminated union, GraphOutput, subgraphs=True." />
-  <LinkCard title="Prebuilt nodes reference" href="/langgraph-guide/python/reference-prebuilt-nodes/" description="ToolNode (all constructor params, wrap_tool_call, handle_tool_errors), InjectedState, InjectedStore, ToolRuntime, ToolCallRequest, tools_condition, ToolCallTransformer, ToolCallStream." />
-  <LinkCard title="Channels reference" href="/langgraph-guide/python/reference-channels/" description="LastValue, BinaryOperatorAggregate, Topic, EphemeralValue, NamedBarrierValue, AnyValue — concurrent-write semantics, Annotated[] shorthands, fan-in patterns." />
-  <LinkCard title="Managed values reference" href="/langgraph-guide/python/reference-managed-values/" description="IsLastStep and RemainingSteps — read-only state fields injected by the Pregel executor for recursion-limit detection and graceful truncation." />
-  <LinkCard title="Runtime, ToolRuntime & Managed Values reference" href="/langgraph-guide/python/reference-runtime-and-managed-values/" description="Runtime context injection, ToolRuntime for tools, ExecutionInfo, IsLastStep, RemainingSteps — accessing execution metadata and injecting immutable context into nodes and tools." />
-  <LinkCard title="RemoteGraph reference" href="/langgraph-guide/python/reference-remote-graph/" description="Call a LangGraph Platform deployment as a local graph — same invoke/stream/get_state surface, interrupt/resume, and subgraph node wiring." />
-  <LinkCard title="Graceful shutdown reference" href="/langgraph-guide/python/reference-graceful-shutdown/" description="RunControl, request_drain(), GraphDrained — cooperative superstep-boundary draining for SIGTERM, pre-stop hooks, and timeout-with-checkpoint patterns." />
-  <LinkCard title="TracePolicy reference" href="/langgraph-guide/python/reference-trace-policy/" description="Per-node LangSmith tracing control — process_inputs, process_outputs, omit_payload; selectively redact, truncate, or silence individual node spans." />
-  <LinkCard title="Cache backends reference" href="/langgraph-guide/python/reference-cache-backends/" description="BaseCache abstract interface and InMemoryCache thread-safe implementation — TTL eviction, custom Redis backends, CachePolicy wiring, and serializer protocol." />
-  <LinkCard title="Class Deep Dives Vol. 1" href="/langgraph-guide/python/reference-class-deep-dives-vol1/" description="Send, Command, StateSnapshot, Interrupt, TracePolicy, InMemoryStore, InjectedState, InjectedStore, RetryPolicy, CachePolicy — multiple runnable examples per class." />
-  <LinkCard title="Class Deep Dives Vol. 2" href="/langgraph-guide/python/reference-class-deep-dives-vol2/" description="DeltaChannel, EncryptedSerializer, TimeoutPolicy, NamedBarrierValueAfterFinish, GraphOutput, Durability, TaskPayload, CheckpointPayload, ToolCallTransformer/ToolCallStream, StateUpdate — source-verified v1.2.14." />
-  <LinkCard title="Class Deep Dives Vol. 3" href="/langgraph-guide/python/reference-class-deep-dives-vol3/" description="BinaryOperatorAggregate, Topic, EphemeralValue, LastValue/LastValueAfterFinish, GraphCallbackHandler/events, ToolNode, MessagesState/add_messages, UIMessage/RemoveUIMessage, Runtime/ExecutionInfo/RunControl, HumanResponse — source-verified v1.2.16." />
+  <LinkCard title="API map & quick reference" href="/langgraph-guide/python/langgraph_comprehensive_guide/" description="Packages, symbols by module, defaults and limits, deprecations, and which page covers each topic." />
+  <LinkCard title="StateGraph" href="/langgraph-guide/python/reference-state-graph/" description="Constructor, add_node, edges, add_sequence, compile, node policies (retry, timeout, cache, error handlers), set_node_defaults, Runtime." />
+  <LinkCard title="Checkpointers" href="/langgraph-guide/python/reference-checkpointers/" description="InMemorySaver, Sqlite, Postgres; durability modes; connection pools; encryption." />
+  <LinkCard title="Store (long-term memory)" href="/langgraph-guide/python/reference-store/" description="BaseStore, InMemoryStore, PostgresStore, namespaces, vector search, TTL, InjectedStore." />
+  <LinkCard title="Functional API" href="/langgraph-guide/python/reference-functional-api/" description="@entrypoint, @task, entrypoint.final, previous, Runtime injection." />
+  <LinkCard title="Command / Send" href="/langgraph-guide/python/reference-command-and-send/" description="Command(update, goto, resume, graph), Send fan-out with per-task timeouts, Command.PARENT, interrupt and resume." />
+  <LinkCard title="Streaming modes" href="/langgraph-guide/python/reference-streaming-modes/" description="The stream modes, v1 vs v2 output, StreamPart, GraphOutput, subgraph streaming, per-tool streaming." />
+  <LinkCard title="Prebuilt nodes" href="/langgraph-guide/python/reference-prebuilt-nodes/" description="ToolNode and its error handling, wrap_tool_call, InjectedState, InjectedStore, ToolRuntime, tools_condition, ToolCallTransformer." />
+  <LinkCard title="Channels" href="/langgraph-guide/python/reference-channels/" description="LastValue, BinaryOperatorAggregate, Topic, EphemeralValue, NamedBarrierValue, AnyValue, UntrackedValue, DeltaChannel." />
+  <LinkCard title="Runtime, ToolRuntime & managed values" href="/langgraph-guide/python/reference-runtime-and-managed-values/" description="Runtime context, ExecutionInfo, ServerInfo, ToolRuntime, IsLastStep and RemainingSteps." />
+  <LinkCard title="RemoteGraph" href="/langgraph-guide/python/reference-remote-graph/" description="Call a deployed graph as a local graph: invoke, stream, get_state, interrupts, use as a subgraph." />
+  <LinkCard title="Graceful shutdown" href="/langgraph-guide/python/reference-graceful-shutdown/" description="RunControl, request_drain(), GraphDrained: stopping at a step boundary." />
+  <LinkCard title="TracePolicy" href="/langgraph-guide/python/reference-trace-policy/" description="Per-node control of what LangSmith records for inputs and outputs." />
+  <LinkCard title="Cache backends" href="/langgraph-guide/python/reference-cache-backends/" description="BaseCache, InMemoryCache, SqliteCache, RedisCache and CachePolicy wiring." />
 </CardGrid>
 
 <CardGrid>
-  <LinkCard title="Single-page comprehensive guide" href="/langgraph-guide/python/langgraph_comprehensive_guide/" description="All chapters in one long page — best for search and printing." />
-  <LinkCard title="Recipes" href="/langgraph-guide/python/langgraph_recipes/" description="RAG, support routing, research agent, doc pipelines, long-term memory conversations." />
-  <LinkCard title="Diagrams" href="/langgraph-guide/python/langgraph_diagrams/" description="20+ Mermaid architecture diagrams." />
-  <LinkCard title="Production guide" href="/langgraph-guide/python/langgraph_production_guide/" description="Deployment, scaling, monitoring, disaster recovery." />
-  <LinkCard title="Advanced error recovery" href="/langgraph-guide/python/langgraph_advanced_error_recovery/" />
+  <LinkCard title="Recipes" href="/langgraph-guide/python/langgraph_recipes/" description="RAG, support routing, research fan-out, memory, map-reduce, tool interceptors, channels, Functional API." />
+  <LinkCard title="Production deployment" href="/langgraph-guide/python/langgraph_production_guide/" description="LangSmith Deployment, langgraph.json, the langgraph CLI, self-hosting, auth, calling a deployment." />
+  <LinkCard title="Error handling and recovery" href="/langgraph-guide/python/langgraph_advanced_error_recovery/" description="Error handlers, dead-letter routing, resuming from checkpoints, exception types." />
   <LinkCard title="Observability" href="/langgraph-guide/python/langgraph_observability_python/" />
-  <LinkCard title="Performance optimization" href="/langgraph-guide/python/langgraph_performance_optimization/" />
+  <LinkCard title="Performance" href="/langgraph-guide/python/langgraph_performance_optimization/" />
   <LinkCard title="Streaming server (FastAPI)" href="/langgraph-guide/python/langgraph_streaming_server_fastapi/" />
+  <LinkCard title="Diagrams" href="/langgraph-guide/python/langgraph_diagrams/" description="Mermaid architecture diagrams." />
 </CardGrid>
 
-<Aside type="caution" title="Verified against installed library">
-  Introspected against `langgraph==1.2.14`, `langgraph-checkpoint==4.2.0`,
-  `langgraph-prebuilt==1.1.0`, `langgraph-checkpoint-sqlite==3.0.3`,
-  `langgraph-checkpoint-postgres==3.0.5` in October 2026. The full class/API
-  surface — every symbol below and many more — is consolidated in the
-  [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference)
-  section of the single-page guide.
-
-  Known corrections vs older drafts / third-party guides:
-
-  - `langgraph.llm_hooks` and `langgraph.cache.cache_node` **do not exist**.
-    The real middleware API is `pre_model_hook`/`post_model_hook` kwargs on
-    `langgraph.prebuilt.create_react_agent`; see [Chapter 8](./chapter-08-middleware-hooks/).
-  - `langchain.agents.create_agent(middleware=[...])` and `AgentMiddleware` exist in
-    the separate **`langchain`** package (install with `pip install langchain`), which
-    is not bundled with `langgraph`. `create_react_agent` is **deprecated** per
-    official LangGraph v1 migration docs in favour of `langchain.agents.create_agent`.
-  - `AgentState` / `AgentStatePydantic` are **deprecated** in `langgraph.prebuilt` (no
-    longer re-exported from the top-level `__init__`; still importable from
-    `langgraph.prebuilt.chat_agent_executor`). Deprecation notice targets `langchain.agents`
-    as migration (requires the `langchain` package).
-  - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)`
-    are **context managers** (`with ... as saver:`), not factories that return
-    a saver directly. Some earlier examples omitted the `with`; see the
-    [Checkpointers reference](./reference-checkpointers/).
-  - `Interrupt.ns`, `Interrupt.when`, `Interrupt.resumable` were removed in v0.6;
-    only `Interrupt.value` and `Interrupt.id` remain.
-  - `checkpoint_during=False` on `invoke`/`stream` is deprecated — use
-    `durability="exit"` (or `"sync"` / `"async"`).
-  - `ShallowPostgresSaver` is deprecated as of `langgraph-checkpoint-postgres`
-    2.0.20. Use `PostgresSaver` + `durability="exit"`.
+<Aside type="caution" title="Corrections to older material">
+  - Build tool-calling agents with `langchain.agents.create_agent` (in the `langchain` package). `langgraph.prebuilt.create_react_agent` is deprecated and its `pre_model_hook`/`post_model_hook` map to middleware ([Chapter 8](/langgraph-guide/python/chapter-08-middleware-hooks/#migrating-from-create_react_agent-hooks)).
+  - The default `recursion_limit` is 10007, not 25. Set it explicitly for agent loops.
+  - `ToolNode`'s default error handling catches only invalid-argument errors; other tool exceptions propagate unless you pass `handle_tool_errors=True`.
+  - `durability=` is an argument to `invoke`/`stream`, not `compile()`, and interrupts work under every mode.
+  - Node timeouts work only on `async` nodes; `compile()` rejects a sync node with a timeout.
+  - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)` are context managers.
+  - `InMemoryStore` has no TTL support; use `PostgresStore` with a `ttl` config.
+  - "LangGraph Cloud" / "LangGraph Platform" is now LangSmith Deployment; the server is the Agent Server.
 </Aside>
 
-## Install, minimal example
+## Minimal example
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -194,25 +141,12 @@ Ready for the full walk-through? **[Start Chapter 1 →](/langgraph-guide/python
 
 ## Revision history
 
-Full per-volume history now lives in git — this table covers meaningfully
-distinct versions only, oldest to newest.
+Earlier history is in git.
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2025-11 | 1.0.3 | Initial guide: node caching, deferred nodes, pre/post model hooks, cross-thread memory, Python 3.13 support. |
-| 2026-04-16 | 1.1.6 | Python 3.9 dropped; type-safe v2 streaming/invoke API; Pydantic/dataclass coercion; Python 3.14 support; time-travel fixes. |
-| 2026-04-21 | 1.1.8 | Index redesigned into Zero → Hero chaptered tutorial + Jump-to-topic grid. |
-| 2026-04-22 | 1.1.9 | Added six source-verified reference pages (StateGraph, Checkpointers, Store, Functional API, Command/Send, Streaming modes); corrected stale guidance (`create_react_agent` deprecation, `from_conn_string` context managers, `ShallowPostgresSaver` deprecation). |
-| 2026-05-12 | 1.2.0 | `ToolRuntime` and `ToolCallTransformer` added to `langgraph.prebuilt`. |
-| 2026-05-22 | 1.2.1 | Patch release; all core symbols re-verified. |
-| 2026-06-15 | 1.2.5 | v3 streaming protocol (beta) documented: `GraphRunStream`, `SubgraphRunStream`, native transformers. |
-| 2026-06-23 | 1.2.6 | Deprecation of `AgentState`/`AgentStatePydantic`/`ValidationNode` in favor of `langchain.agents`; `LangGraphDeprecatedSinceV11` added. |
-| 2026-07-01 | 1.2.7 | `TracePolicy`, `add_node(defer=True)`, graph visualization/schema-introspection APIs (`get_graph(xray=)`, `as_tool()`, `get_context_jsonschema()`) documented. |
-| 2026-07-09 | 1.2.8 | Encrypted checkpoint serde (`EncryptedSerializer`), serde audit hooks documented. |
-| 2026-07-20 | 1.2.9 | `RunControl`/cooperative draining, `RemainingSteps`, `ToolRuntime` execution metadata, `TimeoutPolicy` refinements. |
-| 2026-08-01 | 1.2.10 | Patch release; all core symbols re-verified against the installed source. |
-| 2026-08-17 | 1.2.11 | **Consolidated the 46 "class deep dive" volumes into one source-verified [Class & API Reference](./langgraph_comprehensive_guide/#class--api-reference) section** on the single-page guide; removed the per-volume pages and changelog entries (full history remains in git); refreshed all version callouts to `langgraph==1.2.11`. |
-| 2026-09-28 | 1.2.12 | Version bump to 1.2.12; added `set_node_defaults()` section to ch1 and Pattern 15 to ch9; Functional API section expanded with async tasks, `context_schema`/`Runtime` injection, `entrypoint.final` accumulator, named `@task` with `CachePolicy`; fixed `ToolRuntime` canonical import; Recipes 22–23 added (`set_node_defaults` + `ToolRuntime` all-in-one injection). |
-| 2026-10-05 | 1.2.12 | Added **Class Deep Dives Vol. 1** reference page — 10 source-verified class deep dives (`Send`, `Command`, `StateSnapshot`, `Interrupt`, `TracePolicy`, `InMemoryStore`, `InjectedState`, `InjectedStore`, `RetryPolicy`, `CachePolicy`) with 25+ runnable code examples covering the full range of each API. |
-| 2026-10-12 | 1.2.14 | Version bump to 1.2.14; all reference pages updated. Added **Class Deep Dives Vol. 2** — 10 source-verified deep dives (`DeltaChannel`, `EncryptedSerializer`, `TimeoutPolicy`, `NamedBarrierValueAfterFinish`, `GraphOutput`, `Durability`, `TaskPayload`/`TaskResultPayload`, `CheckpointPayload`, `ToolCallTransformer`/`ToolCallStream`, `StateUpdate`) with 30+ runnable code examples. `DeltaChannel` cross-reference added to channels reference. `langgraph-checkpoint` bumped to 4.2.0. |
-| 2026-10-19 | 1.2.16 | Version bump to 1.2.16. Added **Class Deep Dives Vol. 3** — 10 source-verified deep dives (`BinaryOperatorAggregate`, `Topic`, `EphemeralValue`, `LastValue`/`LastValueAfterFinish`, `GraphCallbackHandler`/`GraphInterruptEvent`/`GraphResumeEvent`, `ToolNode`, `MessagesState`/`add_messages`, `UIMessage`/`RemoveUIMessage`/`push_ui_message`, `Runtime`/`ExecutionInfo`/`RunControl`, `HumanResponse`) with 25+ runnable code examples. |
+| 2026-10-21 | 1.2.16 | Agent chapters moved to `create_agent` and middleware (Chapter 8 rewritten; `create_react_agent` documented as deprecated). The single-page comprehensive guide replaced by an API map that links to the chapters; retry/timeout/cache policies documented once, in the StateGraph reference. Chapter 10, the production guide and the performance page rewritten around LangGraph's own deployment, durability, checkpointer and testing features. Corrected: default recursion limit, `ToolNode` error-handling default, interrupt behaviour without a checkpointer, `InMemoryStore` TTL, `destinations=`, `durability` placement, error-handler signatures and routing, sync nodes with timeouts, `Send` from nodes. Removed the advanced-implementations page and merged the managed-values page into the runtime reference. |
+| 2026-10-19 | 1.2.16 | Version bump; more runnable examples for channels, `ToolNode`, `MessagesState` and `Runtime`. |
+| 2026-04-22 | 1.1.9 | Source-checked reference pages added. |
+| 2026-04-21 | 1.1.8 | Index redesigned into a chaptered tutorial with topic links. |
+| 2025-11 | 1.0.3 | Initial guide. |

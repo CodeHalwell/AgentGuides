@@ -1,8 +1,8 @@
 ---
 title: "CrewAI"
 description: "Role-based autonomous agent teams with Flows, MCP, and checkpoint resume."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v1.14.6** · May 2026 · Python 3.10+
+    **v%%version=crewai%%** · checked %%versions-checked%% · Python 3.10–3.13
   </Card>
   <Card title="Best for" icon="puzzle">
     Team simulations, research pipelines, content creation, analyst crews.
@@ -27,89 +27,99 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="tip" title="Where to start">
-  Follow **Zero → Hero** for the tutorial path, or **Jump to a topic** if you already know what you need. The new **API reference pages** (Agent, Task, Memory, Knowledge, Tools, LLM, CLI) are verified against the installed source.
+  Follow **Zero → Hero** for the tutorial path, or **Jump to a topic** if you already know what you need. The **reference pages** (Agent, Task, Memory, Knowledge, Tools, LLM, CLI) are checked against the installed source.
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Core fundamentals" href="./crewai_comprehensive_guide/#core-fundamentals" description="Install, LLM config, initialisation · 15 min" />
-  <LinkCard title="2 · Your first agent" href="./crewai_comprehensive_guide/#simple-agents" description="Role, goal, backstory, single-agent crews · 20 min" />
-  <LinkCard title="3 · Agent API deep dive" href="./crewai_agent_api_python/" description="Every field verified against source · 20 min" />
-  <LinkCard title="4 · Tasks & structured output" href="./crewai_task_api_python/" description="Task API, guardrails, conditional tasks, processes · 25 min" />
-  <LinkCard title="5 · Tools & @tool decorator" href="./crewai_tools_python/" description="BaseTool, @tool, MCP tool bridging · 20 min" />
-  <LinkCard title="6 · Memory systems" href="./crewai_memory_python/" description="Unified Memory, scope/slice, storage backends · 20 min" />
-  <LinkCard title="7 · Knowledge sources" href="./crewai_knowledge_python/" description="PDF, CSV, Docling, string sources · 15 min" />
-  <LinkCard title="8 · LLM providers & routing" href="./crewai_llm_providers_python/" description="Native SDK vs LiteLLM, reasoning/thinking · 15 min" />
-  <LinkCard title="9 · CLI & project layout" href="./crewai_cli_python/" description="crewai create/run/train/test/checkpoint · 15 min" />
-  <LinkCard title="10 · Flows (event-driven)" href="./crewai_flows_guide/" description="@start/@listen decorators, state routing · 25 min" />
-  <LinkCard title="11 · Advanced multi-agent" href="./crewai_advanced_multi_agent_python/" description="Hierarchies, delegation, collaboration · 30 min" />
-  <LinkCard title="12 · Production" href="./crewai_production_guide/" description="Deployment, monitoring, cost controls · 30 min" />
+  <LinkCard title="1 · Core fundamentals" href="/crewai-guide/crewai_comprehensive_guide/#core-fundamentals" description="Install, LLM config, initialisation · 15 min" />
+  <LinkCard title="2 · Your first agent" href="/crewai-guide/crewai_comprehensive_guide/#simple-agents" description="Role, goal, backstory, single-agent crews · 20 min" />
+  <LinkCard title="3 · Agent API reference" href="/crewai-guide/crewai_agent_api_python/" description="Every field checked against source · 20 min" />
+  <LinkCard title="4 · Tasks & structured output" href="/crewai-guide/crewai_task_api_python/" description="Task API, guardrails, conditional tasks, processes · 25 min" />
+  <LinkCard title="5 · Tools & @tool decorator" href="/crewai-guide/crewai_tools_python/" description="BaseTool, @tool, MCP tool bridging · 20 min" />
+  <LinkCard title="6 · Memory systems" href="/crewai-guide/crewai_memory_python/" description="Unified Memory, scope/slice, storage backends · 20 min" />
+  <LinkCard title="7 · Knowledge sources" href="/crewai-guide/crewai_knowledge_python/" description="PDF, CSV, Docling, string sources · 15 min" />
+  <LinkCard title="8 · LLM providers & routing" href="/crewai-guide/crewai_llm_providers_python/" description="Native SDK vs LiteLLM, reasoning/thinking · 15 min" />
+  <LinkCard title="9 · CLI & project layout" href="/crewai-guide/crewai_cli_python/" description="crewai create/run/train/test/checkpoint · 15 min" />
+  <LinkCard title="10 · Flows (event-driven)" href="/crewai-guide/crewai_flows_guide/" description="Structured state, routers, @persist, human feedback · 30 min" />
+  <LinkCard title="11 · Multi-agent patterns" href="/crewai-guide/crewai_advanced_multi_agent_python/" description="Delegation, managers, parallel work, A2A, review · 20 min" />
+  <LinkCard title="12 · Production" href="/crewai-guide/crewai_production_guide/" description="Limits, events, tracing, tests, deployment · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="Agent fields & defaults" href="./crewai_agent_api_python/" />
-  <LinkCard title="Task structured outputs" href="./crewai_task_api_python/#structured-output-three-fields-one-answer" />
-  <LinkCard title="Process: sequential vs hierarchical" href="./crewai_task_api_python/#process-types" />
-  <LinkCard title="@tool decorator" href="./crewai_tools_python/#tool-decorator" />
-  <LinkCard title="BaseTool subclass" href="./crewai_tools_python/#basetool-subclass" />
-  <LinkCard title="MCP server bridging" href="./crewai_tools_python/#mcp-server-tools--agentmcps" />
-  <LinkCard title="Memory scope & slice" href="./crewai_memory_python/#scope-and-slice-views" />
-  <LinkCard title="Knowledge source types" href="./crewai_knowledge_python/#built-in-sources" />
-  <LinkCard title="LLM routing rules" href="./crewai_llm_providers_python/#how-routing-works" />
-  <LinkCard title="Reasoning / thinking models" href="./crewai_llm_providers_python/#reasoning-models" />
-  <LinkCard title="Custom BaseLLM" href="./crewai_llm_providers_python/#custom-llm--subclass-basellm" />
-  <LinkCard title="CLI cheat sheet" href="./crewai_cli_python/#command-cheat-sheet" />
-  <LinkCard title="Project scaffold" href="./crewai_cli_python/#project-layout--crewai-create-crew" />
-  <LinkCard title="Training & testing modes" href="./crewai_cli_python/#training-mode" />
-  <LinkCard title="Checkpoint CLI" href="./crewai_cli_python/#checkpoints" />
-  <LinkCard title="CrewAI Flows" href="./crewai_flows_guide/" />
+  <LinkCard title="Agent fields & defaults" href="/crewai-guide/crewai_agent_api_python/" />
+  <LinkCard title="Task structured outputs" href="/crewai-guide/crewai_task_api_python/#structured-output-three-fields-one-answer" />
+  <LinkCard title="Process: sequential vs hierarchical" href="/crewai-guide/crewai_task_api_python/#process-types" />
+  <LinkCard title="@tool decorator" href="/crewai-guide/crewai_tools_python/#tool-decorator" />
+  <LinkCard title="BaseTool subclass" href="/crewai-guide/crewai_tools_python/#basetool-subclass" />
+  <LinkCard title="MCP server bridging" href="/crewai-guide/crewai_tools_python/#mcp-server-tools--agentmcps" />
+  <LinkCard title="Memory scope & slice" href="/crewai-guide/crewai_memory_python/#scope-and-slice-views" />
+  <LinkCard title="Knowledge source types" href="/crewai-guide/crewai_knowledge_python/#built-in-sources" />
+  <LinkCard title="LLM routing rules" href="/crewai-guide/crewai_llm_providers_python/#how-routing-works" />
+  <LinkCard title="Reasoning / thinking models" href="/crewai-guide/crewai_llm_providers_python/#reasoning-models" />
+  <LinkCard title="Custom BaseLLM" href="/crewai-guide/crewai_llm_providers_python/#custom-llm--subclass-basellm" />
+  <LinkCard title="CLI cheat sheet" href="/crewai-guide/crewai_cli_python/#command-cheat-sheet" />
+  <LinkCard title="Project scaffold" href="/crewai-guide/crewai_cli_python/#project-layout--crewai-create-crew---classic" />
+  <LinkCard title="Training & testing modes" href="/crewai-guide/crewai_cli_python/#training-mode" />
+  <LinkCard title="Checkpoint CLI" href="/crewai-guide/crewai_cli_python/#checkpoints" />
+  <LinkCard title="Flow routers & and_/or_" href="/crewai-guide/crewai_flows_guide/#decorators" />
+  <LinkCard title="Flow persistence & resume" href="/crewai-guide/crewai_flows_guide/#persistence-and-resume--persist" />
+  <LinkCard title="Human feedback in flows" href="/crewai-guide/crewai_flows_guide/#human-feedback--human_feedback" />
+  <LinkCard title="Event listeners" href="/crewai-guide/crewai_production_guide/#event-listeners" />
+  <LinkCard title="Testing with a stub LLM" href="/crewai-guide/crewai_production_guide/#testing-without-a-model" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Agent API" href="./crewai_agent_api_python/" description="Fields, planning, guardrails, MCP, A2A." />
-  <LinkCard title="Task API" href="./crewai_task_api_python/" description="Fields, structured output, conditional tasks, processes." />
-  <LinkCard title="Memory" href="./crewai_memory_python/" description="Unified Memory class, scope/slice, LanceDB/Qdrant." />
-  <LinkCard title="Knowledge" href="./crewai_knowledge_python/" description="Built-in sources + custom BaseKnowledgeSource." />
-  <LinkCard title="Tools" href="./crewai_tools_python/" description="BaseTool, @tool, MCP servers, caching, usage caps." />
-  <LinkCard title="LLM providers" href="./crewai_llm_providers_python/" description="Routing, native SDKs, LiteLLM fallback, reasoning." />
-  <LinkCard title="CLI" href="./crewai_cli_python/" description="Every CLI command verified against source." />
-  <LinkCard title="Comprehensive guide" href="./crewai_comprehensive_guide/" description="Single-page technical tour (some errata — see note)." />
-  <LinkCard title="Advanced multi-agent" href="./crewai_advanced_multi_agent_python/" />
-  <LinkCard title="Flows guide" href="./crewai_flows_guide/" description="Event-driven workflows." />
-  <LinkCard title="Recipes" href="./crewai_recipes/" description="Blog generation, BI, support, code review, marketing, legal." />
-  <LinkCard title="Diagrams" href="./crewai_diagrams/" />
-  <LinkCard title="Production guide" href="./crewai_production_guide/" />
+  <LinkCard title="Agent API" href="/crewai-guide/crewai_agent_api_python/" description="Fields, planning, guardrails, MCP, A2A." />
+  <LinkCard title="Task API" href="/crewai-guide/crewai_task_api_python/" description="Fields, structured output, conditional tasks, processes." />
+  <LinkCard title="Memory" href="/crewai-guide/crewai_memory_python/" description="Unified Memory class, scope/slice, LanceDB/Qdrant." />
+  <LinkCard title="Knowledge" href="/crewai-guide/crewai_knowledge_python/" description="Built-in sources + custom BaseKnowledgeSource." />
+  <LinkCard title="Tools" href="/crewai-guide/crewai_tools_python/" description="BaseTool, @tool, MCP servers, caching, usage caps." />
+  <LinkCard title="LLM providers" href="/crewai-guide/crewai_llm_providers_python/" description="Routing, native SDKs, LiteLLM fallback, reasoning." />
+  <LinkCard title="CLI" href="/crewai-guide/crewai_cli_python/" description="Every CLI command verified against source." />
+  <LinkCard title="Comprehensive guide" href="/crewai-guide/crewai_comprehensive_guide/" description="Single-page tour of the core concepts." />
+  <LinkCard title="Multi-agent patterns" href="/crewai-guide/crewai_advanced_multi_agent_python/" description="Delegation, managers, A2A, human review." />
+  <LinkCard title="Flows" href="/crewai-guide/crewai_flows_guide/" description="Structured state, routers, persistence, conversational flows." />
+  <LinkCard title="Recipes" href="/crewai-guide/crewai_recipes/" description="Article crew, CSV report, support triage, code review, batch runs, a lead flow." />
+  <LinkCard title="Diagrams" href="/crewai-guide/crewai_diagrams/" description="Processes, flows, memory, events and hooks." />
+  <LinkCard title="Production" href="/crewai-guide/crewai_production_guide/" description="Event listeners, tracing, hooks, checkpoints, testing, deployment." />
 </CardGrid>
 
-## What's new in v1.14.6 (May 2026)
+## What's new in the 1.15 line (June–October 2026)
 
-- **v1.14.6 (May 2026)** — Patch release; stability improvements. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions.
-- **v1.14.5 (May 2026)** — Patch release; stability improvements. `Agent`, `Task`, `Crew`, `Process`, `Flow` imports verified against installed `crewai==1.14.5` (`.routine-envs/check-0519-crewai`); no `DeprecationWarning` emissions.
-- **v1.14.4 (May 1)** — Patch release; stability improvements.
+- **JSON-first scaffolds** — `crewai create crew` now runs an interactive wizard and writes `crew.jsonc` + `agents/*.jsonc`. Pass `--classic` for the Python/YAML `@CrewBase` layout this guide uses. Tools, skills and templates are scaffolded through the same command (`crewai create tool|skill|template`); the older `crewai tool create` / `crewai template add` forms are deprecated.
+- **Declarative and conversational flows** — `crewai create flow --declarative`, `crewai run --definition <file>`; conversational flows are stable since 1.15.18. `crewai run` runs flows as well as crews.
+- **`crewai eval`** — grades the last traced run through CrewAI AMP and exits non-zero on a failed gate; `--models` compares models on a deployment.
+- **Agent defaults** — the newer `AgentExecutor` is now the default `executor_class`; new `skills=` and `tool_failure_policy=` fields; tool failures are surfaced rather than reported as success.
+- **Packaging** — the CLI moved to its own `crewai-cli` distribution (installed with `crewai`; `crewai.cli` is a deprecated alias for `crewai_cli`). Provider SDKs and LiteLLM are optional extras (`crewai[anthropic]`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`).
+- **New native providers** — Snowflake and DeepInfra join the native list; DashScope routes natively for all models.
+- **Memory** — default analysis model `gpt-5.4-mini` and embedder `text-embedding-3-large`; stores built with the old 1536-dimension default need a reset or an explicit embedder (see [Memory](/crewai-guide/crewai_memory_python/)).
 
-## Earlier highlights (v1.14.3, April 2026)
+## Earlier highlights (1.14 line, April–May 2026)
 
-- **New reference pages** — Agent, Task, Memory, Knowledge, Tools, LLM, CLI — each verified against installed source.
-- **Checkpoint forking with lineage tracking** — branch execution from any saved checkpoint.
-- **`from_checkpoint` on `Crew.kickoff` / `Flow.kickoff`** — resume a crew or flow with `from_checkpoint=CheckpointConfig(restore_from=...)`.
+- **Checkpoint system** (1.14.0, yanked; first usable release 1.14.1) and checkpoint forking with lineage tracking (1.14.2).
+- **`from_checkpoint` on `Crew.kickoff` / `Flow.kickoff` / `Agent.kickoff`** — resume with `from_checkpoint=CheckpointConfig(restore_from=...)`.
 - **Checkpoint CLI** — `crewai checkpoint list|info|resume|diff|prune`.
-- **Template management CLI** — `crewai template list|add`.
 - **Enriched token tracking** — `reasoning_tokens`, `cache_creation_tokens` on `CrewOutput.token_usage`.
 - **Scoped streaming handlers** — per-run isolation across concurrent crews.
 
-<Aside type="caution" title="Breaking changes since v1.5.0">
-  - `CodeInterpreterTool` removed from the public API — use E2B / Modal / a custom `BaseTool`.
+<Aside type="caution" title="Breaking and behavioural changes since v1.5.0">
+  - `CodeInterpreterTool` removed from the public API (1.14.0/1.14.1) — use E2B / Modal / a custom `BaseTool`.
   - `CrewStructuredTool` moved to internal API — external code should use `BaseTool`.
-  - `stop=` parameter stripped for GPT-5 / o-series models by the LLM router.
+  - `stop=` parameter stripped for GPT-5 / o-series (and later OpenAI reasoning) models by the LLM router.
   - `Agent.reasoning` deprecated → use `planning` + `PlanningConfig`.
-  - `Agent.multimodal` deprecated → use `Task.input_files={"name": path}`.
-  - `from crewai.amp import ...` **is not a valid import** in the stable package. AMP is accessed through the CLI (`crewai login`, `crewai deploy ...`). The AMP Suite section of the comprehensive guide includes pre-existing fabricated imports and is flagged with an errata note.
-  - v1.10.0 yanked — use 1.10.1+.
+  - `function_calling_llm` (on `Agent` and `Crew`) marked deprecated in the 1.15 line.
+  - `Agent.multimodal` deprecated → use `Task.input_files=...`.
+  - `StateProxy` removed from flow state access (1.15.0).
+  - `crewai create crew` defaults to the JSON-first layout (1.15 line) — add `--classic` for YAML.
+  - LiteLLM is no longer installed by default; non-native model prefixes need `crewai[litellm]`.
+  - `from crewai.amp import ...` **is not a valid import**. AMP is accessed through the CLI (`crewai login`, `crewai deploy ...`) and `Agent(apps=[...])`.
+  - Yanked from PyPI: 1.10.0, 1.12.0 and **1.14.0** (broken Anthropic dependency). Use 1.10.1+, 1.12.1+ and 1.14.1+.
 </Aside>
 
 ## Install, minimal example
@@ -117,7 +127,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 ```python
 from crewai import Agent, Task, Crew, Process, LLM
 
-llm = LLM(model="openai/gpt-4o-mini")
+llm = LLM(model="openai/%%model=openai-small%%")
 
 analyst = Agent(
     role="Research Analyst",
@@ -137,7 +147,7 @@ result = crew.kickoff()
 print(result)
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./crewai_comprehensive_guide/#core-fundamentals)**
+Ready? **[Start Zero → Hero Step 1 →](/crewai-guide/crewai_comprehensive_guide/#core-fundamentals)**
 
 ---
 
@@ -145,12 +155,14 @@ Ready? **[Start Zero → Hero Step 1 →](./crewai_comprehensive_guide/#core-fun
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-10-21 | 1.15.28 | Rewrote the Flows, Production, Recipes, Diagrams, Multi-agent and Comprehensive pages against 1.15.28 (structured flow state, routers that pass 1.15's definition checks, `and_`/`or_`, `@persist`, `@human_feedback`, conversational and declarative flows; event listeners, OpenTelemetry, hooks, checkpoints, offline tests with a stub LLM, `crewai deploy validate`). Fixed reference-page errors (embedder `model_name`, `aadd` on custom knowledge sources, MCP filter signature, guardrail return values, default task context, `CrewOutput.to_dict`, Qdrant Edge extra). Links made root-absolute. | Claude |
+| 2026-10-21 | 1.15.28 | Re-verified the whole guide against 1.15.28 in a clean venv (imports, constructor keywords, CLI `--help`). Current-version mentions now come from the shared versions file. Documented JSON-first scaffolds, `crewai eval`, `crewai_cli` split, new Agent fields and defaults, Memory default embedder change; fixed `memory_tools_for` → `create_memory_tools`, `A2AClientConfig(endpoint=...)`, `crewai_tools` imports; removed the fabricated `crewai.amp` examples. | Claude |
 | 2026-05-29 | 1.14.6 | Version bumped 1.14.5 → 1.14.6; "What's new" heading updated to v1.14.6; v1.14.6 bullet added; comprehensive guide header updated; revision history entry added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-19 | 1.14.5 | Version bumped 1.14.4 → 1.14.5; "What's new" section updated; comprehensive guide header updated; revision history entries added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.5` (`.routine-envs/check-0519-crewai`); no `DeprecationWarning` emissions. | Claude routine |
 | 2026-05-01 | 1.14.4 | Version bumped 1.14.3 → 1.14.4; "What's new" section updated; revision history entry added. `Agent`, `Task`, `Crew` imports verified against installed 1.14.4 (`.routine-envs/check-crewai-0501`). | Claude routine |
 | 2026-04-25 | 1.14.3 | Pre-release 1.14.3a2 confirmed stable as v1.14.3; version card updated from pre-release to stable; revision history entry added. Symbols verified against installed `crewai 1.14.3` (`.routine-envs/crewai-py-0425`). | Claude routine |
 | 2026-04-22 | 1.14.3a2 | Added 7 source-verified reference pages: Agent API, Task API, Memory, Knowledge, Tools, LLM providers, CLI. Corrected checkpoint import path (`crewai.state.provider.sqlite_provider`), field name (`checkpoint=`, not `checkpoint_config=`), and resume API (`from_checkpoint=CheckpointConfig(restore_from=...)`). Added errata banner to the AMP Suite section (imports fabricated; use CLI). | Claude (Opus 4.7) |
 | 2026-04-21 | 1.14.2 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
-| April 17, 2026 | 1.14.2 | Checkpoint forking; `from_checkpoint`; checkpoint CLI; template CLI; reasoning_tokens. | — |
-| April 7, 2026 | 1.14.0 | Checkpoint system; Pydantic structured outputs; SSRF protections; RBAC; MCP custom servers. | — |
-| November 2025 | 1.5.0 | CrewAI Flows; MCP integration; memory systems; hierarchical processes. | — |
+| 2026-04-17 | 1.14.2 | Checkpoint forking; `from_checkpoint`; checkpoint CLI; template CLI; reasoning_tokens. | — |
+| 2026-04-07 | 1.14.0 (yanked) | Checkpoint system; Pydantic structured outputs; SSRF protections; RBAC; MCP custom servers. Re-released as 1.14.1 on 2026-04-08. | — |
+| 2025-11 | 1.5.0 | CrewAI Flows; MCP integration; memory systems; hierarchical processes. | — |

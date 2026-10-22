@@ -1,8 +1,8 @@
 ---
 title: "Anthropic Claude Agent SDK (Python)"
-description: "Claude-native agent SDK — tools, Computer Use, MCP, extended thinking, session rewind."
-framework: anthropic-claude-sdk
-language: python
+description: "Claude Code as a Python library — built-in tools, MCP, subagents, hooks, permissions and resumable sessions."
+framework: "claude-agent-sdk"
+language: "python"
 sidebar:
   label: "Overview"
   order: 0
@@ -10,114 +10,88 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Claude-first agent SDK.** The production successor to the Code SDK — Computer Use, MCP, extended thinking, checkpointing, and session rewind, all tuned for Claude.
+**Claude Code as a library.** The Agent SDK gives Python code the same agent loop, built-in tools, permission system and sessions that power Claude Code, plus in-process custom tools via MCP.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
     ```bash
-    pip install claude-agent-sdk
+    pip install claude-agent-sdk==%%version=claude-agent-sdk%%
     ```
   </Card>
   <Card title="Version" icon="information">
-    **v0.2.93** · June 2026 · Python 3.10+
+    **Current release: `claude-agent-sdk` %%version=claude-agent-sdk%%** · Python 3.10+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
-    Claude-exclusive apps, Computer Use, MCP-heavy workflows, durable sessions.
+    Agents that read and change files, run commands and call tools on your own infrastructure.
   </Card>
 </CardGrid>
 
-<Aside type="tip" title="Migrating from the Code SDK?">
-  The SDK was renamed from Code SDK to Agent SDK. See the [migration guide](./anthropic_claude_agent_sdk_migration_guide/).
+<Aside type="tip" title="Coming from the Claude Code SDK?">
+  `claude-code-sdk` was renamed to `claude-agent-sdk` in 0.1.0. See the [migration guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_migration_guide/).
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Introduction" href="./anthropic_claude_agent_sdk_comprehensive_guide/#introduction" description="What's the SDK, when to use it · 10 min" />
-  <LinkCard title="2 · Installation & auth" href="./anthropic_claude_agent_sdk_comprehensive_guide/#installation--authentication" description="API key, client setup · 10 min" />
-  <LinkCard title="3 · Core architecture" href="./anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" description="Agent, tools, sessions · 20 min" />
-  <LinkCard title="4 · Your first agent" href="./anthropic_claude_agent_sdk_comprehensive_guide/#simple-agents" description="Chat, streaming, async · 25 min" />
-  <LinkCard title="5 · Tools & integration" href="./anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" description="Custom tools, tool use loop · 25 min" />
-  <LinkCard title="6 · Multi-agent systems" href="./anthropic_claude_agent_sdk_comprehensive_guide/#multi-agent-systems" description="Sub-agents, delegation · 20 min" />
-  <LinkCard title="7 · Computer Use API" href="./anthropic_claude_agent_sdk_comprehensive_guide/#computer-use-api" description="Screenshots, mouse/keyboard, VNC · 30 min" />
-  <LinkCard title="8 · MCP" href="./anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" description="Filesystem, git, HTTP servers · 20 min" />
-  <LinkCard title="9 · Structured output" href="./anthropic_claude_agent_sdk_comprehensive_guide/#structured-output" description="JSON schema, validated responses · 15 min" />
-  <LinkCard title="10 · Sessions & memory" href="./anthropic_claude_agent_sdk_comprehensive_guide/#session-management" description="Persistence, replay, forking · 20 min" />
-  <LinkCard title="11 · Extended thinking" href="./anthropic_claude_agent_sdk_comprehensive_guide/#extended-thinking-configuration-v0160" description="Reasoning budgets (v0.1.60+) · 10 min" />
-  <LinkCard title="12 · File checkpointing" href="./anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-session-rewind-v0160" description="Session rewind (v0.1.60+) · 15 min" />
-  <LinkCard title="13 · Production" href="./anthropic_claude_agent_sdk_production_guide/" description="Deployment, monitoring · 30 min" />
-</CardGrid>
-
-## Jump to a topic
-
-<CardGrid>
-  <LinkCard title="Core architecture" href="./anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" />
-  <LinkCard title="Tools & integration" href="./anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" />
-  <LinkCard title="Computer Use" href="./anthropic_claude_agent_sdk_comprehensive_guide/#computer-use-api" />
-  <LinkCard title="MCP" href="./anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" />
-  <LinkCard title="Session management" href="./anthropic_claude_agent_sdk_comprehensive_guide/#session-management" />
-  <LinkCard title="Context engineering" href="./anthropic_claude_agent_sdk_comprehensive_guide/#context-engineering" />
-  <LinkCard title="Permissions" href="./anthropic_claude_agent_sdk_comprehensive_guide/#advanced-permissions" />
-  <LinkCard title="Agentic patterns" href="./anthropic_claude_agent_sdk_comprehensive_guide/#agentic-patterns" />
-  <LinkCard title="Extended thinking" href="./anthropic_claude_agent_sdk_comprehensive_guide/#extended-thinking-configuration-v0160" />
-  <LinkCard title="File checkpointing" href="./anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-session-rewind-v0160" />
-  <LinkCard title="Code SDK migration" href="./anthropic_claude_agent_sdk_migration_guide/" />
+  <LinkCard title="1 · Introduction" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#introduction" description="What the SDK is and when to use it · 10 min" />
+  <LinkCard title="2 · Installation & authentication" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#installation--authentication" description="API key, Bedrock, Vertex · 10 min" />
+  <LinkCard title="3 · Core concepts" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#core-architecture--concepts" description="Options, messages, models · 15 min" />
+  <LinkCard title="4 · Your first agent" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#simple-agents" description="query(), ClaudeSDKClient, streaming · 20 min" />
+  <LinkCard title="5 · Tools" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" description="Built-in tools and @tool custom tools · 20 min" />
+  <LinkCard title="6 · Permissions" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#permissions" description="Modes, can_use_tool, sandboxing · 20 min" />
+  <LinkCard title="7 · Hooks" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#hooks" description="PreToolUse, PostToolUse and friends · 15 min" />
+  <LinkCard title="8 · User input and approvals" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#user-input-and-approvals" description="AskUserQuestion, always-allow rules · 10 min" />
+  <LinkCard title="9 · Multi-agent systems" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
+  <LinkCard title="10 · MCP" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" description="stdio, HTTP, SSE and in-process servers · 15 min" />
+  <LinkCard title="11 · Structured output" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#structured-output" description="JSON schema results · 10 min" />
+  <LinkCard title="12 · Sessions" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#session-management" description="Resume, fork, a SQLite session store · 20 min" />
+  <LinkCard title="13 · Thinking and effort" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#thinking-and-effort" description="Adaptive thinking and effort levels · 10 min" />
+  <LinkCard title="14 · File checkpointing" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#file-checkpointing-and-rewind" description="Rewind file changes · 10 min" />
+  <LinkCard title="15 · Production" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_production_guide/" description="Resilience, cost, observability, security · 30 min" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="./anthropic_claude_agent_sdk_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Migration guide" href="./anthropic_claude_agent_sdk_migration_guide/" description="Code SDK → Agent SDK." />
-  <LinkCard title="Recipes" href="./anthropic_claude_agent_sdk_recipes/" />
-  <LinkCard title="Diagrams" href="./anthropic_claude_agent_sdk_diagrams/" />
-  <LinkCard title="Production guide" href="./anthropic_claude_agent_sdk_production_guide/" />
+  <LinkCard title="Comprehensive guide" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Recipes" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_recipes/" description="Fifteen copy-and-adapt examples, including testing with a stub CLI and an SSE server." />
+  <LinkCard title="Production guide" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_production_guide/" description="Running agents as a service." />
+  <LinkCard title="Migration guide" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_migration_guide/" description="Code SDK → Agent SDK, and 0.1 → 0.2." />
+  <LinkCard title="Diagrams" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_diagrams/" description="Architecture and flow diagrams." />
 </CardGrid>
 
-## What's new in v0.2.93 (June 2026)
+## Notable changes in the 0.2 series
 
-- **v0.2.93 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.93` (`.routine-envs/refresh-py`, 2026-06-07); no `DeprecationWarning` emissions. 140 public symbols confirmed.
-- **v0.2.92 (June 2026)** — Patch release; stability and dependency updates.
-- **v0.2.91 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.91` (`.routine-envs/check-0605-claude-py`, 2026-06-05); no `DeprecationWarning` emissions. 140 public symbols confirmed.
-- **v0.2.90 (June 2026)** — Patch release; stability and dependency updates.
-- **v0.2.89 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.89` (`/tmp/claude-sdk-check`, 2026-06-04); no `DeprecationWarning` emissions. 140 public symbols confirmed.
-- **v0.2.88 (June 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed.
-- **v0.2.87 (May 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed.
-- **v0.2.86 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.2.85 (May 2026)** — Patch release; stability and dependency updates. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.85` (`.routine-envs/check-0522-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed.
-- **v0.2.84 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.2.83 (May 2026)** — Patch release; stability and dependency updates.
-- **v0.2.82 (May 2026)** — Major minor-version bump (0.1 → 0.2). Significantly expanded API surface including `SandboxSettings`, `SandboxNetworkConfig`, `SandboxIgnoreViolations` for sandbox configuration; `TaskBudget`, `TaskNotificationMessage`, `TaskNotificationStatus`, `TaskProgressMessage`, `TaskStartedMessage`, `TaskUsage` for task lifecycle tracking; `EffortLevel` for configurable effort modes; `DeferredToolUse` for deferred tool execution patterns; `SdkBeta`, `SdkMcpTool`, `SdkPluginConfig` for plugin and MCP configuration; store-backed variants of all session management functions (`delete_session_via_store`, `fork_session_via_store`, etc.); `project_key_for_directory` utility. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent`, `InMemorySessionStore`) verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions.
-- **v0.1.81 (May 12)** — Final 0.1.x release; stability and dependency updates.
-- **v0.1.73 (May 5)** — Patch release; stability improvements.
-- **v0.1.72 (May 1)** — Patch release; stability improvements.
-- **v0.1.71 (April 29)** — Patch release; stability improvements.
-- **v0.1.70 (April 29)** — Patch release; stability improvements.
-- **v0.1.69 (April 28)** — Patch release; stability improvements.
-- **v0.1.68 (April 25)** — Patch release; stability improvements.
-- **v0.1.67 (April 24)** — Patch release; stability improvements.
-- **v0.1.66 (April 23)** — Patch release; stability improvements.
-- **v0.1.65 (April 22)** — Patch release; bundled Claude Code CLI updated; dependency pinning improvements.
-- **v0.1.64 (April 20)** — Stability and dependency updates.
-- **v0.1.63** — `get_context_usage()` per-category token breakdown; `typing.Annotated` per-parameter descriptions; `tool_use_id`/`agent_id` in `ToolPermissionContext`.
+Most releases only update the bundled Claude Code CLI. The ones that change the API:
 
-## Install, minimal example
+- **0.2.170** — `get_session_messages()` returns every branch of parallel tool calls.
+- **0.2.166** — typed hook outputs and `SystemInitData`; `SandboxSettings.ignoreViolations` is now a `dict[str, list[str]]`.
+- **0.2.158** — `verbatim_prompts` option: prompts are delivered literally, with no `@file` expansion or slash commands.
+- **0.2.140** — `ResultError` with structured failure details; `can_use_tool` works with `query()`; `forward_subagent_text`; `mcp` 2.x support.
+- **0.2.137** — `ConversationResetMessage`; message `origin`; `resume_session_at` / `resume_drops_turn`.
+- **0.2.129** — skill names are validated (breaking for `skills=["*"]`; use `skills="all"`).
+- **0.2.126** — `ResultMessage.terminal_reason`; typed `model_usage`.
 
-The SDK offers two entry points — `query()` for one-shot calls and `ClaudeSDKClient` for bidirectional sessions. **There is no `Agent` class; an earlier draft of this page documented one that doesn't exist.**
+See the [migration guide](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_migration_guide/#part-2--upgrading-within-claude-agent-sdk) for what to change, and the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-python/blob/main/CHANGELOG.md) for everything else.
+
+## Minimal examples
+
+The SDK has two entry points: `query()` for one-shot tasks and `ClaudeSDKClient` for conversations. There is no `Agent` class.
 
 ### One-shot
 
 ```python
 import asyncio
-from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk import query, ClaudeAgentOptions, ResultMessage
 
 async def main():
     options = ClaudeAgentOptions(
-        model="claude-3-5-sonnet-latest",
+        model="%%model=anthropic-flagship%%",
         system_prompt="You are a helpful assistant.",
     )
     async for message in query(prompt="What is 15 + 27?", options=options):
-        print(message)
+        if isinstance(message, ResultMessage):
+            print(message.result)
 
 asyncio.run(main())
 ```
@@ -126,45 +100,33 @@ asyncio.run(main())
 
 ```python
 import asyncio
-from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions, AssistantMessage, TextBlock
 
 async def main():
     options = ClaudeAgentOptions(system_prompt="You are a helpful assistant.")
     async with ClaudeSDKClient(options=options) as client:
         await client.query("What is 15 + 27?")
         async for message in client.receive_response():
-            print(message)
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if isinstance(block, TextBlock):
+                        print(block.text)
 
 asyncio.run(main())
 ```
 
-Ready? **[Start Zero → Hero Step 1 →](./anthropic_claude_agent_sdk_comprehensive_guide/#introduction)**
+Ready? **[Start Zero → Hero step 1 →](/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#introduction)**
 
 ---
 
 ## Revision history
 
-| Date | Framework version (installed) | Summary of changes | Reviewer |
-|------|-------------------------------|--------------------|----------|
-| 2026-06-07 | claude-agent-sdk 0.2.93 | Patch releases 0.2.92–0.2.93; version card updated to v0.2.93; "What's new" heading updated; two patch bullets added; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.93` (`.routine-envs/refresh-py`, 2026-06-07); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 2026-06-05 | claude-agent-sdk 0.2.91 | Patch releases 0.2.90–0.2.91; "What's new" heading updated to v0.2.91; two patch bullets added; comprehensive guide header updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.91` (`.routine-envs/check-0605-claude-py`, 2026-06-05); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 2026-06-04 | claude-agent-sdk 0.2.89 | Patch release 0.2.89; "What's new" heading updated to v0.2.89; v0.2.89 bullet added; comprehensive guide header updated; revision history entry added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.89` (`/tmp/claude-sdk-check`, 2026-06-04); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 2026-06-03 | claude-agent-sdk 0.2.88 | Patch release 0.2.88; version card updated June 2026; "What's new" heading updated to v0.2.88; v0.2.88 bullet added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.88` (`.routine-envs/py-0603`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 2026-05-23 | claude-agent-sdk 0.2.87 | Patch releases 0.2.86–0.2.87; "What's new" heading updated to v0.2.87; two patch bullets added. All core symbols verified against installed `claude-agent-sdk==0.2.87` (`.routine-envs/check-0523-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 2026-05-22 | claude-agent-sdk 0.2.85 | Patch releases 0.2.83–0.2.85; "What's new" heading updated to v0.2.85; three patch bullets added. All core symbols (`query`, `tool`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `SandboxSettings`, `TaskBudget`, `EffortLevel`, `DeferredToolUse`) verified against installed `claude-agent-sdk==0.2.85` (`.routine-envs/check-0522-claude-py`); no `DeprecationWarning` emissions. 140 public symbols confirmed. | Claude routine |
-| 2026-05-19 | claude-agent-sdk 0.2.82 | Major version bump 0.1.81 → 0.2.82; "What's new" updated with expanded API surface; comprehensive guide updated; revision history entry added. All core symbols verified against installed `claude-agent-sdk==0.2.82` (`.routine-envs/check-0519-py`); no `DeprecationWarning` emissions. | Claude routine |
-| 2026-05-12 | claude-agent-sdk 0.1.81 | Version bumped 0.1.80 → 0.1.81; "What's new" updated; revision history entry added. `query`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock`, `AssistantMessage`, `UserMessage`, `ResultMessage`, `StreamEvent`, `RateLimitEvent` verified against installed 0.1.81 (`.routine-envs/check-0512-py`); no DeprecationWarnings. | Claude routine |
-| 2026-05-09 | claude-agent-sdk 0.1.80 | Version bumped 0.1.73 → 0.1.80 (seven patch releases: 0.1.74–0.1.80); "What's new" updated; revision history entry added. All symbols verified against installed 0.1.80 (`.routine-envs/check-0509-py`); no DeprecationWarnings. | Claude routine |
-| 2026-05-05 | claude-agent-sdk 0.1.73 | Version bumped 0.1.72 → 0.1.73; "What's new" updated; revision history entry added. `query`, `ClaudeSDKClient`, `ClaudeAgentOptions`, `PermissionMode`, `McpServerConfig`, `TextBlock` verified against installed 0.1.73 (`.routine-envs/check-0505`). | Claude routine |
-| 2026-05-01 | claude-agent-sdk 0.1.72 | Version bumped 0.1.71 → 0.1.72; "What's new" updated; revision history entry added. Symbols verified against installed 0.1.72 (`.routine-envs/check-claude-0501`). | Claude routine |
-| 2026-04-29 | claude-agent-sdk 0.1.71 | Version bumped 0.1.69 → 0.1.71 (two patch releases: 0.1.70, 0.1.71); "What's new" updated; revision history entry added. Symbols verified against installed 0.1.71 (`.routine-envs/main-py-0429`). | Claude routine |
-| 2026-04-28 | claude-agent-sdk 0.1.69 | Version bumped 0.1.68 → 0.1.69 (patch release); "What's new" updated; revision history entry added. Symbols verified against installed 0.1.69 (`.routine-envs/main-py-0428`). | Claude routine |
-| 2026-04-25 | claude-agent-sdk 0.1.68 | Version bumped 0.1.66 → 0.1.68 (two patch releases); "What's new" updated with 0.1.67 and 0.1.68 entries; revision history entry added. Symbols verified against installed 0.1.68 (`.routine-envs/main-py-0425`). | Claude routine |
-| 2026-04-24 | claude-agent-sdk 0.1.66 | Version bumped 0.1.65 → 0.1.66; revision history entry added for 0.1.66 patch release. | Claude routine |
-| 2026-04-22 | claude-agent-sdk 0.1.65 | Version bumped 0.1.63 → 0.1.65; "What's new" section updated; revision history entries added for 0.1.64 and 0.1.65. | Claude routine |
-| 2026-04-21 | claude-agent-sdk 0.1.63 | Index redesigned with Zero → Hero + Jump-to-topic grid. | — |
-| 2026-04-18 | claude-agent-sdk 0.1.63 | Stability fixes. | — |
-| 2026-04-16 | claude-agent-sdk 0.1.60 | Extended thinking; file checkpointing; session rewind. | — |
-| 2025 | — | Renamed from Claude Code SDK to Claude Agent SDK. | — |
+| Date | Version | Summary |
+|------|---------|---------|
+| 2026-10-21 | %%version=claude-agent-sdk%% | Failure handling corrected: the SDK yields the error `ResultMessage` before raising `ResultError`, so the retry helpers now keep reading and decide from `subtype` / `api_error_status` (tested against a stub CLI). Corrected the `setting_sources` default (all sources), hooks vs pre-approved tools, `load_timeout_ms`, `usage` vs `model_usage`; replaced `TodoWrite` with the Task tools. Added user input and approvals, image prompts, a SQLite `SessionStore` with its conformance test, a stub-CLI testing recipe and a FastAPI SSE recipe; rewrote the diagrams page. |
+| 2026-10-21 | 0.2.170 | Guide rewritten as Python-only and re-verified against the installed package: removed TypeScript duplicates and invented options (`api_provider`, `checkpoint_dir`, `enable_subagents`, `temperature`, `permission_prompt_tool_callback`), fixed `query()` keyword-only usage and `isinstance`-based message handling, added permissions, hooks, structured output, session stores and file checkpointing, updated models to the Claude 5 family. |
+| 2026-05-19 | 0.2.82 | 0.1.x → 0.2.x series. |
+| 2026-04-16 | 0.1.60 | Thinking configuration and file checkpointing documented. |
+| 2025 | 0.1.0 | Renamed from Claude Code SDK to Claude Agent SDK. |
 
-**Note:** TypeScript implementation lives at [Claude Agent SDK (TypeScript)](/anthropic-claude-agent-sdk-typescript-guide/).
+**Note:** the TypeScript package has its own guide: [Claude Agent SDK (TypeScript)](/anthropic-claude-agent-sdk-typescript-guide/).

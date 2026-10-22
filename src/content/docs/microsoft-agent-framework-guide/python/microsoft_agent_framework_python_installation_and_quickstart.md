@@ -1,13 +1,13 @@
 ---
-title: "agent-framework (Python) — Installation & Quickstart"
-description: "Get started with agent-framework 1.15.0: installation, authentication, your first agent, tools, sessions, and async patterns."
-framework: microsoft-agent-framework
-language: python
+title: "Microsoft Agent Framework (Python) — Installation and Quick Start"
+description: "Get started with agent-framework: installation, authentication, your first agent, tools, sessions, and async patterns."
+framework: "microsoft-agent-framework"
+language: "python"
+sidebar:
+  label: "Installation & quick start"
 ---
 
-# agent-framework (Python) — Installation & Quickstart
-
-This guide covers everything you need to get your first agent running in Python using `agent-framework` (version 1.15.0).
+This guide covers everything you need to get your first agent running in Python using `agent-framework` (version %%version=agent-framework%%, checked %%versions-checked%%).
 
 ---
 
@@ -16,7 +16,7 @@ This guide covers everything you need to get your first agent running in Python 
 | Property | Value |
 |---|---|
 | Package name | `agent-framework` |
-| Current version | `1.15.0` |
+| Current version | `%%version=agent-framework%%` |
 | Import root | `agent_framework` |
 | Python requirement | 3.10 or later |
 
@@ -27,10 +27,10 @@ pip install agent-framework
 Provider-specific sub-packages (install whichever chat backend you need):
 
 ```bash
-pip install agent-framework-azure-ai       # Azure AI Foundry (FoundryChatClient)
+pip install agent-framework-foundry        # Microsoft Foundry (FoundryChatClient)
 pip install agent-framework-openai         # OpenAI / Azure OpenAI (OpenAIChatClient)
 pip install agent-framework-a2a --pre      # A2A protocol (pre-release)
-pip install agent-framework-declarative --pre  # Declarative YAML agents (pre-release)
+pip install agent-framework-declarative    # Declarative YAML agents
 ```
 
 ---
@@ -79,12 +79,14 @@ import asyncio
 import os
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from azure.identity import AzureCliCredential
 
 
 async def main() -> None:
     client = FoundryChatClient(
-        endpoint=os.environ["AZURE_AI_FOUNDRY_ENDPOINT"],
-        deployment=os.environ.get("MODEL_DEPLOYMENT_NAME", "gpt-4o"),
+        project_endpoint=os.environ["FOUNDRY_PROJECT_ENDPOINT"],
+        model=os.environ.get("FOUNDRY_MODEL", "%%model=openai%%"),
+        credential=AzureCliCredential(),
     )
     agent = Agent(
         client=client,
@@ -194,7 +196,7 @@ Run `pip install agent-framework` in your active environment. For provider-speci
 
 ### `ModuleNotFoundError: No module named 'agent_framework.foundry'`
 
-Install the Azure AI Foundry provider: `pip install agent-framework-azure-ai`.
+Install the Microsoft Foundry provider: `pip install agent-framework-foundry`. (The older `agent-framework-azure-ai` package stopped at 1.0.0rc6 and does not provide `agent_framework.foundry`.)
 
 ### `AttributeError: 'Agent' object has no attribute 'run'`
 
@@ -204,9 +206,9 @@ You may have an old version of the package. Upgrade with `pip install --upgrade 
 
 ## Next Steps
 
-- [Core fundamentals](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#core-fundamentals) — full architecture and installation reference
+- [Comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — configuration, agents, streaming, sessions, workflows and more on one page
 - [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) — all chat client constructors with real signatures
 - [Tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/) — `@tool`, `FunctionTool`, approval gates, schemas, runtime context
 - [MCP integration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) — `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`
 - [Multi-agent orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/) — `WorkflowBuilder`, sequential, concurrent, handoff, group chat
-- [Class & API Reference](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#class--api-reference) — source-verified reference covering `Agent`, `RawAgent`, `FunctionTool`, `WorkflowBuilder`, `RunContext`, `InlineSkill`, `MCPStdioTool`, and every other class across workflows, agents, memory, tools, security, skills, and more
+- [API map](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#api-map) — which page documents each class

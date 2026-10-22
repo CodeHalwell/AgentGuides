@@ -26,6 +26,8 @@ Frameworks covered: OpenAI Agents SDK, CrewAI, AutoGen / AG2, LangGraph, LlamaIn
 - **[React](https://react.dev/)** 19 — interactive islands (framework filter, use-case picker)
 - **[Pagefind](https://pagefind.app/)** — client-side search (bundled by Starlight)
 
+The look follows the "Atoms to agents" brand guidelines and UI mockups: flat paper or ink ground, hairline rules, a single oxide accent, Newsreader / Hanken Grotesk / JetBrains Mono (self-hosted via `@fontsource`). Light and dark tokens live at the top of `src/styles/global.css`; code panels use `src/styles/code-theme.json`; the header mark and article header are `src/components/SiteTitle.astro` and `src/components/PageTitle.astro`.
+
 ## Local development
 
 ```bash
@@ -49,6 +51,25 @@ framework: "openai-agents-sdk"   # optional
 language: "python"               # optional: python | typescript | dotnet | go
 ---
 ```
+
+## Keeping versions right
+
+The current version of every framework is written in exactly one place: `src/data/versions.json`. Nothing else should hard-code it.
+
+- **Model IDs** work the same way: `%%model=openai%%`, `%%model=anthropic-small%%` and so on, from `models` in `versions.json`.
+- **Docs** write `%%version=<package>%%` (e.g. `pip install agent-framework==%%version=agent-framework%%`) and `%%versions-checked%%` for the date. `src/plugins/remark-versions.mjs` fills these in at build time, in prose, inline code, code blocks and links. An unknown package name fails the build. Placeholders don't work in frontmatter, and shouldn't go in headings (the anchor would change on every bump).
+- **Framework cards** on the home page read `versions.json` directly via `src/data/frameworks.ts`.
+- Literal numbers are only for history: "added in 1.17.0", changelog entries, migration notes.
+
+When a framework releases:
+
+```bash
+npm run check:latest                              # which packages are behind PyPI / npm / NuGet / Go?
+node scripts/check-versions.mjs --latest --write  # bump versions.json; every page follows on the next build
+npm run check:versions                            # fails on hard-coded pins or unknown placeholders
+```
+
+Then read the changelog and fix any examples a breaking change affects. The `Check guide versions` workflow runs `check:versions` on pull requests and `check:latest` weekly.
 
 ## Deploy
 

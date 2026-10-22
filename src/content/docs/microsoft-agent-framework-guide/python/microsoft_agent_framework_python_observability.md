@@ -1,15 +1,13 @@
 ---
 title: "Microsoft Agent Framework (Python) — Observability & Telemetry"
-description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework 1.11.0. Instrumentation is on by default — wire up an exporter (Azure Monitor, OTLP, console, or VS Code AI Toolkit) to receive signals."
-framework: microsoft-agent-framework
-language: python
+description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework. Instrumentation is on by default — wire up an exporter (Azure Monitor, OTLP, console, or VS Code AI Toolkit) to receive signals."
+framework: "microsoft-agent-framework"
+language: "python"
 ---
-
-# Observability & Telemetry — Python
 
 `agent-framework` emits OpenTelemetry signals following the **GenAI semantic conventions**. Every agent run, model call, tool invocation, workflow executor, and edge group is a span; every chat completion emits a duration histogram and a token-usage histogram. Signal *emission* is **on by default** — what you need to add is an OTel *exporter* so those signals are actually received somewhere. Pick one of the three options in the next section; without an exporter signals are emitted but immediately discarded.
 
-Verified against `agent-framework==1.11.0` (`agent_framework.observability`).
+Verified against `agent-framework` %%version=agent-framework%% (`agent_framework.observability`, re-checked %%versions-checked%%; first written for 1.11.0).
 
 ## Three ways to wire up an exporter
 
@@ -203,6 +201,23 @@ client = MyModelClient(otel_provider_name="my_model_prod")
 
 `EmbeddingTelemetryLayer` follows the same pattern for embedding clients — wrap `RawMyEmbeddingClient` to get `embeddings` spans with token-usage histograms.
 
+## Token usage in code — `UsageDetails`
+
+The token metrics above are also on every response object. `AgentResponse.usage_details` and `ChatResponse.usage_details` are a `UsageDetails` TypedDict with the keys `input_token_count`, `output_token_count`, `total_token_count`, `cache_creation_input_token_count`, `cache_read_input_token_count` and `reasoning_output_token_count`. All are optional, and providers may add their own `int` keys. Sum them with `add_usage_details`, which accepts `None` and skips non-int values:
+
+```python
+from agent_framework import UsageDetails, add_usage_details
+
+total: UsageDetails = {}
+for prompt in ["What is the speed of light?", "Explain entanglement briefly."]:
+    response = await agent.run(prompt)
+    total = add_usage_details(total, response.usage_details)
+
+print(total.get("input_token_count"), total.get("output_token_count"), total.get("cache_read_input_token_count"))
+```
+
+For a per-tenant budget, do the same in an `AgentMiddleware` after `await call_next()` (read `context.result.usage_details`) and raise `MiddlewareTermination` once the budget is spent.
+
 ## Custom spans around business logic
 
 You can still wrap your own code in spans; they slot neatly into the framework's tree.
@@ -277,7 +292,8 @@ class TokenSpendProcessor(SpanProcessor):
     def force_flush(self, timeout_millis: int = 30_000) -> bool: return True
 
 
-# Register alongside the framework's exporters.
+# Register alongside the framework's exporters. configure_otel_providers() (or your own
+# TracerProvider setup) must run first: the default proxy provider has no add_span_processor.
 from opentelemetry import trace
 trace.get_tracer_provider().add_span_processor(TokenSpendProcessor())
 ```
@@ -457,11 +473,11 @@ configure_otel_providers(views=views)
 Two ways to attach business attributes — pick the one that matches lifetime:
 
 1. **Per-`agent.run(...)` call** — pass `additional_properties={"gen_ai.conversation.id": req_id}` so the conversation correlator uses your upstream request ID.
-2. **Per-process resource attributes** — set `OTEL_RESOURCE_ATTRIBUTES=team=payments,env=prod,deployment.version=1.4.2` before launching your service. The framework attaches them to every span/metric/log automatically.
+2. **Per-process resource attributes** — set `OTEL_RESOURCE_ATTRIBUTES=team=payments,env=prod,deployment.version=build-4821` before launching your service. The framework attaches them to every span/metric/log automatically.
 
 ```python
 import os
-os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "team=payments,env=prod,deployment.version=1.4.2"
+os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "team=payments,env=prod,deployment.version=build-4821"
 os.environ["OTEL_SERVICE_NAME"] = "checkout-agent"
 
 from agent_framework.observability import configure_otel_providers

@@ -1,16 +1,14 @@
 ---
 title: "Runtime, ToolRuntime & Managed Values — API reference"
 description: "Runtime context injection, ToolRuntime for tools, ExecutionInfo, IsLastStep, RemainingSteps — how to access execution metadata and inject immutable context into nodes and tools."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "Ref · Runtime & Managed Values"
   order: 39
 ---
 
-# Runtime, ToolRuntime & Managed Values
-
-Verified against **`langgraph==1.2.14`** (modules: `langgraph.runtime`, `langgraph.prebuilt.tool_node`, `langgraph.managed.is_last_step`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.prebuilt.tool_node`, `langgraph.managed.is_last_step`).
 
 This page covers the three mechanisms LangGraph provides for injecting execution context into node and tool functions without threading values through graph state:
 
@@ -183,7 +181,7 @@ def resilient_node(state: State, runtime: Runtime) -> dict:
 
 ---
 
-## `get_runtime()` — context-manager alternative
+## `get_runtime()` — function alternative
 
 `get_runtime()` retrieves the current `Runtime` from a context variable set by the executor. It is an alternative to parameter injection for cases where you cannot add parameters to the function signature (e.g. when wrapping third-party code).
 
@@ -212,11 +210,11 @@ def my_node(state: State) -> dict:
 
 ## `ToolRuntime[ContextT, StateT]` — tool-level injection
 
-`ToolRuntime` is a separate dataclass for **tool functions** invoked by `ToolNode`. It is distinct from `Runtime` — it provides the tool with access to the current graph state, the triggering tool-call ID, the store, typed context, and (on LangSmith Platform) execution metadata.
+`ToolRuntime` is a separate dataclass for **tool functions** invoked by `ToolNode`. It is distinct from `Runtime` — it provides the tool with access to the current graph state, the triggering tool-call ID, the store, typed context, execution metadata and (in the Agent Server) server metadata.
 
 ### Class definition
 
-Verified against the installed `langgraph-prebuilt==1.1.0` source (`langgraph.prebuilt.tool_node`):
+Verified against the installed `langgraph-prebuilt==%%version=langgraph-prebuilt%%` source (`langgraph.prebuilt.tool_node`):
 
 ```python
 @dataclass
@@ -229,7 +227,7 @@ class ToolRuntime(Generic[ContextT, StateT]):
     store: BaseStore | None                    # graph's persistent store
     tools: list[BaseTool]                      # all tools registered with ToolNode
     execution_info: ExecutionInfo | None = None  # execution metadata (always set)
-    server_info: ServerInfo | None = None        # LangSmith Platform metadata (None in OSS)
+    server_info: ServerInfo | None = None        # Agent Server metadata (None outside the server)
 ```
 
 ### Field reference
@@ -244,7 +242,7 @@ class ToolRuntime(Generic[ContextT, StateT]):
 | `store` | `BaseStore \| None` | The graph's persistent store (`None` if not compiled with one). |
 | `tools` | `list[BaseTool]` | All tools registered with the `ToolNode`. Lets one tool look up or delegate to another. |
 | `execution_info` | `ExecutionInfo \| None` | Execution metadata (checkpoint ID, task ID, attempt number, thread ID). |
-| `server_info` | `ServerInfo \| None` | LangSmith Platform metadata (assistant/graph IDs, authenticated user). `None` in OSS LangGraph. |
+| `server_info` | `ServerInfo \| None` | Agent Server metadata (assistant/graph IDs, authenticated user). `None` outside the server. |
 
 ### Usage example
 
@@ -293,9 +291,9 @@ tool_node = ToolNode([fetch_user_data])
 
 ---
 
-## `ServerInfo` — LangGraph Cloud metadata (source-verified, 1.2.14)
+## `ServerInfo` — Agent Server metadata
 
-`ServerInfo` is a frozen dataclass injected into `Runtime.server_info` and `ToolRuntime.server_info` when the graph runs inside a **LangGraph Cloud** (LangSmith Platform) deployment. It is always `None` when running open-source LangGraph locally.
+`ServerInfo` is a frozen dataclass injected into `Runtime.server_info` and `ToolRuntime.server_info` when the graph runs inside the LangGraph Agent Server (LangSmith Deployment, a standalone server, or `langgraph dev`). It is `None` when you call the graph directly in your own process.
 
 ```python
 # langgraph.runtime
@@ -321,13 +319,13 @@ class ServerInfo:
 
 | Field | Type | Available | Description |
 |---|---|---|---|
-| `assistant_id` | `str` | Cloud only | LangGraph Cloud assistant identifier |
-| `graph_id` | `str` | Cloud only | LangGraph Cloud graph identifier |
-| `user` | `BaseUser \| None` | Cloud + auth | Authenticated user from LangGraph Cloud auth middleware; `None` if no auth is configured |
+| `assistant_id` | `str` | Agent Server only | Assistant identifier |
+| `graph_id` | `str` | Agent Server only | Graph ID from `langgraph.json` |
+| `user` | `BaseUser \| None` | Agent Server + auth | Authenticated user from the server's auth handler; `None` if no auth is configured |
 
-### Guard pattern — OSS vs Cloud
+### Guard pattern — in-process vs server
 
-`server_info` is `None` in OSS deployments. Always guard:
+`server_info` is `None` outside the Agent Server. Always guard:
 
 ```python
 from langgraph.runtime import Runtime
@@ -337,15 +335,15 @@ def my_node(state: dict, runtime: Runtime) -> dict:
     if runtime.server_info is not None:
         assistant_id = runtime.server_info.assistant_id
         graph_id = runtime.server_info.graph_id
-        print(f"Running on Cloud: assistant={assistant_id}, graph={graph_id}")
+        print(f"Running in Agent Server: assistant={assistant_id}, graph={graph_id}")
     else:
-        print("Running in OSS LangGraph")
+        print("Running in-process")
     return state
 ```
 
 ### Accessing the authenticated user
 
-When LangGraph Cloud is configured with an auth handler, `server_info.user` is populated:
+When the server has an auth handler (`auth.path` in `langgraph.json`), `server_info.user` is populated:
 
 ```python
 from langgraph.runtime import Runtime
@@ -367,12 +365,12 @@ def personalized_node(state: dict, runtime: Runtime) -> dict:
 
 ### Routing by graph identity (multi-graph deployments)
 
-In a Cloud deployment that hosts multiple graphs, `graph_id` lets a shared node adjust behaviour per-graph:
+In a deployment that hosts multiple graphs, `graph_id` lets a shared node adjust behaviour per-graph:
 
 ```python
 GRAPH_CONFIGS = {
-    "customer-support": {"max_steps": 10, "model": "gpt-4o"},
-    "internal-tools":   {"max_steps": 50, "model": "gpt-4o-mini"},
+    "customer-support": {"max_steps": 10, "model": "%%model=openai%%"},
+    "internal-tools":   {"max_steps": 50, "model": "%%model=openai-small%%"},
 }
 
 from langgraph.runtime import Runtime
@@ -380,7 +378,7 @@ from langgraph.runtime import Runtime
 
 def adaptive_node(state: dict, runtime: Runtime) -> dict:
     graph_id = runtime.server_info.graph_id if runtime.server_info else "default"
-    config = GRAPH_CONFIGS.get(graph_id, {"max_steps": 25, "model": "gpt-4o-mini"})
+    config = GRAPH_CONFIGS.get(graph_id, {"max_steps": 25, "model": "%%model=openai-small%%"})
     # use config["model"] and config["max_steps"] ...
     return state
 ```
@@ -462,7 +460,8 @@ builder.add_edge(START, "my_node")
 builder.add_conditional_edges("my_node", lambda s: END if s["is_last_step"] else "my_node")
 
 graph = builder.compile()
-graph.invoke({"messages": [HumanMessage("Start")]})
+# Set the limit explicitly: with the default (10007) this loop would run ~10,000 times.
+graph.invoke({"messages": [HumanMessage("Start")]}, {"recursion_limit": 5})
 ```
 
 ### `IsLastStep`
@@ -491,9 +490,9 @@ def agent(state: AgentState) -> dict:
 
 Step-count details:
 
-- Default recursion limit: **25** steps.
+- Default recursion limit: **10007** steps (set by `LANGGRAPH_DEFAULT_RECURSION_LIMIT`; older releases used 25). That default is too high to act as a loop guard, so set it per call.
 - Override per-call: `graph.invoke(input, {"recursion_limit": 50})`.
-- `IsLastStep` becomes `True` at step **24** (default) or step **49** (`recursion_limit=50`).
+- With `recursion_limit=50`, `IsLastStep` becomes `True` on the 50th step.
 
 ### `RemainingSteps`
 
@@ -757,23 +756,11 @@ class RemainingStepsManager(ManagedValue[int]):
   # or with a dataclass / Pydantic model:
   class State(BaseModel):
       is_last_step: IsLastStep = False
-      remaining: RemainingSteps = 25
+      remaining: RemainingSteps = 10
   ```
 
 - **`recursion_limit` is per-invoke, not per-graph.** Different calls to `graph.invoke` can use different limits. `IsLastStep` and `RemainingSteps` track whichever limit was active when the run started.
 
-- **Step counter resets on each `invoke`.** Checkpointers save channel values but not the step counter. A new `invoke` on an existing thread always starts the step counter at 0.
+- **The limit applies per `invoke`.** A new `invoke` on an existing thread gets the full `recursion_limit` again, even though the thread's step number keeps increasing.
 
 - **`get_runtime()` raises outside a task context.** Do not call it from module-level code, background threads, or any code path that runs outside the Pregel executor.
-
----
-
-## Version history
-
-| Version | Change |
-|---|---|
-| 1.2.1 | `ExecutionInfo.node_first_attempt_time` field added. |
-| 1.2 | `RemainingSteps` added alongside the existing `IsLastStep`. Both re-exported from `langgraph.managed`. |
-| 0.6.0 | `Runtime`, `ToolRuntime`, and `get_runtime()` introduced. |
-| 1.0 | `IsLastStep` moved to `langgraph.managed.is_last_step`; old import path re-exported. (`RemainingSteps` did not yet exist.) |
-| 0.3 | `IsLastStep` introduced as the first managed value. |

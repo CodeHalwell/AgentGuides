@@ -1,18 +1,16 @@
 ---
 title: "Chapter 4 — Tools"
 description: "ToolNode, InjectedState, InjectedStore, ToolRuntime, Command-returning tools, custom error handling, parallel execution, and state injection patterns."
-framework: langgraph
-language: python
+framework: "langgraph"
+language: "python"
 sidebar:
   label: "4 · Tools"
   order: 4
 ---
 
-# Chapter 4 — Tools
-
 **What you'll learn:** how to plug external capabilities into your graph — the built-in `ToolNode`, injecting graph state and the long-term store into tools, the new `ToolRuntime` all-in-one injection dataclass, routing from inside tool calls with `Command`, configuring fine-grained error handling, and understanding parallel tool execution.
 
-Verified against **`langgraph==1.2.12`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
+Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.prebuilt.tool_node`, `langgraph.types`).
 
 **Time:** ~25 minutes.
 
@@ -48,7 +46,7 @@ def get_stock_price(symbol: str) -> str:
 
 tools = [get_weather, get_stock_price]
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022")
+model = ChatAnthropic(model="%%model=anthropic%%")
 model_with_tools = model.bind_tools(tools)
 
 
@@ -84,12 +82,13 @@ print(result["messages"][-1].content)
 
 | Value | Behaviour |
 |---|---|
-| `True` *(default)* | Catch all exceptions; return a built-in error template as a `ToolMessage` |
+| *(default)* | Catch only argument-validation errors (`ToolInvocationError`: the model sent arguments that don't match the schema) and return them to the model. **Any exception the tool itself raises propagates** and fails the run. |
+| `True` | Catch all exceptions; return a built-in error template as a `ToolMessage` |
 | `False` | Disable error handling; exceptions propagate and crash the graph |
 | `"<message>"` *(str)* | Catch all exceptions; return the fixed string as the error message |
 | `ValueError` *(single type)* | Catch only `ValueError`; all other exceptions propagate |
 | `(ValueError, ConnectionError)` *(tuple of types)* | Catch exactly those exception types |
-| `Callable[..., str]` | Catch all exceptions; call the function with the exception to build the message |
+| `Callable[..., str]` | Catch the exception types in the function's first-parameter annotation (all exceptions if it has none); the function's return value is the message |
 
 ```python
 from langgraph.prebuilt import ToolNode
@@ -104,9 +103,13 @@ def risky_lookup(item_id: str) -> str:
     return f"Item {item_id}: found"
 
 
-# ── Variant 1: True (default) ──────────────────────────────────────────────
-# Catches all exceptions, returns the built-in error template.
-node_default = ToolNode([risky_lookup])                          # handle_tool_errors=True
+# ── Variant 1: the default ─────────────────────────────────────────────────
+# Only bad arguments are reported back to the model; the ValueError raised
+# inside risky_lookup propagates out of the graph.
+node_default = ToolNode([risky_lookup])
+
+# Catch everything and return the built-in error template:
+node_catch_all = ToolNode([risky_lookup], handle_tool_errors=True)
 
 
 # ── Variant 2: fixed string ────────────────────────────────────────────────
@@ -183,7 +186,7 @@ def lookup_order(order_id: str) -> str:
     return f"Order {order_id}: shipped"
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([lookup_order])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([lookup_order])
 
 
 def agent(state: CustomerState) -> dict:
@@ -238,7 +241,7 @@ def perform_action(
     return f"Action '{action}' executed for user {state['user_id']}."
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([perform_action])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([perform_action])
 
 
 def agent(state: AppState) -> dict:
@@ -313,7 +316,7 @@ memory_store = InMemoryStore(
     index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
 )
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools(
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools(
     [save_preference, recall_preferences]
 )
 
@@ -336,9 +339,9 @@ graph = builder.compile(store=memory_store)
 
 `ToolRuntime` is a dataclass that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
 
-Verified against the installed source (`langgraph-prebuilt==1.1.0`):
+Verified against the installed source (`langgraph-prebuilt==%%version=langgraph-prebuilt%%`):
 
-```python
+```text
 @dataclass
 class ToolRuntime(Generic[ContextT, StateT]):
     state: StateT | None                       # full graph state dict
@@ -349,7 +352,7 @@ class ToolRuntime(Generic[ContextT, StateT]):
     store: BaseStore | None                    # store passed to compile(store=...)
     tools: list[BaseTool]                      # all tools registered with ToolNode
     execution_info: ExecutionInfo | None = None  # execution metadata
-    server_info: ServerInfo | None = None        # LangSmith Platform info (None in OSS)
+    server_info: ServerInfo | None = None        # Agent Server info (None outside the server)
 ```
 
 Use `ToolRuntime` when a single tool needs two or more of these values — it avoids stacking multiple `Annotated` parameters.
@@ -409,7 +412,7 @@ memory_store = InMemoryStore(
     index={"dims": 1536, "embed": "openai:text-embedding-3-small"}
 )
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools([smart_search])
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools([smart_search])
 
 
 def agent(state: WorkspaceState) -> dict:
@@ -509,7 +512,7 @@ def technical_agent(state: SupportState) -> dict:
     return {"messages": [("assistant", "Tech support here. Describe the issue.")]}
 
 
-model = ChatAnthropic(model="claude-3-5-sonnet-20241022").bind_tools(
+model = ChatAnthropic(model="%%model=anthropic%%").bind_tools(
     [escalate_to_billing, escalate_to_technical]
 )
 
@@ -542,7 +545,7 @@ print(result["assigned_to"])  # "billing"
 
 `wrap_tool_call` (and its async twin `awrap_tool_call`) lets you intercept every tool call before and after execution. Receive a `ToolCallRequest` (with `.tool_call`, `.tool`, `.state`, `.runtime`) and a callable `execute` — add logging, auth checks, or argument transformations without modifying the tools themselves.
 
-**`ToolCallRequest.override()`** (new in 1.2.4) returns a new `ToolCallRequest` with specific fields replaced. Setting attributes directly on the instance is deprecated — always use `override()` for the immutable update pattern.
+**`ToolCallRequest.override()`** (in `langgraph-prebuilt` since 1.0.2) returns a new `ToolCallRequest` with specific fields replaced. Setting attributes directly on the instance is deprecated — always use `override()` for the immutable update pattern.
 
 ```python
 from typing import Callable
@@ -627,7 +630,7 @@ tool_node = ToolNode(
 )
 ```
 
-> **Note:** `wrap_tool_call` overrides are not serialized to checkpoints and are not re-applied on resume. Put any stateful side effects in graph nodes rather than interceptors.
+> **Note:** `wrap_tool_call` overrides are not serialised to checkpoints and are not re-applied on resume. Put any stateful side effects in graph nodes rather than interceptors.
 
 ---
 
@@ -641,7 +644,7 @@ When `ToolNode` receives a tool call from an LLM but Pydantic validation of the 
 - `.source` — the underlying `pydantic.ValidationError`
 - `.filtered_errors` — validation errors with injected-parameter entries removed (so the LLM only sees errors about the arguments it controls)
 
-By default `ToolNode(handle_tool_errors=True)` catches `ToolInvocationError` and returns a `ToolMessage` with the formatted error message. You can differentiate handling with a callable:
+By default `ToolNode` catches only `ToolInvocationError` (invalid arguments) and returns it as a `ToolMessage`; `handle_tool_errors=True` catches every exception. You can differentiate handling with a callable:
 
 ```python
 from langgraph.prebuilt import ToolNode

@@ -1,30 +1,61 @@
 ---
 title: "OpenAI Agents Streaming Server (FastAPI)"
-description: "Stream model output using FastAPI and OpenAI Python SDK."
-framework: openai-agents-sdk
+description: "Streaming an Agents SDK run to a browser over Server-Sent Events with FastAPI, plus Docker and Kubernetes manifests."
+sidebar:
+  label: "Streaming server (FastAPI)"
+  order: 6
+framework: "openai-agents-sdk"
+language: "python"
 ---
 
-# OpenAI Agents Streaming Server (FastAPI)
+> Verified against `openai-agents` %%version=openai-agents%% (checked %%versions-checked%%). Requires `fastapi`, `uvicorn` and `openai-agents==%%version=openai-agents%%`.
 
-Latest: openai-agents 0.17.4 | Updated: May 27, 2026
+## Streaming an agent run over SSE
 
-> The snippets on this page stream through the base `openai` SDK (6.8.1) rather than the Agents SDK runner — use them when you want raw token streaming over SSE without an agent loop.
+`Runner.run_streamed` returns immediately; iterate `stream_events()` and forward text deltas as Server-Sent Events. Tool calls, handoffs and guardrails all still run inside the agent loop.
+
+```python
+import json
+
+from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
+from agents import Agent, Runner
+
+app = FastAPI()
+agent = Agent(name="Assistant", instructions="Answer concisely.")
+
+@app.get("/stream")
+async def stream(q: str):
+    async def gen():
+        result = Runner.run_streamed(agent, q)
+        async for event in result.stream_events():
+            if event.type == "raw_response_event" and event.data.type == "response.output_text.delta":
+                yield f"data: {json.dumps({'delta': event.data.delta})}\n\n"
+            elif event.type == "agent_updated_stream_event":
+                yield f"event: agent\ndata: {json.dumps({'agent': event.new_agent.name})}\n\n"
+        yield "event: done\ndata: {}\n\n"
+    return StreamingResponse(gen(), media_type="text/event-stream")
+```
+
+## Raw model streaming without an agent loop
+
+If you only need tokens from a single model call, the base `openai` SDK (v3, which the Agents SDK depends on) is enough:
 
 ```python
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
-from openai import OpenAI
-import os
+from openai import AsyncOpenAI
 
 app = FastAPI()
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+client = AsyncOpenAI()  # reads OPENAI_API_KEY
 
-@app.get("/stream")
-def stream(q: str):
-    def gen():
-        with client.chat.completions.stream(model="gpt-4o-mini", messages=[{"role":"user","content":q}]) as s:
-            for event in s:
-                yield f"data: {event}\n\n"
+@app.get("/raw")
+async def raw(q: str):
+    async def gen():
+        stream = await client.responses.create(model="%%model=openai-small%%", input=q, stream=True)
+        async for event in stream:
+            if event.type == "response.output_text.delta":
+                yield f"data: {event.delta}\n\n"
     return StreamingResponse(gen(), media_type="text/event-stream")
 ```
 
@@ -33,7 +64,7 @@ def stream(q: str):
 ### Dockerfile
 
 ```dockerfile
-FROM python:3.11-slim
+FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt

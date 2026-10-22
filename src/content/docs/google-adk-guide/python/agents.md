@@ -1,15 +1,16 @@
 ---
 title: "Agents (LlmAgent, LangGraphAgent, RemoteA2aAgent, Parallel, Loop, Sequential)"
 description: "All agent primitives shipped by google-adk: LlmAgent, LangGraphAgent, RemoteA2aAgent, and the deprecated shell agents."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
+  label: "Agents"
   order: 20
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/agents/`). As of 2026-09-28 the latest release was **2.10.0**. Most examples require 2.3.0 or later; `LangGraphAgent` requires 2.5.0+; `ManagedAgent` requires 2.4.0+. Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; `LangGraphAgent` requires 2.5.0+; `ManagedAgent` requires 2.4.0+. Per-section minimums are noted where they differ.
 
-ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](./workflows/).
+ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](/google-adk-guide/python/workflows/).
 
 ## Minimal example
 
@@ -20,7 +21,7 @@ from google.adk.runners import InMemoryRunner
 
 root = LlmAgent(
     name="tutor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer concisely. If you do maths, show the steps.",
 )
 
@@ -48,9 +49,9 @@ asyncio.run(main())
 | `LangGraphAgent` | `google.adk.agents.langgraph_agent` | Wraps a compiled LangGraph graph as a `BaseAgent` | Stable (concept) |
 | `RemoteA2aAgent` | `google.adk.agents.remote_a2a_agent` | Calls a remote A2A-compatible agent over HTTP | `@a2a_experimental` |
 
-The deprecation notices are emitted via `typing_extensions.deprecated` at class level (see `sequential_agent.py:48`, `parallel_agent.py:150`, `loop_agent.py:52`).
+The deprecation notices are emitted via `typing_extensions.deprecated` at class level (see `sequential_agent.py`, `parallel_agent.py`, `loop_agent.py`).
 
-> **LangGraphAgent** and **RemoteA2aAgent** have source-verified deep dives in the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) and [— A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) sections.
+> **LangGraphAgent**, **RemoteA2aAgent** and **ManagedAgent** have their own sections below; the A2A side (serving agents, authentication, task mode) is on [MCP and A2A](/google-adk-guide/python/mcp-and-a2a/).
 
 ## LlmAgent
 
@@ -67,11 +68,11 @@ class Reply(BaseModel):
 
 agent = LlmAgent(
     name="research_assistant",          # required; must be a Python identifier
-    model="gemini-2.5-flash",            # str or BaseLlm; inherits from ancestors when ""
+    model="%%model=gemini%%",            # str or BaseLlm; inherits from ancestors when ""
     description="Answers research questions with web search.",
     instruction="You are a research assistant. Cite the URLs you consulted.",
     tools=[google_search],
-    output_schema=Reply,                 # optional; tools still work alongside output_schema in 2.3.0
+    output_schema=Reply,                 # optional; tools still work alongside output_schema (since 2.3.0)
     output_key="latest_reply",           # writes final text to session.state[key]
     include_contents="default",          # or "none" to wipe history
     disallow_transfer_to_parent=False,
@@ -91,13 +92,13 @@ agent = LlmAgent(
 | `tools` | `list[Callable \| BaseTool \| BaseToolset]` | `[]` | Callables are auto-wrapped as `FunctionTool` |
 | `generate_content_config` | `types.GenerateContentConfig` | `None` | Temperature, safety, thinking, etc. |
 | `mode` | `'chat' \| 'task' \| 'single_turn' \| None` | `None` | Root `LlmAgent` must have `mode='chat'` |
-| `input_schema` / `output_schema` | Pydantic model / schema | `None` | `output_schema` and `tools` can be used together in 2.3.0 |
+| `input_schema` / `output_schema` | Pydantic model / schema | `None` | `output_schema` and `tools` can be used together (since 2.3.0) |
 | `output_key` | `str` | `None` | Writes final text to `session.state[key]` |
 | `include_contents` | `'default' \| 'none'` | `'default'` | `'none'` → stateless single-turn |
 | `planner` | `BasePlanner` | `None` | `BuiltInPlanner` forwards `thinking_config` to the model |
 | `code_executor` | `BaseCodeExecutor` | `None` | See [code executors](#code-executors) |
 | `disallow_transfer_to_parent` / `disallow_transfer_to_peers` | `bool` | `False` | Governs agent-transfer reachability |
-| `before_model_callback` / `after_model_callback` / `on_model_error_callback` | fn or list | `None` | See [callbacks-and-plugins](./callbacks-and-plugins/) |
+| `before_model_callback` / `after_model_callback` / `on_model_error_callback` | fn or list | `None` | See [callbacks-and-plugins](/google-adk-guide/python/callbacks-and-plugins/) |
 | `before_tool_callback` / `after_tool_callback` / `on_tool_error_callback` | fn or list | `None` | Same |
 | `before_agent_callback` / `after_agent_callback` | fn or list | `None` | Inherited from `BaseAgent` |
 
@@ -111,7 +112,7 @@ from google.genai import types
 
 agent = LlmAgent(
     name="precise_analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Analyse the data carefully.",
     generate_content_config=types.GenerateContentConfig(
         temperature=0.2,          # lower = more deterministic
@@ -126,14 +127,14 @@ agent = LlmAgent(
     ),
 )
 
-# Gemini 2.5 thinking mode
+# Thinking (Gemini 3 models take thinking_level; Gemini 2.5 models took thinking_budget)
 thinking_agent = LlmAgent(
     name="thoughtful",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     generate_content_config=types.GenerateContentConfig(
         thinking_config=types.ThinkingConfig(
             include_thoughts=True,
-            thinking_budget=8192,
+            thinking_level=types.ThinkingLevel.HIGH,
         )
     ),
 )
@@ -141,19 +142,19 @@ thinking_agent = LlmAgent(
 
 ### Model resolution
 
-A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("gemini-2.5-pro")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-3.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
+A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini`, `Gemma`, `ApigeeLlm`, optionally `Claude`, `LiteLlm`, `Gemma3Ollama` (`models/__init__.py`). Setting `LlmAgent.set_default_model("%%model=gemini-flagship%%")` changes the class-level default used when `model=""` and no ancestor sets it. The built-in class constants are `LlmAgent.DEFAULT_MODEL = "gemini-3.5-flash"` and `LlmAgent.DEFAULT_LIVE_MODEL = "gemini-live-2.5-flash-native-audio"`.
 
 ```python
 from google.adk.models import Gemini, LiteLlm
 
 # Gemini with explicit base URL and speech config
-agent = LlmAgent(name="voice", model=Gemini(model="gemini-2.5-pro"))
+agent = LlmAgent(name="voice", model=Gemini(model="%%model=gemini-flagship%%"))
 
 # OpenAI via LiteLlm (requires `pip install google-adk[extensions]`)
-agent = LlmAgent(name="gpt", model=LiteLlm(model="openai/gpt-4o"))
+agent = LlmAgent(name="gpt", model=LiteLlm(model="openai/%%model=openai%%"))
 
 # Change the class-level default for all agents in the process
-LlmAgent.set_default_model("gemini-2.5-pro")
+LlmAgent.set_default_model("%%model=gemini-flagship%%")
 ```
 
 ### Dynamic instructions
@@ -179,7 +180,7 @@ from google.genai import types
 # ── Without static_instruction (no caching benefit) ─────────────────────────
 agent_no_cache = LlmAgent(
     name="legal_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="You are a legal assistant specialising in UK contract law. "
                 "Always cite relevant legislation. User: {user_name}.",
 )
@@ -189,7 +190,7 @@ agent_no_cache = LlmAgent(
 # The dynamic part (personalisation) is injected as user content each turn.
 agent_with_cache = LlmAgent(
     name="legal_assistant",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     # This large, fixed block is eligible for Gemini's implicit context cache:
     static_instruction=(
         "You are a legal assistant specialising in UK contract law. "
@@ -207,7 +208,7 @@ agent_with_cache = LlmAgent(
 # static_instruction accepts types.ContentUnion, so you can include file refs:
 agent_with_doc = LlmAgent(
     name="doc_analyst",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     static_instruction=types.Content(
         role="user",
         parts=[
@@ -254,20 +255,20 @@ from google.genai import types
 
 billing = LlmAgent(
     name="billing",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Handles invoice and refund questions.",
     instruction="Answer billing questions concisely.",
 )
 support = LlmAgent(
     name="support",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     description="Handles technical support questions.",
     instruction="Help users fix technical problems.",
 )
 
 coordinator = LlmAgent(
     name="triage",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     # mode='chat' is set automatically by the runner for root agents
     instruction="Route each question to the right specialist.",
     sub_agents=[billing, support],
@@ -306,13 +307,13 @@ from google.adk.apps import App
 
 drafter = LlmAgent(
     name="drafter",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="single_turn",                         # processes one turn, no history
     instruction="Write a punchy 2-sentence summary of the input topic.",
 )
 editor = LlmAgent(
     name="editor",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="single_turn",
     instruction="Polish the summary. Fix grammar, tighten sentences. Return only the final text.",
 )
@@ -368,7 +369,7 @@ class ResearchOutput(BaseModel):
 # ── Task sub-agent — structured I/O, no transfer tools ──────────────────────
 researcher = LlmAgent(
     name="researcher",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="task",
     instruction=(
         "Research the given topic. Return a structured summary with "
@@ -381,7 +382,7 @@ researcher = LlmAgent(
 # ── Chat coordinator — delegates structured work to researcher ────────────────
 writer = LlmAgent(
     name="writer",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You write blog posts. For every topic, first ask the 'researcher' "
         "sub-agent for a structured brief, then write a 3-paragraph post."
@@ -444,7 +445,7 @@ from google.genai import types
 # ── Fan-out agent ─────────────────────────────────────────────────────────────
 _summariser_agent = LlmAgent(
     name="summariser",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     mode="single_turn",
     instruction="Summarise the given text in one sentence.",
 )
@@ -500,7 +501,7 @@ asyncio.run(main())
 
 ## Transfer and routing
 
-An `LlmAgent` with `sub_agents=[...]` gets the `transfer_to_agent` tool injected automatically. The runner's `_find_agent_to_run` routes the next user message to the last-replying transferable agent (`runners.py:1456`).
+An `LlmAgent` with `sub_agents=[...]` gets the `transfer_to_agent` tool injected automatically. The runner's `_find_agent_to_run` routes the next user message to the last-replying transferable agent (`runners.py`).
 
 ```python
 from google.adk.agents import LlmAgent
@@ -514,7 +515,7 @@ root = LlmAgent(
 )
 ```
 
-Set `disallow_transfer_to_parent=True` on a specialist to prevent it from returning control to the triage agent. Pair with `disallow_transfer_to_peers=True` to lock the conversation to the single agent (the runtime will then use `SingleFlow` instead of `AutoFlow`, disabling transfer-tool injection entirely — `llm_agent.py:788-797`).
+Set `disallow_transfer_to_parent=True` on a specialist to prevent it from returning control to the triage agent. Pair with `disallow_transfer_to_peers=True` to lock the conversation to the single agent (the runtime will then use `SingleFlow` instead of `AutoFlow`, disabling transfer-tool injection entirely — `llm_agent.py`).
 
 ## Code executors
 
@@ -534,17 +535,48 @@ from google.adk.code_executors import BuiltInCodeExecutor
 
 agent = LlmAgent(
     name="analyst",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction="Use Python to compute anything numeric.",
     code_executor=BuiltInCodeExecutor(),
 )
 ```
 
-Note: when `RunConfig.support_cfc=True` and the agent's model is `gemini-2.*`, the runner swaps in `BuiltInCodeExecutor` automatically (`runners.py:1806-1814`).
+Note: when `RunConfig.support_cfc=True` and the agent's model is `gemini-2.*`, the runner swaps in `BuiltInCodeExecutor` automatically (`runners.py`).
+
+Every executor inherits these `BaseCodeExecutor` fields:
+
+| Field | Default | Purpose |
+|---|---|---|
+| `optimize_data_file` | `False` | Pull CSV files out of the request and hand them to the executor |
+| `stateful` | `False` | Keep interpreter state across code blocks |
+| `error_retry_attempts` | `2` | Consecutive code errors tolerated before giving up |
+| `code_block_delimiters` | `` ```tool_code `` and `` ```python `` fences | How code blocks are found in model output |
+| `execution_result_delimiters` | `` ```tool_output `` fence | How results are fed back to the model |
+| `timeout_seconds` | `None` | Wall-clock limit per execution |
+
+`UnsafeLocalCodeExecutor` runs each block in a fresh subprocess of the current interpreter (sending SIGTERM, then SIGKILL after 5 s on timeout), so `stateful=True` and `optimize_data_file=True` raise `ValueError`. It has full OS access; use it only in a trusted sandbox. To run code somewhere else, subclass `BaseCodeExecutor` and implement the synchronous `execute_code`:
+
+```python
+import subprocess
+from google.adk.code_executors import BaseCodeExecutor
+from google.adk.code_executors.code_execution_utils import CodeExecutionInput, CodeExecutionResult
+
+class DockerCodeExecutor(BaseCodeExecutor):
+    image: str = "python:3.13-slim"
+
+    def execute_code(self, invocation_context, code_execution_input: CodeExecutionInput) -> CodeExecutionResult:
+        proc = subprocess.run(
+            ["docker", "run", "--rm", "-i", "--network=none", self.image, "python", "-"],
+            input=code_execution_input.code.encode(),
+            capture_output=True,
+            timeout=self.timeout_seconds or 30,
+        )
+        return CodeExecutionResult(stdout=proc.stdout.decode(), stderr=proc.stderr.decode())
+```
 
 ### `BuiltInCodeExecutor` — the full signature
 
-Source-verified against `google.adk.code_executors.built_in_code_executor` (google-adk==2.7.1). Every field is inherited from `BaseCodeExecutor`; `BuiltInCodeExecutor` overrides only `process_llm_request` (attaches `types.Tool(code_execution=types.ToolCodeExecution())` to the request) and stubs out `execute_code` because execution happens **inside the Gemini API call**, not client-side.
+Source-verified against `google.adk.code_executors.built_in_code_executor` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Every field is inherited from `BaseCodeExecutor`; `BuiltInCodeExecutor` overrides only `process_llm_request` (attaches `types.Tool(code_execution=types.ToolCodeExecution())` to the request) and stubs out `execute_code` because execution happens **inside the Gemini API call**, not client-side.
 
 ```python
 from google.adk.code_executors import BuiltInCodeExecutor
@@ -564,7 +596,7 @@ executor = BuiltInCodeExecutor(
 
 agent = LlmAgent(
     name="quant",
-    model="gemini-2.5-pro",   # MUST be a Gemini model — raises ValueError otherwise
+    model="%%model=gemini-flagship%%",   # MUST be a Gemini model — raises ValueError otherwise
     instruction=(
         "You are a quantitative analyst. Solve numerical problems by "
         "writing and executing Python. Always show intermediate steps."
@@ -604,7 +636,7 @@ shared_executor = VertexAiCodeExecutor(
 
 agent = LlmAgent(
     name="charts",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     instruction=(
         "Answer with data analysis. Use pandas + matplotlib. "
         "Save every chart to a PNG file — I will retrieve it as an artifact."
@@ -647,7 +679,7 @@ algo_b = LlmAgent(name="algo_b", instruction="Answer using approach B.")
 fanout = ParallelAgent(name="multi_try", sub_agents=[algo_a, algo_b])
 ```
 
-Sub-agents run concurrently in isolated branches. `run_live` is **not supported** (`parallel_agent.py:219`).
+Sub-agents run concurrently in isolated branches. `run_live` is **not supported** (`parallel_agent.py`).
 
 ### LoopAgent
 
@@ -677,7 +709,7 @@ import asyncio
 from langgraph.graph import StateGraph, MessagesState, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_core.messages import AIMessage
-from google.adk.agents import LangGraphAgent
+from google.adk.agents.langgraph_agent import LangGraphAgent  # not re-exported from google.adk.agents
 from google.adk.runners import InMemoryRunner
 
 # --- Build a minimal LangGraph ------------------------------------------------
@@ -734,7 +766,7 @@ asyncio.run(main())
 
 ## Migration to `Workflow`
 
-The deprecated shells map to `Workflow` like this (full details in the [workflows page](./workflows/)):
+The deprecated shells map to `Workflow` like this (full details in the [workflows page](/google-adk-guide/python/workflows/)):
 
 ```python
 from google.adk.workflow import Workflow, START
@@ -756,38 +788,38 @@ fanout = Workflow(name="fanout", edges=[(START, (algo_a, algo_b))])
 Set `sub_agents=[a, b]` on a parent `LlmAgent` to get `transfer_to_agent` routing. Disable `disallow_transfer_to_peers` on specialists so they can bounce between one another without returning to root.
 
 ### 2 — Produce → Validate with `output_schema`
-An `LlmAgent` with `output_schema=MyPydanticModel` emits a validated structured reply. In 2.3.0, `tools` can be used alongside `output_schema` — the ADK exposes tools during the thought loop and enforces the schema only on the final output. Wire structured-output agents downstream via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
+An `LlmAgent` with `output_schema=MyPydanticModel` emits a validated structured reply. Since 2.3.0, `tools` can be used alongside `output_schema` — the ADK exposes tools during the thought loop and enforces the schema only on the final output. Wire structured-output agents downstream via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
 
 ### 3 — ReAct via `BuiltInPlanner`
 
-`BuiltInPlanner` delegates planning entirely to Gemini's native thinking feature. It injects a `ThinkingConfig` into every `LlmRequest` — the model then produces `thought=True` parts internally which are stripped before the response reaches the user.
+`BuiltInPlanner` delegates planning entirely to Gemini's native thinking feature. It injects a `ThinkingConfig` into every `LlmRequest` and adds no system-prompt text (`build_planning_instruction` returns `None`). With `include_thoughts=True` the model's `thought=True` parts are **not** stripped (`process_planning_response` is a no-op): they appear in the yielded events, so filter on `part.thought` before showing text in a UI or logging it. Use it on thinking-capable Gemini models; `PlanReActPlanner` below is the alternative for others. In a multi-agent setup you can give only the orchestrator a planner.
 
 Source: `planners/built_in_planner.py`.
 
 ```python
 from google.adk.planners import BuiltInPlanner
 from google.adk.agents import LlmAgent
+from google.adk.tools import google_search
 from google.genai import types
 
-# ── Minimal — enable thinking, no token budget ────────────────────────────────
+# ── Minimal — return the model's thoughts ─────────────────────────────────────
 agent = LlmAgent(
     name="thoughtful",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(include_thoughts=True)
     ),
-    tools=[...],
 )
 
-# ── Cap thinking tokens (reduces latency / cost) ──────────────────────────────
-agent_capped = LlmAgent(
-    name="budgeted",
-    model="gemini-2.5-flash",
+# ── Less thinking (reduces latency / cost) ────────────────────────────────────
+agent_light = LlmAgent(
+    name="light_thinker",
+    model="%%model=gemini%%",
     instruction="Research and summarise the topic.",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(
             include_thoughts=True,
-            thinking_budget=4096,   # max thinking tokens; 0 disables thinking
+            thinking_level=types.ThinkingLevel.LOW,   # Gemini 3; older models used thinking_budget
         )
     ),
     tools=[google_search],
@@ -812,7 +844,7 @@ async def capture_thoughts(callback_context, llm_response):
 
 agent = LlmAgent(
     name="transparent",
-    model="gemini-2.5-pro",
+    model="%%model=gemini-flagship%%",
     planner=BuiltInPlanner(
         thinking_config=types.ThinkingConfig(include_thoughts=True)
     ),
@@ -834,7 +866,7 @@ from google.adk.tools import google_search
 
 agent = LlmAgent(
     name="planner_agent",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Answer research questions with web search.",
     planner=PlanReActPlanner(),
     tools=[google_search],
@@ -909,7 +941,7 @@ async def get_company_news(company: str) -> dict:
 
 analyst = LlmAgent(
     name="analyst",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You are a financial analyst. Use the available tools to research "
         "companies and produce a concise investment brief."
@@ -942,18 +974,18 @@ asyncio.run(main())
 
 | Planner | Requires thinking model | Latency overhead | Reasoning visible in traces | Cost |
 |---|---|---|---|---|
-| `BuiltInPlanner(thinking_config=...)` | Yes (Gemini 2.5 Pro/Flash only) | Low (native) | Yes (thought parts) | Thinking tokens charged separately |
+| `BuiltInPlanner(thinking_config=...)` | Yes (thinking-capable Gemini models, 2.5 and later) | Low (native) | Yes (thought parts) | Thinking tokens charged separately |
 | `PlanReActPlanner()` | No (any Gemini model) | Higher (extra output tokens) | Yes (thought parts) | Normal output token rate |
 
 Use `PlanReActPlanner` when:
-- You need structured planning on a non-thinking model (e.g. `gemini-2.0-flash`).
+- You need structured planning on a non-thinking model, or through `LiteLlm` to a non-Gemini model.
 - You want the plan/reasoning explicitly tagged and capturable via callbacks.
 - You need to debug multi-step tool chains — the `/*REASONING*/` blocks reveal the model's intent at each step.
 
 Use `BuiltInPlanner` when:
-- You're using Gemini 2.5 Pro or Flash (supports `ThinkingConfig`).
+- You're using a Gemini thinking model (supports `ThinkingConfig`).
 - Latency matters — native thinking is faster than generating reasoning tokens.
-- You want to cap reasoning cost with `thinking_budget`.
+- You want to control reasoning effort with `thinking_level` (or `thinking_budget` on older models).
 
 ### 4 — Reflection loop
 `LoopAgent` (or the `Workflow` equivalent) with a single reflective `LlmAgent` that rewrites `state['draft']` each turn and escalates when satisfied. Use `include_contents="none"` on the reflective agent to avoid feeding the full history back each iteration.
@@ -961,36 +993,9 @@ Use `BuiltInPlanner` when:
 ### 5 — Parallel multi-try with a judge
 `ParallelAgent` (or `Workflow` fan-out) of N candidate agents, followed by a "judge" `LlmAgent` that reads `state['candidate_1..N']` and picks the best. Pair each candidate's `output_key` to a distinct state slot.
 
-## LangGraphAgent
-
-`LangGraphAgent` wraps a compiled LangGraph `CompiledGraph` as a `BaseAgent`. Install prerequisite: `pip install langchain-core langgraph langchain-google-genai`.
-
-```python
-from langgraph.prebuilt import create_react_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
-from google.adk.agents.langgraph_agent import LangGraphAgent
-from google.adk.runners import InMemoryRunner
-
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
-graph = create_react_agent(llm, tools=[])
-
-agent = LangGraphAgent(
-    name="langgraph_agent",
-    description="Answers questions using a LangGraph ReAct graph.",
-    graph=graph,
-    instruction="You are a helpful assistant.",
-)
-```
-
-**Fields:** `graph: CompiledGraph` (required), `instruction: str` (injected as `SystemMessage` on the first turn only). All `BaseAgent` fields (`name`, `description`, `mode`, callbacks) also apply.
-
-**Memory rules:** If `graph.checkpointer` is set, ADK sends only the latest user messages and LangGraph manages history via its checkpointer. If no checkpointer, ADK sends the full conversation for that agent.
-
-> For detailed examples — multi-turn with `MemorySaver`, as a sub-agent in a multi-agent system — see the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) section.
-
 ## RemoteA2aAgent
 
-`RemoteA2aAgent` calls a remote A2A-compatible agent over HTTP, exposing it as a local `BaseAgent`. See also [MCP & A2A](./mcp-and-a2a/).
+`RemoteA2aAgent` calls a remote A2A-compatible agent over HTTP, exposing it as a local `BaseAgent`. See also [MCP & A2A](/google-adk-guide/python/mcp-and-a2a/).
 
 ```python
 from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
@@ -1004,17 +1009,17 @@ remote = RemoteA2aAgent(
 
 root = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="For specialist tasks, delegate to 'remote_specialist'.",
     sub_agents=[remote],
 )
 ```
 
-> For full constructor reference and examples (signed requests, file-based cards, interceptors) — see the [Class & API Reference — A2A Protocol](./google_adk_comprehensive_guide/#a2a-protocol) section.
+> Authentication, file-based cards, request interceptors and task mode are covered on [MCP and A2A](/google-adk-guide/python/mcp-and-a2a/#call-a-remote-a2a-agent-client).
 
 ## ManagedAgent
 
-`ManagedAgent` wraps Google's **Managed Agents API** so a _server-hosted_ agent (identified by `agent_id`) runs without local inference. Available from `google.adk.agents` (verified in `agents/_managed_agent.py`, google-adk==2.7.1).
+`ManagedAgent` wraps Google's **Managed Agents API** so a _server-hosted_ agent (identified by `agent_id`) runs without local inference. Available from `google.adk.agents` (defined in `agents/_managed_agent.py`; re-checked against %%version=google-adk%%).
 
 Key constraints:
 - `tools` must be `list[types.Tool | BaseTool | RemoteMcpServer]` — passing a plain callable or `FunctionTool` raises at runtime.
@@ -1040,7 +1045,7 @@ managed_search = ManagedAgent(
 # Chat coordinator — delegates to the managed agent
 root = LlmAgent(
     name="coordinator",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction=(
         "For questions that need up-to-date information, "
         "ask 'web_researcher'. Handle everything else yourself."
@@ -1089,11 +1094,11 @@ managed_maps = ManagedAgent(
 )
 ```
 
-> `ManagedAgent` requires a Managed Agents API project allowlist. See the [Class & API Reference — Agents & Context](./google_adk_comprehensive_guide/#agents--context) section for the full constructor signature.
+> `ManagedAgent` requires a Managed Agents API project allowlist. Pass `api_client=` to reuse a `google.genai.Client` you have already configured.
 
 ## Gotchas
 
-- `output_schema` and `tools` can be used together in 2.3.0 — tools run during the thought loop and the schema is enforced on the final reply only (`llm_agent.py:368-372`).
+- `output_schema` and `tools` can be used together (since 2.3.0) — tools run during the thought loop and the schema is enforced on the final reply only (`llm_agent.py`).
 - `global_instruction` is deprecated at the agent level; use `GlobalInstructionPlugin` at the `App` level.
 - A root `LlmAgent` must have `mode='chat'` or the runner auto-sets it. `mode='single_turn'` agents belong as `Workflow` nodes. `mode='task'` agents **cannot** be static `Workflow` graph nodes (`Workflow.__init__` raises `ValueError`) — place them in a chat coordinator's `sub_agents` or dispatch via `ctx.run_node()`. See [LlmAgent modes](#llmagent-modes).
 - `LoopAgent.run_live` is **not implemented** — `ParallelAgent.run_live` also raises `NotImplementedError`.
@@ -1102,4 +1107,4 @@ managed_maps = ManagedAgent(
 - `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
 - `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
 - `ManagedAgent.tools` only accepts `types.Tool`, `BaseTool`, or `RemoteMcpServer` — a plain callable or `FunctionTool` raises a `NotImplementedError` at runtime because client-side tools are not supported in server-hosted execution.
-- `ManagedAgent` is available from `google.adk.agents` starting in google-adk==2.4.0.
+- `ManagedAgent` is available from `google.adk.agents` since 2.4.0.

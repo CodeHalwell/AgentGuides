@@ -1,16 +1,16 @@
 ---
 title: "Knowledge sources"
 description: "Every built-in BaseKnowledgeSource — PDF, CSV, JSON, Excel, Docling, string, text file — plus custom sources, embedder config, and crew vs agent attachment."
-framework: crewai
-language: python
+framework: "crewai"
+language: "python"
 sidebar:
   label: "Knowledge"
   order: 23
 ---
 
-> **Verified against crewai==1.14.3a2** (source: `crewai/knowledge/knowledge.py`, `crewai/knowledge/source/*.py`, `crewai/knowledge/knowledge_config.py`).
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/knowledge/knowledge.py`, `crewai/knowledge/source/*.py`, `crewai/knowledge/knowledge_config.py`).
 
-Knowledge is a read-mostly vector store attached to an `Agent` or `Crew`. Unlike [Memory](./crewai_memory_python/) it's populated ahead of time and isn't automatically written to during a run.
+Knowledge is a read-mostly vector store attached to an `Agent` or `Crew`. Unlike [Memory](/crewai-guide/crewai_memory_python/) it's populated ahead of time and isn't automatically written to during a run.
 
 ## Minimal runnable example
 
@@ -119,7 +119,7 @@ Accepted formats per source: `MD`, `ASCIIDOC`, `PDF`, `DOCX`, `HTML`, images. If
 
 ## Custom sources
 
-Subclass `BaseKnowledgeSource` (or `BaseFileKnowledgeSource` for file I/O). Two methods to implement:
+Subclass `BaseKnowledgeSource` (or `BaseFileKnowledgeSource` for file I/O). Three methods are abstract: `validate_content`, `add` and its async twin `aadd`.
 
 ```python
 from crewai.knowledge.source.base_knowledge_source import BaseKnowledgeSource
@@ -136,7 +136,12 @@ class NotionSource(BaseKnowledgeSource):
         for p in pages:
             self.chunks.extend(self._chunk_text(p.text))
         self._save_documents()
+
+    async def aadd(self) -> None:
+        self.add()             # or an async fetch + await self._asave_documents()
 ```
+
+Leaving out `aadd` makes the class abstract: instantiating it raises `TypeError: Can't instantiate abstract class`.
 
 `_chunk_text` and `_save_documents` are inherited — you rarely need to override them.
 
@@ -154,7 +159,7 @@ agent = Agent(
 )
 ```
 
-The collection name defaults to the agent's `role`; storage lives at `./knowledge/<collection>` (LanceDB).
+The collection name defaults to the agent's `role` (stored as `knowledge_<role>`); vectors go into the shared RAG client, ChromaDB by default, persisted under CrewAI's platform data directory (`db_storage_path()`, overridable with `CREWAI_STORAGE_DIR`). Source files themselves are read from `./knowledge/`.
 
 ### To a whole crew
 
@@ -164,7 +169,7 @@ crew = Crew(
     agents=[a, b],
     tasks=[t1, t2],
     knowledge_sources=[pdfs],            # shared across all agents
-    embedder={"provider": "openai", "config": {"model": "text-embedding-3-large"}},
+    embedder={"provider": "openai", "config": {"model_name": "text-embedding-3-large"}},
 )
 ```
 
@@ -178,8 +183,8 @@ from crewai.knowledge.knowledge_config import KnowledgeConfig
 
 agent = Agent(
     role="Researcher",
-    goal="...",
-    backstory="...",
+    goal="Answer from the indexed reports",
+    backstory="Research librarian.",
     knowledge_sources=[pdfs],
     knowledge_config=KnowledgeConfig(results_limit=8, score_threshold=0.5),
 )
@@ -223,8 +228,10 @@ New quarter → new file, rebuild the collection (call `Knowledge.reset()` then 
 ### 2. Per-agent specialised sources
 
 ```python
-legal  = Agent(role="Legal", ..., knowledge_sources=[legal_pdfs])
-finops = Agent(role="FinOps", ..., knowledge_sources=[sql_schema_txt, runbooks_md])
+legal  = Agent(role="Legal", goal="Answer contract questions", backstory="In-house counsel.",
+               knowledge_sources=[legal_pdfs])
+finops = Agent(role="FinOps", goal="Explain cloud spend", backstory="FinOps analyst.",
+               knowledge_sources=[sql_schema_txt, runbooks_md])
 ```
 
 Collections don't collide — they're isolated by `role`.
@@ -274,4 +281,4 @@ Docling treats URLs and local paths the same as long as the format is supported.
 - **Chunking is naive by default** — a sliding window over characters. Override `_chunk_text` in a subclass if you need sentence-aware splits.
 - **`file_path` is deprecated.** Always use `file_paths=[...]`, even for a single file.
 - **Knowledge is read-heavy.** It doesn't auto-update. For dynamic content, use Memory or rebuild the collection.
-- **`knowledge_storage=` on an agent overrides the default LanceDB store.** Pass a custom `BaseKnowledgeStorage` if you need Qdrant/Pinecone/etc.
+- **`knowledge_storage=` on an agent overrides the default ChromaDB-backed store.** Pass a custom `BaseKnowledgeStorage` if you need Qdrant/Pinecone/etc., or register one process-wide with `crewai.knowledge.storage.factory.set_knowledge_storage_factory`.

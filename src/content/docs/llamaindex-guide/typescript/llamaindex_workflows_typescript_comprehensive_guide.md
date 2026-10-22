@@ -1,17 +1,17 @@
 ---
 title: "LlamaIndex TypeScript Workflows — Comprehensive Guide"
-description: "Complete technical reference for @llamaindex/workflow 1.1.25 — functional API, event-driven orchestration, stateful middleware, multi-agent coordination."
-framework: llamaindex
-language: typescript
+description: "Technical reference for the (now deprecated) LlamaIndex.TS workflow API — functional events and handlers, stateful middleware, multi-agent coordination."
+framework: "llamaindex"
+language: "typescript"
+sidebar:
+  label: "Comprehensive guide"
 ---
 
-# LlamaIndex TypeScript Workflows — Comprehensive Guide
+**Packages:** the final releases of `@llamaindex/workflow`, `@llamaindex/core` and the provider packages ([versions](/llamaindex-guide/typescript/#final-releases)) · Node 22+ · checked %%versions-checked%%
 
-**Package:** `@llamaindex/workflow`  
-**Latest:** 1.1.25 (May 2026)  
-**Node:** 18+
+> **Deprecated upstream.** LlamaIndex.TS is no longer maintained. The repository README says *"This project is deprecated and no longer maintained"*, and npm marks `@llamaindex/workflow`, `@llamaindex/workflow-core`, `@llamaindex/core` and the provider packages (`@llamaindex/openai`, ...) as deprecated. `@llamaindex/workflow-core` points users to **LlamaAgents (Python Workflows)** instead. The final releases still install and work, and this guide documents them accurately, but expect no fixes. For new TypeScript projects consider a maintained framework — for example [LangGraph.js](/langgraph-guide/typescript/) or the [OpenAI Agents SDK for TypeScript](/openai-agents-sdk-typescript-guide/) — or run LlamaIndex in Python behind an API.
 
-> **Important — API note.** This guide documents the current **functional API** shipped in `@llamaindex/workflow`. Earlier versions of this guide (and some third-party tutorials) document a class-based `extends Workflow` + `@step()` decorator pattern. That pattern was never part of the published package. The correct API is `createWorkflow()`, `workflowEvent()`, and `workflow.handle()`. All code in this guide is executed against the installed `@llamaindex/workflow@1.1.25`. Sources: installed package `node_modules/@llamaindex/workflow-core/dist/index.d.ts`, retrieved 2026-05-24.
+> **API note.** This guide documents the **functional API**: `createWorkflow()`, `workflowEvent()`, `workflow.handle()` and `run()`. A class-based `extends Workflow` + `@step()` pattern that appears in some tutorials was never part of the published TypeScript package (it is the *Python* API). Examples were type-checked with `tsc --strict` against the final releases.
 
 ---
 
@@ -30,7 +30,7 @@ language: typescript
 
 ### Package installation
 
-`@llamaindex/workflow` is the canonical package for event-driven agent orchestration in TypeScript. The older `llamaindex` monolith and the non-existent `llama-index-workflows` package are not used here.
+`@llamaindex/workflow` holds the event-driven workflow runtime and the agent helpers. The `llamaindex` umbrella package (%%version=llamaindex%%) adds indexes, readers, node parsers and query engines, but does not re-export the workflow API; if you use both, install the versions it pins (see [final releases](/llamaindex-guide/typescript/#final-releases)) and read the [RAG recipe](/llamaindex-guide/typescript/llamaindex_typescript_recipes/#recipe-1-rag-with-vectorstoreindex). (`llama-index-workflows` is the name of the *Python* workflows package, not an npm package.)
 
 ```bash
 npm install @llamaindex/workflow @llamaindex/core zod
@@ -83,7 +83,7 @@ NODE_ENV=development
 
 ### Verification — minimal hello-world
 
-Run this against `@llamaindex/workflow@1.1.25` to confirm the install:
+Run this to confirm the install:
 
 ```typescript
 import { createWorkflow, workflowEvent, run } from '@llamaindex/workflow';
@@ -106,7 +106,6 @@ const events = await run(workflow, startEvent.with({ input: 'Hello!' }))
 console.log(events.at(-1)?.data); // { result: 'Echo: Hello!' }
 ```
 
-**Executed against installed 1.1.25 — PASS.** Source: `node_modules/@llamaindex/workflow-core/dist/stream/run.d.ts` (retrieved 2026-05-24).
 
 ---
 
@@ -194,7 +193,7 @@ for await (const ev of run(workflow, startEvent.with({ input: 'test' }))) {
 }
 ```
 
-> `runWorkflow()`, `runAndCollect()`, and `runStream()` are all `@deprecated` since 1.1.25. Use `run().until().toArray()` for the equivalent behaviour.
+> `runWorkflow()`, `runAndCollect()` and `runStream()` are marked `@deprecated` in `@llamaindex/workflow-core`. Use `run().until().toArray()` for the equivalent behaviour. Iterating a `WorkflowStream` with `for await` needs `"DOM.AsyncIterable"` (or Node's own types) in your `lib` setting.
 
 ### 2.4 Sending intermediate events
 
@@ -404,24 +403,39 @@ const result = await run(workflow, normalInputEv.with({ text: 'hello', source: '
 console.log(result.at(-1)?.data); // { output: 'HELLO', fromCache: false }
 ```
 
-### 4.3 Conditional branching with `ctx.sendEvent()`
+### 4.3 Fan-out and fan-in with `ctx.sendEvent()`
 
-A handler can fan out to multiple downstream events by calling `ctx.sendEvent()` for each branch, then returning a final aggregation event:
+A handler can emit several events with `ctx.sendEvent()` and return nothing. Collect the results in workflow state and emit the final event once all have arrived:
 
 ```typescript
-const startEv   = workflowEvent<{ items: string[] }>();
-const itemEv    = workflowEvent<{ item: string; index: number }>();
-const stopEv    = workflowEvent<{ results: string[] }>();
+import { createWorkflow, workflowEvent, run, createStatefulMiddleware } from '@llamaindex/workflow';
 
-const workflow = createWorkflow();
+const startEv    = workflowEvent<{ items: string[] }>();
+const itemEv     = workflowEvent<{ item: string; index: number }>();
+const itemDoneEv = workflowEvent<{ index: number; result: string }>();
+const stopEv     = workflowEvent<{ results: string[] }>();
 
-workflow.handle([startEv], async (ctx, ev) => {
-  const results: string[] = [];
-  for (let i = 0; i < ev.data.items.length; i++) {
-    results.push(`Processed: ${ev.data.items[i]}`);
-  }
-  return stopEv.with({ results });
+const { withState } = createStatefulMiddleware(() => ({ expected: 0, results: [] as string[] }));
+const workflow = withState(createWorkflow());
+
+workflow.handle([startEv], (ctx, ev) => {
+  ctx.state.expected = ev.data.items.length;
+  ev.data.items.forEach((item, index) => ctx.sendEvent(itemEv.with({ item, index })));
 });
+
+workflow.handle([itemEv], async (ctx, ev) => {
+  return itemDoneEv.with({ index: ev.data.index, result: `Processed: ${ev.data.item}` });
+});
+
+workflow.handle([itemDoneEv], (ctx, ev) => {
+  ctx.state.results[ev.data.index] = ev.data.result;
+  if (ctx.state.results.filter(Boolean).length === ctx.state.expected) {
+    return stopEv.with({ results: ctx.state.results });
+  }
+});
+
+const events = await run(workflow, startEv.with({ items: ['a', 'b', 'c'] })).until(stopEv).toArray();
+console.log(events.at(-1)?.data); // { results: ['Processed: a', 'Processed: b', 'Processed: c'] }
 ```
 
 ### 4.4 Multi-handler pipelines
@@ -479,8 +493,8 @@ import { OpenAI } from '@llamaindex/openai';
 // Event definitions
 // ---
 const queryEv       = workflowEvent<{ query: string; sessionId: string }>();
-const retrievedEv   = workflowEvent<{ docs: string[]; scores: number[] }>();
-const generatedEv   = workflowEvent<{ answer: string }>();
+const retrievedEv   = workflowEvent<{ query: string; sessionId: string; docs: string[]; scores: number[] }>();
+const generatedEv   = workflowEvent<{ answer: string; sessionId: string }>();
 const stopEv        = workflowEvent<{
   answer: string;
   docsUsed: number;
@@ -515,13 +529,13 @@ workflow.handle([queryEv], async (ctx, ev) => {
   const scores = [0.95, 0.88, 0.76];
 
   ctx.state.docsRetrieved = docs.length;
-  return retrievedEv.with({ docs, scores });
+  return retrievedEv.with({ query: ev.data.query, sessionId: ev.data.sessionId, docs, scores });
 });
 
 // ---
 // Handler 2 — LLM generation
 // ---
-const llm = new OpenAI({ model: 'gpt-4o-mini', temperature: 0.2 });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 workflow.handle([retrievedEv], async (ctx, ev) => {
   const context = ev.data.docs
@@ -529,21 +543,20 @@ workflow.handle([retrievedEv], async (ctx, ev) => {
     .join('\n');
 
   const response = await llm.complete({
-    prompt: `Answer concisely using only the context below.\n\nContext:\n${context}\n\nQuestion: (see queryEv)`,
+    prompt: `Answer concisely using only the context below.\n\nContext:\n${context}\n\nQuestion: ${ev.data.query}`,
   });
 
-  return generatedEv.with({ answer: response.text });
+  return generatedEv.with({ answer: response.text, sessionId: ev.data.sessionId });
 });
 
 // ---
 // Handler 3 — assemble final result
 // ---
-workflow.handle([generatedEv, queryEv], async (ctx, gen) => {
-  // Note: workflow.handle with multiple events fires when ALL listed events have arrived
+workflow.handle([generatedEv], async (ctx, gen) => {
   return stopEv.with({
     answer: gen.data.answer,
     docsUsed: ctx.state.docsRetrieved,
-    sessionId: 'session_001',
+    sessionId: gen.data.sessionId,
     durationMs: Date.now() - ctx.state.startMs,
   });
 });
@@ -566,7 +579,7 @@ async function runRagQuery(query: string, sessionId: string) {
 // runRagQuery('What is RAG?', 'session_001').then(console.log);
 ```
 
-**Pitfall:** `workflow.handle([evA, evB], handler)` fires only when **both** events have been emitted in the same context. If you want a handler that fires on either event, use `or(evA, evB)`. Source: `@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24).
+**Tip:** carry the values later handlers need (here `query` and `sessionId`) in the event payloads or in state, rather than trying to have a handler wait for an earlier event a second time. To fire a handler on *either* of two events, use `or(evA, evB)`.
 
 ---
 
@@ -580,14 +593,14 @@ For LLM-backed agent coordination, `@llamaindex/workflow` ships `FunctionAgent`,
 import {
   FunctionAgent,
   multiAgent,
-  agent,
-  startAgentEvent,
+  agentStreamEvent,
   stopAgentEvent,
 } from '@llamaindex/workflow';
 import { OpenAI } from '@llamaindex/openai';
 import { tool } from '@llamaindex/core/tools';
+import { z } from 'zod';
 
-const llm = new OpenAI({ model: 'gpt-4o' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 // ---
 // Define tools
@@ -595,12 +608,8 @@ const llm = new OpenAI({ model: 'gpt-4o' });
 const searchTool = tool({
   name: 'web_search',
   description: 'Search the web for recent information',
-  parameters: {
-    type: 'object',
-    properties: { query: { type: 'string' } },
-    required: ['query'],
-  },
-  execute: async ({ query }: { query: string }) => {
+  parameters: z.object({ query: z.string().describe('Search query') }),
+  execute: async ({ query }) => {
     return `Search results for: ${query}`;
   },
 });
@@ -608,12 +617,8 @@ const searchTool = tool({
 const analyseTool = tool({
   name: 'analyse_data',
   description: 'Analyse text data and extract key insights',
-  parameters: {
-    type: 'object',
-    properties: { data: { type: 'string' } },
-    required: ['data'],
-  },
-  execute: async ({ data }: { data: string }) => {
+  parameters: z.object({ data: z.string() }),
+  execute: async ({ data }) => {
     return `Analysis of: ${data.substring(0, 100)}...`;
   },
 });
@@ -651,13 +656,10 @@ const researchWorkflow = multiAgent({
 // Run
 // ---
 async function runResearch(question: string) {
-  const stream = researchWorkflow.run(question);
-
-  for await (const event of stream) {
-    if (stopAgentEvent.include(event)) {
-      console.log('Final answer:', event.data.result);
-      return event.data;
-    }
+  // run() resolves to the final stop event; runStream() yields every event
+  for await (const event of researchWorkflow.runStream(question)) {
+    if (agentStreamEvent.include(event)) process.stdout.write(event.data.delta);
+    if (stopAgentEvent.include(event)) return event.data.result;
   }
 }
 
@@ -669,10 +671,10 @@ async function runResearch(question: string) {
 When you only need one agent, use the `agent()` helper:
 
 ```typescript
-import { agent, startAgentEvent, stopAgentEvent } from '@llamaindex/workflow';
+import { agent } from '@llamaindex/workflow';
 import { OpenAI } from '@llamaindex/openai';
 
-const llm = new OpenAI({ model: 'gpt-4o-mini' });
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
 
 const summaryWorkflow = agent({
   name: 'Summariser',
@@ -683,12 +685,8 @@ const summaryWorkflow = agent({
 });
 
 async function summarise(text: string): Promise<string> {
-  const events = await summaryWorkflow.run(text)
-    .until(stopAgentEvent)
-    .toArray();
-
-  const stop = events.find(e => stopAgentEvent.include(e));
-  return String(stop?.data.result ?? '');
+  const stop = await summaryWorkflow.run(text);   // resolves to the stop event
+  return String(stop.data.result ?? '');
 }
 ```
 
@@ -718,12 +716,10 @@ const { withState } = createStatefulMiddleware<OrchestratorState>(() => ({
 const base = createWorkflow();
 const workflow = withState(base);
 
-workflow.handle([orchestratorEv], async (ctx, ev) => {
-  // Decide which specialist to invoke
-  if (ev.data.priority === 'high') {
-    ctx.sendEvent(researchTaskEv.with({ task: ev.data.task }));
-  }
-  return researchTaskEv.with({ task: ev.data.task });
+workflow.handle([orchestratorEv], async (_ctx, ev) => {
+  // Route to the research specialist; flag urgent work in the payload
+  const task = ev.data.priority === 'high' ? `[urgent] ${ev.data.task}` : ev.data.task;
+  return researchTaskEv.with({ task });
 });
 
 workflow.handle([researchTaskEv], async (ctx, ev) => {
@@ -748,59 +744,9 @@ const report = events.find(e => reportEv.include(e));
 console.log(report?.data);
 ```
 
-### 6.4 Stateful checkpointing and resume
+### 6.4 Snapshots
 
-`createStatefulMiddleware` supports snapshotting workflow state for durable execution:
-
-```typescript
-import {
-  createWorkflow,
-  workflowEvent,
-  run,
-  createStatefulMiddleware,
-} from '@llamaindex/workflow';
-
-type CheckpointState = {
-  steps: string[];
-  lastCheckpoint: number;
-};
-
-const { withState } = createStatefulMiddleware<CheckpointState>(() => ({
-  steps: [],
-  lastCheckpoint: 0,
-}));
-
-const startEv = workflowEvent<{ jobId: string }>();
-const step1Ev = workflowEvent<{ jobId: string }>();
-const stopEv  = workflowEvent<{ jobId: string; steps: string[] }>();
-
-const base = createWorkflow();
-const workflow = withState(base);
-
-workflow.handle([startEv], async (ctx, ev) => {
-  ctx.state.steps.push('initialised');
-  return step1Ev.with({ jobId: ev.data.jobId });
-});
-
-workflow.handle([step1Ev], async (ctx, ev) => {
-  ctx.state.steps.push('step1-complete');
-  ctx.state.lastCheckpoint = Date.now();
-
-  // Take a snapshot for durable checkpointing
-  const snap = await ctx.snapshot();
-  console.log('Checkpoint version:', snap.version);
-
-  return stopEv.with({ jobId: ev.data.jobId, steps: ctx.state.steps });
-});
-
-const ctxInstance = workflow.createContext();
-const events = await run(workflow, startEv.with({ jobId: 'job-42' }))
-  .until(stopEv)
-  .toArray();
-
-console.log(events.at(-1)?.data);
-// { jobId: 'job-42', steps: ['initialised', 'step1-complete'] }
-```
+Stateful workflows also expose `ctx.snapshot()` and `workflow.resume(snapshot)` for pausing a run (for example while waiting for a human) and continuing it later. A snapshot closes the context to further events, so take it only when you intend to stop the run. Given that the package is no longer maintained, test this carefully before relying on it for durable execution; Python Workflows (`llama-index-workflows`) have the better-supported equivalent.
 
 ---
 
@@ -808,22 +754,24 @@ console.log(events.at(-1)?.data);
 
 | Pitfall | Correct approach |
 |---------|-----------------|
-| Importing `Workflow`, `StartEvent`, `StopEvent` from `llama-index-workflows` | Import from `@llamaindex/workflow`. `llama-index-workflows` is not a real package. |
+| Importing `Workflow`, `StartEvent`, `StopEvent` from `llama-index-workflows` | Import from `@llamaindex/workflow`. `llama-index-workflows` is the *Python* package. |
 | `extends Workflow` + `@step()` class pattern | Use `createWorkflow()` + `workflow.handle()` |
 | `workflow.handle(...).handle(...)` chaining | `handle()` returns `void`; register each handler as a separate call |
 | `new StopEvent({ result: ... })` | `stopEvent.with({ result: ... })` |
 | `runWorkflow(wf, input, stop)` | `await run(wf, input).until(stop).toArray()` |
 | `runAndCollect(wf, input, stop)` | `await run(wf, input).until(stop).toArray()` |
 | Using `getContext()` outside a handler | Pass `ctx` from the handler parameter instead |
-| Multi-event handler fires immediately | `handle([evA, evB], ...)` waits for BOTH events; use `or(evA, evB)` for either/or |
+| Expecting a handler to receive an event that was already consumed | Carry the data forward in event payloads or state; use `or(evA, evB)` for either/or |
+| `await agentWorkflow.run(q).until(...)` | `run()` returns a Promise of the stop event; use `runStream()` for events |
+| `tool({ parameters: { type: 'object', ... } })` with a widened `type: string` | Pass a Zod schema (`z.object({...})`) or mark the JSON schema `as const` |
 
 ---
 
 ## Upstream documentation
 
-- Official docs: [ts.llamaindex.ai](https://ts.llamaindex.ai) — Workflows section
-- Package source: `node_modules/@llamaindex/workflow-core/dist/index.d.ts`
-- CHANGELOG: `node_modules/@llamaindex/workflow/CHANGELOG.md`
+- Official docs: [ts.llamaindex.ai](https://ts.llamaindex.ai) (archived with the project)
+- Deprecation notice: [LlamaIndexTS README](https://github.com/run-llama/LlamaIndexTS)
+- Package source: [LlamaIndexTS on GitHub](https://github.com/run-llama/LlamaIndexTS) (`packages/workflow`), and the type declarations shipped in `@llamaindex/workflow-core` on [npm](https://www.npmjs.com/package/@llamaindex/workflow-core)
 - npm: [npmjs.com/package/@llamaindex/workflow](https://www.npmjs.com/package/@llamaindex/workflow)
 
 ---
@@ -832,6 +780,8 @@ console.log(events.at(-1)?.data);
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous guide documented a fictional `llama-index-workflows` class-based API (`extends Workflow`, `@step()`, `new StartEvent`, etc.) that does not exist in the published package. Rewritten entirely against the functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`, `or`, `createStatefulMiddleware`. All six code examples executed against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node` — PASS. API surface verified from `node_modules/@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24). | Claude routine |
+| 2026-10-21 | final releases | Versions now listed once on the overview; corrected the claim that `llamaindex` re-exports the workflow API; Node 22+; the orchestrator example no longer sends the research event twice. |
+| 2026-10-21 | @llamaindex/workflow 1.1.25 | Added the upstream deprecation notice. Fixed examples that failed type-checking: tool schemas now use Zod, `multiAgent(...).run()` / `agent(...).run()` corrected (they return a Promise; streaming is `runStream()`), RAG example no longer relies on a two-event join that never fires, fan-out example now actually fans out, broken snapshot example replaced with a note. |
+| 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous guide documented a fictional `llama-index-workflows` class-based API (`extends Workflow`, `@step()`, `new StartEvent`, etc.) that does not exist in the published package. Rewritten entirely against the functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`, `or`, `createStatefulMiddleware`. All six code examples executed against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node` — PASS. API surface verified from `node_modules/@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24). |
 | 2026-05-04 | @llamaindex/workflow 1.1.25 | Previous guide carried over (not yet remediated). |
 | 2026-04-21 | @llamaindex/workflow 1.1.24 | First attempt to document functional API; minimal example rewritten. |

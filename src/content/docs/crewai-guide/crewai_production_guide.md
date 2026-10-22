@@ -1,998 +1,434 @@
 ---
-title: "CrewAI Production Guide"
-description: "Running CrewAI in production — testing, deployment, monitoring, performance and cost optimisation, and error recovery."
-framework: crewai
+title: "CrewAI in production"
+description: "CrewAI's own production tooling — limits and guardrails, event listeners, OpenTelemetry, tracing, hooks, token accounting, checkpoints, offline tests with a stub LLM, and deploying with crewai deploy or your own container."
+framework: "crewai"
+language: "python"
+sidebar:
+  label: "Production"
+  order: 50
 ---
 
-# CrewAI Production Guide
-## Deploying, Testing, Optimising, and Maintaining Multi-Agent Systems
+> **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/events/`, `crewai/hooks/`, `crewai/execution.py`, `crewai/state/`, `crewai_cli/deploy/`). The Python examples were run against that release with a stub LLM; the pytest files pass offline.
 
----
+This page covers what CrewAI itself gives you for running crews and flows in production. Generic service plumbing (web frameworks, Kubernetes, queues) is not CrewAI-specific and is only touched on where CrewAI changes the advice.
 
-## Table of Contents
+## Checklist
 
-1. [Production Fundamentals](#production-fundamentals)
-2. [Testing Strategies](#testing-strategies)
-3. [Deployment Patterns](#deployment-patterns)
-4. [Monitoring and Logging](#monitoring-and-logging)
-5. [Performance Optimisation](#performance-optimisation)
-6. [Cost Optimisation](#cost-optimisation)
-7. [Error Handling and Recovery](#error-handling-and-recovery)
-8. [Security Considerations](#security-considerations)
-9. [Scaling Strategies](#scaling-strategies)
-10. [Integration Patterns](#integration-patterns)
+| Concern | CrewAI feature | Section |
+|---|---|---|
+| Runaway loops and cost | `max_iter`, `max_rpm`, `max_execution_time`, tool `max_usage_count` | [Limits](#limits-guardrails-and-failure-policy) |
+| Bad output | Task `guardrail` / `guardrails`, `output_pydantic` / `response_model` | [Limits](#limits-guardrails-and-failure-policy) |
+| Tools that fail quietly | `tool_failure_policy` | [Limits](#limits-guardrails-and-failure-policy) |
+| Logs and metrics | Event listeners on `crewai_event_bus` | [Event listeners](#event-listeners) |
+| Traces | Your own OpenTelemetry spans from listeners; CrewAI AMP tracing | [Tracing](#tracing) |
+| Policy enforcement | `before_tool_call` / `after_llm_call` hooks | [Hooks](#hooks-block-or-rewrite-calls) |
+| Cost reporting | `CrewOutput.token_usage`, `LLMCallCompletedEvent.usage` | [Tokens](#token-usage) |
+| Crashes mid-run | `Crew(checkpoint=...)`, `@persist` for flows | [Checkpoints](#recovery-with-checkpoints) |
+| Regressions | pytest with a stub `BaseLLM`; `crewai test`, `crewai eval` | [Testing](#testing-without-a-model) |
+| Shipping | `crewai deploy validate/create/push`, or your own container | [Deploying](#deploying) |
 
----
+## Configuration and secrets
 
-## Production Fundamentals
+- Keep provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) in the environment. CrewAI and the provider SDKs read them from there; `LLM(api_key=...)` is only needed for non-standard setups.
+- The project scaffold puts a `.env` in the project root and lists it in `.gitignore`. It is for local runs. Never `COPY` it into an image or commit it; inject secrets at runtime (`docker run --env-file`, Kubernetes Secrets, your platform's secret store).
+- `crewai deploy create` **reads your local `.env` and sends its variables to CrewAI AMP** as deployment environment variables, after showing you the list to confirm. Check that file before you deploy, or keep production values out of it and set them on the platform.
+- Pin the model per agent (`llm=LLM(model="openai/%%model=openai-small%%")`) rather than relying on the default. An agent without `llm` reads the `MODEL` environment variable, then falls back to CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), which can change between releases. Provider SDKs other than OpenAI are extras: `pip install "crewai[anthropic]"`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`.
+- CrewAI sends anonymous usage telemetry by default. Turn it off with `CREWAI_DISABLE_TELEMETRY=true` (or `CREWAI_DISABLE_TRACKING=true`). `OTEL_SDK_DISABLED=true` also works but disables **every** OpenTelemetry SDK in the process, including your own tracing. Leave `Crew(share_crew=False)` (the default) unless you intend to share crew data with CrewAI.
 
-### Development vs. Production Configuration
-
-**Development Environment:**
+## Limits, guardrails and failure policy
 
 ```python
+from crewai import Agent, Crew, Task, LLM
+from crewai.tasks.task_output import TaskOutput
+
+llm = LLM(model="openai/%%model=openai-small%%", timeout=60)
+
+
+def under_300_words(output: TaskOutput) -> tuple[bool, str]:
+    words = len(output.raw.split())
+    if words > 300:
+        return False, f"{words} words; cut it to 300 or fewer."
+    return True, output.raw
+
+
+writer = Agent(
+    role="Writer",
+    goal="Write accurate product summaries",
+    backstory="Technical writer for a hardware company.",
+    llm=llm,
+    max_iter=10,                 # reasoning iterations per task (default 25)
+    max_execution_time=120,      # wall-clock seconds per task
+    max_retry_limit=2,           # retries after a task-level error
+    tool_failure_policy="raise", # a tool that reports failure aborts the task
+)
+
+summary = Task(
+    description="Summarise {product} for the catalogue.",
+    expected_output="A plain-text summary under 300 words.",
+    agent=writer,
+    guardrail=under_300_words,
+    guardrail_max_retries=2,
+)
+
+crew = Crew(agents=[writer], tasks=[summary], max_rpm=30)   # requests per minute, whole crew
+print(crew.kickoff(inputs={"product": "a USB-C dock"}).raw)
+```
+
+- **Guardrails** run after the task; a failure sends the reason back to the agent for another attempt. On success, return the output (`output.raw`) as the second value; that value becomes the task output. See [Task API → Guardrails](/crewai-guide/crewai_task_api_python/#guardrails) for the structured-output caveats.
+- **`tool_failure_policy`** (`"ignore"`, `"warn"`, `"raise"`) applies when a tool runs but reports failure. Set it on the crew, agent or task; the most specific wins, and the default is `"warn"`.
+- **Tool caps**: `@tool("search", max_usage_count=5)` stops a tool after five calls per task.
+- `LLM(timeout=...)` bounds each model call; `max_execution_time` bounds the whole task.
+
+## Event listeners
+
+Every crew, task, agent, LLM call, tool call, flow method, memory and knowledge operation emits a typed event on `crewai_event_bus`. A listener subclass registers its handlers once and then sees every run in the process:
+
+```python
+import json
+import logging
+
+from crewai.events import (
+    BaseEventListener,
+    CrewKickoffCompletedEvent,
+    CrewKickoffFailedEvent,
+    LLMCallFailedEvent,
+    TaskFailedEvent,
+    ToolUsageErrorEvent,
+)
+
+log = logging.getLogger("crew.ops")
+
+
+def emit(kind: str, **fields) -> None:
+    log.info(json.dumps({"event": kind, **fields}, default=str))
+
+
+class OpsListener(BaseEventListener):
+    def setup_listeners(self, crewai_event_bus):
+        @crewai_event_bus.on(CrewKickoffCompletedEvent)
+        def on_crew_done(source, event):
+            emit("crew_completed", crew=event.crew_name, total_tokens=event.total_tokens)
+
+        @crewai_event_bus.on(CrewKickoffFailedEvent)
+        def on_crew_failed(source, event):
+            emit("crew_failed", crew=event.crew_name, error=event.error)
+
+        @crewai_event_bus.on(TaskFailedEvent)
+        def on_task_failed(source, event):
+            emit("task_failed", task=event.task_name, agent=event.agent_role, error=event.error)
+
+        @crewai_event_bus.on(ToolUsageErrorEvent)
+        def on_tool_error(source, event):
+            emit("tool_error", tool=event.tool_name, agent=event.agent_role, error=event.error)
+
+        @crewai_event_bus.on(LLMCallFailedEvent)
+        def on_llm_failed(source, event):
+            emit("llm_failed", model=event.model, error=event.error)
+
+
+ops_listener = OpsListener()   # instantiate once, at import time, before any kickoff
+```
+
+- Handlers take `(source, event)`. Sync handlers run on a thread pool, so they don't block the agents; call `crewai_event_bus.flush()` when you need them finished (in tests, or before a short-lived process exits).
+- Event families include `Crew*`, `Task*`, `Agent*`, `LLMCall*`, `LLMStreamChunkEvent`, `ToolUsage*`, `ToolFailureDetectedEvent`, `MCP*`, `Memory*`, `Knowledge*`, `Flow*`, `MethodExecution*`, `HumanFeedback*`, `Conversation*` and `Checkpoint*`; all are importable from `crewai.events`.
+- `crewai_event_bus.scoped_handlers()` is a context manager that removes handlers registered inside it, which keeps tests independent.
+- Use `Crew(step_callback=..., task_callback=...)` only for quick per-crew hooks; listeners are the general mechanism.
+
+## Tracing
+
+### Your own OpenTelemetry backend
+
+CrewAI does not install a global OpenTelemetry `TracerProvider`, so spans for your backend come from a listener. This one records a span per task:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+
+from crewai.events import (
+    BaseEventListener,
+    TaskCompletedEvent,
+    TaskFailedEvent,
+    TaskStartedEvent,
+)
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))  # swap for an OTLP exporter
+trace.set_tracer_provider(provider)
+tracer = trace.get_tracer("my-crew")
+
+
+class TaskSpans(BaseEventListener):
+    def __init__(self):
+        self._spans = {}
+        super().__init__()
+
+    def setup_listeners(self, crewai_event_bus):
+        @crewai_event_bus.on(TaskStartedEvent)
+        def started(source, event):
+            self._spans[event.task_id] = tracer.start_span(f"task {event.task_name or event.task_id}")
+
+        @crewai_event_bus.on(TaskCompletedEvent)
+        def completed(source, event):
+            if span := self._spans.pop(event.task_id, None):
+                span.set_attribute("crewai.output_chars", len(event.output.raw))
+                span.end()
+
+        @crewai_event_bus.on(TaskFailedEvent)
+        def failed(source, event):
+            if span := self._spans.pop(event.task_id, None):
+                span.set_status(trace.Status(trace.StatusCode.ERROR, event.error))
+                span.end()
+
+
+task_spans = TaskSpans()
+```
+
+The same pattern extends to `LLMCallStartedEvent` / `LLMCallCompletedEvent` (keyed by `event.call_id`) and the tool events. Do not set `OTEL_SDK_DISABLED=true` to silence CrewAI's telemetry when you use this; it turns these spans into no-ops too.
+
+### CrewAI AMP tracing
+
+CrewAI can also send execution traces to CrewAI AMP, where `crewai eval` grades them. Enable it with any one of:
+
+- `Crew(tracing=True)` or `Flow(tracing=True)` in code;
+- `CREWAI_TRACING_ENABLED=true` in the environment;
+- `crewai traces enable` (records your consent in CrewAI's per-user data; `crewai traces status` and `crewai traces disable` also exist).
+
+`tracing=False` or `CREWAI_TRACING_ENABLED=false` turns it off for a run. Traces contain prompts and outputs, so treat this as sending data to a third party.
+
+## Hooks: block or rewrite calls
+
+Hooks run synchronously inside the agent loop, so unlike listeners they can change what happens. They are registered globally when the decorated function is defined:
+
+```python
+import re
+
+from crewai.hooks import (
+    LLMCallHookContext,
+    ToolCallHookContext,
+    after_llm_call,
+    before_tool_call,
+)
+
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
+
+
+@before_tool_call(tools=["delete_customer"])
+def block_deletes(context: ToolCallHookContext) -> bool | None:
+    """Refuse destructive calls unless the agent passed confirmed=True."""
+    if not context.tool_input.get("confirmed"):
+        return False          # the tool does not run; the agent sees "Tool execution blocked by hook"
+    return None
+
+
+@after_llm_call
+def redact_emails(context: LLMCallHookContext) -> str | None:
+    """Mask email addresses in every model response before CrewAI uses it."""
+    if context.response and EMAIL.search(context.response):
+        return EMAIL.sub("[email]", context.response)
+    return None               # keep the response unchanged
+```
+
+- `before_llm_call` and `before_tool_call` hooks return `False` to block the call; they may edit `context.messages` / `context.tool_input` in place (never replace the list or dict).
+- `after_llm_call` and `after_tool_call` hooks return a replacement string, or `None` to keep the original.
+- `tools=[...]` and `agents=[...]` filter which calls a hook sees. `crewai.hooks.clear_all_global_hooks()` removes them all (useful between tests).
+
+## Token usage
+
+`kickoff()` returns a `CrewOutput` whose `token_usage` is a `UsageMetrics` with `total_tokens`, `prompt_tokens`, `cached_prompt_tokens`, `completion_tokens`, `reasoning_tokens`, `cache_creation_tokens` and `successful_requests`:
+
+```python
+result = crew.kickoff(inputs={"product": "a USB-C dock"})
+usage = result.token_usage
+print(usage.prompt_tokens, usage.completion_tokens, usage.cached_prompt_tokens)
+```
+
+Multiply by your provider's current prices to report cost; keep the prices in configuration rather than code, because they change. For per-call figures (per model, per agent), read `event.usage` and `event.model` in an `LLMCallCompletedEvent` listener.
+
+## Recovery with checkpoints
+
+A checkpoint is a JSON snapshot of the run written when chosen events fire. If the process dies, resume from the last one instead of starting again:
+
+```python
+from crewai import Agent, Crew, Task, LLM, CheckpointConfig
+
+llm = LLM(model="openai/%%model=openai-small%%")
+writer = Agent(role="Writer", goal="Write about {topic}", backstory="Technical writer.", llm=llm)
+outline = Task(description="Outline an article on {topic}.", expected_output="Five headings.", agent=writer)
+draft = Task(description="Write the article from the outline.", expected_output="About 800 words.", agent=writer)
+
 crew = Crew(
-    agents=agents,
-    tasks=tasks,
-    verbose=True,  # Enable detailed logging
-    memory=True,   # Enable memory for debugging
-    max_rpm=100    # Higher limit for testing
+    agents=[writer],
+    tasks=[outline, draft],
+    checkpoint=CheckpointConfig(location="./.checkpoints", on_events=["task_completed"], max_checkpoints=20),
 )
+crew.kickoff(inputs={"topic": "vector search"})
+
+# After a crash: rebuild the same crew and resume from a saved file
+# crew.kickoff(from_checkpoint=CheckpointConfig(restore_from="./.checkpoints/main/<file>.json"))
 ```
 
-**Production Environment:**
+- `crewai checkpoint list ./.checkpoints` shows each file with the number of tasks completed; `crewai checkpoint resume` picks the latest. See [CLI → Checkpoints](/crewai-guide/crewai_cli_python/#checkpoints).
+- In containers, put `location` on a persistent volume, or use the SQLite provider (`crewai.state.provider.sqlite_provider`).
+- Flows can use the same `checkpoint=` / `from_checkpoint=`, or `@persist` for state-level resume and paused human review ([Flows → Persistence](/crewai-guide/crewai_flows_guide/#persistence-and-resume--persist)).
+- Checkpoints contain task outputs and inputs. Treat the directory as sensitive data.
+
+## Testing without a model
+
+Unit tests should not call a provider. Subclass `BaseLLM` with canned replies and pass it as the agent's `llm`; everything else (interpolation, task wiring, guardrails, events, flow routing) runs for real. These two files pass with `pytest` and no API key:
 
 ```python
-crew = Crew(
-    agents=agents,
-    tasks=tasks,
-    verbose=False,  # Minimal output
-    memory=True,    # Maintain history for analysis
-    max_rpm=10,     # Respect API rate limits
-    share_crew_state=True  # Optimise for reliability
-)
+# tests/test_crew.py: runs offline, no API key, no network
+from typing import Any
+
+from crewai import Agent, Crew, Task
+from crewai.crews.crew_output import CrewOutput
+from crewai.events import TaskCompletedEvent, crewai_event_bus
+from crewai.llms.base_llm import BaseLLM
+
+
+class ScriptedLLM(BaseLLM):
+    """Returns canned replies in order and records every prompt it was sent."""
+
+    replies: list[str] = []
+    prompts: list[Any] = []
+
+    def call(self, messages, tools=None, callbacks=None, available_functions=None,
+             from_task=None, from_agent=None, response_model=None, **kwargs):
+        self.prompts.append(messages)
+        reply = self.replies.pop(0) if self.replies else "done"
+        return f"Thought: I now know the final answer\nFinal Answer: {reply}"
+
+    def supports_function_calling(self) -> bool:
+        return False
+
+
+def build_crew(llm: BaseLLM) -> Crew:
+    analyst = Agent(
+        role="Analyst",
+        goal="Summarise {topic}",
+        backstory="Writes short, factual summaries.",
+        llm=llm,
+    )
+    summary = Task(
+        description="Summarise {topic} in one sentence.",
+        expected_output="One sentence.",
+        agent=analyst,
+    )
+    return Crew(agents=[analyst], tasks=[summary])
+
+
+def test_crew_returns_summary_and_interpolates_inputs():
+    llm = ScriptedLLM(model="scripted", replies=["Tides are caused by the Moon."])
+    result = build_crew(llm).kickoff(inputs={"topic": "tides"})
+
+    assert isinstance(result, CrewOutput)
+    assert result.raw == "Tides are caused by the Moon."
+    assert "tides" in str(llm.prompts[0])          # {topic} reached the prompt
+
+
+def test_task_completed_event_fires():
+    seen = []
+    with crewai_event_bus.scoped_handlers():       # handlers removed on exit
+        @crewai_event_bus.on(TaskCompletedEvent)
+        def record(source, event):
+            seen.append(event.output.raw)
+
+        build_crew(ScriptedLLM(model="scripted", replies=["ok"])).kickoff(inputs={"topic": "x"})
+        crewai_event_bus.flush()                   # handlers run on a thread pool
+
+    assert seen == ["ok"]
 ```
-
-### Configuration Management
-
-Store configuration in environment variables:
 
 ```python
-import os
-from dotenv import load_dotenv
+# tests/test_flow.py: flow routing is plain Python, so test it without any LLM
+from typing import Literal
 
-load_dotenv()
+from pydantic import BaseModel
+from crewai.flow import Flow, listen, router, start
 
-# API Configuration
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
 
-# Model Configuration
-PRODUCTION_MODEL = os.getenv('PRODUCTION_MODEL', 'openai/gpt-4-turbo')
-FALLBACK_MODEL = os.getenv('FALLBACK_MODEL', 'openai/gpt-3.5-turbo')
+class TicketState(BaseModel):
+    text: str = ""
 
-# Execution Configuration
-MAX_RPM = int(os.getenv('MAX_RPM', '10'))
-VERBOSE = os.getenv('VERBOSE', 'False').lower() == 'true'
 
-# Create LLM based on configuration
-llm = LLM(
-    model=PRODUCTION_MODEL,
-    api_key=OPENAI_API_KEY,
-    temperature=0.5
-)
+class TriageFlow(Flow[TicketState]):
+    @start()
+    def receive(self):
+        return self.state.text
+
+    @router(receive)
+    def route(self) -> Literal["urgent", "routine"]:
+        return "urgent" if "outage" in self.state.text.lower() else "routine"
+
+    @listen("urgent")
+    def page(self):
+        return "paged"
+
+    @listen("routine")
+    def queue(self):
+        return "queued"
+
+
+def test_outage_pages_on_call():
+    assert TriageFlow().kickoff(inputs={"text": "EU outage"}) == "paged"
+
+
+def test_everything_else_is_queued():
+    assert TriageFlow().kickoff(inputs={"text": "typo"}) == "queued"
+
+
+def test_router_declares_its_labels():
+    route = TriageFlow.flow_definition().to_dict()["methods"]["route"]
+    assert route["emit"] == ["urgent", "routine"]
 ```
 
-### Project Structure for Production
+- The stub answers in CrewAI's text format (`Final Answer: ...`) and reports no native function calling, which keeps the agent on the text path. To exercise a tool, return `Action: <tool name>` / `Action Input: {...}` first and the final answer on the next call.
+- For structured output, return JSON matching the model when `response_model` is passed to `call`.
+- Set `CREWAI_DISABLE_TELEMETRY=true` and `CREWAI_TRACING_ENABLED=false` in the test environment so nothing leaves the machine.
 
-```
-my_crewai_project/
-├── .env                          # Environment variables
-├── .env.example                  # Template for env vars
-├── .gitignore
-├── README.md
-├── requirements.txt
-├── setup.py
-├── pyproject.toml
-│
-├── src/
-│   └── my_project/
-│       ├── __init__.py
-│       ├── main.py              # Entry point
-│       ├── config.py            # Configuration management
-│       ├── logging_config.py    # Logging setup
-│       │
-│       ├── agents/
-│       │   ├── __init__.py
-│       │   ├── base_agent.py
-│       │   └── specialized_agents.py
-│       │
-│       ├── tasks/
-│       │   ├── __init__.py
-│       │   └── task_definitions.py
-│       │
-│       ├── crews/
-│       │   ├── __init__.py
-│       │   └── crew_factory.py
-│       │
-│       ├── tools/
-│       │   ├── __init__.py
-│       │   └── custom_tools.py
-│       │
-│       └── utils/
-│           ├── __init__.py
-│           ├── error_handling.py
-│           ├── monitoring.py
-│           └── caching.py
-│
-├── tests/
-│   ├── unit/
-│   │   ├── test_agents.py
-│   │   ├── test_tasks.py
-│   │   └── test_tools.py
-│   │
-│   ├── integration/
-│   │   ├── test_crew_execution.py
-│   │   └── test_end_to_end.py
-│   │
-│   └── performance/
-│       ├── test_latency.py
-│       └── test_throughput.py
-│
-└── docs/
-    ├── deployment.md
-    ├── troubleshooting.md
-    └── api_reference.md
+### Evaluation with a real model
+
+- `crewai test -n 3 -m %%model=openai-small%%` runs the crew three times and scores each task with an OpenAI model. It costs tokens, and in 1.15.28 it exits 0 even when the run errors, so it is a report rather than a CI gate.
+- `crewai eval` grades the last traced run through CrewAI AMP and exits non-zero on a failed gate; `crewai eval --models a,b` compares models on a deployment. It needs tracing and `crewai login`.
+
+## Deploying
+
+### CrewAI AMP
+
+CrewAI AMP is CrewAI's hosted platform. The CLI is the interface; there is no `crewai.amp` Python API.
+
+```bash
+crewai login                       # authenticate the CLI
+crewai deploy validate             # local pre-flight checks, no network
+crewai deploy create               # first deployment (from the git origin remote, or a ZIP upload)
+crewai deploy push                 # redeploy after changes
+crewai deploy status -u <uuid>
+crewai deploy logs -u <uuid>
 ```
 
----
+`crewai deploy validate` runs the checks `create` and `push` run first, and exits non-zero on blocking errors: `pyproject.toml` with a project name, a lockfile (`uv.lock` or `poetry.lock`) that is present and not stale, the `src/<package>/` layout and standard crew files (or a `Flow` subclass in `main.py`), a resolvable wheel target, a clean import of the crew or flow module, environment variables referenced in code but missing from `.env`, and the installed `crewai` against the lockfile pin. It is cheap to run in CI.
 
-## Testing Strategies
+Remember that `create` uploads the variables in your local `.env` (see [Configuration](#configuration-and-secrets)).
 
-### Unit Testing Agents
+### Your own container
 
-```python
-import pytest
-from crewai import Agent, LLM
-
-def test_agent_creation():
-    """Test agent initialisation."""
-    agent = Agent(
-        role="Test Agent",
-        goal="Test goal",
-        backstory="Test backstory"
-    )
-    
-    assert agent.role == "Test Agent"
-    assert agent.goal == "Test goal"
-    assert agent.backstory == "Test backstory"
-
-def test_agent_with_tools():
-    """Test agent with tool assignment."""
-    from crewai_tools import FileReadTool
-    
-    reader = FileReadTool()
-    agent = Agent(
-        role="File Reader",
-        goal="Read files",
-        tools=[reader]
-    )
-    
-    assert len(agent.tools) == 1
-    assert agent.tools[0].name == "read_file"
-
-@pytest.mark.asyncio
-async def test_agent_async_execution():
-    """Test async agent execution."""
-    agent = Agent(role="Async Agent", goal="Test async")
-    # Test async functionality
-    pass
-```
-
-### Unit Testing Tasks
-
-```python
-def test_task_creation():
-    """Test task initialisation."""
-    agent = Agent(role="Test", goal="Test")
-    
-    task = Task(
-        description="Test task",
-        expected_output="Test output",
-        agent=agent
-    )
-    
-    assert task.description == "Test task"
-    assert task.agent == agent
-
-def test_task_with_async_execution():
-    """Test async task configuration."""
-    agent = Agent(role="Test", goal="Test")
-    
-    task = Task(
-        description="Async task",
-        expected_output="Output",
-        agent=agent,
-        async_execution=True
-    )
-    
-    assert task.async_execution is True
-```
-
-### Integration Testing Crews
-
-```python
-import pytest
-from crewai import Agent, Task, Crew, Process, LLM
-
-@pytest.fixture
-def test_crew():
-    """Create a test crew."""
-    agent1 = Agent(
-        role="Test Agent 1",
-        goal="Test goal 1",
-        backstory="Test"
-    )
-    agent2 = Agent(
-        role="Test Agent 2",
-        goal="Test goal 2",
-        backstory="Test"
-    )
-    
-    task1 = Task(
-        description="Test task 1",
-        expected_output="Output 1",
-        agent=agent1
-    )
-    
-    task2 = Task(
-        description="Test task 2",
-        expected_output="Output 2",
-        agent=agent2
-    )
-    
-    crew = Crew(
-        agents=[agent1, agent2],
-        tasks=[task1, task2],
-        process=Process.sequential
-    )
-    
-    return crew
-
-def test_crew_execution(test_crew):
-    """Test crew execution."""
-    result = test_crew.kickoff()
-    assert result is not None
-    assert isinstance(result, (str, dict))
-
-def test_crew_sequential_process(test_crew):
-    """Test sequential process execution."""
-    assert test_crew.process == Process.sequential
-    # Verify tasks execute in order
-```
-
-### Performance Testing
-
-```python
-import time
-import pytest
-
-def test_crew_execution_time():
-    """Test crew execution latency."""
-    crew = setup_test_crew()
-    
-    start_time = time.time()
-    result = crew.kickoff()
-    execution_time = time.time() - start_time
-    
-    # Assert execution completes within threshold
-    assert execution_time < 30, f"Execution took {execution_time}s, threshold is 30s"
-
-def test_crew_throughput():
-    """Test crew throughput."""
-    crew = setup_test_crew()
-    
-    start_time = time.time()
-    
-    for _ in range(10):
-        crew.kickoff()
-    
-    total_time = time.time() - start_time
-    avg_time_per_exec = total_time / 10
-    
-    assert avg_time_per_exec < 5, f"Average execution time {avg_time_per_exec}s exceeds threshold"
-
-@pytest.mark.performance
-def test_memory_usage():
-    """Test memory consumption."""
-    import psutil
-    
-    crew = setup_test_crew()
-    
-    process = psutil.Process()
-    memory_before = process.memory_info().rss / 1024 / 1024  # MB
-    
-    crew.kickoff()
-    
-    memory_after = process.memory_info().rss / 1024 / 1024
-    memory_used = memory_after - memory_before
-    
-    assert memory_used < 500, f"Memory usage {memory_used}MB exceeds threshold"
-```
-
----
-
-## Deployment Patterns
-
-### Docker Deployment
-
-**Dockerfile:**
+A crew is an ordinary Python program, so any container platform works. The CrewAI-specific points:
 
 ```dockerfile
-FROM python:3.11-slim
-
+FROM python:3.12-slim
+RUN pip install --no-cache-dir uv
 WORKDIR /app
-
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application
-COPY src/ ./src/
-COPY .env .
-
-# Set environment
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONPATH=/app
-
-# Run application
-CMD ["python", "-m", "src.my_project.main"]
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
+COPY src ./src
+RUN uv sync --frozen
+ENV CREWAI_DISABLE_TELEMETRY=true
+# No .env in the image: pass secrets at run time, e.g. docker run --env-file prod.env ...
+CMD ["uv", "run", "run_crew"]
 ```
 
-**Docker Compose:**
-
-```yaml
-version: '3.8'
-
-services:
-  crewai-app:
-    build: .
-    environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - LOG_LEVEL=INFO
-    volumes:
-      - ./data:/app/data
-    ports:
-      - "8000:8000"
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-
-volumes:
-  redis_data:
-```
-
-### FastAPI Integration
-
-```python
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from typing import Optional
-from crewai import Crew
-
-app = FastAPI(title="CrewAI Service")
-
-class TaskRequest(BaseModel):
-    topic: str
-    depth: str = "comprehensive"
-    preferences: Optional[dict] = None
-
-class TaskResponse(BaseModel):
-    task_id: str
-    status: str
-    result: Optional[str] = None
-
-@app.post("/execute", response_model=TaskResponse)
-async def execute_crew(request: TaskRequest):
-    """Execute crew task via API."""
-    try:
-        crew = create_crew_for_task(request.topic, request.depth)
-        result = crew.kickoff()
-        
-        return TaskResponse(
-            task_id="generated_id",
-            status="completed",
-            result=result
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy"}
-```
-
-### Kubernetes Deployment
-
-**deployment.yaml:**
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: crewai-deployment
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: crewai
-  template:
-    metadata:
-      labels:
-        app: crewai
-    spec:
-      containers:
-      - name: crewai
-        image: my-registry/crewai:latest
-        ports:
-        - containerPort: 8000
-        env:
-        - name: OPENAI_API_KEY
-          valueFrom:
-            secretKeyRef:
-              name: api-keys
-              key: openai
-        resources:
-          requests:
-            memory: "512Mi"
-            cpu: "500m"
-          limits:
-            memory: "1Gi"
-            cpu: "1000m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-```
-
----
-
-## Monitoring and Logging
-
-### Comprehensive Logging Setup
-
-```python
-import logging
-import json
-from datetime import datetime
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('crew_execution.log'),
-        logging.StreamHandler()
-    ]
-)
-
-class CrewLogger:
-    """Custom logger for CrewAI operations."""
-    
-    def __init__(self, name):
-        self.logger = logging.getLogger(name)
-    
-    def log_agent_action(self, agent_name, action, details):
-        """Log agent actions."""
-        self.logger.info(json.dumps({
-            'timestamp': datetime.now().isoformat(),
-            'type': 'agent_action',
-            'agent': agent_name,
-            'action': action,
-            'details': details
-        }))
-    
-    def log_task_start(self, task_name):
-        """Log task start."""
-        self.logger.info(f"Task started: {task_name}")
-    
-    def log_task_complete(self, task_name, duration, success=True):
-        """Log task completion."""
-        status = "SUCCESS" if success else "FAILED"
-        self.logger.info(f"Task {task_name} {status} (Duration: {duration}s)")
-    
-    def log_error(self, component, error):
-        """Log errors."""
-        self.logger.error(f"{component} error: {str(error)}", exc_info=True)
-
-# Usage
-logger = CrewLogger(__name__)
-logger.log_task_start("research_task")
-```
-
-### Monitoring Metrics
-
-```python
-from dataclasses import dataclass
-from typing import Dict, List
-import time
-
-@dataclass
-class ExecutionMetrics:
-    """Metrics for crew execution."""
-    crew_name: str
-    start_time: float
-    end_time: float
-    total_agents: int
-    total_tasks: int
-    successful_tasks: int
-    failed_tasks: int
-    total_tokens_used: int
-    total_cost: float
-    
-    @property
-    def execution_time(self) -> float:
-        return self.end_time - self.start_time
-    
-    @property
-    def success_rate(self) -> float:
-        total = self.successful_tasks + self.failed_tasks
-        return (self.successful_tasks / total * 100) if total > 0 else 0
-    
-    def to_dict(self) -> Dict:
-        return {
-            'crew_name': self.crew_name,
-            'execution_time': self.execution_time,
-            'success_rate': self.success_rate,
-            'total_agents': self.total_agents,
-            'total_tasks': self.total_tasks,
-            'total_tokens_used': self.total_tokens_used,
-            'total_cost': self.total_cost
-        }
-
-class MetricsCollector:
-    """Collect and track execution metrics."""
-    
-    def __init__(self):
-        self.metrics: List[ExecutionMetrics] = []
-    
-    def add_metrics(self, metrics: ExecutionMetrics):
-        """Add metrics record."""
-        self.metrics.append(metrics)
-    
-    def get_average_execution_time(self) -> float:
-        """Get average execution time."""
-        if not self.metrics:
-            return 0
-        total_time = sum(m.execution_time for m in self.metrics)
-        return total_time / len(self.metrics)
-    
-    def get_overall_success_rate(self) -> float:
-        """Get overall success rate."""
-        if not self.metrics:
-            return 0
-        total_successful = sum(m.successful_tasks for m in self.metrics)
-        total_tasks = sum(m.successful_tasks + m.failed_tasks for m in self.metrics)
-        return (total_successful / total_tasks * 100) if total_tasks > 0 else 0
-```
-
----
-
-## Performance Optimisation
-
-### LLM Caching Strategy
-
-```python
-from functools import lru_cache
-from typing import Tuple
-
-class LLMCache:
-    """Cache LLM responses to reduce API calls."""
-    
-    def __init__(self, cache_size=128):
-        self.cache = {}
-        self.cache_size = cache_size
-    
-    def get_cache_key(self, prompt: str, model: str) -> str:
-        """Generate cache key from prompt and model."""
-        import hashlib
-        combined = f"{model}:{prompt}"
-        return hashlib.sha256(combined.encode()).hexdigest()
-    
-    def get(self, prompt: str, model: str) -> str | None:
-        """Retrieve cached response."""
-        key = self.get_cache_key(prompt, model)
-        return self.cache.get(key)
-    
-    def set(self, prompt: str, model: str, response: str):
-        """Cache response."""
-        if len(self.cache) >= self.cache_size:
-            # Remove oldest entry
-            oldest_key = next(iter(self.cache))
-            del self.cache[oldest_key]
-        
-        key = self.get_cache_key(prompt, model)
-        self.cache[key] = response
-    
-    def clear(self):
-        """Clear cache."""
-        self.cache.clear()
-
-# Usage
-cache = LLMCache(cache_size=256)
-
-# Before API call
-cached_response = cache.get(prompt, model_name)
-if cached_response:
-    return cached_response
-
-# After API call
-response = llm.call(prompt)
-cache.set(prompt, model_name, response)
-```
-
-### Parallel Task Execution
-
-```python
-import asyncio
-from typing import List
-
-async def execute_tasks_concurrently(tasks: List[Task], agents: List[Agent]) -> List[str]:
-    """Execute multiple tasks concurrently."""
-    
-    async def run_task(task, agent):
-        # Convert synchronous task execution to async
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, task.execute, agent)
-    
-    # Run all tasks concurrently
-    results = await asyncio.gather(
-        *[run_task(task, agent) for task, agent in zip(tasks, agents)]
-    )
-    
-    return results
-
-# Usage
-async def main():
-    tasks = [task1, task2, task3]
-    agents = [agent1, agent2, agent3]
-    
-    results = await execute_tasks_concurrently(tasks, agents)
-    print(f"All tasks completed: {len(results)} results")
-
-# Run async function
-asyncio.run(main())
-```
-
-### Memory Optimisation
-
-```python
-class OptimisedMemoryManager:
-    """Manage memory efficiently."""
-    
-    def __init__(self, max_memory_mb=512):
-        self.max_memory = max_memory_mb * 1024 * 1024  # Convert to bytes
-        self.memory_usage = {}
-    
-    def should_cleanup(self) -> bool:
-        """Check if cleanup is needed."""
-        import psutil
-        process = psutil.Process()
-        current_memory = process.memory_info().rss
-        return current_memory > self.max_memory
-    
-    def cleanup_old_entries(self):
-        """Remove oldest memory entries."""
-        # Remove least recently used entries
-        sorted_entries = sorted(
-            self.memory_usage.items(),
-            key=lambda x: x[1]['timestamp']
-        )
-        
-        # Remove oldest 25%
-        entries_to_remove = len(sorted_entries) // 4
-        for key, _ in sorted_entries[:entries_to_remove]:
-            del self.memory_usage[key]
-    
-    def add_memory_entry(self, key: str, value: dict):
-        """Add memory entry with cleanup."""
-        if self.should_cleanup():
-            self.cleanup_old_entries()
-        
-        from datetime import datetime
-        self.memory_usage[key] = {
-            **value,
-            'timestamp': datetime.now()
-        }
-```
-
----
-
-## Cost Optimisation
-
-### Token Cost Tracking
-
-```python
-class CostTracker:
-    """Track and optimise API costs."""
-    
-    # Pricing per 1K tokens (as of 2024)
-    PRICING = {
-        'gpt-4-turbo': {'input': 0.01, 'output': 0.03},
-        'gpt-3.5-turbo': {'input': 0.0005, 'output': 0.0015},
-        'claude-3-opus': {'input': 0.015, 'output': 0.075},
-        'claude-3-sonnet': {'input': 0.003, 'output': 0.015}
-    }
-    
-    def __init__(self):
-        self.total_cost = 0.0
-        self.token_usage = {}
-    
-    def calculate_cost(self, model: str, input_tokens: int, output_tokens: int) -> float:
-        """Calculate cost for API call."""
-        if model not in self.PRICING:
-            return 0.0
-        
-        pricing = self.PRICING[model]
-        input_cost = (input_tokens / 1000) * pricing['input']
-        output_cost = (output_tokens / 1000) * pricing['output']
-        
-        total = input_cost + output_cost
-        self.total_cost += total
-        
-        # Track usage
-        if model not in self.token_usage:
-            self.token_usage[model] = {'input': 0, 'output': 0}
-        
-        self.token_usage[model]['input'] += input_tokens
-        self.token_usage[model]['output'] += output_tokens
-        
-        return total
-    
-    def get_cost_report(self) -> dict:
-        """Get comprehensive cost report."""
-        return {
-            'total_cost': f"${self.total_cost:.4f}",
-            'by_model': {
-                model: {
-                    'input_tokens': self.token_usage[model]['input'],
-                    'output_tokens': self.token_usage[model]['output'],
-                    'cost': f"${self.calculate_model_cost(model):.4f}"
-                }
-                for model in self.token_usage
-            }
-        }
-    
-    def calculate_model_cost(self, model: str) -> float:
-        """Calculate cost for specific model."""
-        pricing = self.PRICING.get(model, {'input': 0, 'output': 0})
-        tokens = self.token_usage.get(model, {'input': 0, 'output': 0})
-        
-        input_cost = (tokens['input'] / 1000) * pricing['input']
-        output_cost = (tokens['output'] / 1000) * pricing['output']
-        
-        return input_cost + output_cost
-
-# Usage
-tracker = CostTracker()
-
-# After each LLM call
-cost = tracker.calculate_cost('gpt-4-turbo', input_tokens=500, output_tokens=200)
-print(f"Cost for this call: ${cost:.4f}")
-
-# Get overall report
-report = tracker.get_cost_report()
-print(f"Total cost: {report['total_cost']}")
-```
-
----
-
-## Error Handling and Recovery
-
-### Robust Error Handling
-
-```python
-from typing import Optional, Callable
-import time
-
-class TaskExecutor:
-    """Execute tasks with error handling and retry logic."""
-    
-    def __init__(self, max_retries=3, backoff_factor=2):
-        self.max_retries = max_retries
-        self.backoff_factor = backoff_factor
-    
-    def execute_with_retry(
-        self,
-        task: Task,
-        on_error: Optional[Callable] = None
-    ) -> str:
-        """Execute task with automatic retry."""
-        
-        for attempt in range(self.max_retries):
-            try:
-                return self.execute_task(task)
-            
-            except Exception as e:
-                if attempt < self.max_retries - 1:
-                    # Calculate backoff time
-                    wait_time = self.backoff_factor ** attempt
-                    logger.warning(
-                        f"Task failed (attempt {attempt + 1}/{self.max_retries}). "
-                        f"Retrying in {wait_time}s. Error: {str(e)}"
-                    )
-                    time.sleep(wait_time)
-                else:
-                    # All retries exhausted
-                    if on_error:
-                        on_error(e)
-                    raise
-    
-    def execute_task(self, task: Task) -> str:
-        """Execute single task."""
-        # Implementation
-        pass
-
-# Usage
-executor = TaskExecutor(max_retries=3)
-
-try:
-    result = executor.execute_with_retry(
-        task,
-        on_error=lambda e: logger.error(f"Task failed: {e}")
-    )
-except Exception as e:
-    logger.critical(f"Task execution failed after retries: {e}")
-```
-
----
-
-## Security Considerations
-
-### API Key Management
-
-```python
-import os
-from cryptography.fernet import Fernet
-
-class SecureKeyManager:
-    """Manage API keys securely."""
-    
-    def __init__(self, master_key: Optional[str] = None):
-        if not master_key:
-            master_key = os.getenv('MASTER_KEY')
-        
-        self.cipher = Fernet(master_key.encode())
-    
-    def encrypt_key(self, api_key: str) -> str:
-        """Encrypt API key."""
-        return self.cipher.encrypt(api_key.encode()).decode()
-    
-    def decrypt_key(self, encrypted_key: str) -> str:
-        """Decrypt API key."""
-        return self.cipher.decrypt(encrypted_key.encode()).decode()
-    
-    @staticmethod
-    def load_from_env() -> dict:
-        """Load keys from environment."""
-        return {
-            'openai': os.getenv('OPENAI_API_KEY'),
-            'anthropic': os.getenv('ANTHROPIC_API_KEY'),
-            'serper': os.getenv('SERPER_API_KEY')
-        }
-
-# Usage
-manager = SecureKeyManager()
-
-# Encrypt keys for storage
-encrypted = manager.encrypt_key(api_key)
-
-# Decrypt keys for use
-api_key = manager.decrypt_key(encrypted)
-```
-
----
-
-## Scaling Strategies
-
-### Horizontal Scaling with Load Balancing
-
-```python
-from typing import List
-import random
-
-class CrewLoadBalancer:
-    """Distribute tasks across multiple crew instances."""
-    
-    def __init__(self, crews: List[Crew]):
-        self.crews = crews
-    
-    def execute_balanced(self, task: Task) -> str:
-        """Execute task on least loaded crew."""
-        # Select crew with lowest recent task count
-        selected_crew = min(self.crews, key=lambda c: c.task_count)
-        return selected_crew.execute_task(task)
-    
-    def execute_parallel(self, tasks: List[Task]) -> List[str]:
-        """Execute tasks in parallel across crews."""
-        results = []
-        for task, crew in zip(tasks, self.crews):
-            result = crew.execute_task(task)
-            results.append(result)
-        return results
-
-# Usage
-crews = [create_crew() for _ in range(3)]
-balancer = CrewLoadBalancer(crews)
-
-results = balancer.execute_parallel([task1, task2, task3])
-```
-
----
-
-## Integration Patterns
-
-### Database Integration
-
-```python
-from sqlalchemy import create_engine, Column, String, DateTime, Integer
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from datetime import datetime
-
-Base = declarative_base()
-
-class ExecutionRecord(Base):
-    """Store crew execution records."""
-    __tablename__ = 'executions'
-    
-    id = Column(Integer, primary_key=True)
-    crew_name = Column(String)
-    task_name = Column(String)
-    status = Column(String)  # success, failed, pending
-    result = Column(String)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime)
-
-# Create database session
-engine = create_engine('sqlite:///crew_execution.db')
-Base.metadata.create_all(engine)
-Session = sessionmaker(bind=engine)
-
-class ExecutionDatabase:
-    """Manage execution records."""
-    
-    def __init__(self):
-        self.session = Session()
-    
-    def record_execution(self, crew_name: str, task_name: str, result: str, status: str):
-        """Record execution."""
-        record = ExecutionRecord(
-            crew_name=crew_name,
-            task_name=task_name,
-            result=result,
-            status=status,
-            completed_at=datetime.utcnow()
-        )
-        self.session.add(record)
-        self.session.commit()
-    
-    def get_execution_history(self, crew_name: str) -> List[ExecutionRecord]:
-        """Get execution history."""
-        return self.session.query(ExecutionRecord).filter(
-            ExecutionRecord.crew_name == crew_name
-        ).order_by(ExecutionRecord.created_at.desc()).all()
-```
-
-This production guide provides comprehensive strategies for deploying, monitoring, and optimising CrewAI systems in production environments.
-
-
+- `run_crew` is the console script the classic scaffold defines in `pyproject.toml`; flow projects define their own.
+- Memory (LanceDB), knowledge (ChromaDB), flow persistence (SQLite) and checkpoints write under the working directory or CrewAI's per-user data directory by default. Point them at a mounted volume (`CREWAI_STORAGE_DIR`, `CheckpointConfig(location=...)`, `SQLiteFlowPersistence(path)`) or they vanish with the container. Two processes must not write the same LanceDB path.
+- Behind a web API, run kickoffs as background jobs (a run takes seconds to minutes) and build a fresh crew per request instead of sharing one instance between concurrent requests. In async servers use `await crew.akickoff(...)` or `await flow.kickoff_async(...)`; `kickoff()` blocks the calling thread.
+- Stream partial output with `Crew(stream=True)` / `Flow(stream=True)`, or listen for `LLMStreamChunkEvent`.

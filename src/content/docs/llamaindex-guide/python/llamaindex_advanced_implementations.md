@@ -1,209 +1,223 @@
 ---
 title: "LlamaIndex: Advanced Implementation Patterns"
-description: "This guide explores advanced, production-grade patterns for building sophisticated multi-agent and RAG systems with LlamaIndex."
-framework: llamaindex
-language: python
+description: "Production-grade workflow patterns for LlamaIndex — parallel fan-out, agentic RAG with self-correction, retries, resilient tools and timing middleware."
+framework: "llamaindex"
+language: "python"
+sidebar:
+  label: "Workflow patterns"
 ---
 
-# LlamaIndex: Advanced Implementation Patterns
+> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). For multi-agent routing and human-in-the-loop see [Advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).
 
-This guide explores advanced, production-grade patterns for building sophisticated multi-agent and RAG systems with LlamaIndex.
+Earlier versions of this page were built on the retired `llama-agents` package (`AgentOrchestrator`, `SimpleMessageQueue`) and on an `AgentWorkflow.from_tools(...)` constructor that never existed. The patterns below use the current Workflows runtime.
 
 ---
-## Advanced Multi-Agent Systems with `llama-agents`
 
-While the comprehensive guide introduces `llama-agents`, this section dives deeper into orchestration and communication.
+## 1. Parallel research with fan-out / fan-in
 
-### Asynchronous Agent Orchestration
-
-For complex workflows, running agents sequentially is inefficient. `llama-agents` supports asynchronous execution, allowing you to run multiple agents in parallel.
+Run several agents concurrently and merge their output in a final step.
 
 ```python
-# advanced_multi_agent.py
 import asyncio
-from llama_agents import (
-    AgentService,
-    ControlPlaneServer,
-    SimpleMessageQueue,
-    AgentOrchestrator,
-)
-from llama_index.core.workflow import AgentWorkflow
-from llama_index.core.tools import FunctionTool
+from llama_index.core.agent.workflow import FunctionAgent
+from llama_index.core.workflow import Workflow, step, Context, StartEvent, StopEvent, Event
 from llama_index.llms.openai import OpenAI
 
-# Define tools for different agents
-def research_tool(topic: str) -> str:
-    """Researches a topic online."""
-    return f"Research complete for {topic}. Findings: ..."
+llm = OpenAI(model="%%model=openai-small%%")
 
-def analysis_tool(data: str) -> str:
-    """Analyzes data."""
-    return f"Analysis complete. Key insight: ..."
+def web_search(query: str) -> str:
+    """Search the web."""
+    return f"(results for {query})"
 
-# Create agents
-llm = OpenAI(model="gpt-4")
-research_agent_service = AgentService(
-    agent=AgentWorkflow.from_tools([FunctionTool.from_defaults(research_tool)], llm=llm),
-    message_queue=SimpleMessageQueue(),
-)
-analysis_agent_service = AgentService(
-    agent=AgentWorkflow.from_tools([FunctionTool.from_defaults(analysis_tool)], llm=llm),
-    message_queue=SimpleMessageQueue(),
-)
+researcher = FunctionAgent(tools=[web_search], llm=llm,
+                           system_prompt="Research the angle you are given. Reply with bullet notes.")
 
-# Create orchestrator
-orchestrator = AgentOrchestrator(
-    llm=llm,
-    message_queue=SimpleMessageQueue.from_other(research_agent_service.message_queue),
-)
+class Angle(Event):
+    topic: str
+    angle: str
+
+class Notes(Event):
+    angle: str
+    notes: str
+
+class ParallelResearch(Workflow):
+    @step
+    async def plan(self, ctx: Context, ev: StartEvent) -> Angle:
+        angles = ["technical", "commercial", "regulatory"]
+        await ctx.store.set("expected", len(angles))
+        for a in angles:
+            ctx.send_event(Angle(topic=ev.topic, angle=a))
+        return None
+
+    @step(num_workers=3)
+    async def research(self, ev: Angle) -> Notes:
+        result = await researcher.run(user_msg=f"{ev.topic} — {ev.angle} perspective")
+        return Notes(angle=ev.angle, notes=str(result))
+
+    @step
+    async def merge(self, ctx: Context, ev: Notes) -> StopEvent | None:
+        expected = await ctx.store.get("expected")
+        batch = ctx.collect_events(ev, [Notes] * expected)
+        if batch is None:
+            return None
+        combined = "\n\n".join(f"## {n.angle}\n{n.notes}" for n in batch)
+        summary = await llm.acomplete(f"Write a one-paragraph synthesis:\n\n{combined}")
+        return StopEvent(result=str(summary))
 
 async def main():
-    # Define the task
-    task_str = "Research 'quantum computing' and analyze the findings."
-    
-    # Let the orchestrator create a plan and execute it
-    result = await orchestrator.orchestrate(
-        task_str,
-        agent_services=[research_agent_service, analysis_agent_service],
-    )
-    
-    print(f"Final Result: {result}")
+    print(await ParallelResearch(timeout=300).run(topic="small modular reactors"))
 
-if __name__ == "__main__":
-    asyncio.run(main())
+asyncio.run(main())
 ```
 
+`num_workers` caps concurrency for that step; `collect_events` returns `None` until all expected events have arrived.
+
 ---
-## Complex Human-in-the-Loop (HITL) Patterns
 
-LlamaIndex agents can be designed to pause and wait for human input, which is crucial for approval workflows or interactive data labeling.
+## 2. Agentic RAG with self-correction
 
-### Human Review and Approval Workflow
-
-This pattern involves an agent performing a task, presenting the result for human review, and only proceeding after receiving approval.
+Retrieve, grade the context, and rewrite the query if the context is poor — bounded to a fixed number of attempts.
 
 ```python
-# human_approval_workflow.py
-from llama_index.core.workflow import AgentWorkflow
-from llama_index.core.tools import FunctionTool
-from llama_index.llms.openai import OpenAI
+from llama_index.core import VectorStoreIndex
 
-def draft_email(recipient: str, topic: str) -> str:
-    """Drafts an email."""
-    return f"Subject: {topic}\n\nDear {recipient},\n\nThis is a draft about {topic}."
+class Retrieved(Event):
+    query: str
+    context: str
+    attempt: int
 
-def send_email(email_content: str) -> str:
-    """Sends an email. THIS IS A CRITICAL ACTION."""
-    print(f"---
-SENDING EMAIL ---
-{email_content}")
-    return "Email sent successfully."
+class Rewrite(Event):
+    query: str
+    attempt: int
 
-tools = [
-    FunctionTool.from_defaults(draft_email),
-    FunctionTool.from_defaults(send_email),
-]
+class CorrectiveRAG(Workflow):
+    def __init__(self, index: VectorStoreIndex, max_attempts: int = 3, **kw):
+        super().__init__(**kw)
+        self.retriever = index.as_retriever(similarity_top_k=4)
+        self.max_attempts = max_attempts
 
-llm = OpenAI(model="gpt-4")
-agent = AgentWorkflow.from_tools(tools, llm=llm, verbose=True)
+    @step
+    async def start(self, ev: StartEvent) -> Rewrite:
+        return Rewrite(query=ev.query, attempt=0)
 
-# Manual HITL implementation
-task = "Draft an email to 'test@example.com' about 'Project Update' and send it."
-result = agent.chat(task)
+    @step
+    async def retrieve(self, ev: Rewrite) -> Retrieved:
+        nodes = await self.retriever.aretrieve(ev.query)
+        return Retrieved(query=ev.query, attempt=ev.attempt,
+                         context="\n\n".join(n.get_content() for n in nodes))
 
-print(f"Agent wants to do: {result}")
-
-# Human-in-the-loop
-approval = input("Approve this action? (yes/no): ")
-if approval.lower() == "yes":
-    final_result = agent.chat("Yes, please proceed.")
-    print(f"Final Result: {final_result}")
-else:
-    print("Action rejected by user.")
+    @step
+    async def grade(self, ctx: Context, ev: Retrieved) -> Rewrite | StopEvent:
+        verdict = await llm.acomplete(
+            f"Does this context answer the question? Reply YES or NO.\n\nQ: {ev.query}\n\n{ev.context}"
+        )
+        if "YES" in str(verdict).upper() or ev.attempt + 1 >= self.max_attempts:
+            answer = await llm.acomplete(f"Answer from the context only.\n\n{ev.context}\n\nQ: {ev.query}")
+            return StopEvent(result=str(answer))
+        better = await llm.acomplete(f"Rewrite this search query to be more specific: {ev.query}")
+        return Rewrite(query=str(better).strip(), attempt=ev.attempt + 1)
 ```
 
+The union return type (`Rewrite | StopEvent`) is how a step declares that it may branch; the runtime validates the graph from these annotations.
+
 ---
-## Middleware and Observability
 
-You can inject middleware-like functionality for logging, metrics, and tracing by creating custom `QueryEngine` or `Agent` classes.
-
-### Custom Agent with Observability
-
-This example shows a custom agent that logs every step and its duration.
+## 3. Step retries
 
 ```python
-# observable_agent.py
-import time
-from llama_index.core.workflow import AgentWorkflow
-from llama_index.core.tools import FunctionTool
-from llama_index.llms.openai import OpenAI
-import logging
+from llama_index.core.workflow.retry_policy import ConstantDelayRetryPolicy
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-
-# NOTE: ReActAgent was hard-removed in v0.14.x (raises ImportError). Extended AgentWorkflow instead.
-class ObservableAgentWorkflow(AgentWorkflow):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def run(self, *args, **kwargs):
-        start_time = time.time()
-        logging.info(f"Agent run started with task: {args[0]}")
-        
-        result = super().run(*args, **kwargs)
-        
-        duration = time.time() - start_time
-        logging.info(f"Agent run finished in {duration:.2f} seconds.")
-        return result
-
-# Usage
-tools = [FunctionTool.from_defaults(lambda x: x, name="echo")]
-llm = OpenAI(model="gpt-4")
-agent = ObservableAgentWorkflow.from_tools(tools, llm=llm)
-agent.run("This is a test.")
+class Ingest(Workflow):
+    @step(retry_policy=ConstantDelayRetryPolicy(delay=5, maximum_attempts=4))
+    async def fetch(self, ev: StartEvent) -> StopEvent:
+        # any exception here re-runs the step after 5 s, up to 4 attempts
+        ...
 ```
 
----
-## Advanced Error Handling and Recovery
+Use retry policies for idempotent steps only.
 
-Production systems need to be resilient. This pattern shows how to add retry logic and fallbacks to tool calls.
+---
+
+## 4. Resilient tools: retry, then fall back
 
 ```python
-# resilient_tools.py
+import random
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from llama_index.core.tools import FunctionTool
-from tenacity import retry, stop_after_attempt, wait_exponential
 
-# A tool that might fail
 def unreliable_api_call(query: str) -> str:
-    """This API call is unreliable and might fail."""
-    import random
     if random.random() < 0.5:
-        raise ConnectionError("Failed to connect to the API")
+        raise ConnectionError("upstream unavailable")
     return f"Data for {query}"
 
-# A fallback tool
 def fallback_search(query: str) -> str:
-    """A reliable fallback search."""
-    return f"Fallback search results for {query}"
+    return f"(cached results for {query})"
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def resilient_api_call(query: str) -> str:
-    """A resilient version of the API call with retries."""
+@retry(stop=stop_after_attempt(3),
+       wait=wait_exponential(multiplier=1, min=1, max=8),
+       retry=retry_if_exception_type(ConnectionError))
+def _primary(query: str) -> str:
+    return unreliable_api_call(query)
+
+def resilient_search(query: str) -> str:
+    """Search the primary API, falling back to the cache if it is unavailable."""
     try:
-        return unreliable_api_call(query)
-    except ConnectionError as e:
-        print(f"Attempt failed: {e}. Retrying...")
-        raise
+        return _primary(query)
+    except ConnectionError:
+        return fallback_search(query) + " [served from fallback]"
 
-def tool_with_fallback(query: str) -> str:
-    """A tool that uses a fallback if the primary function fails."""
-    try:
-        return resilient_api_call(query)
-    except Exception as e:
-        print(f"All retries failed: {e}. Using fallback.")
-        return fallback_search(query)
-
-# Create a tool from the resilient function
-resilient_tool = FunctionTool.from_defaults(tool_with_fallback, name="resilient_search")
+search_tool = FunctionTool.from_defaults(fn=resilient_search)
 ```
 
+Telling the model that a result came from a fallback lets it caveat its answer.
+
+---
+
+## 5. Timing and logging middleware
+
+Subclassing agents to wrap `run()` is fragile. The instrumentation dispatcher sees every LLM call, retrieval, tool call and workflow step without touching your classes:
+
+```python
+import logging
+from llama_index.core.instrumentation import get_dispatcher
+from llama_index.core.instrumentation.event_handlers import BaseEventHandler
+from llama_index.core.instrumentation.events import BaseEvent
+from llama_index.core.instrumentation.events.llm import LLMChatEndEvent
+
+log = logging.getLogger("llamaindex")
+
+class LLMLogger(BaseEventHandler):
+    @classmethod
+    def class_name(cls) -> str:
+        return "LLMLogger"
+
+    def handle(self, event: BaseEvent, **kwargs) -> None:
+        if isinstance(event, LLMChatEndEvent) and event.response is not None:
+            usage = getattr(event.response.raw, "usage", None)
+            log.info("llm call span=%s usage=%s", event.span_id, usage)
+
+get_dispatcher().add_event_handler(LLMLogger())
+```
+
+For wall-clock timings and traces, export spans with OpenTelemetry — see the [observability page](/llamaindex-guide/python/llamaindex_observability_python/).
+
+---
+
+## 6. Caching ingestion
+
+```python
+from llama_index.core.ingestion import IngestionPipeline, IngestionCache
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.storage.docstore import SimpleDocumentStore
+from llama_index.embeddings.openai import OpenAIEmbedding
+
+pipeline = IngestionPipeline(
+    transformations=[SentenceSplitter(chunk_size=512), OpenAIEmbedding(model="text-embedding-3-small")],
+    docstore=SimpleDocumentStore(),   # de-duplicates by document id + hash
+    cache=IngestionCache(),           # skips re-running transformations on unchanged nodes
+)
+nodes = pipeline.run(documents=documents)
+pipeline.persist("./pipeline_storage")   # pipeline.load("./pipeline_storage") next time
+```
+
+Use stable document IDs (`SimpleDirectoryReader(filename_as_id=True)`) so that changed files are upserted rather than duplicated. Remote cache and docstore backends (Redis, MongoDB, Postgres) are available as separate integration packages.

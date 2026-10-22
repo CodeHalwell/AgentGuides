@@ -1,13 +1,14 @@
 ---
 title: "Runner, App, and Sessions"
 description: "Runner / InMemoryRunner, the App container, session services, RunConfig, and state scopes."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
+  label: "Runner, App and sessions"
   order: 50
 ---
 
-Verified against google-adk==2.10.0 (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 
@@ -19,7 +20,7 @@ from google.adk.agents import LlmAgent
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
-agent = LlmAgent(name="chat", model="gemini-2.5-flash", instruction="Be concise.")
+agent = LlmAgent(name="chat", model="%%model=gemini%%", instruction="Be concise.")
 
 async def main():
     runner = InMemoryRunner(agent=agent, app_name="demo")
@@ -40,12 +41,13 @@ async def main():
 asyncio.run(main())
 ```
 
-`InMemoryRunner` subclasses `Runner` and wires in `InMemorySessionService` + `InMemoryMemoryService` + `InMemoryArtifactService` (`runners.py:1970`).
+`InMemoryRunner` subclasses `Runner` and wires in `InMemorySessionService` + `InMemoryMemoryService` + `InMemoryArtifactService` (`runners.py`).
 
 ## The App container
 
 ```python
-from google.adk.apps import App, ResumabilityConfig, EventsCompactionConfig
+from google.adk.apps import App, ResumabilityConfig
+from google.adk.apps.app import EventsCompactionConfig  # not re-exported from google.adk.apps
 from google.adk.plugins import LoggingPlugin
 from google.adk.agents.context_cache_config import ContextCacheConfig
 
@@ -66,12 +68,14 @@ app = App(
 
 | Field | Default | Purpose |
 |---|---|---|
-| `name` | required | Must be a valid Python identifier; reserved word `"user"` is forbidden |
+| `name` | required | Must match `^[a-zA-Z][a-zA-Z0-9_-]*$` (a letter first; letters, digits, `_`, `-`); `"user"` is reserved. Violations raise `ValueError` |
 | `root_agent` | required | `BaseAgent` or `BaseNode` (e.g. a `Workflow`) |
 | `plugins` | `[]` | App-wide plugins (ordered) |
 | `events_compaction_config` | `None` | Sliding-window event compaction |
 | `context_cache_config` | `None` | Gemini context cache config, applied to every LLM call |
 | `resumability_config` | `None` | Enables pause/resume around long-running tools |
+
+Put plugins on the `App`: `Runner(plugins=...)` still works but emits a `DeprecationWarning`. Likewise `LlmAgent.global_instruction` is deprecated in favour of `App(plugins=[GlobalInstructionPlugin(...)])`.
 
 ## Runner constructor
 
@@ -90,7 +94,7 @@ runner = Runner(
 )
 ```
 
-Exactly one of `app=`, `agent=`, or `node=` is required (`runners.py:196-274`). `plugins=` on the runner is **deprecated** — pass them through `App(plugins=[...])` instead. `auto_create_session=True` is a convenience flag — when the session service returns `None`, the runner creates one on the fly; otherwise it raises `SessionNotFoundError` with an app-name alignment hint.
+Exactly one of `app=`, `agent=`, or `node=` is required (`runners.py`). `plugins=` on the runner is **deprecated** — pass them through `App(plugins=[...])` instead. `auto_create_session=True` is a convenience flag — when the session service returns `None`, the runner creates one on the fly; otherwise it raises `SessionNotFoundError` with an app-name alignment hint.
 
 ### Key methods
 
@@ -125,7 +129,7 @@ Passed to each `run_async`/`run_live` call (`agents/run_config.py`). Notable fie
 | `output_audio_transcription` / `input_audio_transcription` | `AudioTranscriptionConfig()` | Live transcription |
 | `context_window_compression` | `None` | Live-mode server-side context compression |
 | `get_session_config` | `None` | Passes `num_recent_events` / `after_timestamp` through to the session service on load |
-| `support_cfc` | `False` | Experimental compositional function calling (requires Gemini 2.x + live API) |
+| `support_cfc` | `False` | Experimental compositional function calling over the Live API. Only `gemini-2*` model names are accepted; any other model raises `ValueError`, so it is of little use for new projects |
 | `tool_thread_pool_config` | `None` | Runs tools in a thread pool during live mode |
 | `save_live_blob` | `False` | Persist audio/video frames to artifact service |
 | `save_input_blobs_as_artifacts` | `False` | **Deprecated** → `SaveFilesAsArtifactsPlugin` |
@@ -276,7 +280,7 @@ cfg = RunConfig(
 
 ### The full `RunConfig` — every field in one runnable example
 
-Source-verified against `google.adk.agents.run_config` (google-adk==2.7.1). Every field is optional; the example below sets each one at least once so you can see the exact call site and type. Copy-paste-delete to build your own.
+Source-verified against `google.adk.agents.run_config` (first verified in 2.7.1; re-checked against %%version=google-adk%%). Every field is optional; the example below sets each one at least once so you can see the exact call site and type. Copy-paste-delete to build your own.
 
 ```python
 from google.genai import types
@@ -380,11 +384,13 @@ svc = VertexAiSessionService(
 )
 ```
 
-`DatabaseSessionService.create_session`/`get_session` run the underlying SQL inside an async session factory; Postgres and MySQL use row-level locking for concurrent `append_event` (`database_session_service.py:282-320`).
+`VertexAiSessionService` validates session IDs against `^[A-Za-z0-9_-]+$` and raises `ValueError` otherwise (this blocks path injection into the resource URL); it also accepts a full `projects/.../reasoningEngines/{id}/sessions/{sid}` resource name as `session_id` and checks that the engine ID matches. `express_mode_api_key` is only for Vertex AI Express Mode.
+
+`DatabaseSessionService.create_session`/`get_session` run the underlying SQL inside an async session factory; Postgres and MySQL use row-level locking for concurrent `append_event` (`database_session_service.py`).
 
 ---
 
-## `DatabaseSessionService` deep dive
+## `DatabaseSessionService`
 
 `DatabaseSessionService(db_url, **kwargs)` is the recommended persistent session backend for self-hosted deployments. It uses **SQLAlchemy 2.x async** with a per-session asyncio lock to serialise concurrent `append_event` calls within the same process.
 
@@ -455,7 +461,7 @@ async def main():
         app_name="myapp",
         user_id="u1",
         state={
-            "session:last_city": "London",  # session-scoped
+            "last_city": "London",          # no prefix: session-scoped
             "user:lang": "en",              # user-scoped (persists across sessions)
             "app:feature_x": True,          # app-scoped (all users see this)
         },
@@ -477,7 +483,7 @@ async def main():
     # ── list_sessions ─────────────────────────────────────────────────────────
     response = await svc.list_sessions(app_name="myapp", user_id="u1")
     for s in response.sessions:
-        print(s.id, s.update_time)
+        print(s.id, s.last_update_time)
 
     # ── delete_session ────────────────────────────────────────────────────────
     await svc.delete_session(app_name="myapp", user_id="u1", session_id="s1")
@@ -581,7 +587,7 @@ async with runner:
 
 ---
 
-## `SqliteSessionService` deep dive
+## `SqliteSessionService`
 
 `SqliteSessionService(db_path)` is a lighter-weight alternative to `DatabaseSessionService` for pure SQLite use. It uses **aiosqlite** directly (bundled with `google-adk`) instead of SQLAlchemy, making it a zero-extra-dependency choice.
 
@@ -667,7 +673,7 @@ from google.adk.sessions.sqlite_session_service import SqliteSessionService
 from google.adk.sessions.base_session_service import GetSessionConfig
 from google.genai import types
 
-agent = LlmAgent(name="chat", model="gemini-2.5-flash", instruction="Be helpful.")
+agent = LlmAgent(name="chat", model="%%model=gemini%%", instruction="Be helpful.")
 app = App(name="chatbot", root_agent=agent)
 
 async def main():
@@ -726,7 +732,7 @@ asyncio.run(main())
 
 | State key prefix | Survives `delete_session`? | Scope |
 |---|---|---|
-| (none) / `session:` | No — lost when session is deleted | This session only |
+| (none) | No — lost when session is deleted | This session only |
 | `user:` | Yes — stored in `user_states` table | All sessions of this user in this app |
 | `app:` | Yes — stored in `app_states` table | All sessions, all users in this app |
 | `temp:` | No — never persisted at all | Current invocation only |
@@ -743,7 +749,7 @@ Migrate by re-creating the DB file (for dev) or using `DatabaseSessionService` w
 
 ## Session state
 
-Access via `ctx.state` in callbacks and tools. State is a `dict`-like object with three reserved prefixes (`sessions/state.py:64-66`):
+Access via `ctx.state` in callbacks and tools. State is a `dict`-like object with three reserved prefixes (`sessions/state.py`):
 
 | Prefix | Lifetime | Example |
 |---|---|---|
@@ -797,7 +803,7 @@ runner = Runner(
 
 ### `ContextCacheConfig` — the `create_http_options` timeout knob
 
-Source-verified against `google.adk.agents.context_cache_config` (google-adk==2.7.1). `create_http_options` is often overlooked but essential in production: **when Gemini's `CachedContent.create()` call is slow** (network hiccup, quota spike), your first request of a new session would otherwise stall waiting for the cache to be created. Setting a timeout tells ADK to give up on cache creation and just serve the request uncached rather than pinning the request.
+Source-verified against `google.adk.agents.context_cache_config` (first verified in 2.7.1; re-checked against %%version=google-adk%%). `create_http_options` is often overlooked but essential in production: **when Gemini's `CachedContent.create()` call is slow** (network hiccup, quota spike), your first request of a new session would otherwise stall waiting for the cache to be created. Setting a timeout tells ADK to give up on cache creation and just serve the request uncached rather than pinning the request.
 
 ```python
 from google.genai import types
@@ -837,7 +843,7 @@ The `pydantic` `extra="forbid"` config on the class means typos (`ttl_secs=`, `c
 
 Non-partial events are persisted via `session_service.append_event` before being yielded.
 
-## `Event` and `EventActions` deep-dive
+## `Event` and `EventActions`
 
 `Event` (defined in `events/event.py`) extends `LlmResponse` and is the single unit of communication between agents, tools, and the runner.
 
@@ -878,11 +884,14 @@ for fr in event.get_function_responses():
 text_parts = [p.text for p in (event.message.parts or []) if p.text]
 ```
 
-`is_final_response()` returns `True` when:
-- No function calls or responses are present, AND
-- The event is not partial (`partial=False`), AND
-- There is no trailing code execution result, OR
-- `actions.skip_summarization` is set (long-running tool response pattern)
+`is_final_response()` checks, in order:
+1. `actions.skip_summarization` is set or `long_running_tool_ids` is non-empty → `True` (even with function calls present, so a client can show progress for a long-running call).
+2. The event has an `error_code`, is not partial and has no function calls → `True`. Error events count as final, so don't assume every final event is a successful text reply.
+3. Otherwise `True` only when there are no function calls or responses, the event is not partial, and there's no trailing code-execution result.
+
+When several agents take part in one invocation, each can produce its own final event.
+
+`Event(...)` accepts shorthand keywords that it routes to nested fields: `message=` → `content` (text or parts are converted), `state=` → `actions.state_delta`, `route=` → `actions.route`, `node_path=` → `node_info.path`. So `Event(author="my_agent", message="Done.", state={"ready": True})` is a complete event.
 
 ### `EventActions` fields
 
@@ -901,7 +910,12 @@ text_parts = [p.text for p in (event.message.parts or []) if p.text]
 | `end_of_agent` | `bool \| None` | Marks that the originating agent has finished its run |
 | `route` | `str \| bool \| int \| list \| None` | Workflow routing value |
 | `render_ui_widgets` | `list[UiWidget] \| None` | Rich UI widgets for ADK Web UI hosts |
-| `rewind_before_invocation_id` | `str \| None` | Rewind anchor (set by `runner.rewind_async`) |
+| `rewind_before_invocation_id` | `str \| None` | Rewind anchor (set by `runner.rewind_async`); the target invocation and everything after it are discarded |
+| `transfer_reason` | `str \| None` | Why `transfer_to_agent` was set (shows in telemetry) |
+| `agent_state` | `dict \| None` | Checkpoint state for resumable agents and workflow nodes |
+| `set_model_response` | `Any \| None` | Overrides the structured output for the model response |
+
+Tools set these through `tool_context`: `tool_context.state[...] = ...` becomes `state_delta`, and `tool_context.actions.transfer_to_agent = "billing_agent"` (with an optional `transfer_reason`) or `tool_context.actions.escalate = True` steer control. A compaction event's `actions.compaction` is an `EventCompaction(start_timestamp, end_timestamp, compacted_content)` covering the summarised window.
 
 ### Emitting custom events from tools
 
@@ -947,7 +961,7 @@ Runners accept an optional `artifact_service=`. When configured, tools can call 
 | `FileArtifactService(root_dir=...)` | Local filesystem |
 | `GcsArtifactService(bucket_name=...)` | Google Cloud Storage |
 
-See [memory-and-artifacts](./memory-and-artifacts/) for detailed semantics and versioning.
+See [memory-and-artifacts](/google-adk-guide/python/memory-and-artifacts/) for detailed semantics and versioning.
 
 ## `InvocationContext` — invocation lifecycle
 
@@ -964,35 +978,23 @@ Each call to `runner.run_async` creates one `InvocationContext`. Callbacks and p
 
 ### Early termination with `end_invocation`
 
-Set `invocation_context.end_invocation = True` inside any callback to stop the invocation after the current step. Useful for hard budget/safety gates:
+Set `invocation_context.end_invocation = True` inside any callback to stop the invocation after the current step. Useful for hard budget/safety gates. Here a `before_agent_callback` ends the run and returns the reply the user sees:
 
 ```python
+from google.genai import types
 from google.adk.agents import LlmAgent
-from google.adk.plugins import BasePlugin
-from google.adk.agents.invocation_context import LlmCallsLimitExceededError
+from google.adk.agents.callback_context import CallbackContext
 
-class SafetyPlugin(BasePlugin):
-    """Terminates the invocation if a forbidden phrase is detected."""
+def safety_gate(callback_context: CallbackContext) -> types.Content | None:
+    ctx = callback_context._invocation_context
+    user_text = " ".join(p.text or "" for p in (ctx.user_content.parts if ctx.user_content else []))
+    if "forbidden" in user_text.lower():
+        ctx.end_invocation = True            # stop the whole invocation, not just this agent
+        return types.Content(role="model", parts=[types.Part(text="I cannot help with that request.")])
+    return None
 
-    def __init__(self, forbidden: set[str]):
-        super().__init__(name="safety")
-        self._forbidden = forbidden
-
-    async def before_model_callback(self, *, callback_context, llm_request):
-        from google.genai import types
-
-        # Inspect the last user message
-        user_text = ""
-        if callback_context.user_content and callback_context.user_content.parts:
-            user_text = " ".join(
-                p.text or "" for p in callback_context.user_content.parts
-            ).lower()
-
-        if any(f in user_text for f in self._forbidden):
-            # Abort the whole invocation, not just skip this model call
-            callback_context._invocation_context.end_invocation = True
-            return types.Content.__class__  # won't be reached; invocation stops
-        return None
+agent = LlmAgent(name="guarded", model="%%model=gemini%%", instruction="Answer the user.",
+                 before_agent_callback=safety_gate)
 ```
 
 ### `LlmCallsLimitExceededError`

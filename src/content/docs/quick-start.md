@@ -3,8 +3,6 @@ title: "Quick Start"
 description: "Get started with AI agents in minutes"
 ---
 
-# 🚀 Quick Start Guide
-
 Get up and running with AI agents in just a few minutes.
 
 ---
@@ -20,22 +18,27 @@ pip install smolagents
 ```
 
 ```python
-from smolagents import CodeAgent, tool
+from smolagents import CodeAgent, InferenceClientModel, tool
 
 @tool
 def add_numbers(a: int, b: int) -> int:
-    """Add two numbers together."""
+    """Add two numbers together.
+
+    Args:
+        a: The first number.
+        b: The second number.
+    """
     return a + b
 
-agent = CodeAgent(tools=[add_numbers])
-result = agent.run("What is 15 + 27?")
-print(result)
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")   # needs HF_TOKEN
+agent = CodeAgent(tools=[add_numbers], model=model)
+print(agent.run("What is 15 + 27?"))
 ```
 
 **Next Steps**:
 1. Read [SmolAgents README](/smolagents-guide/)
 2. Try more [SmolAgents Recipes](/smolagents-guide/smolagents_recipes/)
-3. Deep dive: [SmolAgents Comprehensive Guide](/smolagents-guide/smolagents_comprehensive_guide/)
+3. Reference: [SmolAgents Comprehensive Guide](/smolagents-guide/smolagents_comprehensive_guide/)
 
 ---
 
@@ -84,7 +87,7 @@ print(result)
 **Next Steps**:
 1. Read [CrewAI README](/crewai-guide/)
 2. Try more [CrewAI Recipes](/crewai-guide/crewai_recipes/)
-3. Deep dive: [CrewAI Comprehensive Guide](/crewai-guide/crewai_comprehensive_guide/)
+3. Full reference: [CrewAI Comprehensive Guide](/crewai-guide/crewai_comprehensive_guide/)
 
 ---
 
@@ -122,7 +125,7 @@ print(result.final_output)
 **Next Steps**:
 1. Read [OpenAI Agents SDK README](/openai-agents-sdk-guides/)
 2. Try more [OpenAI Recipes](/openai-agents-sdk-guides/openai_agents_sdk_recipes/)
-3. Deep dive: [OpenAI Comprehensive Guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/)
+3. Full reference: [OpenAI Comprehensive Guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/)
 
 ---
 
@@ -152,7 +155,7 @@ print(response)
 **Next Steps**:
 1. Read [LlamaIndex README](/llamaindex-guide/)
 2. Try more [LlamaIndex Recipes](/llamaindex-guide/python/llamaindex_recipes/)
-3. Deep dive: [LlamaIndex Comprehensive Guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/)
+3. Full reference: [LlamaIndex Comprehensive Guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/)
 
 ---
 
@@ -196,7 +199,7 @@ print(result)
 **Next Steps**:
 1. Read [LangGraph README](/langgraph-guide/)
 2. Try more [LangGraph Recipes](/langgraph-guide/python/langgraph_recipes/)
-3. Deep dive: [LangGraph Comprehensive Guide](/langgraph-guide/python/langgraph_comprehensive_guide/)
+3. Full reference: [LangGraph Comprehensive Guide](/langgraph-guide/python/langgraph_comprehensive_guide/)
 
 ---
 
@@ -229,7 +232,7 @@ graph = builder.compile(checkpointer=memory)
 # Now the graph remembers between runs
 ```
 
-[Learn More →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory--persistence)
+[Learn More →](/langgraph-guide/python/chapter-05-memory/)
 
 ---
 
@@ -249,7 +252,7 @@ def risky_operation() -> str:
         return "Operation failed, trying alternative approach"
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#error-handling-and-resilience)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#bound-every-run)
 
 ---
 
@@ -264,7 +267,7 @@ docker run -p 8000:8000 my-agent
 aws ecs run-task --cluster my-cluster --task-definition my-agent
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#deployment-architectures)
+[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/)
 
 ---
 
@@ -374,7 +377,7 @@ graph = builder.compile(checkpointer=MemorySaver())
 graph = builder.compile()
 ```
 
-[See Memory Guide →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory--persistence)
+[See Memory Guide →](/langgraph-guide/python/chapter-05-memory/)
 
 ---
 
@@ -397,7 +400,7 @@ output = agent.run(input)
 
 - 📖 [All Guides](/guides/)
 - 🔄 [Framework Comparison](/frameworks/)
-- 📚 [Browse by Use Case](/guides/#-quick-reference)
+- 📚 [Browse by Use Case](/#i-want-to-build)
 - 🏠 [Home](/)
 
 ---

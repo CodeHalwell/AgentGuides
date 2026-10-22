@@ -1,13 +1,14 @@
 ---
-title: "PydanticAI: Advanced Error Handling & Testing"
+title: "PydanticAI: Error Handling & Testing Error Paths"
 description: "Comprehensive guide to ModelRetry, UnexpectedModelBehavior, UsageLimitExceeded, ConcurrencyLimitExceeded, AgentRunError, UserError, and testing error paths with FunctionModel and capture_run_messages."
-framework: pydanticai
-language: python
+framework: "pydanticai"
+language: "python"
+sidebar:
+  label: "Error handling"
+  order: 11
 ---
 
-# Advanced Error Handling & Testing
-
-Verified against **pydantic-ai==1.101.0** — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.exceptions`, `pydantic_ai.usage`, `pydantic_ai.concurrency`, `pydantic_ai.models.function`, `pydantic_ai.agent`.
 
 PydanticAI exposes a small, predictable exception hierarchy. Understanding each exception type — when it is raised, how to catch it, and how to test that your agent handles it correctly — is essential for production-grade agents.
 
@@ -16,18 +17,29 @@ PydanticAI exposes a small, predictable exception hierarchy. Understanding each 
 ## Exception hierarchy
 
 ```
+RuntimeError
+├── AgentRunError                 # base for all errors that occur during agent.run*()
+│   ├── UsageLimitExceeded        # token / request / tool-call / cost budget exhausted
+│   ├── ConcurrencyLimitExceeded  # queue depth exceeded when using ConcurrencyLimiter
+│   ├── RunCancelled              # run cancelled (RunTimedOut is a subclass)
+│   ├── UnexpectedModelBehavior   # model produced structurally invalid output
+│   │   ├── ContentFilterError
+│   │   └── IncompleteToolCall
+│   └── ModelAPIError             # provider/API failure
+│       ├── ModelHTTPError        # non-2xx HTTP from provider (has .status_code)
+│       ├── ModelRateLimitError, ModelQuotaExceededError, ModelServerError,
+│       │   ModelUnavailableError (→ ModelOverloadedError),
+│       │   ModelContextWindowExceededError, ModelConnectionError (→ ModelTimeoutError)
+│       └── ...                   # HTTP errors are also raised as the matching category
+└── UserError                     # programming error (bad arguments, unsupported combination)
+
 Exception
-└── AgentRunError            # base for all errors that occur during agent.run*()
-    ├── UsageLimitExceeded   # token / request / tool-call budget exhausted
-    ├── UnexpectedModelBehavior   # model produced structurally invalid output
-    └── ModelAPIError
-        └── ModelHTTPError   # non-2xx HTTP from provider (has .status_code)
-ModelRetry                   # not an error — a signal to retry (raised inside tools/validators)
-UserError                    # programming error (bad arguments, unsupported combination)
-ConcurrencyLimitExceeded     # queue depth exceeded when using ConcurrencyLimiter
-ApprovalRequired             # tool call needs HITL approval before executing
-FallbackExceptionGroup       # all FallbackModel candidates failed
+├── ModelRetry                    # not an error — a signal to retry (raised inside tools/validators)
+├── ApprovalRequired, CallDeferred  # control flow for deferred / HITL tool calls
+└── FallbackExceptionGroup        # (an ExceptionGroup) all FallbackModel candidates failed
 ```
+
+The categorised `ModelAPIError` subclasses let you catch "rate limited" or "context window exceeded" without inspecting status codes per provider: a 429 from any provider is both a `ModelHTTPError` and a `ModelRateLimitError`.
 
 ---
 
@@ -38,10 +50,10 @@ FallbackExceptionGroup       # all FallbackModel candidates failed
 ```python
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool
-async def lookup_user(ctx: RunContext[None], user_id: int) -> dict:
+async def lookup_user(ctx: RunContext[object], user_id: int) -> dict:
     if user_id <= 0:
         raise ModelRetry(f'user_id must be positive, got {user_id!r}')
     return {'id': user_id, 'name': 'Alice'}
@@ -63,10 +75,10 @@ class Summary(BaseModel):
     bullets: list[str]
     word_count: int
 
-agent = Agent('openai:gpt-4o', output_type=Summary)
+agent = Agent('openai:%%model=openai%%', output_type=Summary)
 
 @agent.output_validator
-async def validate_bullets(ctx: RunContext[None], out: Summary) -> Summary:
+async def validate_bullets(ctx: RunContext[object], out: Summary) -> Summary:
     if len(out.bullets) < 3:
         raise ModelRetry(
             f'Need at least 3 bullet points, got {len(out.bullets)}. '
@@ -76,11 +88,35 @@ async def validate_bullets(ctx: RunContext[None], out: Summary) -> Summary:
         raise ModelRetry('word_count must be positive.')
     return out
 
-result = agent.run_sync('Summarise the Pydantic AI framework.')
+result = agent.run_sync('Summarise the PydanticAI framework.')
 print(result.output)
 ```
 
 ---
+
+## `ToolFailed` — a definitive failure, not a retry
+
+`ModelRetry` tells the model "fix your call and try again" and spends the tool's retry budget. `ToolFailed(message)` reports that the call has *definitively* failed (not found, permanently gone, not permitted): the model sees your message verbatim as the tool result, no retry instructions are added, and no retry budget is used. Bound repeated failures with `UsageLimits(tool_calls_limit=...)`.
+
+| | `ModelRetry` | `ToolFailed` |
+|---|---|---|
+| Model sees | retry prompt + your message | your message only |
+| Uses the retry budget | yes | no |
+| Use for | fixable input (bad ID format, missing field) | definitive outcomes |
+
+## Cancellation and timeouts — `RunCancelled` / `RunTimedOut`
+
+A run can be stopped from outside without losing its history:
+
+- `agent.run(..., timeout=seconds)` raises `RunTimedOut` (a `RunCancelled` subclass).
+- `agent.run(..., cancellation_token=token)`, then `token.cancel()` from anywhere (a request handler, a UI "stop" button).
+- `run.cancel()` on an `AgentRun` from `agent.iter()`, or `ctx.cancel()` inside a tool.
+
+`RunCancelled` carries `all_messages()`, `new_messages()`, `usage`, `run_id` and `conversation_id`; tool calls that never finished are closed with synthetic `outcome='interrupted'` returns, so `all_messages()` can be passed straight back as `message_history` to resume. If the run was killed by an *external* `asyncio.timeout()` or task cancellation instead, `RunCancelled.from_cancellation(exc)` recovers the same state from the `CancelledError` / `TimeoutError`.
+
+```python
+{err}
+```
 
 ## `UnexpectedModelBehavior` — model misbehaved
 
@@ -123,7 +159,7 @@ from pydantic_ai import Agent
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 logger = logging.getLogger(__name__)
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 async def safe_run(prompt: str) -> str | None:
     try:
@@ -145,7 +181,7 @@ from pydantic_ai import Agent
 from pydantic_ai import UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 try:
     result = agent.run_sync(
@@ -162,14 +198,17 @@ except UsageLimitExceeded as e:
 ### All `UsageLimits` fields
 
 ```python
+from decimal import Decimal
 from pydantic_ai import UsageLimits
 
 limits = UsageLimits(
     request_limit=50,           # max number of model requests (default 50)
+    cost_limit=Decimal('0.50'), # max estimated cost per run (uses genai-prices)
     tool_calls_limit=20,        # max successful tool executions
     input_tokens_limit=8_000,   # max prompt tokens per run
     output_tokens_limit=2_000,  # max generated tokens per run
     total_tokens_limit=10_000,  # combined input + output cap
+    per_request_input_tokens_limit=6_000,  # cap on any single request's prompt
     count_tokens_before_request=True,  # pre-check tokens (Anthropic, Google, Bedrock)
 )
 ```
@@ -179,10 +218,10 @@ limits = UsageLimits(
 ```python
 from pydantic_ai import Agent, RunUsage
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 result = agent.run_sync('Hello')
 
-usage: RunUsage = result.usage()
+usage: RunUsage = result.usage
 print(f'requests={usage.requests}  input={usage.input_tokens}  output={usage.output_tokens}  total={usage.total_tokens}')
 ```
 
@@ -191,7 +230,7 @@ print(f'requests={usage.requests}  input={usage.input_tokens}  output={usage.out
 ```python
 from pydantic_ai import Agent, RunUsage
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 shared_usage = RunUsage()
 
 for prompt in ['One', 'Two', 'Three']:
@@ -211,10 +250,10 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import UserError
 
 try:
-    agent = Agent('openai:gpt-4o', output_type=int)
+    agent = Agent('openai:%%model=openai%%', output_type=int)
 
     @agent.output_validator
-    def validate_int(ctx: RunContext[None], out: int) -> int:
+    def validate_int(ctx: RunContext[object], out: int) -> int:
         return out
 
     # Overriding output_type when an output_validator is already registered
@@ -238,7 +277,7 @@ from pydantic_ai import Agent, ConcurrencyLimiter
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 
 agent = Agent(
-    'openai:gpt-4o',
+    'openai:%%model=openai%%',
     max_concurrency=ConcurrencyLimiter(max_running=2, max_queued=3, name='demo'),
 )
 
@@ -258,7 +297,7 @@ asyncio.run(main())
 
 ## `ModelHTTPError` — provider HTTP failures
 
-`ModelHTTPError` (source: `pydantic_ai/exceptions.py` in 2.33.0) exposes:
+`ModelHTTPError` (source: `pydantic_ai/exceptions.py`) exposes:
 
 | Attribute            | Type              | Notes                                                                       |
 | -------------------- | ----------------- | --------------------------------------------------------------------------- |
@@ -266,20 +305,21 @@ asyncio.run(main())
 | `body`               | `object | None`   | Provider payload if available.                                              |
 | `headers`            | `dict[str, str] | None` | Lowercased header names — use `.get('retry-after')`.                    |
 | `suggested_model_id` | `str | None`      | Set when the provider returned "did you mean <id>?".                        |
-| `retry_after`        | `float | None`    | **Property**. Parses `Retry-After` (integer seconds *or* RFC-9110 date).    |
+| `retry_after`        | `float | None`    | Seconds to wait, parsed from `Retry-After` (integer seconds *or* RFC-9110 date) when the provider sent one. |
+| `provider_error_code` / `provider_error_type` | `str | None` | Provider-specific error identifiers, when available. |
 
 ```python
 from pydantic_ai import Agent
 from pydantic_ai.exceptions import ModelHTTPError, AgentRunError
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 try:
     result = agent.run_sync('Hello')
 except ModelHTTPError as e:
     print(f'Provider returned HTTP {e.status_code}: {e}')
     if e.retry_after is not None:
-        # Property returns float | None — no need to parse the header.
+        # float | None — already parsed from the Retry-After header.
         print(f'  retry after {e.retry_after:.1f}s')
     if e.suggested_model_id:
         print(f'  provider suggested {e.suggested_model_id!r}')
@@ -303,7 +343,7 @@ from pydantic_ai.exceptions import FallbackExceptionGroup
 from pydantic_ai.models.fallback import FallbackModel
 
 agent = Agent(
-    FallbackModel('openai:gpt-4o', 'anthropic:claude-opus-4-5', 'google:gemini-2.0-flash')
+    FallbackModel('openai:%%model=openai%%', 'anthropic:%%model=anthropic-flagship%%', 'google:%%model=gemini%%')
 )
 
 try:
@@ -339,7 +379,7 @@ async def retry_on_rate_limit(ctx, *, request_context, error: Exception):
         await asyncio.sleep(min(wait, 30.0))
     raise error
 
-agent = Agent('openai:gpt-4o', capabilities=[retry_hooks])
+agent = Agent('openai:%%model=openai%%', capabilities=[retry_hooks])
 ```
 
 ---
@@ -362,10 +402,10 @@ class Price(BaseModel):
     amount: float
     currency: str
 
-agent = Agent('openai:gpt-4o', output_type=Price)
+agent = Agent('openai:%%model=openai%%', output_type=Price)
 
 @agent.output_validator
-async def no_negative(ctx: RunContext[None], p: Price) -> Price:
+async def no_negative(ctx: RunContext[object], p: Price) -> Price:
     if p.amount < 0:
         raise ModelRetry('Price cannot be negative, please fix.')
     return p
@@ -396,7 +436,7 @@ from pydantic_ai import Agent, UsageLimits
 from pydantic_ai.exceptions import UsageLimitExceeded
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 def test_request_limit():
     with agent.override(model=TestModel()):
@@ -410,10 +450,10 @@ def test_request_limit():
 from pydantic_ai.exceptions import UnexpectedModelBehavior
 from pydantic_ai.models.test import TestModel
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool(retries=2)
-def always_fails(ctx: RunContext[None]) -> str:
+def always_fails(ctx: RunContext[object]) -> str:
     raise ModelRetry('always broken')
 
 def test_exhausted_retries():
@@ -433,7 +473,7 @@ from pydantic import BaseModel
 class Strict(BaseModel):
     required_field: str
 
-agent = Agent('openai:gpt-4o', output_type=Strict, retries=1)
+agent = Agent('openai:%%model=openai%%', output_type=Strict, retries=1)
 
 def test_messages_on_failure():
     with capture_run_messages() as messages:
@@ -482,7 +522,7 @@ class Answer(BaseModel):
     value: int
     reasoning: str
 
-agent = Agent('openai:gpt-4o', output_type=Answer)
+agent = Agent('openai:%%model=openai%%', output_type=Answer)
 
 def test_structured_output():
     with agent.override(model=TestModel()):
@@ -497,31 +537,43 @@ def test_structured_output():
 from pydantic_ai.models.test import TestModel
 
 # Return a specific text response
-model = TestModel(custom_result_text='The answer is 42.')
+model = TestModel(custom_output_text='The answer is 42.')
 
 # Return structured output as a dict
-model = TestModel(custom_result_args={'value': 42, 'reasoning': 'Basic arithmetic'})
+model = TestModel(custom_output_args={'value': 42, 'reasoning': 'Basic arithmetic'})
 
 # Simulate a tool call before responding
 model = TestModel(
     call_tools=['web_search'],    # tool names to call
-    custom_result_text='Found it.',
+    custom_output_text='Found it.',
 )
 ```
 
 ### Inspecting calls made to `TestModel`
 
 ```python
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelRequest, ModelResponse
 from pydantic_ai.models.test import TestModel
 
 model = TestModel()
-agent = Agent('openai:gpt-4o', output_type=str)
+agent = Agent('openai:%%model=openai%%', output_type=str)
+
+@agent.tool_plain
+def lookup(sku: str) -> str:
+    return f'{sku}: in stock'
 
 with agent.override(model=model):
-    result = agent.run_sync('Hello')
+    result = agent.run_sync('Is ABC-1 in stock?')
 
-print(model.agent_model_requests)   # list of ModelRequest objects
-print(model.agent_model_responses)  # list of ModelResponse objects
+# What the agent offered the model on the last request
+params = model.last_model_request_parameters
+print([t.name for t in params.function_tools])   # ['lookup']
+
+# What was actually exchanged
+requests = [m for m in result.all_messages() if isinstance(m, ModelRequest)]
+responses = [m for m in result.all_messages() if isinstance(m, ModelResponse)]
+print(len(requests), len(responses))             # 2 2
 ```
 
 ---
@@ -541,7 +593,7 @@ def my_model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     )
     return ModelResponse(parts=[TextPart(content=f'Echo: {last_user}')])
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 def test_echo_response():
     with agent.override(model=FunctionModel(my_model)):
@@ -577,7 +629,7 @@ def tool_calling_model(messages, info: AgentInfo) -> ModelResponse:
 ```python
 from pydantic_ai import Agent, capture_run_messages
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 with capture_run_messages() as messages:
     result = agent.run_sync('What is 2 + 2?')
@@ -597,10 +649,10 @@ import asyncio
 import httpx
 from pydantic_ai import Agent, ModelRetry, RunContext
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool(retries=4)
-async def fetch_api(ctx: RunContext[None], url: str) -> str:
+async def fetch_api(ctx: RunContext[object], url: str) -> str:
     delay = 2 ** ctx.retry  # 1s, 2s, 4s, 8s
     try:
         async with httpx.AsyncClient() as client:
@@ -618,10 +670,10 @@ async def fetch_api(ctx: RunContext[None], url: str) -> str:
 from pydantic_ai import Agent, ModelRetry, RunContext
 import json
 
-agent = Agent('openai:gpt-4o')
+agent = Agent('openai:%%model=openai%%')
 
 @agent.tool(retries=3)
-def parse_structured(ctx: RunContext[None], raw: str) -> dict:
+def parse_structured(ctx: RunContext[object], raw: str) -> dict:
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
@@ -635,6 +687,34 @@ def parse_structured(ctx: RunContext[None], raw: str) -> dict:
 ```
 
 ---
+
+### Transport-level HTTP retries
+
+`ModelRetry` is about the *model's* mistakes. For flaky networks and 429/5xx responses, retry at the HTTP layer with the `retries` extra (`pip install "pydantic-ai-slim[retries]"`, which adds `tenacity`; it is not in the default bundle): wrap the provider's HTTP client in a tenacity transport.
+
+```python
+import httpx2
+from tenacity import retry_if_exception_type, stop_after_attempt
+
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
+from pydantic_ai.retries import AsyncHTTPX2TenacityTransport, RetryConfig, wait_retry_after
+
+transport = AsyncHTTPX2TenacityTransport(
+    config=RetryConfig(
+        retry=retry_if_exception_type(httpx2.HTTPStatusError),
+        wait=wait_retry_after(max_wait=60),      # honours Retry-After, else exponential back-off
+        stop=stop_after_attempt(4),
+        reraise=True,
+    ),
+    validate_response=lambda r: r.raise_for_status(),   # turn 429/5xx into exceptions to retry
+)
+provider = OpenAIProvider(http_client=httpx2.AsyncClient(transport=transport))
+agent = Agent(OpenAIChatModel('%%model=openai%%', provider=provider))
+```
+
+`RetryConfig` is a `TypedDict` of `tenacity.retry` arguments. `HTTPX2TenacityTransport` is the sync twin, and the older `AsyncTenacityTransport` / `TenacityTransport` (for plain `httpx`) are deprecated. Remember the provider SDK also retries (2 times by default for OpenAI, Anthropic, Groq and Cohere); set `model_settings={'max_retries': 0}` if you want the transport to own retries entirely.
 
 ## Structured error reporting
 
@@ -660,7 +740,7 @@ async def run_with_report(agent: Agent, prompt: str) -> RunSuccess | RunFailure:
         result = await agent.run(prompt)
         return RunSuccess(
             output=result.output,
-            tokens_used=result.usage().total_tokens,
+            tokens_used=result.usage.total_tokens,
         )
     except UsageLimitExceeded as e:
         return RunFailure(reason=str(e), kind='budget_exceeded')
@@ -683,13 +763,13 @@ from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart
 
 @pytest.fixture
 def deterministic_agent():
-    agent = Agent('openai:gpt-4o', system_prompt='Be helpful.')
+    agent = Agent('openai:%%model=openai%%', system_prompt='Be helpful.')
     with agent.override(model=TestModel(seed=42)):
         yield agent
 
 @pytest.fixture
 def failing_agent():
-    agent = Agent('openai:gpt-4o')
+    agent = Agent('openai:%%model=openai%%')
     def always_empty(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
         return ModelResponse(parts=[TextPart('')])
     with agent.override(model=FunctionModel(always_empty)):
@@ -697,10 +777,10 @@ def failing_agent():
 
 @pytest.fixture
 def test_model():
-    return TestModel(custom_result_text='mocked response')
+    return TestModel(custom_output_text='mocked response')
 
 def test_agent_returns_string(test_model):
-    agent = Agent('openai:gpt-4o', output_type=str)
+    agent = Agent('openai:%%model=openai%%', output_type=str)
     with agent.override(model=test_model):
         result = agent.run_sync('Any prompt')
         assert isinstance(result.output, str)
@@ -718,8 +798,8 @@ from pydantic_ai.models.test import TestModel
     ('Say goodbye to the world', 'Goodbye, world!'),
 ])
 def test_snapshot(prompt, expected):
-    agent = Agent('openai:gpt-4o')
-    with agent.override(model=TestModel(custom_result_text=expected)):
+    agent = Agent('openai:%%model=openai%%')
+    with agent.override(model=TestModel(custom_output_text=expected)):
         result = agent.run_sync(prompt)
         assert result.output == expected
 ```

@@ -1,13 +1,14 @@
 ---
 title: "Memory and Artifacts"
 description: "Long-term memory (InMemory, Vertex Memory Bank, Vertex RAG) and artifact services (file, GCS, in-memory)."
-framework: google-adk
-language: python
+framework: "google-adk"
+language: "python"
 sidebar:
-  order: 60
+  label: "Memory and artifacts"
+  order: 70
 ---
 
-Verified against google-adk==2.3.0 (`google/adk/memory/`, `google/adk/artifacts/`). As of 2026-09-28 the latest release was **2.10.0** — all examples are compatible with 2.3.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 
@@ -23,7 +24,7 @@ from google.adk.tools import load_memory, load_artifacts
 
 agent = LlmAgent(
     name="librarian",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     instruction="Use load_memory for recall and load_artifacts for files.",
     tools=[load_memory, load_artifacts],
 )
@@ -39,7 +40,7 @@ runner = Runner(
 
 ## Memory service landscape
 
-`BaseMemoryService` (`memory/base_memory_service.py:44`) defines the following operations:
+`BaseMemoryService` (`memory/base_memory_service.py`) defines the following operations:
 
 | Method | Purpose |
 |---|---|
@@ -55,10 +56,10 @@ Not every service implements every method — `InMemoryMemoryService` supports s
 | Service | Storage | Search | Extra setup |
 |---|---|---|---|
 | `InMemoryMemoryService()` | Python dict, keyed by `(app_name, user_id)` | Case-insensitive word overlap | None |
-| `VertexAiMemoryBankService(project, location, agent_engine_id, *, express_mode_api_key=None)` | GCP Agent Engine Memory Bank | Semantic (Vertex-side) | Enable Agent Engine in your GCP project; pass the engine's numeric ID (not the full resource path) |
+| `VertexAiMemoryBankService(project, location, agent_engine_id, *, express_mode_api_key=None, credentials=None)` | GCP Agent Engine Memory Bank | Semantic (Vertex-side) | Enable Agent Engine in your GCP project; pass the engine's numeric ID (not the full resource path) |
 | `VertexAiRagMemoryService(rag_corpus, similarity_top_k=None, vector_distance_threshold=10)` | Vertex AI RAG corpus | Vector similarity | Create a RAG corpus in advance; format `projects/.../ragCorpora/{id}` or just the id |
 
-`VertexAiRagMemoryService` is imported lazily — install `google-cloud-aiplatform` to enable it (`memory/__init__.py:30-37`).
+`VertexAiRagMemoryService` is imported lazily (`memory/__init__.py`). It uses the `agentplatform` client that ships with the `google-cloud-aiplatform` version pinned by `pip install "google-adk[gcp]"`, not the deprecated `vertexai.preview.rag`. Its full signature is `VertexAiRagMemoryService(rag_corpus=None, similarity_top_k=None, vector_distance_threshold=10, project=None, location=None)`; `project`/`location` fall back to `GOOGLE_CLOUD_PROJECT`/`GOOGLE_CLOUD_LOCATION`, or are parsed from a full corpus resource name. `vector_distance_threshold` is a maximum distance, so lower is stricter. Create the corpus with `agentplatform.Client(project=..., location=...).rag.create_corpus(rag_corpus=agentplatform.types.RagCorpus(display_name="agent-memory"))` and pass its `name`.
 
 ### Wiring memory into agent turns
 
@@ -72,12 +73,23 @@ from google.adk.tools import load_memory, preload_memory
 
 agent = LlmAgent(
     name="remembering",
-    model="gemini-2.5-flash",
+    model="%%model=gemini%%",
     tools=[load_memory, preload_memory],   # both can be used together
 )
 ```
 
-**`preload_memory`** runs automatically before each LLM call (not invoked by the model). It wraps `ToolContext.search_memory()` in a broad `try/except` — if no `memory_service` is configured, it logs a warning and silently returns. Safe to add without a memory service.
+**`preload_memory`** (`PreloadMemoryTool`) runs automatically before each LLM call (not invoked by the model, and absent from the function declarations, so don't mention it in instructions as a callable tool). It searches memory with the text of the current user message and, if anything matches, inserts a transient user-role block into that one request (it is never written to the session):
+
+```text
+The following content is from your previous conversations with the user.
+They may be useful for answering the user's current query.
+<PAST_CONVERSATIONS>
+Time: <timestamp>        (only when the entry has one)
+<author>: <text>         (author prefix only when set)
+</PAST_CONVERSATIONS>
+```
+
+Only text parts of memories are used, and a user message with no text (e.g. audio only) skips the search. It wraps `ToolContext.search_memory()` in a broad `try/except` — if no `memory_service` is configured or search fails, it logs a warning and silently returns. Safe to add without a memory service, but check your logs if recall quietly stops working.
 
 **`load_memory`** is a callable tool the model invokes explicitly. It calls `ToolContext.search_memory()` directly, which raises `ValueError('Memory service is not available.')` when the `Runner` has no `memory_service`. The model receives a tool error instead of an empty result. Always configure a `memory_service` on the `Runner` before using `load_memory`.
 
@@ -109,7 +121,9 @@ await runner.memory_service.add_memory(
 )
 ```
 
-`VertexAiMemoryBankService.add_events_to_memory` uses `memories.ingest_events` by default; it switches to `memories.generate` if `custom_metadata` includes Vertex-specific keys (`ttl`, `revision_ttl`, `metadata`, `wait_for_completion`). See `vertex_ai_memory_bank_service.py:229-250`.
+**Ingest once per conversation, not per turn.** `Runner` never ingests automatically, and an `after_agent_callback` fires after every turn. With `VertexAiRagMemoryService` this matters most: each `add_session_to_memory()` uploads the whole transcript as a new RAG file, so per-turn calls fill the corpus with duplicates. Call it from whatever ends a conversation in your app (an explicit "end chat", an idle timeout).
+
+`VertexAiMemoryBankService.add_events_to_memory` uses `memories.ingest_events` by default; it switches to `memories.generate` if `custom_metadata` includes Vertex-specific keys (`ttl`, `revision_ttl`, `metadata`, `wait_for_completion`). See `vertex_ai_memory_bank_service.py`.
 
 ## MemoryEntry
 
@@ -131,7 +145,7 @@ entry = MemoryEntry(
 
 ## Artifact service landscape
 
-`BaseArtifactService` (`artifacts/base_artifact_service.py:88`) abstracts versioned file storage. Key methods:
+`BaseArtifactService` (`artifacts/base_artifact_service.py`) abstracts versioned file storage. Key methods:
 
 | Method | Purpose |
 |---|---|
@@ -147,7 +161,7 @@ entry = MemoryEntry(
 
 - `session_id=<id>` — session-scoped artifact. Lost when the session is deleted.
 - `session_id=None` — user-scoped artifact. Lives across sessions.
-- `filename="user:foo.pdf"` — explicit user scope even inside a session (filename prefix convention; see `file_artifact_service.py:60-85`).
+- `filename="user:foo.pdf"` — explicit user scope even inside a session (filename prefix convention; see `file_artifact_service.py`).
 
 ### Implementations
 
@@ -183,15 +197,31 @@ gcs_sa = GcsArtifactService("my-adk-artifacts", credentials=sa_creds)
 | Scope | How to trigger | Blob path |
 |---|---|---|
 | Session-scoped | `session_id=<id>`, filename without `user:` prefix | `{app_name}/{user_id}/{session_id}/{filename}/{version}` |
-| User-scoped | `filename="user:foo"` prefix — `session_id` is ignored | `{app_name}/{user_id}/user/{filename}/{version}` |
+| User-scoped | `filename="user:foo"` prefix — `session_id` is ignored | `{app_name}/{user_id}/user/{filename}/{version}` (the `user:` prefix stays in `filename`, e.g. `my_app/u1/user/user:profile.json/0`) |
 
 > **GCS note:** `GcsArtifactService` raises `InputValidationError` when `session_id=None` and the filename does not start with `"user:"`. Use the `"user:"` filename prefix (not `session_id=None` alone) for cross-session user storage.
 
-Version numbers start at **0** and increment by 1 on each save.
+Version numbers start at **0** and increment by 1 on each save. Saves never overwrite: each upload is a create-only write (`if_generation_match=0`), so two concurrent saves of the same file can't clobber each other; the loser takes the next number, up to 10 attempts. `delete_artifact` removes every version (there's no single-version delete). All GCS calls run in `asyncio.to_thread`, and `custom_metadata` values are stored as strings.
+
+To hand a file to a browser, `GcsArtifactService` (not the base class) has two URL helpers, both returning `None` if the artifact doesn't exist:
+
+```python
+import datetime
+
+url = await gcs.get_signed_url(
+    app_name="file_app", user_id="u1", session_id="s1", filename="report.pdf",
+    expiration=datetime.timedelta(minutes=15),   # default 1 hour; also datetime or epoch seconds
+)   # method="GET", signing_version="v2"|"v4", extra kwargs go to Blob.generate_signed_url
+
+auth_url = await gcs.get_authenticated_url(
+    app_name="file_app", user_id="u1", session_id="s1", filename="report.pdf",
+)   # https://storage.cloud.google.com/...; the viewer needs a Google account with read access
+```
+
+`Blob.generate_signed_url` needs credentials that can sign: a service-account key, or (with token-only ADC on Cloud Run/GKE) pass `service_account_email=` and `access_token=` through the extra kwargs.
 
 **GCS IAM requirements:** `storage.objects.create` (save), `storage.objects.get` (load), `storage.objects.list` (list/versions), `storage.objects.delete` (delete). The `roles/storage.objectAdmin` role covers all four.
 
-> For more detailed `GcsArtifactService` examples — binary artifacts, user-scoped files, listing version metadata — see the [Class & API Reference — Memory, Sessions & Artifacts](./google_adk_comprehensive_guide/#memory-sessions--artifacts) section.
 
 ### Saving and loading from tools
 
@@ -247,7 +277,7 @@ Save with `session_id=None` (or `filename="user:history.json"`). The artifact su
 Each run saves a new version of `report.pdf`. The UI lists `list_artifact_versions(...)` with timestamps so a reviewer can diff outputs turn-by-turn.
 
 ### 5 — RAG corpus-backed memory
-`VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The service writes to the corpus via `add_session_to_memory()` (called once when a session ends — see the Vol. 4 class deep dive). Static content (files, web pages, BigQuery) can also be loaded via the Agent Platform corpus management API. `add_events_to_memory()` is not supported and raises `NotImplementedError`.
+`VertexAiRagMemoryService(rag_corpus="...")` plus `load_memory` in `tools=`. The service writes to the corpus via `add_session_to_memory()` (call it once when a session ends — see [Writing to memory](#writing-to-memory)). Static content (files, web pages, BigQuery) can also be loaded via the Agent Platform corpus management API. `add_events_to_memory()` is not supported and raises `NotImplementedError`.
 
 ## Complete examples
 
@@ -270,7 +300,7 @@ USER_ID = "alice"
 
 agent = LlmAgent(
     name="assistant",
-    model="gemini-2.0-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You are a helpful assistant. Use load_memory to recall "
         "things the user told you in previous conversations."
@@ -347,7 +377,7 @@ report_tool = FunctionTool(func=generate_report)
 
 agent = LlmAgent(
     name="report_agent",
-    model="gemini-2.0-flash",
+    model="%%model=gemini%%",
     instruction=(
         "Generate reports when asked. Use generate_report to save them. "
         "Use load_artifacts to retrieve them when asked."
@@ -404,7 +434,7 @@ USER_ID = "charlie"
 
 agent = LlmAgent(
     name="vertex_assistant",
-    model="gemini-2.0-flash",
+    model="%%model=gemini%%",
     instruction=(
         "You are a helpful assistant. Memories from past conversations "
         "are automatically available to you via preload_memory. "
@@ -529,7 +559,7 @@ asyncio.run(demo_gcs_artifacts())
 - **`preload_memory`** silently no-ops when no `memory_service` is configured (catches all exceptions). **`load_memory`** raises `ValueError('Memory service is not available.')` — the model receives a tool error. Always wire a `memory_service` on the `Runner` before exposing `load_memory` to the model.
 - `VertexAiMemoryBankService` requires the **numeric** `agent_engine_id` (`"456"`), not the full resource path. The constructor warns if it detects a `/`.
 - `SaveFilesAsArtifactsPlugin` replaced the deprecated `RunConfig.save_input_blobs_as_artifacts`. Install the plugin on the `App` instead of toggling the flag.
-- Artifact `save_artifact` accepts a `types.Part` OR a plain dict (camelCase or snake_case); `ensure_part` normalises via Pydantic validation (`base_artifact_service.py:68-85`).
+- Artifact `save_artifact` accepts a `types.Part` OR a plain dict (camelCase or snake_case); `ensure_part` normalises via Pydantic validation (`base_artifact_service.py`).
 - `FileArtifactService` creates the root directory lazily on first save; make sure the process has write permissions.
 - `GcsArtifactService` uses Application Default Credentials by default — on GKE/Cloud Run make sure the service account has `storage.objects.create` and `storage.objects.get`.
-- An artifact's `version` starts at **0**, not 1 (`base_artifact_service.py:122`).
+- An artifact's `version` starts at **0**, not 1 (`base_artifact_service.py`).
