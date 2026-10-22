@@ -232,7 +232,7 @@ graph = builder.compile(checkpointer=memory)
 # Now the graph remembers between runs
 ```
 
-[Learn More →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory--persistence)
+[Learn More →](/langgraph-guide/python/chapter-05-memory/)
 
 ---
 
@@ -377,7 +377,7 @@ graph = builder.compile(checkpointer=MemorySaver())
 graph = builder.compile()
 ```
 
-[See Memory Guide →](/langgraph-guide/python/langgraph_comprehensive_guide/#memory--persistence)
+[See Memory Guide →](/langgraph-guide/python/chapter-05-memory/)
 
 ---
 
@@ -400,7 +400,7 @@ output = agent.run(input)
 
 - 📖 [All Guides](/guides/)
 - 🔄 [Framework Comparison](/frameworks/)
-- 📚 [Browse by Use Case](/guides/#-quick-reference)
+- 📚 [Browse by Use Case](/#i-want-to-build)
 - 🏠 [Home](/)
 
 ---

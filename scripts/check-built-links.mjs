@@ -4,7 +4,8 @@
 // check-links.mjs reads the markdown sources and resolves relative links the way
 // authors mean them. This one checks what the browser actually gets, after the
 // base path and remark plugins have run, so it catches anything those get wrong.
-// Run `npm run build` first. Anchors are not checked.
+// Run `npm run build` first. `#fragments` are checked against the ids on the
+// target page, including same-page links.
 
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
@@ -30,6 +31,19 @@ const exists = (sitePath) => {
   return p === '' || existsSync(join(root, p, 'index.html')) || (existsSync(join(root, p)) && statSync(join(root, p)).isFile());
 };
 
+// Element ids per built page, read once on first use.
+const idCache = new Map();
+const ids = (sitePath) => {
+  const p = decodeURIComponent(sitePath.slice(base.length)).replace(/^\//, '');
+  const file = join(root, p, 'index.html');
+  if (!idCache.has(file)) {
+    const set = new Set();
+    if (existsSync(file)) for (const [, id] of readFileSync(file, 'utf8').matchAll(/\sid="([^"]+)"/g)) set.add(id);
+    idCache.set(file, set);
+  }
+  return idCache.get(file);
+};
+
 const broken = [];
 let checked = 0;
 for (const file of walk(root)) {
@@ -41,10 +55,14 @@ for (const file of walk(root)) {
   const pageUrl = `${base}/${rel.replace(/index\.html$/, '')}`;
   for (const [, raw] of content.matchAll(/href="([^"]+)"/g)) {
     const href = raw.replace(/&amp;/g, '&');
-    if (/^(https?:|mailto:|tel:|data:|#)/.test(href)) continue;
+    if (/^(https?:|mailto:|tel:|data:)/.test(href)) continue;
     checked++;
-    const target = new URL(href, `https://x${pageUrl}`).pathname;
+    const url = new URL(href, `https://x${pageUrl}`);
+    const target = url.pathname;
     if (!target.startsWith(base) || !exists(target)) broken.push(`${pageUrl}  →  ${href}`);
+    else if (url.hash && url.hash !== '#' && url.hash !== '#_top' && !ids(target).has(decodeURIComponent(url.hash.slice(1)))) {
+      broken.push(`${pageUrl}  →  ${href}  (no such anchor)`);
+    }
   }
 }
 
