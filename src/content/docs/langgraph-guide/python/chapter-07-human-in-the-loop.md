@@ -8,7 +8,7 @@ sidebar:
   order: 7
 ---
 
-**What you'll learn:** how to pause your graph mid-execution to collect input, approval, or corrections from a human — the `interrupt()` and `Command(resume=...)` primitives, multi-stage approval workflows, multiple interrupts inside one node, and resume-by-id when a node raises several interrupts at once.
+**What you'll learn:** how to pause your graph mid-execution to collect input, approval, or corrections from a human — the `interrupt()` and `Command(resume=...)` primitives, multi-stage approval workflows, multiple interrupts inside one node, resume-by-id when parallel nodes are paused at once, and typed resume values.
 
 Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.types`).
 
@@ -33,7 +33,7 @@ graph.stream(Command(resume=...), cfg)   ← resume
 Key rules:
 - A checkpointer is **required** — interrupts persist state so the graph can resume.
 - The node **re-runs from the top** on resume. Keep side-effects inside `@task`s (which are skipped on replay) rather than raw code before `interrupt()`.
-- Multiple `interrupt()` calls in one node are matched to resume values **by order** within the task, unless you address them by id.
+- Multiple `interrupt()` calls in one node are matched to resume values **by order** within the task. Ids identify tasks, so use them to answer interrupts from different tasks that are pending at the same time.
 
 ## Example 1: Basic single interrupt + resume
 
@@ -77,7 +77,7 @@ cfg = {"configurable": {"thread_id": "t1"}}
 # --- First run: graph pauses at interrupt ---
 for event in graph.stream({"action": "transfer", "amount": 500.0}, cfg):
     print(event)
-# {'request_approval': {'__interrupt__': (Interrupt(value={...}, id='...'),)}}
+# {'__interrupt__': (Interrupt(value={...}, id='...', response_schema=None),)}
 
 # Inspect the interrupt
 snap = graph.get_state(cfg)
@@ -160,13 +160,13 @@ print(final.values["published"])   # True
 
 ## Example 3: Resume by interrupt id
 
-When you know the interrupt ids in advance (e.g., from a UI that lists pending interrupts), you can address them by id using `Command(resume={"<id>": value, ...})`. This is useful when multiple interrupts fire in the same step or when the client stores the id for later.
+Every `interrupt()` inside one task shares that task's id, so ids do not distinguish the first and second interrupt of the same node (Example 2 resumes those by order). Ids matter when **several tasks are paused at once**, typically parallel nodes. Each pending interrupt then has its own id, and `Command(resume={id: value, ...})` answers them in one call.
 
 ```python
 from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.types import interrupt, Command, Interrupt
+from langgraph.types import interrupt, Command
 
 
 class SignoffState(TypedDict):
@@ -175,51 +175,42 @@ class SignoffState(TypedDict):
     finance_ok: bool
 
 
-def dual_signoff(state: SignoffState) -> dict:
-    # Both interrupt() calls appear in the same node execution.
-    # On the first run, the first one fires. On the first resume, the second fires.
-    # Or: address both by id in a single Command(resume={id1: v1, id2: v2}).
-    legal = interrupt({"department": "legal", "item": state["proposal"]})
-    finance = interrupt({"department": "finance", "item": state["proposal"]})
-    return {"legal_ok": legal == "approved", "finance_ok": finance == "approved"}
+def legal_review(state: SignoffState) -> dict:
+    answer = interrupt({"department": "legal", "item": state["proposal"]})
+    return {"legal_ok": answer == "approved"}
+
+
+def finance_review(state: SignoffState) -> dict:
+    answer = interrupt({"department": "finance", "item": state["proposal"]})
+    return {"finance_ok": answer == "approved"}
 
 
 builder = StateGraph(SignoffState)
-builder.add_node("signoff", dual_signoff)
-builder.add_edge(START, "signoff")
-builder.add_edge("signoff", END)
+builder.add_node("legal", legal_review)
+builder.add_node("finance", finance_review)
+# Both reviews start from START, so they run in the same step, in parallel.
+builder.add_edge(START, "legal")
+builder.add_edge(START, "finance")
+builder.add_edge("legal", END)
+builder.add_edge("finance", END)
 
 graph = builder.compile(checkpointer=InMemorySaver())
 cfg = {"configurable": {"thread_id": "signoff-1"}}
 
-# First stream: pauses at the legal interrupt
-list(graph.stream({"proposal": "Acquire WidgetCo", "legal_ok": False, "finance_ok": False}, cfg))
+# First run: both nodes pause, so two interrupts are pending at once.
+graph.invoke({"proposal": "Acquire WidgetCo", "legal_ok": False, "finance_ok": False}, cfg)
 
-# Inspect the interrupt id from StateSnapshot
-snap = graph.get_state(cfg)
-legal_interrupt: Interrupt = snap.interrupts[0]
-legal_id = legal_interrupt.id
-print(f"Legal interrupt id: {legal_id}")
+pending = graph.get_state(cfg).interrupts
+for intr in pending:
+    print(intr.id, intr.value["department"])
 
-# Option A — sequential per-id resume (one call per interrupt):
-# Resume with the legal answer by id; execution advances to the finance interrupt.
-list(graph.stream(Command(resume={legal_id: "approved"}), cfg))
-
-snap2 = graph.get_state(cfg)
-finance_interrupt: Interrupt = snap2.interrupts[0]
-list(graph.stream(Command(resume={finance_interrupt.id: "approved"}), cfg))
-
-final = graph.get_state(cfg)
-print(final.values["legal_ok"], final.values["finance_ok"])   # True True
-
-# Option B — single-step dual-id resume (supply both ids up-front if you know them):
-# Both interrupts fire in order; a single Command with both ids answers them in one go.
-#
-#   list(graph.stream(
-#       Command(resume={legal_id: "approved", finance_id: "approved"}),
-#       cfg,
-#   ))
+# Answer both in one call, keyed by interrupt id.
+answers = {intr.id: "approved" for intr in pending}
+result = graph.invoke(Command(resume=answers), cfg)
+print(result["legal_ok"], result["finance_ok"])   # True True
 ```
+
+If you answer only some of the ids, those tasks finish and the rest stay pending: `get_state(cfg).interrupts` then lists only the unanswered ones, and you resume them later in the same way. A UI that shows each pending approval separately can therefore send each answer as it arrives.
 
 ## Example 4: Multi-step approval workflow
 
@@ -353,12 +344,65 @@ list(graph.stream(Command(resume="accept"), cfg))
 print(graph.get_state(cfg).values["final"])   # [PUBLISHED] Improved draft text
 ```
 
+## Example 6: Typed resume values with `response_schema`
+
+`interrupt(value, response_schema=...)` declares the shape of the answer you expect. With a Pydantic model, `TypedDict` or dataclass, the resume value is validated and `interrupt` returns the validated object; the schema is also stored on the `Interrupt` as JSON Schema so a client can render a form from it.
+
+```python
+from pydantic import BaseModel
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import interrupt, Command
+
+
+class Decision(BaseModel):
+    approve: bool
+    reason: str
+
+
+class RefundState(TypedDict):
+    amount: float
+    outcome: str
+
+
+def review_refund(state: RefundState) -> dict:
+    decision = interrupt({"amount": state["amount"]}, response_schema=Decision)
+    # decision is a Decision instance, not a dict
+    verdict = "refunded" if decision.approve else "declined"
+    return {"outcome": f"{verdict}: {decision.reason}"}
+
+
+graph = (
+    StateGraph(RefundState)
+    .add_node("review", review_refund)
+    .add_edge(START, "review")
+    .add_edge("review", END)
+    .compile(checkpointer=InMemorySaver())
+)
+cfg = {"configurable": {"thread_id": "refund-1"}}
+
+graph.invoke({"amount": 42.0, "outcome": ""}, cfg)
+print(graph.get_state(cfg).interrupts[0].response_schema["required"])   # ['approve', 'reason']
+
+try:
+    graph.invoke(Command(resume={"approve": "maybe"}), cfg)   # invalid: fails validation
+except Exception as exc:
+    print(type(exc).__name__)                                  # ValidationError
+
+result = graph.invoke(Command(resume={"approve": True, "reason": "damaged in transit"}), cfg)
+print(result["outcome"])   # refunded: damaged in transit
+```
+
+A rejected resume value saves nothing, so the interrupt stays pending and can be answered again. A plain JSON Schema `dict` is passed to clients as-is but not used for validation. See [typed resume values](/langgraph-guide/python/reference-command-and-send/#typed-resume-values-response_schema) for the details.
+
 ## Gotchas
 
 - **Re-execution on resume.** The node runs from the top every time. Any code before `interrupt()` executes again — make side effects idempotent or move them into `@task`s (which are cache-skipped on replay).
 - **No checkpointer = no resume.** Without a checkpointer, `invoke` still stops at `interrupt()` and returns the state with an `__interrupt__` key, but nothing is saved, so `Command(resume=...)` has nothing to resume. Always compile with a checkpointer (`InMemorySaver()` in tests) and pass a `thread_id`.
 - **`state.next` vs `state.interrupts`.** When paused, `graph.get_state(cfg).next` names the paused node (for example `('ask',)`); `state.interrupts` is the tuple of `Interrupt(value=..., id=...)` objects.
 - **Resume by id requires the correct id.** Pass the id exactly as reported by `Interrupt.id`. A mapping whose keys are not interrupt ids is not rejected: with a single pending interrupt, the whole dict becomes the resume value (checked against %%version=langgraph%%).
-- **`Command(resume=scalar)` answers the next interrupt in order.** Use `Command(resume={id: value})` to target a specific interrupt by id.
+- **Interrupts in one node share an id.** The id identifies the task, so a node that calls `interrupt()` twice reports the same id both times; resume those in order.
+- **`Command(resume=scalar)` answers the next interrupt in order.** With interrupts from more than one task pending, a non-mapping resume value raises `RuntimeError: When there are multiple pending interrupts, you must specify the interrupt id when resuming.` Use `Command(resume={id: value})` there.
 
 

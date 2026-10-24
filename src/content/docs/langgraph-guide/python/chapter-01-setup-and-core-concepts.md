@@ -50,12 +50,10 @@ The current release is LangGraph %%version=langgraph%% (checked %%versions-check
 
 ```bash
 # Core LangGraph, pinned to the version this guide is verified against
-pip install "langgraph==%%version=langgraph%%" langchain-core
+# (langchain-core, langgraph-checkpoint and langgraph-prebuilt come with it)
+pip install "langgraph==%%version=langgraph%%"
 
-# Async support
-pip install aiosqlite
-
-# For SQLite checkpointing (requires separate package)
+# For SQLite checkpointing: SqliteSaver and AsyncSqliteSaver (pulls in aiosqlite)
 pip install langgraph-checkpoint-sqlite
 
 # For PostgreSQL checkpointing (uses psycopg 3)
@@ -64,8 +62,8 @@ pip install langgraph-checkpoint-postgres "psycopg[binary,pool]"
 # LLM providers (example with Anthropic)
 pip install langchain-anthropic
 
-# Development & debugging
-pip install langgraph-cli        # CLI tools
+# Local development server and deployment CLI (`langgraph dev` needs the inmem extra)
+pip install "langgraph-cli[inmem]"
 ```
 
 > **Note on checkpointers:** `InMemorySaver` is built into `langgraph` itself — no extra install needed. `SqliteSaver` requires the separate `langgraph-checkpoint-sqlite` package. PostgreSQL requires the separate `langgraph-checkpoint-postgres` package (`langgraph` has no `[postgres]` extra).
@@ -244,7 +242,7 @@ result = graph.invoke(
 for event in graph.stream(
     {"message": "Hello"},
     config={"configurable": {"thread_id": "user-1"}},
-    stream_mode="values"  # or "updates" or "debug"
+    stream_mode="values"  # default for StateGraph is "updates"; see Chapter 6
 ):
     print(event)
 
@@ -257,12 +255,17 @@ results = graph.batch(
     ]
 )
 
-# Asynchronous
-import asyncio
-async_result = await graph.ainvoke({"message": "Hello"}, config={...})
+# Asynchronous (inside an async function)
+async_result = await graph.ainvoke(
+    {"message": "Hello"},
+    config={"configurable": {"thread_id": "user-2"}},
+)
 
 # Streaming async
-async for event in graph.astream(...):
+async for event in graph.astream(
+    {"message": "Hello"},
+    config={"configurable": {"thread_id": "user-3"}},
+):
     print(event)
 ```
 
@@ -663,12 +666,14 @@ from langgraph.graph.message import push_message
 push_message(
     message: MessageLikeRepresentation | BaseMessageChunk,
     *,
-    state_key: str = "messages",
+    state_key: str | None = "messages",
 ) -> AnyMessage
 ```
 
-- `message` — any message-like object: a `BaseMessage`, a `(role, content)` tuple, or a raw dict.
-- `state_key` — defaults to `"messages"`. Pass `None` if you want to push to the stream without automatically writing to a channel.
+- `message` — any message-like object: a `BaseMessage`, a `(role, content)` tuple, or a raw dict. It must have an `id`; `push_message` raises `ValueError("Message ID is required")` otherwise.
+- `state_key` — defaults to `"messages"`, so the pushed message is also written to that state channel (it stays in the history). Pass `None` to emit it on the stream only.
+
+`push_message` must be called from inside a running node (it reads the run's config), and the message only appears to callers that stream with `stream_mode="messages"`.
 
 **Example — progress indicator during a slow operation:**
 
@@ -705,7 +710,9 @@ for chunk in graph.stream(
     print(chunk)
 ```
 
-> **When to use this:** real-time feedback for users during long-running nodes, streaming partial LLM output token by token, or emitting tool-call progress events without restructuring your node logic.
+The stream shows `Working on it...` first, then the final answer. Because `state_key` defaulted to `"messages"`, the status message is also left in the thread's history; pass `state_key=None` if it should not be.
+
+> **When to use this:** a complete message you want the user to see before the node finishes, such as a status line during a slow call. For arbitrary progress payloads that are not chat messages, use `get_stream_writer()` and `stream_mode="custom"` ([Chapter 6](/langgraph-guide/python/chapter-06-streaming-and-debugging/)).
 
 ---
 

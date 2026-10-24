@@ -23,7 +23,7 @@ Pick the right backend:
 | `AsyncPostgresSaver` | `langgraph.checkpoint.postgres.aio` | Async production deployments | Yes | Yes | Yes | No | Yes |
 | `ShallowPostgresSaver` / `AsyncShallowPostgresSaver` | `langgraph.checkpoint.postgres.shallow` | Latest-only row, no time travel | Yes | **No** | (both) | No | Yes |
 
-> `ShallowPostgresSaver` is **deprecated since 2.0.20** and will be removed in a future release (its own `DeprecationWarning` still names 3.0.0, but as of 3.0.5 the class is retained for compatibility). Use `PostgresSaver` with `durability="exit"` on `invoke` / `stream` instead.
+> `ShallowPostgresSaver` is **deprecated since 2.0.20**. Its `DeprecationWarning` says it will be removed in 3.0.0, but it is still shipped in `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%%. Use `PostgresSaver` instead, with `durability="exit"` to cut writes and `prune(...)` to drop old checkpoints (see [Keeping history small](#keeping-history-small-prune)).
 
 The SQLite and Postgres packages install separately:
 
@@ -216,8 +216,8 @@ A `Checkpoint` (TypedDict, `langgraph.checkpoint.base`):
 
 ```python
 {
-    "v": 1,                       # format version
-    "id": "01HY...",              # monotonically increasing ULID-ish
+    "v": 4,                       # format version written by langgraph %%version=langgraph%%
+    "id": "1f1d001b-dc60-...",    # time-ordered UUID string; sorts by creation
     "ts": "2026-04-22T12:34:56Z",
     "channel_values": {...},      # current value of every channel
     "channel_versions": {...},    # per-channel monotonic version
@@ -230,8 +230,10 @@ A `Checkpoint` (TypedDict, `langgraph.checkpoint.base`):
 
 - `source`: `"input" | "loop" | "update" | "fork"` — how the checkpoint was created.
 - `step`: `-1` for the initial input, `0` for the first loop step, then `1, 2, ...`.
-- `writes`: mapping of node name → output written in this step.
 - `parents`: mapping of checkpoint namespace → parent checkpoint id (subgraphs).
+- `run_id`: the run that wrote the checkpoint, when the config carried one.
+
+There is no `writes` key in %%version=langgraph-checkpoint%%. A node's output is in `tasks[i].result` of the snapshot that scheduled it (the one whose `next` names the node), or stream it with `stream_mode="updates"`.
 
 ## `StateSnapshot` — fields
 
@@ -249,10 +251,10 @@ snapshot.metadata      # CheckpointMetadata | None  — source, step, writes, pa
 snapshot.created_at    # str | None                 — ISO-8601 timestamp of this checkpoint
 snapshot.parent_config # RunnableConfig | None      — config of the preceding checkpoint
 snapshot.tasks         # tuple[PregelTask, ...]     — pending task descriptors
-snapshot.interrupts    # tuple[Interrupt, ...]      — interrupts raised in the current step (new in 1.2+)
+snapshot.interrupts    # tuple[Interrupt, ...]      — pending interrupts from the current step
 ```
 
-### `interrupts` field (new in 1.2+)
+### `interrupts` field
 
 `snapshot.interrupts` exposes the `Interrupt` objects raised during the most recent step — useful for inspecting why a graph paused without re-running it:
 
@@ -354,9 +356,10 @@ print(result["approved"])  # True
 | Field | Type | Description |
 |---|---|---|
 | `value` | `Any` | The payload passed to `interrupt(value)` — question, instructions, or data for the human |
-| `id` | `str` | Unique identifier. Use in `Command(resume={id: answer})` to address this specific interrupt |
+| `id` | `str` | Identifies the task that raised it. Use in `Command(resume={id: answer})` to address it; several `interrupt()` calls in one node share one id |
+| `response_schema` | `dict \| None` | JSON Schema for the expected resume value, if the node passed `response_schema=` |
 
-> **Note on removed fields.** Before v0.6.0, `Interrupt` had `ns`, `when`, and `resumable` attributes. These were removed in v0.6.0. If you see code referencing them, it is targeting an older LangGraph version.
+> **Note on removed fields.** Before v0.6.0, `Interrupt` had `ns`, `when` and `resumable` attributes and an `interrupt_id` property (added in 0.4). v0.6.0 removed the attributes and replaced `interrupt_id` with `id`; `interrupt_id` still works as a deprecated property. If you see code referencing the others, it targets an older LangGraph version.
 
 ---
 
@@ -533,15 +536,6 @@ from langgraph.types import Durability
 | `"async"` (default) | Checkpoint is persisted **in the background** while the next step executes. Best throughput. |
 | `"exit"` | Checkpoint is persisted **only when the graph exits**. No mid-run time-travel. Minimal I/O. |
 
-Set it at compile time so every invocation of that graph uses the same policy:
-
-```python
-from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import StateGraph, START, END
-
-graph = builder.compile(checkpointer=InMemorySaver())
-```
-
 `durability` is a **per-call** option on `invoke` / `stream` / `ainvoke` / `astream` — it is **not** a `compile()` argument:
 
 ```python
@@ -553,7 +547,7 @@ graph.invoke(inputs, cfg, durability="exit")    # write only when graph exits
 
 The legacy `checkpoint_during=False` kwarg is still accepted and maps to `durability="exit"`, but emits a `DeprecationWarning`. Migrate to the explicit `durability=` spelling.
 
-> Use `durability="exit"` as a lightweight replacement for the deprecated `ShallowPostgresSaver`: you keep a single-row footprint per thread while preserving `PostgresSaver`'s full API.
+> `durability="exit"` writes one checkpoint per run instead of one per step, so a thread's history grows by one entry per call rather than staying at a single row as with `ShallowPostgresSaver`. To keep only the latest checkpoint, call `PostgresSaver.prune(thread_ids, strategy="keep_latest")` periodically.
 
 ## Required config keys
 
@@ -578,7 +572,10 @@ saver.list(config, *, filter=None, before=None, limit=None) -> Iterator[Checkpoi
 saver.put(config, checkpoint, metadata, new_versions) -> RunnableConfig
 saver.put_writes(config, writes, task_id, task_path="") -> None
 saver.delete_thread(thread_id) -> None
-# All have async twins: aget_tuple, alist, aput, aput_writes, adelete_thread
+saver.prune(thread_ids, *, strategy="keep_latest") -> None    # PostgresSaver only
+saver.copy_thread(source_thread_id, target_thread_id) -> None  # NotImplementedError in the OSS savers
+saver.delete_for_runs(run_ids) -> None                          # NotImplementedError in the OSS savers
+# All have async twins: aget_tuple, alist, aput, aput_writes, adelete_thread, aprune, ...
 ```
 
 Typical app code uses the graph-level helpers instead:
@@ -587,7 +584,7 @@ Typical app code uses the graph-level helpers instead:
 graph.get_state(cfg)                              # uses saver.get_tuple
 list(graph.get_state_history(cfg))                # uses saver.list
 graph.update_state(cfg, {"count": 42})            # uses saver.put + saver.put_writes
-await graph.adelete_thread(thread_id)             # routes to the checkpointer
+saver.delete_thread(thread_id)                    # no graph-level equivalent: call the saver
 ```
 
 ### Thread lifecycle management: `delete_thread` / `adelete_thread`
@@ -614,9 +611,8 @@ cfg = {"configurable": {"thread_id": "user-42"}}
 graph.invoke({"count": 0}, cfg)
 graph.invoke({"count": 0}, cfg)    # count == 2 after two calls
 
-# Full GDPR erasure for user-42
+# Full GDPR erasure for user-42 (compiled graphs have no delete_thread method)
 saver.delete_thread("user-42")
-# or via the graph:  graph.delete_thread("user-42")
 
 # The thread no longer exists — next invoke starts fresh
 graph.invoke({"count": 0}, cfg)    # count == 1 again
@@ -626,11 +622,50 @@ Async variant:
 
 ```python
 await saver.adelete_thread("user-42")
-# or:
-await graph.adelete_thread("user-42")
 ```
 
 `InMemorySaver.delete_thread` removes entries from all three internal dicts (`storage`, `writes`, `blobs`) in a single call. `PostgresSaver` / `AsyncPostgresSaver` issue `DELETE` statements targeting all three backing tables (`checkpoints`, `checkpoint_blobs`, `checkpoint_writes`) for the given thread ID.
+
+### Keeping history small: `prune`
+
+`PostgresSaver` and `AsyncPostgresSaver` can trim old checkpoints. `prune(thread_ids, strategy="keep_latest")` keeps the latest checkpoint of each namespace (the one `get_state` loads) and deletes the rest; `strategy="delete"` removes the threads entirely. `InMemorySaver` and the SQLite savers raise `NotImplementedError`. Combined with `durability="exit"`, this replaces `ShallowPostgresSaver`:
+
+```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.postgres import PostgresSaver
+
+DB_URI = "postgresql://user:pass@localhost:5432/app"
+
+
+class S(TypedDict):
+    count: Annotated[int, operator.add]
+
+
+builder = StateGraph(S).add_node("bump", lambda s: {"count": 1})
+builder.add_edge(START, "bump").add_edge("bump", END)
+
+with PostgresSaver.from_conn_string(DB_URI) as saver:
+    saver.setup()
+    graph = builder.compile(checkpointer=saver)
+    cfg = {"configurable": {"thread_id": "prune-demo"}}
+
+    for _ in range(3):
+        graph.invoke({"count": 0}, cfg)
+    print(len(list(saver.list(cfg))))      # 9: three checkpoints per run (input, start, bump)
+
+    for _ in range(3):
+        graph.invoke({"count": 0}, cfg, durability="exit")
+    print(len(list(saver.list(cfg))))      # 12: one more per run
+
+    saver.prune(["prune-demo"], strategy="keep_latest")
+    print(len(list(saver.list(cfg))))      # 1
+    print(graph.get_state(cfg).values)     # {'count': 6}: the state is intact
+```
+
+`keep_latest` refuses threads that use a `DeltaChannel` (it would need the older checkpoints to rebuild the value), and forking from a checkpoint while it is being pruned is not safe. Run it from a maintenance job rather than inside a request.
 
 > **Deleting a thread is permanent.** There is no soft-delete or recycle bin — the data is gone immediately. Call `get_state_history` to archive thread content before deletion if you need an audit trail.
 
@@ -733,45 +768,45 @@ graph.invoke(None, new_cfg)
 
 ### 4. Time-travel with full snapshot inspection
 
-Use `StateSnapshot` fields to pick a fork point programmatically:
+Use `StateSnapshot` fields to pick a fork point programmatically. This example is self-contained:
 
 ```python
+import operator
+from typing import Annotated
+from typing_extensions import TypedDict
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
 
-saver = InMemorySaver()
-graph = builder.compile(checkpointer=saver)
+
+class Counter(TypedDict):
+    count: Annotated[int, operator.add]
+
+
+counter_builder = StateGraph(Counter).add_node("bump", lambda s: {"count": 1})
+counter_builder.add_edge(START, "bump").add_edge("bump", END)
+graph = counter_builder.compile(checkpointer=InMemorySaver())
 
 cfg = {"configurable": {"thread_id": "replay-demo"}}
+for _ in range(3):
+    graph.invoke({"count": 0}, cfg)          # count: 1, 2, 3
 
-# Run the graph several times to build up history
-for _ in range(5):
-    graph.invoke({"count": 0}, cfg)
-
-# Retrieve full history (newest first)
-history = list(graph.get_state_history(cfg))
-
-# Inspect each snapshot
+history = list(graph.get_state_history(cfg))   # newest first
 for snap in history:
-    print(snap.created_at, snap.values, snap.metadata["step"])
+    print(snap.metadata["step"], snap.metadata["source"], snap.values, snap.next)
 
-# Pick a specific past snapshot by index (index 2 = 3rd-most-recent)
-old_snapshot = history[2]
-print("Rewinding to step:", old_snapshot.metadata["step"])
-print("State at that point:", old_snapshot.values)
-print("Interrupts at that point:", old_snapshot.interrupts)  # new in 1.2+
+# Pick the checkpoint just before the second run's "bump" executed.
+before_bump = [s for s in history if s.next == ("bump",)][1]
+print("State at that point:", before_bump.values)    # {'count': 1}
 
-# Fork: replay from that checkpoint with no new input
-forked_config = old_snapshot.config
-result = graph.invoke(None, forked_config)   # resumes from the saved state
+# Replay from there with no new input: bump runs again on that saved state.
+print(graph.invoke(None, before_bump.config))         # {'count': 2}
 
-# Or patch state before replaying (creates a new branch)
-patched_config = graph.update_state(
-    forked_config,
-    {"count": 99},        # override a channel value
-    as_node="bump",       # attribute the patch to the "bump" node
-)
-result = graph.invoke(None, patched_config)
+# Or patch state first; this creates a new branch from the same point.
+patched = graph.update_state(before_bump.config, {"count": 99}, as_node="__start__")
+print(graph.invoke(None, patched))                    # {'count': 101}
 ```
+
+The replay and the patched run both become new branches of the thread; the latest checkpoint is now the last one written, so `get_state(cfg)` returns `{'count': 101}`.
 
 ### 5. Production Postgres with pooling
 
@@ -864,7 +899,7 @@ checkpoints = list(
 - **`thread_id` is required.** A checkpointed graph called with an empty configurable dict raises `ValueError`.
 - **`InMemorySaver` is not persistent.** Restarting the process loses all threads. Not suitable for Platform-hosted agents (the managed checkpointer is injected automatically there — don't pass one at all).
 - **Don't share a raw `psycopg.Connection` across threads without the saver.** The saver holds a `threading.Lock`; bypassing it breaks `autocommit` contract.
-- Deleting a thread is `delete_thread(thread_id)` — this is a checkpointer method, not a graph method on older versions. In v1.x, `graph.delete_thread` / `graph.adelete_thread` forward to the checkpointer.
+- Deleting a thread is `saver.delete_thread(thread_id)` (or `adelete_thread`). It is a checkpointer method only; compiled graphs have no `delete_thread` in %%version=langgraph%%, so keep a reference to the saver.
 - **`InMemorySaver` import path.** Always import from `langgraph.checkpoint.memory`. `MemorySaver` is an alias in the same module but `InMemorySaver` is the canonical name.
 - **`Checkpointer=False` on subgraphs.** Passing `checkpointer=False` when compiling a subgraph disables checkpointing for that subgraph even when the parent has one. This is intentional; use `None` (the default) to inherit the parent's backend.
 
@@ -872,9 +907,7 @@ checkpoints = list(
 
 | Version | Change |
 |---|---|
-| langgraph 1.2.1 | `StateSnapshot.interrupts` field added; `Checkpointer` type alias (`None \| bool \| BaseCheckpointSaver`) formalised in `langgraph.types`; `ensure_valid_checkpointer()` utility added. |
-| checkpoint 4.0 | `Checkpoint.v == 1` is the supported format; checkpoints with `v < 4` from the old pending-sends schema are auto-migrated on read. |
-| checkpoint 3.x | `checkpoint_during` kwarg deprecated; migrate to `durability="sync" \| "async" \| "exit"`. |
-| postgres 3.0 / shallow 2.0.20 | `ShallowPostgresSaver` / `AsyncShallowPostgresSaver` deprecated; prefer `PostgresSaver` with `durability="exit"`. |
-| langgraph 0.4 | `Interrupt.id` introduced; `interrupt_id` deprecated. |
-| langgraph 0.6 | `Interrupt.ns`, `when`, `resumable`, `interrupt_id` removed. |
+| langgraph 1.0 | `interrupt_id` warns with `LangGraphDeprecatedSinceV10`. |
+| langgraph 0.6 | `durability=` replaces `checkpoint_during=` (still accepted, with a deprecation warning). `Interrupt` reduced to `value` and `id`: `ns`, `when` and `resumable` removed, `interrupt_id` deprecated in favour of `id`. |
+| postgres 2.0.20 | `ShallowPostgresSaver` / `AsyncShallowPostgresSaver` deprecated; prefer `PostgresSaver`. |
+| langgraph 0.4 | `Interrupt.interrupt_id` property added. |

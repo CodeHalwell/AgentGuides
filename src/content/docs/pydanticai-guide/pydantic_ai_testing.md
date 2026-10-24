@@ -77,13 +77,19 @@ def test_model_calls_lookup():
 ### Forcing specific output
 
 ```python
-tm = TestModel(custom_output_text='mocked reply')
-with agent.override(model=tm):
-    result = agent.run_sync('ignored')
-assert result.output == 'mocked reply'
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+
+agent = Agent('openai:%%model=openai%%')
+
+
+def test_forced_text():
+    with agent.override(model=TestModel(custom_output_text='mocked reply')):
+        result = agent.run_sync('ignored')
+    assert result.output == 'mocked reply'
 ```
 
-For agents with `output_type=MyModel`, set `custom_output_args` to a dict matching the schema.
+For agents with `output_type=MyModel`, set `custom_output_args` to a dict matching the schema (see [Testing structured output](#testing-structured-output-with-testmodel) below).
 
 ## `FunctionModel` — write your own response
 
@@ -116,13 +122,27 @@ assert result.output == 'echo: hello'
 Use `FunctionModel` when you need branching behaviour (e.g. "first call returns a tool call, second returns the final answer"):
 
 ```python
-from pydantic_ai.messages import ToolCallPart
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
 
-def first_tool_then_answer(messages, info):
-    calls = [p for m in messages for p in m.parts if isinstance(p, ToolCallPart)]
-    if not calls:
+
+def first_tool_then_answer(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    returns = [p for m in messages for p in m.parts if isinstance(p, ToolReturnPart)]
+    if not returns:
         return ModelResponse(parts=[ToolCallPart(tool_name='lookup', args={'sku': 'ABC'})])
-    return ModelResponse(parts=[TextPart('done')])
+    return ModelResponse(parts=[TextPart(f'The price is {returns[-1].content["price"]}.')])
+
+
+agent = Agent(FunctionModel(first_tool_then_answer))
+
+
+@agent.tool_plain
+def lookup(sku: str) -> dict:
+    return {'sku': sku, 'price': 9.99}
+
+
+assert agent.run_sync('Price of ABC?').output == 'The price is 9.99.'
 ```
 
 ### Streaming `FunctionModel`
@@ -244,62 +264,148 @@ asyncio.run(test_stream())
 
 - `model` (`Model`, a `KnownModelName`, or any `str`)
 - `deps`
-- `toolsets`, `tools`
+- `toolsets`, `tools`, `native_tools`
 - `instructions`
-- `model_settings`, `metadata`, `name`
+- `model_settings`, `metadata`, `name`, `retries`
 
-Returns a context manager — everything reverts on exit. Overrides are captured in `contextvars`, so they are safe under asyncio concurrency (each task sees its own overrides).
+Returns a context manager — everything reverts on exit. Overrides are held in `contextvars`, so concurrent asyncio tasks each see their own overrides.
 
 ```python
-with agent.override(model=TestModel(), deps=FakeDB()):
-    result = agent.run_sync('query')
+from dataclasses import dataclass, field
+
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.test import TestModel
+
+
+@dataclass
+class Database:
+    prices: dict[str, float] = field(default_factory=dict)
+
+    def price(self, sku: str) -> float:
+        raise RuntimeError('real database not available in tests')
+
+
+@dataclass
+class FakeDB(Database):
+    def price(self, sku: str) -> float:
+        return self.prices.get(sku, 0.0)
+
+
+agent = Agent('openai:%%model=openai%%', deps_type=Database)
+
+
+@agent.tool
+def price(ctx: RunContext[Database], sku: str) -> float:
+    """Price for a SKU."""
+    return ctx.deps.price(sku)
+
+
+with agent.override(model=TestModel(), deps=FakeDB({'a': 9.99})):
+    result = agent.run_sync('query', deps=Database())   # the overridden deps win
+print(result.output)
 ```
 
 ### pytest fixture
 
+Put the override in a fixture so every test that uses it runs offline, and the override is removed afterwards even when the test fails:
+
 ```python
+# test_support_agent.py
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
+support_agent = Agent('openai:%%model=openai%%', instructions='Help with orders.')   # normally imported from your app
+
+
 @pytest.fixture
-def test_agent(my_agent: Agent):
-    with my_agent.override(model=TestModel()):
-        yield my_agent
+def offline_agent():
+    with support_agent.override(model=TestModel(custom_output_text='Your order has shipped.')):
+        yield support_agent
+
+
+def test_reply(offline_agent: Agent):
+    assert offline_agent.run_sync('Where is my order?').output == 'Your order has shipped.'
+```
+
+### Blocking accidental real requests
+
+Set `pydantic_ai.models.ALLOW_MODEL_REQUESTS = False` once (in `conftest.py`) and any request to a real provider model raises `RuntimeError('Model requests are not allowed, since ALLOW_MODEL_REQUESTS is False')`. `TestModel` and `FunctionModel` are unaffected, so a test that forgot its override fails loudly instead of spending money:
+
+```python
+# conftest.py
+import pytest
+from pydantic_ai import models
+
+models.ALLOW_MODEL_REQUESTS = False
+
+
+@pytest.fixture
+def allow_real_requests():
+    """Opt a single (integration) test back in."""
+    with models.override_allow_model_requests(True):
+        yield
 ```
 
 ## `capture_run_messages` — test error paths
 
 ```python
+import pytest
+from pydantic import BaseModel, Field
 from pydantic_ai import Agent, capture_run_messages
 from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.models.test import TestModel
+
+
+class StrictSchema(BaseModel):
+    code: str = Field(pattern=r'^[A-Z]{3}$')
+
+
+agent = Agent(TestModel(custom_output_args={'code': 'not-valid'}), output_type=StrictSchema)
+
 
 def test_bad_output_surfaces_messages():
-    agent = Agent(..., output_type=StrictSchema)
     with capture_run_messages() as msgs:
         with pytest.raises(UnexpectedModelBehavior):
-            agent.run_sync('...')
-    # Inspect what the model actually produced
-    assert any('tool-call' == getattr(p, 'part_kind', None) for m in msgs for p in m.parts)
+            agent.run_sync('Give me a currency code.')
+    # Inspect what the model actually produced, including the retry prompt it was sent
+    kinds = [p.part_kind for m in msgs for p in m.parts]
+    assert 'tool-call' in kinds and 'retry-prompt' in kinds
 ```
 
 Only the **first** `run*` call inside the `with` is captured — don't loop runs inside one context.
 
-## Snapshotting tool traffic
+## Asserting on tool traffic
+
+Messages carry timestamps, run IDs and tool-call IDs that change on every run, so compare a projection of the parts rather than the raw JSON:
 
 ```python
-from pydantic_ai.messages import ModelMessagesTypeAdapter
+from pydantic_ai import Agent
+from pydantic_ai.messages import ToolCallPart, ToolReturnPart
+from pydantic_ai.models.test import TestModel
 
-def test_tool_flow(snapshot):
+agent = Agent('openai:%%model=openai%%')
+
+
+@agent.tool_plain
+def get_weather(city: str) -> str:
+    """Current weather for a city."""
+    return f'Sunny in {city}'
+
+
+def test_tool_flow():
     with agent.override(model=TestModel()):
         result = agent.run_sync('go')
-    snapshot.assert_match(
-        ModelMessagesTypeAdapter.dump_json(result.all_messages(), indent=2),
-        'tool_flow.json',
-    )
+    traffic = [
+        (type(p).__name__, p.tool_name, p.args if isinstance(p, ToolCallPart) else p.content)
+        for m in result.all_messages()
+        for p in m.parts
+        if isinstance(p, (ToolCallPart, ToolReturnPart))
+    ]
+    assert traffic == [('ToolCallPart', 'get_weather', {'city': 'a'}), ('ToolReturnPart', 'get_weather', 'Sunny in a')]
 ```
 
-Pair with [syrupy](https://github.com/syrupy-project/syrupy) or pytest-snapshot.
+For whole-history snapshots, serialise with `ModelMessagesTypeAdapter.dump_python(...)` and use a snapshot library that can ignore volatile fields (inline-snapshot with `dirty-equals`' `IsStr()` / `IsDatetime()` is what PydanticAI's own test suite uses).
 
 ## Feature comparison
 
@@ -327,6 +433,18 @@ For most unit tests, prefer `TestModel` or `FunctionModel`. For contract tests, 
 ### 1. Test an agent's _contract_ without calling an LLM
 
 ```python
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+
+agent = Agent('openai:%%model=openai%%')
+
+
+@agent.tool_plain
+def pricing(sku: str) -> float:
+    """Price for a SKU."""
+    return 9.99
+
+
 def test_pricing_tool_is_registered():
     tm = TestModel()
     with agent.override(model=tm):
@@ -335,35 +453,104 @@ def test_pricing_tool_is_registered():
     assert 'pricing' in names
 ```
 
-### 2. Inject failing tools to test recovery
+### 2. Inject failing tools to test error handling
+
+An ordinary exception raised in a tool is not sent to the model: it propagates out of `run_sync()` and ends the run. Only `ModelRetry` (retry with feedback) and `ToolFailed` (report the failure, no retry) are turned into messages the model sees. Test both paths:
 
 ```python
-@agent.tool
-def fragile(ctx):
+import pytest
+from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.test import TestModel
+
+crashing = Agent(TestModel())
+
+
+@crashing.tool_plain
+def fragile() -> str:
     raise ValueError('boom')
 
-def test_retries_then_succeeds():
-    with agent.override(model=TestModel()):
-        result = agent.run_sync('do it')
-    assert result.output  # agent recovered past the tool error
+
+def test_plain_exception_ends_the_run():
+    with pytest.raises(ValueError, match='boom'):
+        crashing.run_sync('do it')
+
+
+attempts = 0
+
+
+def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+    # Keep calling the tool until it returns; a ModelRetry arrives as a RetryPromptPart, not a ToolReturnPart
+    if any(isinstance(p, ToolReturnPart) for m in messages for p in m.parts):
+        return ModelResponse(parts=[TextPart('recovered')])
+    return ModelResponse(parts=[ToolCallPart('flaky', {})])
+
+
+recovering = Agent(FunctionModel(model))
+
+
+@recovering.tool_plain(retries=2)
+def flaky() -> str:
+    global attempts
+    attempts += 1
+    if attempts == 1:
+        raise ModelRetry('temporary failure, call again')
+    return 'ok'
+
+
+def test_model_retry_recovers():
+    assert recovering.run_sync('do it').output == 'recovered'
+    assert attempts == 2
 ```
 
 ### 3. Drive a multi-turn protocol with `FunctionModel`
 
 ```python
-def script(messages, info):
+from pydantic_ai import Agent
+from pydantic_ai.messages import ModelMessage, ModelResponse, TextPart, ToolCallPart
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+
+
+def script(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
     step = sum(1 for m in messages if m.kind == 'response')
     if step == 0:
         return ModelResponse(parts=[ToolCallPart('search', {'q': 'x'})])
     if step == 1:
         return ModelResponse(parts=[ToolCallPart('refine', {'doc_id': 1})])
     return ModelResponse(parts=[TextPart('final')])
+
+
+agent = Agent(FunctionModel(script))
+calls: list[str] = []
+
+
+@agent.tool_plain
+def search(q: str) -> list[int]:
+    calls.append(f'search({q})')
+    return [1, 2]
+
+
+@agent.tool_plain
+def refine(doc_id: int) -> str:
+    calls.append(f'refine({doc_id})')
+    return 'refined'
+
+
+assert agent.run_sync('go').output == 'final'
+assert calls == ['search(x)', 'refine(1)']
 ```
 
 ### 4. Assert `ModelRetry` is triggered by an output validator
 
 ```python
-from pydantic_ai import ModelRetry
+import pytest
+from pydantic_ai import Agent, ModelRetry
+from pydantic_ai.exceptions import UnexpectedModelBehavior
+from pydantic_ai.models.test import TestModel
+
+agent = Agent('openai:%%model=openai%%')
+
 
 @agent.output_validator
 async def must_be_uppercase(ctx, out: str) -> str:
@@ -381,10 +568,42 @@ Once the output retry budget (`retries={'output': N}`, default 1) is used up, `M
 
 ### 5. Swap `deps` per test without rebuilding the agent
 
+See the `FakeDB` example under [`Agent.override(...)`](#agentoverride--swap-parts-per-runtest): `agent.override(deps=..., model=TestModel())` replaces both for the duration of the `with` block, even if the code under test passes its own `deps=`.
+
+### 6. Test an MCP toolset in-process
+
+`MCPToolset` accepts a `FastMCP` server object directly, which runs the server in the same process — no subprocess, no port. Install the server side with `pip install fastmcp` (the `mcp` extra only brings the client).
+
 ```python
-fake_db = FakeDB([{'sku': 'ABC', 'price': 9.99}])
-with agent.override(deps=fake_db, model=TestModel()):
-    result = agent.run_sync('price ABC')
+import asyncio
+
+from fastmcp import FastMCP
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPToolset
+from pydantic_ai.models.test import TestModel
+
+server = FastMCP('inventory')
+
+
+@server.tool()
+def stock_level(sku: str) -> int:
+    """Units in stock for a SKU."""
+    return {'A-1': 12}.get(sku, 0)
+
+
+model = TestModel()
+agent = Agent(model, toolsets=[MCPToolset(server)])
+
+
+async def main():
+    async with agent:
+        result = await agent.run('How many A-1 are in stock?')
+    assert [t.name for t in model.last_model_request_parameters.function_tools] == ['stock_level']
+    print(result.output)
+    #> {"stock_level":0}
+
+
+asyncio.run(main())
 ```
 
 ## Gotchas
@@ -392,7 +611,8 @@ with agent.override(deps=fake_db, model=TestModel()):
 - **`TestModel` generates tool arguments from the schema**, seeded (`seed=0` by default), so a run is repeatable. Change `seed=` for different values, or use `FunctionModel` when a test depends on specific arguments.
 - **`override` leaks if you manually `__enter__` without `__exit__`.** Always use `with`.
 - **Async tests**: prefer `await agent.run(...)` inside `async def test_*` — don't mix `run_sync` and a running event loop.
-- **`include_return_schema`**: `TestModel` does _not_ honour tool return schemas unless the agent is set to include them; see `IncludeReturnSchemasToolset`.
+- **`TestModel` and native tools**: a run that uses provider-native tools (`WebSearch`, `CodeExecution`, …) raises `UserError('TestModel does not support built-in tools')`. Test those agents with `FunctionModel`, or override the capabilities away in unit tests.
+- **`TestModel` and `NativeOutput`**: in native output mode `TestModel` returns plain text rather than JSON, so the output fails validation. Use `FunctionModel` returning the JSON yourself.
 
 ## Testing `AgentInfo` — assert what the agent offers the model
 

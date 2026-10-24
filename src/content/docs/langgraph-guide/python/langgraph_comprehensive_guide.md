@@ -91,7 +91,8 @@ print(result["messages"][-1].content)
 | `langgraph.config` | `get_config`, `get_store`, `get_stream_writer` |
 | `langgraph.checkpoint.memory` | `InMemorySaver` (`MemorySaver` is an older alias of the same class) |
 | `langgraph.checkpoint.sqlite`, `langgraph.checkpoint.postgres` | `SqliteSaver`, `AsyncSqliteSaver`, `PostgresSaver`, `AsyncPostgresSaver` |
-| `langgraph.store.memory`, `langgraph.store.postgres` | `InMemoryStore`, `PostgresStore`, `AsyncPostgresStore` |
+| `langgraph.store.memory`, `langgraph.store.sqlite`, `langgraph.store.postgres` | `InMemoryStore`, `SqliteStore`, `AsyncSqliteStore`, `PostgresStore`, `AsyncPostgresStore` |
+| `langgraph.graph.ui` | `push_ui_message`, `delete_ui_message`, `ui_message_reducer`, `UIMessage` (generative UI, [Ch. 6](/langgraph-guide/python/chapter-06-streaming-and-debugging/)) |
 | `langgraph.cache.memory` | `InMemoryCache` |
 | `langgraph.prebuilt` | `ToolNode`, `tools_condition`, `InjectedState`, `InjectedStore`, `ToolRuntime` |
 | `langgraph.pregel.remote` | `RemoteGraph` |
@@ -111,7 +112,7 @@ These are the values in the installed source. Several older pages and blog posts
 | Node timeouts | `add_node(..., timeout=...)` and `TimeoutPolicy` work on **async** nodes only. A sync node with a timeout is accepted by `add_node` and rejected by `compile()` with `ValueError`. |
 | `ToolNode` error handling | Default catches only argument-validation errors (`ToolInvocationError`) and returns them to the model; other exceptions propagate. Pass `handle_tool_errors=True` to catch everything. |
 | `interrupt()` without a checkpointer | `invoke` returns with an `__interrupt__` key, but the run cannot be resumed. Compile with a checkpointer and pass a `thread_id`. |
-| `InMemoryStore` TTL | Not supported (`supports_ttl` is `False`). Use `PostgresStore` with `TTLConfig`. |
+| `InMemoryStore` TTL | Not supported (`supports_ttl` is `False`). Use `SqliteStore` or `PostgresStore` with a `TTLConfig` ([Ch. 5](/langgraph-guide/python/chapter-05-memory/#store-ttl-time-to-live)). |
 | `checkpointer=True` on `compile()` | Only valid for a subgraph (inherit the parent's checkpointer). |
 
 ## Compiled-graph utilities
@@ -189,7 +190,7 @@ print(count_tool.invoke({"text": "LangGraph builds agents"})["word_count"])  # 3
 | `ValueError: Checkpointer requires ... thread_id` | Graph compiled with a checkpointer, invoked without a thread | Pass `{"configurable": {"thread_id": "..."}}` |
 | State does not carry over between calls | No checkpointer, or a different `thread_id` each time | Compile with a checkpointer and reuse the thread ID |
 | A list field is overwritten instead of appended | No reducer on the field | `Annotated[list, operator.add]` or `add_messages` |
-| `InvalidUpdateError: Expected dict, got [Send(...)]` | A function returning `Send` objects was registered as a node | Return `Send` from a routing function passed to `add_conditional_edges` |
+| `InvalidUpdateError: Expected dict, got [Send(...)]` | A node returned a bare list of `Send` objects | Return them from a routing function passed to `add_conditional_edges`, or return `Command(goto=[Send(...), ...])` from the node |
 | `ValueError: Node timeouts are only supported for async nodes` | `timeout=` (or a `set_node_defaults` timeout) reaches a sync node, including a sync error handler | Make the node `async def` |
 | Error handler raises `TypeError: missing 1 required positional argument` | Handler parameter not annotated as `NodeError` | `def handler(state, error: NodeError)` |
 | `GraphRecursionError` after many steps | A loop with no exit condition | Fix the routing; set `recursion_limit` |

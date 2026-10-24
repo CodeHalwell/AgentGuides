@@ -92,7 +92,7 @@ class ChatState(TypedDict):
     visited: Annotated[list[str], operator.add]
 ```
 
-- `add_messages` merges two message lists **by `id`**: same-id messages overwrite, new-id messages append. Pass `format="langchain-openai"` to coerce to OpenAI-format blocks (requires `langchain-core>=0.3.11`).
+- `add_messages` merges two message lists **by `id`**: same-id messages overwrite, new-id messages append. Pass `format="langchain-openai"` to convert content blocks to the OpenAI format ([Chapter 1](/langgraph-guide/python/chapter-01-setup-and-core-concepts/#add_messages-with-formatlangchain-openai)).
 - `REMOVE_ALL_MESSAGES` (from `langgraph.graph.message`) is a sentinel id on a `RemoveMessage(id=REMOVE_ALL_MESSAGES)` that wipes the history.
 - Without a reducer, a channel uses `LastValue` semantics: the latest write wins, and two concurrent writes in one super-step raise `InvalidUpdateError`.
 
@@ -444,15 +444,17 @@ Returns a `CompiledStateGraph`, which exposes (all inherited from `Pregel`):
 
 | Method | Purpose |
 |---|---|
-| `invoke(input, config=None, *, context=None, stream_mode=None, interrupt_before=None, interrupt_after=None, durability=None, version="v1")` | Run to completion, return final state. |
+| `invoke(input, config=None, *, context=None, stream_mode="values", print_mode=(), output_keys=None, interrupt_before=None, interrupt_after=None, durability=None, control=None, version="v1")` | Run to completion, return final state (`GraphOutput` with `version="v2"`). |
 | `stream(...)` | Yield per-step events (see the [Streaming modes reference](/langgraph-guide/python/reference-streaming-modes/)). |
 | `ainvoke` / `astream` | Async variants. |
 | `get_state(config, *, subgraphs=False)` | Return the current `StateSnapshot` for a thread. Requires a checkpointer. |
 | `get_state_history(config, *, filter=None, before=None, limit=None)` | Iterate historical snapshots (newest first). |
 | `update_state(config, values, as_node=None, task_id=None)` | Write an update as if it came from `as_node`. |
 | `bulk_update_state(config, supersteps)` | Apply multiple `StateUpdate` groups as distinct super-steps. |
-| `get_subgraphs(namespace=None, recurse=False)` | Iterate nested compiled graphs. |
-| `get_graph(...)` / `draw_mermaid()` / `draw_png()` | Visualization helpers. |
+| `get_subgraphs(*, namespace=None, recurse=False)` | Iterate `(name, graph)` pairs for nested compiled graphs. |
+| `get_graph(xray=False)` | A drawable graph: `.draw_mermaid()`, `.draw_mermaid_png()`, `.draw_ascii()` (needs `grandalf`). |
+| `clear_cache(nodes=None)` / `aclear_cache(...)` | Drop cached node results (see `CachePolicy`). |
+| `get_input_jsonschema()`, `get_output_jsonschema()`, `get_context_jsonschema()` | JSON Schemas for the graph's input, output and context. |
 
 ### Durability modes
 
@@ -526,15 +528,15 @@ To get the config instead, add `config: RunnableConfig` as a parameter or call `
 from langgraph.runtime import ExecutionInfo
 ```
 
-`runtime.execution_info` is a frozen dataclass with read-only per-run metadata. It is populated after task preparation, so it is `None` only in very early lifecycle hooks.
+`runtime.execution_info` is a frozen dataclass with read-only metadata for the current task. Inside a node it is always set; it is typed `Optional` because a `Runtime` can also be built outside a run.
 
 | Field | Type | Description |
 |---|---|---|
-| `checkpoint_id` | `str` | The ULID-style checkpoint ID written by this step. |
-| `checkpoint_ns` | `str` | The checkpoint namespace (empty string for root; `"parent:task_id"` for subgraphs). |
+| `checkpoint_id` | `str` | The ID of the checkpoint this step runs from (a time-ordered UUID string). |
+| `checkpoint_ns` | `str` | The task's checkpoint namespace, `"<node>:<task_id>"` (for example `"n:2e3f…"`); nested graphs add segments separated by `\|`. |
 | `task_id` | `str` | The Pregel task ID for the current node invocation. |
-| `thread_id` | `str \| None` | The thread ID from `config["configurable"]["thread_id"]`. `None` when no checkpointer. |
-| `run_id` | `str \| None` | The LangSmith run ID, if `run_id` was set in `RunnableConfig`. |
+| `thread_id` | `str \| None` | The thread ID from `config["configurable"]["thread_id"]`, with or without a checkpointer. `None` when the config has none. |
+| `run_id` | `str \| None` | The `run_id` from the `RunnableConfig`, if you set one (`invoke(..., {"run_id": uuid4()})`); otherwise `None`. |
 | `node_attempt` | `int` | Current attempt number (1-indexed). Increments on each retry. |
 | `node_first_attempt_time` | `float \| None` | Unix timestamp for when the first attempt of this node started. |
 
@@ -607,16 +609,24 @@ The `runtime.drain_requested` and `runtime.drain_reason` convenience properties 
 
 ## State schema: TypedDict vs Pydantic vs dataclass
 
-All three work as `state_schema`. Since v1.1, `invoke()` **coerces** input dicts into the declared type before calling nodes.
+All three work as `state_schema`. With a Pydantic model or dataclass, `invoke()` validates the input dict against the schema, and each node receives an instance of it.
 
 ```python
 from pydantic import BaseModel
+from langgraph.graph import StateGraph, START
 
-class State(BaseModel):
+
+class CounterState(BaseModel):
     counter: int = 0
 
-graph.invoke({"counter": 0})
-# Nodes receive State(counter=0) — a real Pydantic instance.
+
+def bump(state: CounterState) -> dict:
+    print(type(state).__name__)          # CounterState
+    return {"counter": state.counter + 1}
+
+
+counter_graph = StateGraph(CounterState).add_node("bump", bump).add_edge(START, "bump").compile()
+print(counter_graph.invoke({"counter": 0}))   # {'counter': 1}: the output is a plain dict
 ```
 
 `Annotated[..., reducer]` works the same across all three schema styles. For Pydantic, use `Field(default_factory=...)` if the default depends on call time.
@@ -694,7 +704,7 @@ def traced_node(state: State, runtime: Runtime) -> dict:
 
 ### 5. Pydantic state schema
 
-`StateGraph` accepts a Pydantic `BaseModel` as its state schema. Since v1.1, `invoke()` coerces dict inputs to the model before nodes run, so nodes receive a typed instance.
+`StateGraph` accepts a Pydantic `BaseModel` as its state schema. `invoke()` validates dict inputs against the model before nodes run, and nodes receive a typed instance.
 
 ```python
 import operator
@@ -898,8 +908,8 @@ for mode, data in graph.stream(
 
 | Version | Change |
 |---|---|
-| 1.2 | `TimeoutPolicy` dataclass introduced with `run_timeout`, `idle_timeout`, `refresh_on`. `Runtime.heartbeat()` added. `RunControl` and cooperative draining added (`runtime.control`, `runtime.drain_requested`, `runtime.drain_reason`). `ExecutionInfo` extended with `checkpoint_ns` and `task_id` fields. |
-| 1.1 | `invoke()`/`stream()` coerce input dicts into the declared state schema for Pydantic/dataclass. V2 stream mode emits typed `StreamPart` dicts. Python 3.9 dropped. |
-| 1.0 | `AgentState`, `AgentStatePydantic` **deprecated** in `langgraph.prebuilt` (top-level re-export removed from `__init__`; still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled removal in v2.0.0) — use `MessagesState` or a custom TypedDict for new code. `create_react_agent` is **deprecated** per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent` (separate `langchain` package; `pip install langchain`). It remains in `langgraph.prebuilt` for backwards compatibility. `ns`, `when`, `resumable`, `interrupt_id` removed from `Interrupt` (in v0.6). |
+| 1.2.0 | `TimeoutPolicy` (`run_timeout`, `idle_timeout`, `refresh_on`) and `timeout=` on nodes, tasks and `Send`. Node `error_handler=` and `set_node_defaults()`. `Runtime.heartbeat()`. `RunControl` and cooperative draining (`runtime.control`, `runtime.drain_requested`, `runtime.drain_reason`). Experimental `stream_events(version="v3")`. |
+| 1.1.x | 1.1.0: `version="v2"` for `invoke`/`stream`, with typed `StreamPart` dicts and `GraphOutput`. 1.1.3: `Runtime.execution_info` (`ExecutionInfo`). 1.1.5: `ExecutionInfo.checkpoint_ns` and `task_id`. |
+| 1.0 | Python 3.9 dropped (`langgraph` 1.0.0 requires Python 3.10+). `AgentState`, `AgentStatePydantic` **deprecated** in `langgraph.prebuilt` (top-level re-export removed from `__init__`; still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled removal in v2.0.0) — use `MessagesState` or a custom TypedDict for new code. `create_react_agent` is **deprecated** per official LangGraph v1 migration docs in favour of `langchain.agents.create_agent` (separate `langchain` package; `pip install langchain`). It remains in `langgraph.prebuilt` for backwards compatibility. `ns`, `when`, `resumable`, `interrupt_id` removed from `Interrupt` (in v0.6). |
 | 0.6 | `config_schema` on `StateGraph` deprecated; use `context_schema`. `Runtime[Ctx]` replaces ad-hoc `config["configurable"]` usage for run context. |
 | 0.5 | `input` / `output` kwargs on `StateGraph.__init__` deprecated; use `input_schema` / `output_schema`. |

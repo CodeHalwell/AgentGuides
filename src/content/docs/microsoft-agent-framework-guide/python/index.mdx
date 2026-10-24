@@ -67,11 +67,18 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 - **Experimental APIs inside stable packages** emit an `ExperimentalWarning` on first use: FIDES security, evaluation, functional workflows, vector stores, `FileHistoryProvider`, and parts of the harness (`MemoryContextProvider`, `FileAccessProvider`, `BackgroundAgentsProvider`, `AgentLoopMiddleware`, `TodoFileStore`).
 - **A2A:** `agent_framework.a2a` provides `A2AAgent` (client), `A2AExecutor` (server), `A2AAgentSession` and `A2AServiceSessionId`.
 
-## Breaking changes since GA
+## Breaking changes worth knowing
 
-- `display_name` removed from agents; `middleware=` takes a list.
-- `AgentRunResponse` / `AgentRunResponseUpdate` renamed `AgentResponse` / `AgentResponseUpdate`; `AggregateContextProvider` removed (pass several context providers instead).
-- `WorkflowBuilder(output_executors=...)` deprecated in 1.5.0 in favour of `output_from=`.
+Before GA (code written against the 2025 previews):
+
+- `ChatAgent` → `Agent`, `ChatMessage` → `Message`, `AgentRunContext` → `AgentContext`, `AgentProtocol` → `SupportsAgentRun`; middleware's `next` parameter became `call_next` (1.0.0b260210).
+- `@ai_function` → `@tool`, `AIFunction` → `FunctionTool` (1.0.0b260128); `create_agent` → `as_agent` (1.0.0b260116).
+- `display_name` removed from agents; `middleware=` takes a list; `AggregateContextProvider` removed (pass several context providers instead) (1.0.0b260114).
+- `AgentRunResponse` / `AgentRunResponseUpdate` renamed `AgentResponse` / `AgentResponseUpdate`.
+
+Since GA:
+
+- `WorkflowBuilder(output_executors=...)` is a deprecated alias for `output_from=`.
 - Harness tool names changed in 1.7.0 (`add_todos` → `todos_add`, `set_mode` → `mode_set`, ...).
 - Skills (1.11.0): `require_script_approval=` replaced by `disable_load_skill_approval` / `disable_read_skill_resource_approval` / `disable_run_skill_script_approval`; every skill tool needs approval unless you opt out.
 - Functional workflows (1.14.0): `@workflow` returns a definition; call `.build()` before `.run()`.

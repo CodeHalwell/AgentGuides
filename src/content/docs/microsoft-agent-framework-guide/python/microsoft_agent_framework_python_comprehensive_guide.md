@@ -478,6 +478,27 @@ async def upper_case(
 
 If a custom executor sent a plain `str` to the next agent, that agent would see only the string; `AgentExecutorResponse.with_text()` keeps the full conversation attached.
 
+Two details of function executors catch people out. First, **the function's return value is ignored**: nothing reaches the next node unless you call `await ctx.send_message(...)`, and nothing becomes a workflow output unless you call `await ctx.yield_output(...)`. Second, both of those are coroutines, so an executor that emits anything must be an `async def`. Synchronous functions are accepted (they run in a worker thread through `asyncio.to_thread`), but they cannot await the context, so they suit only side-effect steps at the end of a branch. `FunctionExecutor(func, id=...)` wraps an existing function without decorating it:
+
+```python
+from typing_extensions import Never
+from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowContext, executor
+
+
+@executor(id="upper_case")
+async def upper_case(text: str, ctx: WorkflowContext[str]) -> None:
+    await ctx.send_message(text.upper())          # returning text.upper() would send nothing
+
+
+async def word_count(doc: str, ctx: WorkflowContext[Never, int]) -> None:
+    await ctx.yield_output(len(doc.split()))
+
+
+counter = FunctionExecutor(word_count, id="word_counter")
+workflow = WorkflowBuilder(start_executor=upper_case).add_edge(upper_case, counter).build()
+# (await workflow.run("hello world")).get_outputs() == [2]
+```
+
 For several input types or state that lasts across invocations, subclass `Executor` and mark methods with `@handler`. The runtime dispatches on the message type:
 
 ```python
@@ -820,7 +841,7 @@ Pending `request_info` calls inside the workflow surface on the agent's response
 
 ### An agent as an MCP server
 
-`agent.as_mcp_server(server_name=..., version=..., instructions=..., lifespan=...)` returns an `mcp.server.lowlevel.Server` exposing the agent as one MCP tool (`<server_name>_run`). Connect it to any MCP transport:
+`agent.as_mcp_server(server_name=..., version=..., instructions=..., lifespan=...)` returns an `mcp.server.lowlevel.Server` exposing the agent as one MCP tool. The tool is named after the agent (`inventory-agent` below, or `UnnamedAgent` if the agent has no `name`) and takes a single `task` string. Connect the server to any MCP transport:
 
 ```python
 import asyncio
