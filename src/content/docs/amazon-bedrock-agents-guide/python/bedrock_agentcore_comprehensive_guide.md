@@ -68,14 +68,14 @@ AgentCore separates *what your agent does* (your code, in any framework) from *w
 |---------|--------------|------------------------|--------------|
 | **Runtime** | Hosts your agent or MCP/A2A server in session-isolated microVMs | `bedrock_agentcore.BedrockAgentCoreApp` | `bedrock-agentcore-control` (`create_agent_runtime`), `bedrock-agentcore` (`invoke_agent_runtime`) |
 | **Harness** | Managed agent loop declared as configuration (model, prompt, tools) | — | `bedrock-agentcore-control` (`create_harness`), `bedrock-agentcore` (`invoke_harness`) |
-| **Memory** | Short-term events and long-term extracted records | `bedrock_agentcore.memory.MemoryClient` | `bedrock-agentcore-control` (`create_memory`), `bedrock-agentcore` (`create_event`, `retrieve_memory_records`) |
-| **Gateway** | Turns APIs, Lambda and MCP servers into one MCP endpoint | `bedrock_agentcore.gateway.client.GatewayClient` | `bedrock-agentcore-control` (`create_gateway`, `create_gateway_target`) |
+| **Memory** | Short-term events and long-term extracted records | `bedrock_agentcore.memory.MemorySessionManager` (`MemoryClient` is the legacy interface) | `bedrock-agentcore-control` (`create_memory`), `bedrock-agentcore` (`create_event`, `retrieve_memory_records`) |
+| **Gateway** | Turns APIs, Lambda and MCP servers into one MCP endpoint | `bedrock_agentcore.gateway.GatewayClient` (create and manage gateways and targets) | `bedrock-agentcore-control` (`create_gateway`, `create_gateway_target`) |
 | **Identity** | Inbound auth (JWT/IAM) and outbound OAuth / API-key credentials | `bedrock_agentcore.identity.auth.requires_access_token` | `bedrock-agentcore-control` (credential providers) |
 | **Code Interpreter** | Sandboxed Python/JavaScript/TypeScript execution | `bedrock_agentcore.tools.code_interpreter_client.code_session` | `bedrock-agentcore` (`invoke_code_interpreter`) |
 | **Browser** | Managed headless browser for web automation | `bedrock_agentcore.tools.browser_client.browser_session` | `bedrock-agentcore` (`start_browser_session`) |
 | **Observability** | OpenTelemetry traces, metrics and logs in CloudWatch | via OTEL / ADOT instrumentation | CloudWatch |
 
-AgentCore also includes Policy, Evaluations and Payments services; they are outside the scope of this guide.
+AgentCore also includes Policy, Evaluations and Payments services. The SDK has clients for them (`bedrock_agentcore.policy`, `.evaluation`, `.payments`), and evaluations are covered in the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/#evaluations); Policy and Payments are outside the scope of this guide.
 
 ---
 
@@ -375,7 +375,7 @@ while True:
 
 response = data.invoke_harness(
     harnessArn=harness["arn"],
-    runtimeSessionId=str(uuid.uuid4()),  # at least 33 characters; reuse it to continue the session
+    runtimeSessionId=str(uuid.uuid4()),  # 33 to 100 characters for a harness; reuse it to continue the session
     messages=[{"role": "user", "content": [{"text": "Compare three CRM vendors for a 40-person team"}]}],
 )
 
@@ -575,7 +575,7 @@ control.create_agent_runtime(
 There is no in-SDK resource monitor. Use:
 
 - **Lifecycle settings** (`idleRuntimeSessionTimeout`, `maxLifetime`) to bound session cost.
-- **The ping status** to tell Runtime whether a session is busy with background work, so it is not reclaimed while idle-looking:
+- **The ping status** to tell Runtime whether a session is busy with background work, so it is not reclaimed while idle-looking (see [Runtime Application Features](#runtime-application-features)):
 
 ```python
 import asyncio
@@ -1009,7 +1009,39 @@ def gateway_agent(gateway_url: str, access_token: str) -> Agent:
     return Agent(model="us.anthropic.%%model=anthropic%%", tools=[gateway])  # the agent manages the MCP session
 ```
 
-Gateway target tools are named `<target>___<tool>` (for example `orders-lambda___get_order`). With the `AWS_IAM` authorizer, requests must be SigV4-signed for the `bedrock-agentcore` service: pass an `httpx.Auth` implementation as `auth_provider=` instead of headers. Gateway targets also include Bedrock knowledge bases (`agentcore add gateway-target --type connector --connector bedrock-knowledge-bases`), which is how harnesses and migrated Classic agents reach a knowledge base.
+Gateway target tools are named `<target>___<tool>` (for example `orders-lambda___get_order`). Strands connects to the gateway when the `Agent` is constructed, so a wrong URL or missing token fails at that point.
+
+With the `AWS_IAM` authorizer (the CLI default), requests must be SigV4-signed for the `bedrock-agentcore` service, and a bearer header is no use. The AWS Labs package `mcp-proxy-for-aws` provides a signing transport that uses the default credential chain, which on Runtime is the execution role:
+
+```python
+# pip install mcp-proxy-for-aws
+from mcp_proxy_for_aws.client import aws_iam_streamablehttp_client
+from strands import Agent
+from strands.tools.mcp import MCPClient
+
+GATEWAY_URL = "https://orders-gw-abc123.gateway.bedrock-agentcore.us-west-2.amazonaws.com/mcp"
+
+gateway = MCPClient(
+    lambda: aws_iam_streamablehttp_client(
+        endpoint=GATEWAY_URL,
+        aws_service="bedrock-agentcore",
+        aws_region="us-west-2",
+    )
+)
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[gateway])
+```
+
+The execution role needs `bedrock-agentcore:InvokeGateway` on the gateway ARN.
+
+In a CLI project, declare the gateway and its targets alongside your runtime instead of calling `create_gateway` yourself. `add gateway-target` takes an external MCP endpoint (`--endpoint`), a runtime in the project (`--runtime`) or a full target object (`--target-configuration`) with `targetType` one of `mcpServer`, `httpRuntime`, `apiGateway`, `openApiSchema`, `smithyModel`, `lambdaFunctionArn`, `connector` or `passthrough`. `add gateway-connector` adds the curated connectors, which include Bedrock knowledge bases and web search. The knowledge-base connector is how harnesses and migrated Classic agents reach a knowledge base:
+
+```bash
+agentcore add gateway --name orders-gw --authorizer-type AWS_IAM
+agentcore add gateway-target --gateway orders-gw --name docs --endpoint https://mcp.example.com/mcp --outbound-auth none
+agentcore add gateway-connector --gateway orders-gw --name kb --connector bedrock-knowledge-bases --knowledge-base ABCDEFGHIJ
+agentcore deploy
+```
 
 ### Pattern 2: AgentCore + Step Functions
 
@@ -1098,30 +1130,44 @@ Agents Classic closed to new customers on 30 July 2026. Existing agents keep wor
 | Prompt overrides per orchestration stage | No direct equivalent in the harness; use a code-defined agent |
 | Multi-agent collaboration | Agents as tools in a harness, or Strands multi-agent code on Runtime |
 
-**Start with the CLI import.** `agentcore create --type import` generates a code-defined runtime project in Strands or LangGraph from an existing agent alias. It reads the agent, the alias, action groups, associated knowledge bases and collaborators through the Bedrock Agents APIs, so it needs credentials with `bedrock:GetAgent*` and `bedrock:ListAgent*` permissions in the agent's account:
+**Start with the CLI import.** `agentcore add runtime --agent-id` generates a code-defined runtime in Strands or LangGraph from an existing agent alias, inside an existing project. It reads the agent, the alias, action groups, associated knowledge bases and collaborators through the Bedrock Agents APIs, so it needs credentials with `bedrock:GetAgent*` and `bedrock:ListAgent*` permissions in the agent's account. The alias must point at a prepared version, not `DRAFT`:
 
 ```bash
-agentcore create --name OrdersAgent --type import \
-  --agent-id ABCDEFGHIJ --agent-alias-id TSTALIASID --region us-east-1 \
-  --framework Strands
-cd OrdersAgent
+agentcore create --name OrdersProject
+cd OrdersProject
+agentcore add runtime --name OrdersAgent --agent-id ABCDEFGHIJ --agent-alias-id TSTALIASID --framework strands --region us-east-1
 agentcore dev        # try it locally against the same Lambda functions and knowledge bases
 agentcore deploy
 ```
 
 Review the generated `app/OrdersAgent/` code before deploying. Whatever the Classic agent reached through action groups and knowledge bases (Lambda functions, `bedrock:Retrieve`) needs matching permissions on the new runtime's execution role.
 
-**Or rebuild as a harness** when the Classic agent was purely declarative. Create a harness project, set the model with `--model-id`, copy the instruction into `system-prompt.md`, put the action groups behind a gateway, and add it as a tool:
+**Or rebuild as a harness** when the Classic agent was purely declarative. Add a harness, set the model, copy the instruction into `system-prompt.md`, put the action groups behind a gateway, and add it as a tool:
 
 ```bash
-agentcore create --name OrdersAgent --defaults --model-id us.anthropic.%%model=anthropic%%
-cd OrdersAgent
-agentcore add tool --harness OrdersAgent --type agentcore_gateway --name orders \
-  --gateway-arn arn:aws:bedrock-agentcore:us-east-1:111122223333:gateway/orders-gw
+agentcore create --name OrdersProject
+cd OrdersProject
+agentcore add gateway --name orders-gw --authorizer-type AWS_IAM
+# add the action groups' Lambda functions or APIs with: agentcore add gateway-target --gateway orders-gw ...
+agentcore add harness --name OrdersAgent \
+  --model '{"provider":"bedrock","modelId":"us.anthropic.%%model=anthropic%%"}' \
+  --system-prompt "$(cat classic-instruction.txt)"
+# then list the gateway under tools: in app/OrdersAgent/harness.yaml (agentcore_gateway), and deploy
 agentcore deploy
 ```
 
-AWS also publishes a migration skill for coding agents in the [agent toolkit for AWS](https://github.com/aws/agent-toolkit-for-aws). It inspects a Classic agent, checks whether it can move to a harness and drives the same CLI. Run the old and new agents side by side on recorded conversations (with `agentcore run eval`, see the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/#evaluations)) before switching callers over.
+In `harness.yaml`, a gateway tool looks like this (the gateway ARN appears in `agentcore status` after the first deploy):
+
+```yaml
+tools:
+  - type: agentcore_gateway
+    name: orders
+    config:
+      agentCoreGateway:
+        gatewayArn: arn:aws:bedrock-agentcore:us-east-1:111122223333:gateway/orders-gw-abc123
+```
+
+AWS also publishes a migration skill for coding agents in the [agent toolkit for AWS](https://github.com/aws/agent-toolkit-for-aws). It inspects a Classic agent, checks whether it can move to a harness and drives the same CLI. Run the old and new agents side by side on recorded conversations (with `agentcore eval`, see the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/#evaluations)) before switching callers over.
 
 ---
 
@@ -1163,22 +1209,28 @@ Caller policy (who may deploy and invoke):
 }
 ```
 
-The runtime's execution role trusts `bedrock-agentcore.amazonaws.com` and needs ECR pull, CloudWatch Logs/X-Ray, `bedrock:InvokeModel`/`bedrock:InvokeModelWithResponseStream` on the models it calls, and access to any Memory, Gateway or Code Interpreter resources it uses. See [IAM Permissions for AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html) for the full template.
+Callers that pass `runtimeUserId` also need `bedrock-agentcore:InvokeAgentRuntimeForUser`. The runtime's execution role trusts `bedrock-agentcore.amazonaws.com` and needs ECR pull, CloudWatch Logs/X-Ray, `bedrock:InvokeModel`/`bedrock:InvokeModelWithResponseStream` on the models it calls, and access to any Memory, Gateway or Code Interpreter resources it uses. See [IAM Permissions for AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-permissions.html) for the full template.
 
 ### Inbound authentication
 
 By default callers authenticate with SigV4 (IAM). To accept end-user tokens from an OAuth/OIDC identity provider instead, configure a JWT authorizer on the runtime:
 
 ```python
+import boto3
+
+control = boto3.client("bedrock-agentcore-control", region_name="us-west-2")
+
 control.update_agent_runtime(
-    agentRuntimeId=runtime_id,
-    agentRuntimeArtifact={"containerConfiguration": {"containerUri": IMAGE_URI}},
-    roleArn=ROLE_ARN,
+    agentRuntimeId="DataAnalysisAgent-abc123",
+    agentRuntimeArtifact={
+        "containerConfiguration": {"containerUri": "111122223333.dkr.ecr.us-west-2.amazonaws.com/data-analysis-agent:v2"}
+    },
+    roleArn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
     networkConfiguration={"networkMode": "PUBLIC"},
     authorizerConfiguration={
         "customJWTAuthorizer": {
             "discoveryUrl": "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_EXAMPLE/.well-known/openid-configuration",
-            "allowedClients": ["my-app-client-id"],
+            "allowedClients": ["my-app-client-id"],  # allowedAudience and allowedScopes are also available
         }
     },
 )
@@ -1188,23 +1240,30 @@ Callers using a JWT invoke the runtime over HTTPS with a bearer token rather tha
 
 ### Outbound credentials with Identity
 
-`requires_access_token` fetches (and caches) an OAuth token from an AgentCore Identity credential provider and injects it into your function:
+AgentCore Identity keeps third-party credentials out of your code and images. Credential providers (OAuth 2.0 or API key) are created in the control plane (`create_oauth2_credential_provider`, `create_api_key_credential_provider`) or declared in a CLI project with `agentcore add credentials api-key|oauth`. Inside the runtime, decorators fetch (and cache) a credential using the request's workload access token and inject it into your function.
+
+`requires_access_token` handles OAuth 2.0. `auth_flow` is `M2M` (client credentials, no user), `USER_FEDERATION` (three-legged OAuth: the user consents once and the token is stored against their identity) or `ON_BEHALF_OF_TOKEN_EXCHANGE`:
 
 ```python
-from bedrock_agentcore.identity.auth import requires_access_token
+from bedrock_agentcore.identity.auth import requires_access_token, requires_api_key
 
 
 @requires_access_token(
     provider_name="google-workspace",   # credential provider created in AgentCore Identity
     scopes=["https://www.googleapis.com/auth/calendar.readonly"],
-    auth_flow="USER_FEDERATION",          # or "M2M"
-    on_auth_url=lambda url: print("Authorise at:", url),
+    auth_flow="USER_FEDERATION",
+    on_auth_url=lambda url: print("Authorise at:", url),  # show this URL to the user
 )
 async def list_calendar_events(*, access_token: str):
-    ...
+    ...  # call the Google Calendar API with access_token
+
+
+@requires_api_key(provider_name="weather-api")
+def current_weather(city: str, *, api_key: str):
+    ...  # call the weather API with api_key
 ```
 
-`requires_api_key(provider_name=...)` does the same for API-key providers.
+The injected parameter is `access_token` or `api_key` by default; `into="token"` renames it. `requires_iam_access_token(audience=[...])` is separate: it asks AWS STS for a signed JWT (`GetWebIdentityToken`), for services that validate AWS-issued OIDC tokens, with no client secret. `force_authentication=True` bypasses the cache. The decorators work on both sync and async functions; call a decorated helper from inside a Strands `@tool` function to give an agent a credentialed API. In a CLI project the provider name comes from `agentcore add credentials` and the runtime's environment (`CREDENTIAL_<NAME>_NAME`).
 
 ### Encryption and Audit Logging
 
@@ -1235,7 +1294,7 @@ Keep the entrypoint thin: validate input, call the agent, shape the output. That
 
 ### 2. Error Handling
 
-boto3 raises `botocore` `ClientError`; retry only throttling and transient errors:
+boto3 raises `botocore` `ClientError`. The service errors you will meet from `InvokeAgentRuntime` are `ThrottlingException`, `ServiceQuotaExceededException`, `InternalServerException` and `RetryableConflictException` (all worth retrying with backoff), and `ValidationException`, `AccessDeniedException`, `ResourceNotFoundException` and `RuntimeClientError` (fix the request, role or container instead; read the message of a `RuntimeClientError`, which AWS describes as a client-side problem such as a network or configuration fault). botocore's own retry handler already retries throttling and 5xx responses, so an application-level loop only adds the cases it does not cover:
 
 ```python
 import json
@@ -1247,13 +1306,17 @@ from botocore.exceptions import ClientError
 
 agentcore = boto3.client(
     "bedrock-agentcore",
-    config=Config(retries={"max_attempts": 5, "mode": "adaptive"}, read_timeout=900),
+    region_name="us-west-2",
+    # Streaming responses can be slow to finish; raise the read timeout above the default 60 s
+    config=Config(retries={"max_attempts": 3, "mode": "standard"}, read_timeout=900),
 )
 
-RETRYABLE = {"ThrottlingException", "ServiceQuotaExceededException", "InternalServerException"}
+# Temporary conditions. botocore's own retry handler already covers throttling and
+# 5xx responses, so this loop only matters for the extra cases below.
+RETRYABLE = {"ThrottlingException", "InternalServerException", "RetryableConflictException"}
 
 
-def invoke_with_retry(runtime_arn: str, session_id: str, prompt: str, attempts: int = 3) -> dict:
+def invoke_agent(runtime_arn: str, session_id: str, prompt: str, attempts: int = 4) -> dict:
     for attempt in range(attempts):
         try:
             response = agentcore.invoke_agent_runtime(
@@ -1261,14 +1324,21 @@ def invoke_with_retry(runtime_arn: str, session_id: str, prompt: str, attempts: 
                 runtimeSessionId=session_id,
                 payload=json.dumps({"prompt": prompt}),
             )
+            if response["statusCode"] != 200:
+                raise RuntimeError(f"runtime answered HTTP {response['statusCode']}")
             return json.loads(response["response"].read())
         except ClientError as err:
             code = err.response["Error"]["Code"]
             if code in RETRYABLE and attempt < attempts - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(min(2 ** attempt, 20))
                 continue
+            # ValidationException, AccessDeniedException, ResourceNotFoundException and
+            # RuntimeClientError will not succeed on retry: fix the request, role or container
             raise
+    raise AssertionError("unreachable")
 ```
+
+Retrying a call to the same `runtimeSessionId` repeats the work inside the same microVM, so make tool side effects idempotent. Errors raised by your own entrypoint reach the caller as an HTTP 500 from the container; see [Error handling](/amazon-bedrock-agents-guide/python/bedrock_agents_error_handling_python/#4-errors-on-agentcore) for what the caller sees and how to design for it.
 
 ### 3. Performance
 

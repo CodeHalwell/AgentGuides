@@ -108,4 +108,64 @@ def middleware_handler(event, context):
 
 Only cache when a repeated question really should get the same answer for that user. Don't cache when the agent's tools read live data (order status, balances). `invoke_agent` returns an event stream, so the response must be read before it can be serialised. Session attributes reach action-group Lambdas in `event["sessionAttributes"]`, which is the safe way to pass identity to tools.
 
+The middleware above sits in front of a Bedrock Agents Classic agent. For code-defined agents there are two places to put it, described next.
+
+## 4. Middleware in the AgentCore Runtime app
+
+`BedrockAgentCoreApp` is a Starlette application, so ordinary ASGI middleware runs inside the runtime, before your entrypoint. Pass it to the constructor with `middleware=[...]` (or call `app.add_middleware(...)`). It sees every request, including the `GET /ping` health checks, so branch on the path when a rule applies only to `/invocations`.
+
+```python
+import logging
+import time
+
+from starlette.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
+
+from bedrock_agentcore import BedrockAgentCoreApp
+
+logger = logging.getLogger("agent.access")
+SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
+
+
+class RequestGuard(BaseHTTPMiddleware):
+    """Runs before the entrypoint on every request, including GET /ping."""
+
+    async def dispatch(self, request, call_next):
+        if request.url.path == "/invocations":
+            # Reject oversized bodies before the agent (and the model) see them
+            length = int(request.headers.get("content-length", "0"))
+            if length > 64_000:
+                return JSONResponse({"error": "payload too large"}, status_code=413)
+
+        started = time.perf_counter()
+        response = await call_next(request)
+        logger.info(
+            "%s %s -> %s in %.0f ms (session %s)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            (time.perf_counter() - started) * 1000,
+            request.headers.get(SESSION_HEADER, "-"),
+        )
+        return response
+
+
+app = BedrockAgentCoreApp(middleware=[Middleware(RequestGuard)])
+
+
+@app.entrypoint
+def invoke(payload, context):
+    return {"result": f"echo: {payload.get('prompt', '')}"}
+```
+
+This was run against Starlette's test client: a normal call is logged with its session ID, and a 70 kB body is answered with 413 without reaching the entrypoint.
+
+Some limits to keep in mind:
+
+- **Authentication is done before your code.** Runtime itself checks SigV4 or the configured JWT authorizer, so application middleware should not re-implement token validation. Use it for authorisation decisions that need your own data, taking the user from the verified token rather than from the payload.
+- **Test the streaming path.** Starlette's `TestClient` can drive `/invocations` and `/ping` without AWS. Check that streamed frames still arrive intact through your middleware before deploying.
+- **Caching needs a key per user** for the same reason as in the Lambda example: answers can depend on the caller. Runtime sessions are isolated microVMs, so an in-process cache is per session; use DynamoDB or ElastiCache for anything shared.
+- **Request hooks inside the agent.** Per-model-call and per-tool-call policy (block a tool for some users, redact output, add audit records) belongs in Strands hooks, not HTTP middleware.
+
 For code-defined agents (Strands on AgentCore Runtime), the same concerns are handled with **Strands hooks** (for example `BeforeToolCallEvent` / `AfterInvocationEvent`) inside the agent and **AgentCore Identity** JWT authorisation in front of it — see [Strands hooks and interventions](/strands-agents-guide/python/strands_hooks_and_interrupts/) and [AgentCore security](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#security-and-compliance).

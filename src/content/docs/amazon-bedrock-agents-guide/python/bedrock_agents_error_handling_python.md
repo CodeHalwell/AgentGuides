@@ -12,6 +12,8 @@ sidebar:
 
 ## 1. Common Errors in Bedrock Agents
 
+These are the errors raised by the Bedrock Agents Classic runtime (`bedrock-agent-runtime`). [Section 4](#4-errors-on-agentcore) covers AgentCore.
+
 *   **ValidationException:** Invalid input parameters.
 *   **AccessDeniedException:** Insufficient IAM permissions.
 *   **ResourceNotFoundException:** The specified agent, knowledge base, or action group does not exist.
@@ -146,3 +148,46 @@ try:
 except ClientError:
     answer = invoke_agent_with_retry(FALLBACK_AGENT_ID, FALLBACK_ALIAS_ID, session_id, request)
 ```
+
+## 4. Errors on AgentCore
+
+AgentCore failures reach the caller in three different ways, and each needs its own handling.
+
+**1. The API call fails.** `invoke_agent_runtime` and `invoke_harness` raise `ClientError` with a code from the service model. Retry `ThrottlingException`, `InternalServerException`, `RetryableConflictException` and (with care) `ServiceQuotaExceededException`. Do not retry `ValidationException`, `AccessDeniedException`, `ResourceNotFoundException` or `RuntimeClientError`. The [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#2-error-handling) has a retry wrapper that is tested with botocore's `Stubber`.
+
+**2. Your container returns an error.** An exception in a non-streaming entrypoint is logged with its stack trace and returned as HTTP 500 with `{"error": "<message>"}`. Check `response["statusCode"]` before parsing the body, because boto3 does not raise for a non-200 status from your container. Keep messages free of secrets and internal detail, since they go back to the caller.
+
+**3. A stream fails part-way.** Once a streaming response has started, the HTTP status is already 200. If the generator raises, the SDK ends the stream with a last frame such as `{"error": "model failed", "error_type": "ValueError", "message": "An error occurred during streaming"}`. A caller that only concatenates text will miss it, so parse each frame:
+
+```python
+import json
+
+import boto3
+
+agentcore = boto3.client("bedrock-agentcore", region_name="us-west-2")
+
+
+class AgentStreamError(RuntimeError):
+    """The runtime started streaming, then reported a failure in a final frame."""
+
+
+def stream_agent(runtime_arn: str, session_id: str, prompt: str):
+    response = agentcore.invoke_agent_runtime(
+        agentRuntimeArn=runtime_arn,
+        runtimeSessionId=session_id,
+        payload=json.dumps({"prompt": prompt}),
+    )
+    if response["statusCode"] != 200:
+        raise RuntimeError(f"runtime answered HTTP {response['statusCode']}")
+    for line in response["response"].iter_lines():
+        if not line.startswith(b"data: "):
+            continue  # blank separator lines between frames
+        frame = json.loads(line[len(b"data: "):])
+        if isinstance(frame, dict) and "error" in frame:
+            raise AgentStreamError(f"{frame.get('error_type')}: {frame['error']}")
+        yield frame
+```
+
+Harness streams report failures as events instead: `internalServerException`, `validationException` and `runtimeClientError` appear in the event stream, and the `stopReason` on the final `messageStop` event says why the run ended (`tool_use` means an inline function is waiting for a result). Log it and check it instead of assuming the answer is complete, especially when you set `maxIterations`, `timeoutSeconds` or `maxTokens`.
+
+**Design for retries.** A retried call to the same `runtimeSessionId` runs in the same microVM, with whatever state the failed attempt left behind. Make tools idempotent (use a request ID as the key for writes) and keep a conversation's history in AgentCore Memory or your own store, not only in process memory.

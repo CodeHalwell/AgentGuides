@@ -70,7 +70,7 @@ def run_task(task: str) -> AgentOutcome:
         ok=result.state == "success",
         output=result.output,
         state=result.state,
-        steps=len(result.steps),
+        steps=sum("step_number" in s for s in result.steps),   # action steps; result.steps also holds the task and plans
         input_tokens=usage.input_tokens if usage else 0,
         output_tokens=usage.output_tokens if usage else 0,
         seconds=result.timing.duration or 0.0,
@@ -229,7 +229,7 @@ def budget_guard(limit_tokens: int):
 | Metric | Source |
 |--------|--------|
 | Runs, success rate, `max_steps_error` rate | `RunResult.state` |
-| Steps per run | `len(RunResult.steps)` |
+| Steps per run | action steps in `RunResult.steps` (entries with a `step_number`) |
 | Tokens per run (in/out) | `RunResult.token_usage` |
 | Latency per run and per step | `RunResult.timing`, `ActionStep.timing` |
 | Tool error rate | `ActionStep.error` |
@@ -260,10 +260,10 @@ def log_step(step: ActionStep, agent=None):
 
 ### OpenTelemetry tracing
 
-The `telemetry` extra installs OpenInference's smolagents instrumentation, which emits OpenTelemetry spans for runs, steps, model calls and tool calls. Point it at any OTLP backend (Langfuse, Arize Phoenix, Jaeger, Grafana Tempo):
+The `telemetry` extra installs OpenInference's smolagents instrumentation (`openinference-instrumentation-smolagents`) together with the OpenTelemetry SDK, the OTLP exporters and Arize Phoenix. The instrumentation emits spans for each run (kind `AGENT`), each step (`CHAIN`) and each tool call (`TOOL`), and for each model call (`LLM`) made through the built-in model classes. A custom `Model` subclass of your own is not wrapped, so its calls produce no `LLM` span. Point the exporter at any OTLP backend (Langfuse, Arize Phoenix, Jaeger, Grafana Tempo):
 
 ```python
-# pip install "smolagents[telemetry]" opentelemetry-exporter-otlp
+# pip install "smolagents[telemetry]"
 from openinference.instrumentation.smolagents import SmolagentsInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.trace import TracerProvider
@@ -273,6 +273,8 @@ provider = TracerProvider()
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4318/v1/traces")))
 SmolagentsInstrumentor().instrument(tracer_provider=provider)
 ```
+
+Instrument once, at start-up, before any agent runs. To check the wiring without a backend, add an `InMemorySpanExporter` (from `opentelemetry.sdk.trace.export.in_memory_span_exporter`) behind a `SimpleSpanProcessor` and read `get_finished_spans()` after a run: a one-step `CodeAgent` with one tool produced `CodeAgent.run`, `Step 1` and one span per tool call, including `final_answer`. Spans carry the full prompts and tool outputs, so apply the same retention and redaction rules as to your logs.
 
 ---
 
@@ -308,8 +310,8 @@ Notes:
 
 - Remote executors do not support `managed_agents`; for multi-agent systems, run the whole service inside a locked-down container (no credentials beyond what tools need, egress restricted) instead.
 - Tools are rebuilt from their source inside the sandbox and run there, so any credential a tool reads must be present in the sandbox. Give it only the credentials that tool needs.
-- With `executor_type="docker"`, the executor builds and starts a Jupyter-kernel container. Supply your own image with `executor_kwargs={"image_name": ..., "build_new_image": False}` in production.
-- The Docker container gets a port mapping and nothing else: normal network access (it `pip install`s the authorised imports) and no memory, CPU or process limits. Add limits through `container_run_kwargs`, which is passed to docker-py's `containers.run`. Restrict egress at the host or network level; do not rely on the executor for it.
+- With `executor_type="docker"`, the executor builds a Jupyter-kernel image and starts a container from it, and by default rebuilds the image on every start. Supply your own image with `executor_kwargs={"image_name": ..., "build_new_image": False}` in production.
+- The Docker container gets a port mapping (published on `127.0.0.1:8888` by default, with a random auth token for the kernel gateway) and nothing else: normal network access (it `pip install`s the authorised imports) and no memory, CPU or process limits. Add limits through `container_run_kwargs`, which is passed to docker-py's `containers.run`. Restrict egress at the host or network level; do not rely on the executor for it.
 
 ```python
 agent = CodeAgent(
@@ -594,6 +596,45 @@ def test_agent_uses_tool():
     agent = CodeAgent(tools=[fx_rate], model=model, verbosity_level=0)
     assert agent.run("Convert 100 USD to EUR") == 92.0
 ```
+
+A `ToolCallingAgent` expects structured tool calls rather than text, so its scripted replies are `ChatMessage` objects with `tool_calls`. The last reply calls the `final_answer` tool:
+
+```python
+from smolagents import ChatMessage, Model, ToolCallingAgent
+from smolagents.models import ChatMessageToolCall, ChatMessageToolCallFunction, MessageRole
+
+
+def tool_call(name: str, **arguments) -> ChatMessage:
+    return ChatMessage(
+        role=MessageRole.ASSISTANT,
+        content=None,
+        tool_calls=[ChatMessageToolCall(
+            id=f"call_{name}", type="function",
+            function=ChatMessageToolCallFunction(name=name, arguments=arguments),
+        )],
+    )
+
+
+class ScriptedToolModel(Model):
+    def __init__(self, replies):
+        super().__init__(model_id="scripted")
+        self.replies = list(replies)
+
+    def generate(self, messages, stop_sequences=None, response_format=None, tools_to_call_from=None, **kwargs):
+        return self.replies.pop(0)
+
+
+def test_tool_calling_agent_uses_tool():
+    model = ScriptedToolModel([
+        tool_call("fx_rate", base="USD", quote="EUR"),
+        tool_call("final_answer", answer=92.0),
+    ])
+    agent = ToolCallingAgent(tools=[fx_rate], model=model, verbosity_level=0)
+    assert agent.run("Convert 100 USD to EUR") == 92.0
+    assert agent.memory.steps[1].tool_calls[0].name == "fx_rate"     # steps[0] is the TaskStep
+```
+
+Assertions on `agent.memory.steps` (which tool was called, with what arguments, what the observation was) test your wiring and prompts-as-data without a model.
 
 For quality, keep a small evaluation set of real tasks with expected answers, run it on every prompt, tool or model change, and track success rate, steps and tokens over time.
 

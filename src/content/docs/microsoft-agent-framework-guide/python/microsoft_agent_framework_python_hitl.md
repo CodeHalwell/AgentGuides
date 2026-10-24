@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Human in the Loop"
 description: "Pause a workflow for human input with ctx.request_info and @response_handler, or with SequentialBuilder.with_request_info. Plus tool approval gates."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Human in the loop"
+  order: 22
 ---
 
 Agent Framework ships three human-in-the-loop (HITL) patterns:
@@ -105,7 +108,14 @@ result = await workflow.run(responses={"<id>": "technical"})
 `@response_handler` defaults to introspecting parameter annotations. When you're using forward references (the request/response classes are imported lazily), or you're building executors dynamically and don't want to lock the parameter types, switch to the **explicit-types** form. **All** types must come from decorator parameters in this mode — annotation-based introspection is disabled.
 
 ```python
+from dataclasses import dataclass
+
 from agent_framework import Executor, WorkflowContext, handler, response_handler
+
+
+@dataclass
+class Approval:
+    draft: str
 
 
 class Approver(Executor):
@@ -121,7 +131,7 @@ class Approver(Executor):
         await ctx.yield_output("approved" if approved else "rejected")
 ```
 
-When you mix the two modes the framework raises at registration — be explicit about which one you want. Types can also be given as strings. They are evaluated against the module's globals when the decorator runs, so the name must already be defined or imported at that point (`"module:qualname"` paths are not accepted):
+Once you pass any explicit type, parameter annotations are ignored, and both `request=` and `response=` must be given (`ValueError: Response handler on_decision with explicit type parameters must specify 'response' type` otherwise). Types can also be given as strings. They are evaluated against the module's globals when the decorator runs, so the name must already be defined or imported at that point (`"module:qualname"` paths are not accepted):
 
 ```python
 from dataclasses import dataclass
@@ -166,14 +176,33 @@ workflow = (
 )
 ```
 
-At each configured pause point the workflow emits a `request_info` event carrying the conversation so far. Reply with:
+At each configured pause point the workflow emits a `request_info` event whose `data` is the paused agent's `AgentExecutorResponse` (read `event.data.agent_response.text` to show the draft). The reply must be an `AgentRequestInfoResponse`; any other type is rejected with `ValueError: Response type mismatch`:
 
-- a string — injected as human guidance for the next agent, or
-- `None` — continue unchanged.
+- `AgentRequestInfoResponse.approve()` accepts the agent's response and the pipeline continues;
+- `AgentRequestInfoResponse.from_strings(["Focus on cost."])` (or `from_messages([...])`) sends the feedback back to **the same agent**, which runs again and pauses again for review.
+
+```python
+from agent_framework_orchestrations import AgentRequestInfoResponse, SequentialBuilder
+
+workflow = SequentialBuilder(participants=[researcher, analyst, writer]).with_request_info(agents=[analyst]).build()
+
+result = await workflow.run("Heat pumps in UK homes")
+while requests := result.get_request_info_events():
+    replies = {}
+    for event in requests:
+        print(event.data.agent_response.text)                     # the analyst's draft
+        feedback = input("Feedback (empty to approve): ").strip()
+        replies[event.request_id] = (
+            AgentRequestInfoResponse.from_strings([feedback]) if feedback else AgentRequestInfoResponse.approve()
+        )
+    result = await workflow.run(responses=replies)
+
+print(result.get_outputs()[-1].text)
+```
 
 ### GroupChat — approve a selected speaker
 
-`GroupChatBuilder.with_request_info(agents=[...])` behaves the same way.
+`GroupChatBuilder.with_request_info(agents=[...])` and `ConcurrentBuilder.with_request_info(agents=[...])` use the same request and reply types.
 
 ### Magentic — plan review & stall intervention
 
@@ -368,7 +397,7 @@ For MCP tools, combine `approval_mode="always_require"` (or the per-tool dict fo
 
 **Pre-flight clarification.** Use a workflow-level `request_info` at the front of the pipeline to ask the user what they actually want before spending tokens on research.
 
-**Cost guardrail.** Middleware tracks tokens; when a budget threshold is crossed it calls `ctx.request_info(BudgetCheck(spend=...), response_type=bool)` and halts the workflow until a human approves continuation.
+**Cost guardrail.** An executor between pipeline stages reads the accumulated `usage_details` and, when a budget threshold is crossed, calls `ctx.request_info(BudgetCheck(spend=...), response_type=bool)`, halting the workflow until a human approves continuation. (Middleware has no `WorkflowContext`, so the pause has to come from an executor.)
 
 **Two-stage release.** Combine Magentic's `enable_plan_review` with `SequentialBuilder.with_request_info` in a sub-workflow to get human approval both on the plan AND on the final report.
 
@@ -398,3 +427,9 @@ resumed = workflow.run(
     stream=True,
 )
 ```
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected the orchestration review reply: `with_request_info` expects an `AgentRequestInfoResponse` (`approve()`, `from_strings()`, `from_messages()`), not a string or `None`; added a complete review loop. Corrected the cost-guardrail pattern (only executors can call `request_info`). |

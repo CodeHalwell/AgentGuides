@@ -8,7 +8,7 @@ sidebar:
   order: 18
 ---
 
-Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). The MCP, A2A and web-UI examples were run against that release (fastmcp via the `mcp` extra, fasta2a 2.1).
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%). The MCP examples were run against that release with FastMCP 4.1 (client from the `mcp` extra, server from `pip install fastmcp`); the A2A app was built with fasta2a 2.1.
 
 ## Model Context Protocol (MCP)
 
@@ -25,22 +25,28 @@ Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-che
 `MCPToolset` replaced V1's `MCPServerStdio`, `MCPServerSSE`, `MCPServerStreamableHTTP` and `MCPServerHTTP` in 2.0. It is built on the FastMCP client and accepts:
 
 - a URL (`'https://example.com/mcp'` — Streamable HTTP, or SSE for URLs ending `/sse`);
-- a path to a Python or JavaScript server script (launched over stdio);
-- a FastMCP transport (`StdioTransport('uv', args=[...])`, `StreamableHttpTransport(url, headers=...)`), a `fastmcp.Client`, or an in-process `FastMCP` server.
+- a path to a Python or JavaScript server script, launched over stdio (pass a `pathlib.Path`: FastMCP 4 deprecates inferring stdio from a plain string, and FastMCP 5 will remove it);
+- a FastMCP transport (`StdioTransport('uvx', args=[...])`, `StreamableHttpTransport(url, headers=...)`), a `fastmcp.Client`, or an in-process `FastMCP` server object.
 
 ```python
 import asyncio
+from pathlib import Path
+
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
-from pydantic_ai.models.test import TestModel
 
-toolset = MCPToolset('mcp_server.py')     # a .py path is launched over stdio
-agent = Agent(TestModel(), toolsets=[toolset])
+# The server script below is launched as a subprocess over stdio.
+# init_timeout covers start-up plus the initialize handshake (default 5 s); a server that
+# imports pydantic_ai itself needs longer on a cold start.
+toolset = MCPToolset(Path('mcp_server.py'), init_timeout=30)
+agent = Agent('anthropic:%%model=anthropic%%', toolsets=[toolset])
+
 
 async def main():
     async with agent:                       # opens the MCP session once for several runs
         result = await agent.run('Write me a poem about the sea.')
     print(result.output)
+
 
 asyncio.run(main())
 ```
@@ -48,7 +54,41 @@ asyncio.run(main())
 - `async with agent:` keeps the MCP sessions open across several runs; without it each run connects and disconnects.
 - Useful options: `tool_error_behavior=` (`'retry'`, `'error'`, `'failed'`), `process_tool_call=` (inject deps or headers per call), `sampling_model=` (let the server call back into an LLM), `elicitation_handler=`, `cache_tools=`, `include_instructions=` (forward the server's instructions to the model), `headers=` / `auth=` for HTTP servers.
 - Wrap in `PrefixedToolset` (`toolset.prefixed('docs')`) when two servers expose tools with the same name.
-- `agent.set_mcp_sampling_model(model)` sets the sampling model on every `MCPToolset` the agent has.
+- `agent.set_mcp_sampling_model(model)` sets the sampling model on every `MCPToolset` the agent has. Sampling and elicitation need a session the server can call back over; with a FastMCP 4 server that negotiates the newer stateless session, PydanticAI warns that `sampling_model` will never be called.
+
+### Resources and prompts
+
+Tools are only one of the three things an MCP server offers. `MCPToolset` also reads **resources** (documents the server publishes by URI) and **prompts** (templated messages). These are not given to the model automatically; your code fetches them and decides where they go — typically into instructions or the user prompt:
+
+```python
+import asyncio
+from pathlib import Path
+
+from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPToolset
+
+toolset = MCPToolset(Path('mcp_server.py'), init_timeout=30)
+agent = Agent('anthropic:%%model=anthropic%%', toolsets=[toolset])
+
+
+async def main():
+    async with agent:
+        print([r.uri for r in await toolset.list_resources()])
+        #> ['style://house']
+        style = await toolset.read_resource('style://house')        # str, BinaryContent or a list of them
+        print([p.name for p in await toolset.list_prompts()])
+        #> ['critique']
+        prompt = await toolset.get_prompt('critique', {'poem': 'Roses are red'})
+        print(prompt.messages[0].content)
+
+        result = await agent.run('Write a poem about the sea.', instructions=f'House style: {style}')
+        print(result.output)
+
+
+asyncio.run(main())
+```
+
+`list_resource_templates()` lists parameterised resources, and `cache_resources=` / `cache_prompts=` (on by default) cache the listings until the server reports a change.
 
 ### Several servers from a config file
 
@@ -88,13 +128,13 @@ agent = Agent(
 
 ### Exposing an agent as an MCP server
 
-Any MCP server framework works; FastMCP ships with the `mcp` extra. This is the `mcp_server.py` the client example above launches:
+Any MCP server framework works. The `mcp` extra installs only FastMCP's client (`fastmcp-slim[client]`); for the server side install `fastmcp` itself (`pip install fastmcp`). This is the `mcp_server.py` the client examples above launch:
 
 ```python
 from fastmcp import FastMCP
 from pydantic_ai import Agent
 
-poet = Agent('test', instructions='Write a short poem on the given theme.')
+poet = Agent('anthropic:%%model=anthropic-small%%', instructions='Write a short poem on the given theme.')
 server = FastMCP('poetry-server')
 
 
@@ -105,9 +145,23 @@ async def poem(theme: str) -> str:
     return result.output
 
 
+@server.resource('style://house')
+def house_style() -> str:
+    """The house style guide."""
+    return 'Four lines. No rhyming couplets.'
+
+
+@server.prompt()
+def critique(poem: str) -> str:
+    """Ask for a critique of a poem."""
+    return f'Critique this poem in two sentences:\n\n{poem}'
+
+
 if __name__ == '__main__':
     server.run()   # stdio by default; server.run(transport='http', port=8000) for HTTP
 ```
+
+For tests, pass the `FastMCP` object straight to `MCPToolset(server)`: it runs in-process with no subprocess or port (see [testing](/pydanticai-guide/pydantic_ai_testing/#6-test-an-mcp-toolset-in-process)).
 
 ---
 
@@ -162,17 +216,32 @@ async def vercel_chat(request: Request) -> Response:
 ### Built-in chat UI and CLI
 
 ```python
-app = agent.to_web()           # Starlette app with a ready-made chat UI; run with uvicorn
-agent.to_cli_sync()            # interactive terminal chat
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%', instructions='Be helpful.')
+
+app = agent.to_web()           # Starlette app with a ready-made chat UI; run with: uvicorn my_module:app
+
+if __name__ == '__main__':
+    agent.to_cli_sync()        # interactive terminal chat
 ```
 
-`to_web()` accepts `models=` (a model picker), `deps=`, `model_settings=`, `instructions=` and `allowed_hosts=`; the same deps are used for every request, so use the adapters above when deps vary per user. The `clai` command (from the `cli` extra) gives the same terminal chat without writing code.
+`to_web()` accepts `models=` (a model picker), `deps=`, `model_settings=`, `instructions=`, `html_source=` and `allowed_hosts=`; the same deps are used for every request, so use the adapters above when deps vary per user.
+
+The `pai` command (installed by the `cli` extra, which the default bundle includes; also published standalone on PyPI as `clai`) gives the same chat without writing code:
+
+```bash
+pai -m anthropic:%%model=anthropic%% 'Summarise the A2A protocol in two lines.'   # one-shot
+pai -a my_module:agent                       # chat with your own agent (or an AgentSpec YAML/JSON file)
+pai --mcp-config mcp_config.json             # with the MCP servers from a config file
+pai web -a my_module:agent --port 8000       # the web UI, served from the command line
+```
 
 ---
 
 ## Gotchas
 
-- **Install the extras.** `ag-ui`, `ui` and `temporal`-style extras are not in the default bundle since 2.0; `mcp` is.
+- **Install the extras.** `ag-ui`, `ui` and `temporal`-style extras are not in the default bundle since 2.0; `mcp` is, but only FastMCP's client — add `fastmcp` to write servers.
 - **`MCP(url=...)` changed meaning in 2.0**: it now runs the client locally. Add `native=True` if you relied on the provider calling the server.
 - **Tool name collisions** between MCP servers and your own tools raise at run time — prefix one side.
 - **Untrusted servers**: an MCP server's tool descriptions and results go straight into the model's context. Treat third-party servers as untrusted input, and restrict them with `FilteredToolset` or approval (`ApprovalRequiredToolset`) for anything destructive.

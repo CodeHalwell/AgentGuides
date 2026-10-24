@@ -411,7 +411,7 @@ const app = new BedrockAgentCoreApp({
 app.run()
 ```
 
-When called inside a request, the wrappers read `workloadAccessToken` from the request context automatically; outside a handler, pass `workloadIdentityToken` in the config. For `USER_FEDERATION` (three-legged OAuth), add `onAuthUrl` to receive the consent URL to show the user, and `callbackUrl`. The wrappers are plain functions, so they work equally inside a Strands tool callback. Credential providers and workload identities are created with the control plane (`@aws-sdk/client-bedrock-agentcore-control`) or `agentcore add credential`.
+When called inside a request, the wrappers read `workloadAccessToken` from the request context automatically; outside a handler, pass `workloadIdentityToken` in the config. For `USER_FEDERATION` (three-legged OAuth), add `onAuthUrl` to receive the consent URL to show the user, and `callbackUrl`. The wrappers are plain functions, so they work equally inside a Strands tool callback. Credential providers and workload identities are created with the control plane (`@aws-sdk/client-bedrock-agentcore-control`) or `agentcore add credentials`.
 
 ---
 

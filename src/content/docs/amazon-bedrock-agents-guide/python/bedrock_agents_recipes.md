@@ -12,7 +12,7 @@ Practical recipes for common Bedrock agent scenarios.
 
 > **Verified against:** `boto3` %%version=boto3%%, `strands-agents` %%version=strands-agents%% and `bedrock-agentcore` %%version=bedrock-agentcore%% (checked %%versions-checked%%).
 >
-> Recipes 1, 2, 4, 5 and 6 use **Bedrock Agents (Agents Classic)**, which no longer accepts new customers (since 30 July 2026) and is in maintenance mode; they remain valid for existing accounts. Recipe 3 uses **AgentCore**, AWS's recommended platform for new agents.
+> Recipes 1, 2, 4, 5 and 6 use **Bedrock Agents (Agents Classic)**, which no longer accepts new customers (since 30 July 2026) and is in maintenance mode; they remain valid for existing accounts. Recipes 3, 7 and 8 use **AgentCore**, AWS's recommended platform for new agents.
 
 **Conventions used throughout:**
 
@@ -72,6 +72,8 @@ def read_completion(response) -> str:
 4. [Financial Analytics Agent](#financial-analytics-agent)
 5. [Data Analysis Agent with Code Interpretation](#data-analysis-agent-with-code-interpretation)
 6. [Document Processing Pipeline](#document-processing-pipeline)
+7. [Human Approval with a Harness](#human-approval-with-a-harness)
+8. [Streaming an AgentCore Agent to a Browser](#streaming-an-agentcore-agent-to-a-browser)
 
 ---
 
@@ -392,7 +394,7 @@ Greet customers professionally and clarify their needs before delegating.""",
 
 Bedrock Agents (Classic) collaborators talk to each other through the built-in supervisor mechanism above, not the A2A protocol. To use [A2A](https://a2a-protocol.org/) — the open agent-interoperability protocol, which lets agents built in different frameworks call each other — host the agents on **AgentCore Runtime** with the A2A server protocol.
 
-**1. A research agent served over A2A** (`researcher.py`, deployed to AgentCore Runtime with `protocolConfiguration={"serverProtocol": "A2A"}` or `agentcore create` choosing the A2A protocol):
+**1. A research agent served over A2A** (`researcher.py`, deployed to AgentCore Runtime with `protocolConfiguration={"serverProtocol": "A2A"}` or `agentcore add runtime --protocol A2A`):
 
 ```python
 # pip install "bedrock-agentcore[a2a]" "strands-agents[a2a]"
@@ -636,6 +638,160 @@ class DocumentProcessingAgent:
 ```
 
 `detect_document_text` is synchronous and suits single-page images; use `start_document_analysis` (asynchronous) for multi-page PDFs and forms or tables.
+
+---
+
+## Human Approval with a Harness
+
+### An inline function that pauses the agent for a person
+
+A managed harness can call tools that run in your code. Declare the tool as an `inline_function`; when the model calls it, the harness stops with `stopReason` `tool_use`, you decide what to do (here, ask a person), and you send the answer back as a `toolResult` on the same session. This is AgentCore's version of Classic's return of control and `AMAZON.UserInput`, and it is the right shape for approvals, because the model cannot act before the answer arrives.
+
+The code below reuses `data`, `HARNESS_ARN` and `read_stream()` from the [inline-function example](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#inline-functions-running-a-tool-in-your-own-code) in the AgentCore guide. It adds only the tool, the approval step and a loop:
+
+```python
+# Reuses data, HARNESS_ARN and read_stream() from the inline-function example in the AgentCore guide
+import uuid
+
+APPROVAL_TOOL = {
+    "type": "inline_function",
+    "name": "approve_purchase",
+    "config": {
+        "inlineFunction": {
+            "description": "Ask a human to approve a purchase before it is made. Call this before buying anything.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {"item": {"type": "string"}, "amount": {"type": "number"}},
+                "required": ["item", "amount"],
+            },
+        }
+    },
+}
+
+
+def ask_human(item: str, amount: float) -> bool:
+    return input(f"Approve {item} for {amount:.2f}? [y/N] ").strip().lower() == "y"
+
+
+def run_with_approval(prompt: str, session_id: str) -> str:
+    messages = [{"role": "user", "content": [{"text": prompt}]}]
+    answer = ""
+    while True:
+        response = data.invoke_harness(
+            harnessArn=HARNESS_ARN,
+            runtimeSessionId=session_id,
+            tools=[APPROVAL_TOOL],
+            messages=messages,
+        )
+        text, tool_calls, stop_reason = read_stream(response)
+        answer += text
+        if stop_reason != "tool_use":
+            return answer
+
+        results = []
+        for call in tool_calls:
+            arguments = json.loads(call["input"] or "{}")
+            approved = ask_human(arguments["item"], arguments["amount"])
+            results.append({
+                "toolResult": {
+                    "toolUseId": call["toolUseId"],
+                    # A denial is a normal result the model can act on, not an exception
+                    "content": [{"text": "approved" if approved else "denied by the user; do not buy this item"}],
+                    "status": "success",
+                }
+            })
+        messages = [{"role": "user", "content": results}]
+
+
+print(run_with_approval("Find a mechanical keyboard under 200 and buy it.", str(uuid.uuid4())))
+```
+
+Design points:
+
+- **A denial is a result, not an error.** Returning `denied by the user` with `status` `success` lets the model explain and suggest an alternative. Use `status` `error` for failures of the tool itself.
+- **Describe when to call it.** The tool description is the only instruction the model has about *when* approval is needed, so say "call this before buying anything".
+- **The decision happens outside the model.** Do the purchase in your own code after approval, not in a later model step, so a prompt-injected page cannot talk the agent into skipping the check.
+- **Sessions must be 33 to 100 characters** (letters, digits, hyphens and underscores) for a harness. A UUID is 36.
+- **Time limits apply.** The paused session is a Runtime session, and Runtime reclaims idle sessions (the default `idleRuntimeSessionTimeout` is 900 seconds; raise it in `lifecycleConfiguration` if approvals are slow). If a person may answer much later, store the request and the `toolUseId` yourself and start a new turn that states the decision.
+
+---
+
+## Streaming an AgentCore Agent to a Browser
+
+### A small backend that keeps conversations on one session
+
+A web page cannot sign `InvokeAgentRuntime` calls, and it should not hold AWS credentials. A thin backend authenticates the user, maps each conversation to a runtime session and relays the stream. Deriving the session ID from the user and conversation means repeat calls reach the same microVM (and its in-memory state), while the user's own ID never appears in AgentCore.
+
+```python
+import hashlib
+import json
+
+import boto3
+from botocore.config import Config
+from starlette.applications import Starlette
+from starlette.exceptions import HTTPException
+from starlette.requests import Request
+from starlette.responses import StreamingResponse
+from starlette.routing import Route
+
+RUNTIME_ARN = "arn:aws:bedrock-agentcore:us-west-2:111122223333:runtime/SalesAnalyst_analyst-abc123"
+
+agentcore = boto3.client(
+    "bedrock-agentcore",
+    region_name="us-west-2",
+    config=Config(read_timeout=900, retries={"max_attempts": 3, "mode": "standard"}),
+)
+
+
+def session_id_for(user_id: str, conversation_id: str) -> str:
+    """A stable 64-character session ID: the same conversation always reaches the same microVM,
+    and the user's ID is not exposed in the AgentCore session ID."""
+    return hashlib.sha256(f"{user_id}:{conversation_id}".encode()).hexdigest()
+
+
+def authenticated_user(request: Request) -> str:
+    # Replace with your real check (verify a session cookie or JWT). Never trust a client-supplied ID.
+    user = request.headers.get("x-user-id")
+    if not user:
+        raise HTTPException(status_code=401)
+    return user
+
+
+def sse_frames(session_id: str, prompt: str):
+    try:
+        response = agentcore.invoke_agent_runtime(
+            agentRuntimeArn=RUNTIME_ARN,
+            runtimeSessionId=session_id,
+            payload=json.dumps({"prompt": prompt}),
+        )
+        for line in response["response"].iter_lines():
+            if line:                       # pass the runtime's frames through unchanged
+                yield line + b"\n\n"
+    except Exception as error:             # the 200 status is already sent, so report in-band
+        yield b"data: " + json.dumps({"error": type(error).__name__}).encode() + b"\n\n"
+
+
+async def chat(request: Request):
+    user = authenticated_user(request)
+    body = await request.json()
+    prompt = body.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 8000:
+        raise HTTPException(status_code=400, detail="prompt must be a non-empty string")
+    session_id = session_id_for(user, str(body.get("conversationId", "default")))
+    return StreamingResponse(sse_frames(session_id, prompt), media_type="text/event-stream")
+
+
+app = Starlette(routes=[Route("/chat", chat, methods=["POST"])])
+```
+
+This was tested with Starlette's test client and a botocore `Stubber`: the frames pass through unchanged, a throttling error becomes an in-band `error` frame, and a missing user or empty prompt is rejected with 401 or 400.
+
+Notes:
+
+- **Replace `authenticated_user`.** The `x-user-id` header is a placeholder. Take the user from a verified session cookie or JWT, never from the request body.
+- **Errors after the stream starts cannot change the status code**, so the generator reports them in a final frame. The browser should treat a frame with an `error` key as a failure. The [error-handling page](/amazon-bedrock-agents-guide/python/bedrock_agents_error_handling_python/#4-errors-on-agentcore) covers the frames that the runtime itself sends.
+- **Match the entrypoint.** This relay assumes the runtime's entrypoint streams (an async generator, as in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#runtime-application-features)). For a JSON entrypoint, read the whole body and return it.
+- **Bound the request.** Limit prompt size as shown, and apply per-user rate limits before calling the runtime, since each call can start a model loop.
 
 ---
 

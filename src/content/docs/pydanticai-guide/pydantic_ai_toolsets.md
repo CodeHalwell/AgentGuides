@@ -1012,7 +1012,8 @@ def today() -> str:
 
 # MCPToolset replaced V1's MCPServerStdio / MCPServerSSE / MCPServerStreamableHTTP.
 # It accepts a URL, a script path, a FastMCP server or client, or a transport.
-server = MCPToolset(StdioTransport('uv', args=['run', 'mcp-run-python', 'stdio']))
+# mcp-run-python runs code in a Pyodide sandbox and needs Deno installed.
+server = MCPToolset(StdioTransport('uvx', args=['mcp-run-python', 'stdio']), init_timeout=60)
 agent = Agent('openai:%%model=openai%%',
               toolsets=[local_tools, PrefixedToolset(server, prefix='mcp')])
 

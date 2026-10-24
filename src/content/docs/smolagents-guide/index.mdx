@@ -54,10 +54,14 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="CodeAgent" href="/smolagents-guide/smolagents_comprehensive_guide/#codeagent-the-code-based-paradigm" />
   <LinkCard title="ToolCallingAgent" href="/smolagents-guide/smolagents_comprehensive_guide/#toolcallingagent-traditional-json-based-workflows" />
   <LinkCard title="Custom tools" href="/smolagents-guide/smolagents_comprehensive_guide/#tools-building-blocks-of-agents" />
+  <LinkCard title="MCP servers" href="/smolagents-guide/smolagents_comprehensive_guide/#mcp-servers" />
+  <LinkCard title="Memory and steps" href="/smolagents-guide/smolagents_comprehensive_guide/#memory-and-steps" />
+  <LinkCard title="Planning" href="/smolagents-guide/smolagents_comprehensive_guide/#planning" />
   <LinkCard title="Multi-agent orchestration" href="/smolagents-guide/smolagents_comprehensive_guide/#multi-agent-systems--orchestration" />
   <LinkCard title="Structured outputs" href="/smolagents-guide/smolagents_comprehensive_guide/#structured-outputs--schema" />
   <LinkCard title="Sandboxes, Hub & multimodal" href="/smolagents-guide/smolagents_comprehensive_guide/#sandboxes-hub-sharing-and-multimodal-input" />
   <LinkCard title="Model selection" href="/smolagents-guide/smolagents_comprehensive_guide/#model-configuration--selection" />
+  <LinkCard title="Telemetry" href="/smolagents-guide/smolagents_production_guide/#opentelemetry-tracing" />
   <LinkCard title="Version notes" href="/smolagents-guide/smolagents_comprehensive_guide/#version-notes" />
 </CardGrid>
 
@@ -108,6 +112,7 @@ Next: **[Introduction & philosophy](/smolagents-guide/smolagents_comprehensive_g
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 1.26.0 | Audit against the installed package: corrected the Inference Endpoint example, step-callback registration, `GradioUI.launch()` sharing default, Docker image rebuilds, the browser-agent recipe and step counting; added sections on memory and steps, planning, MCP, local-executor limits, saving agents and tools, delegation, and scripted tests for tool-calling agents. |
 | 2026-10-21 | 1.26.0 | Diagrams page cut to accurate diagrams; tools-in-sandbox, `LogLevel` and quantisation corrections; served model IDs; recipes for the browser agent, agentic RAG and plan review; streaming endpoint and in-flight autoscaling in the production guide. |
 | 2026-10-21 | 1.26.0 | All pages re-verified against the installed package; code rewritten where it used non-existent APIs; release notes corrected; version references now come from the site's version data. |
 | 2026-05-29 | 1.26.0 | Version bump. |
