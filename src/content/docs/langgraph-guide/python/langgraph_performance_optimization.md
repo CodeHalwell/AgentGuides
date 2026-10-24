@@ -82,7 +82,7 @@ print(f"{time.perf_counter() - start:.1f}s")                      # about 0.4s: 
 
 Notes:
 
-- The `Send` targets must be returned from a routing function (`add_conditional_edges`), not from a node.
+- Return the `Send` objects from a routing function (`add_conditional_edges`), or from a node as `Command(goto=[Send(...), ...])`; a node that returns a bare list of `Send` fails.
 - `fetch` writes to `pages`, which has an `operator.add` reducer; without one, parallel writes to the same key raise `InvalidUpdateError`.
 - `summarise` runs once, after every `fetch` task in the super-step has finished. For fan-ins across several steps, `add_node(..., defer=True)` delays a node until all other work has drained ([StateGraph reference](/langgraph-guide/python/reference-state-graph/)).
 - `Send(..., timeout=...)` limits one task; see the [Command and Send reference](/langgraph-guide/python/reference-command-and-send/).
@@ -134,6 +134,8 @@ Provider-side prompt caching (for example Anthropic's) is separate and is config
 
 - **Durability.** The default, `durability="async"`, writes a checkpoint after every super-step without blocking the next one. `durability="exit"` writes only when the run ends or pauses, which suits short runs that need no mid-run recovery. Pass it to `invoke`/`stream`, not `compile()`. ([Chapter 10](/langgraph-guide/python/chapter-10-production/#durability-how-often-state-is-written).)
 - **State size.** Every checkpoint serialises the channels that changed. Keep large documents, files and embeddings out of graph state: store them elsewhere (or in the [Store](/langgraph-guide/python/reference-store/)) and keep IDs in state.
+- **Append-heavy channels.** A long message list or event log is re-serialised in full whenever it changes. `DeltaChannel` (beta, 1.2+) stores only each step's writes and rebuilds the value on read ([Channels reference](/langgraph-guide/python/reference-channels/#deltachannel-beta)).
+- **Old checkpoints.** `PostgresSaver.prune(thread_ids, strategy="keep_latest")` drops all but the latest checkpoint of finished threads ([checkpointers reference](/langgraph-guide/python/reference-checkpointers/#keeping-history-small-prune)).
 - **Narrow node inputs.** `add_node(..., input_schema=...)` gives a node only the keys it needs, which also keeps traces small.
 - **Connection pooling.** With Postgres under concurrent load, give the saver an `AsyncConnectionPool` rather than a single connection ([checkpointers reference](/langgraph-guide/python/reference-checkpointers/)).
 

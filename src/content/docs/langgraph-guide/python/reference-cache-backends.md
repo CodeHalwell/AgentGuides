@@ -1,6 +1,6 @@
 ---
 title: "BaseCache & InMemoryCache — cache backend API reference"
-description: "Build and use LangGraph node cache backends — BaseCache abstract interface, InMemoryCache thread-safe implementation, custom backend wiring, and CachePolicy integration."
+description: "LangGraph node cache backends: the BaseCache interface, the shipped InMemoryCache, SqliteCache and RedisCache, writing your own backend, and CachePolicy wiring."
 framework: "langgraph"
 language: "python"
 sidebar:
@@ -8,16 +8,24 @@ sidebar:
   order: 42
 ---
 
-Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.cache.base`, `langgraph.cache.memory`).
+Verified against **`langgraph==%%version=langgraph%%`**, `langgraph-checkpoint` %%version=langgraph-checkpoint%% and `langgraph-checkpoint-sqlite` %%version=langgraph-checkpoint-sqlite%% (modules: `langgraph.cache.base`, `langgraph.cache.memory`, `langgraph.cache.sqlite`, `langgraph.cache.redis`).
 
 LangGraph node caching is a two-part system:
 
 | Part | What it is |
 |---|---|
 | `CachePolicy` | Per-node config: TTL and optional key function. Attached via `add_node(..., cache_policy=...)`. |
-| `BaseCache` / `InMemoryCache` | Backend: stores and retrieves cached node outputs. Passed to `compile(cache=...)`. |
+| `BaseCache` and its implementations | Backend: stores and retrieves cached node outputs. Passed to `compile(cache=...)` (or `@entrypoint(cache=...)`). |
 
-This page covers the backend side. See [chapter 9 — Advanced Patterns](/langgraph-guide/python/chapter-09-advanced-patterns/) for `CachePolicy` examples.
+Three backends ship with LangGraph:
+
+| Backend | Import | Package | Shared across processes |
+|---|---|---|---|
+| `InMemoryCache()` | `langgraph.cache.memory` | `langgraph-checkpoint` (installed with `langgraph`) | No |
+| `SqliteCache(path=...)` | `langgraph.cache.sqlite` | `langgraph-checkpoint-sqlite` | Processes on one machine |
+| `RedisCache(redis_client, prefix="langgraph:cache:")` | `langgraph.cache.redis` | `langgraph-checkpoint` (needs the `redis` client library) | Yes |
+
+This page covers the backend side. `CachePolicy` options are in [Node policies](/langgraph-guide/python/reference-state-graph/#cachepolicy).
 
 ---
 
@@ -138,6 +146,53 @@ print(r3["embedding"])  # different value
 
 ---
 
+## `SqliteCache` and `RedisCache`
+
+Swap the backend without touching the nodes. `SqliteCache` keeps entries in a file; `RedisCache` takes a Redis client (sync `redis.Redis` or async `redis.asyncio.Redis`) and stores each entry under `prefix`:
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START
+from langgraph.types import CachePolicy
+from langgraph.cache.sqlite import SqliteCache
+
+calls: list[str] = []
+
+
+class State(TypedDict):
+    text: str
+    n: int
+
+
+def count(state: State) -> dict:
+    calls.append(state["text"])
+    return {"n": len(state["text"])}
+
+
+cache = SqliteCache(path="node-cache.db")
+graph = (
+    StateGraph(State)
+    .add_node("count", count, cache_policy=CachePolicy(ttl=60))
+    .add_edge(START, "count")
+    .compile(cache=cache)
+)
+graph.invoke({"text": "hello", "n": 0})
+graph.invoke({"text": "hello", "n": 0})
+print(len(calls))   # 1: the second run was served from the cache
+```
+
+```python
+import redis
+from langgraph.cache.redis import RedisCache
+
+cache = RedisCache(redis.Redis.from_url("redis://localhost:6379"))
+graph = builder.compile(cache=cache)   # same builder as above
+```
+
+The same example passes with `RedisCache` (checked against an in-process fake Redis client) and with `InMemoryCache`. For several workers or replicas, use `RedisCache` so they share entries.
+
+---
+
 ## `BaseCache` method reference
 
 ### `get(keys)` / `aget(keys)`
@@ -197,7 +252,7 @@ cache.set({(("ns", "n"), "k"): ({"v": 1}, 10)})
 # Internal structure (not public API — illustrative only)
 # cache._cache = {
 #   ("ns", "n"): {
-#     "k": ("json", b'{"v": 1}', <expiry_ts>)
+#     "k": ("msgpack", b'\x81\xa1v\x01', <expiry_ts>)
 #   }
 # }
 ```
@@ -206,7 +261,7 @@ cache.set({(("ns", "n"), "k"): ({"v": 1}, 10)})
 
 ## Building a custom cache backend
 
-Subclass `BaseCache` to use Redis, Memcached, or any other store. Implement all six abstract methods:
+For Redis, use the shipped `RedisCache` above. Subclass `BaseCache` for another store (Memcached, DynamoDB, ...). The example below implements the interface against Redis only because it is easy to follow; implement all six abstract methods:
 
 ```python
 import json
@@ -224,8 +279,8 @@ def _encode_seg(s: str) -> str:
     return quote(s, safe="")
 
 
-class RedisCache(BaseCache[Any]):
-    """Simple Redis-backed cache for LangGraph nodes."""
+class ExampleRedisCache(BaseCache[Any]):
+    """Illustrative custom backend (LangGraph already ships langgraph.cache.redis.RedisCache)."""
 
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         super().__init__()
@@ -291,7 +346,7 @@ class RedisCache(BaseCache[Any]):
 Use it the same way:
 
 ```python
-cache = RedisCache("redis://localhost:6379")
+cache = ExampleRedisCache("redis://localhost:6379")
 graph = builder.compile(cache=cache)
 ```
 
@@ -492,7 +547,7 @@ LangGraph constructs these automatically. You only need them when building a cus
 
 - **TTL is wall-clock, not access-time.** `InMemoryCache` uses absolute expiry timestamps, not LRU/LFU. An entry set with `ttl=60` expires 60 seconds after insertion regardless of access pattern.
 - **Expired entries are evicted lazily.** They are removed on the next `get()` for their key, not on a background timer.
-- **`InMemoryCache` is process-local.** It does not survive process restarts and is not shared between workers. Use a networked backend (Redis, Memcached) for multi-worker deployments.
+- **`InMemoryCache` is process-local.** It does not survive process restarts and is not shared between workers. Use `RedisCache` for multi-worker deployments.
 - **Pickle fallback is disabled** in the default `JsonPlusSerializer`. If your node returns a non-JSON-serialisable value, you'll get a serialisation error. Pass a custom `serde` to enable pickle: `InMemoryCache(serde=JsonPlusSerializer(pickle_fallback=True))`.
 - **`cache_policy` without `compile(cache=...)` is silently ignored.** The node will execute on every call.
 
@@ -502,6 +557,4 @@ LangGraph constructs these automatically. You only need them when building a cus
 
 | Version | Change |
 |---|---|
-| 1.2.11 | `BaseCache`, `InMemoryCache` production-stable |
-| 1.2.0 | `CachePolicy.key_func` customization added |
-| 1.1.0 | Node caching first introduced with `CachePolicy` + `compile(cache=...)` |
+| 0.4.x | Node caching: `CachePolicy` (with `key_func` and `ttl`) and `compile(cache=...)`; present in 0.4.10, while in 0.4.0 and 0.3.x `CachePolicy` was an empty placeholder. The backends live in `langgraph-checkpoint` (memory, Redis) and `langgraph-checkpoint-sqlite` (SQLite). |

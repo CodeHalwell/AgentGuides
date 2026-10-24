@@ -810,7 +810,7 @@ if latest:
     result = await workflow.run(checkpoint_id=latest.checkpoint_id)
 ```
 
-Inside an executor, `await ctx.request_info(payload, response_type=bool)` pauses the workflow, and a method decorated with `@response_handler` on the same executor receives the answer when the caller runs `workflow.run(responses={request_id: value})`. Combined with checkpointing, a person can answer hours later in a different process. Storage backends (in-memory, file, Redis, Cosmos DB, custom) are on the [checkpointing page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/); the request/response loop, tool approval and plan review are on the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/).
+Inside an executor, `await ctx.request_info(payload, response_type=bool)` pauses the workflow, and a method decorated with `@response_handler` on the same executor receives the answer when the caller runs `workflow.run(responses={request_id: value})`. Combined with checkpointing, a person can answer hours later in a different process. Storage backends (in-memory, file, Cosmos DB, custom) are on the [checkpointing page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/); the request/response loop, tool approval and plan review are on the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/).
 
 ### A workflow as an agent
 

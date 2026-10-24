@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — MCP Integration"
 description: "Plug Model Context Protocol servers into agent-framework via MCPStdioTool, MCPStreamableHTTPTool, and MCPWebsocketTool. Approval gates, header injection, and sampling callbacks."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "MCP"
+  order: 12
 ---
 
 Model Context Protocol (MCP) servers are first-class tool sources in `agent-framework`. Three transports ship in `agent_framework`:
@@ -10,10 +13,10 @@ Model Context Protocol (MCP) servers are first-class tool sources in `agent-fram
 | Class | Transport | Typical use |
 |---|---|---|
 | `MCPStdioTool` | Subprocess over stdio | Local tools — filesystem, git, npm-hosted servers |
-| `MCPStreamableHTTPTool` | Streamable HTTP (SSE) | Remote / hosted MCP services |
-| `MCPWebsocketTool` | WebSocket | Bidirectional streaming services |
+| `MCPStreamableHTTPTool` | Streamable HTTP | Remote / hosted MCP services |
+| `MCPWebsocketTool` | WebSocket | Servers that only offer WebSocket (the MCP SDK has deprecated this transport) |
 
-All three are async context managers that connect lazily, discover tools and prompts from the server, and register them as `FunctionTool` instances on the agent.
+All three are async context managers. Entering one connects to the server, lists its tools (and prompts, unless `load_prompts=False`) and exposes each as a `FunctionTool`, available afterwards in `.functions`. Pass the MCP tool object itself in `tools=`; the agent expands it into those functions. An agent given an MCP tool that is not yet connected connects it on first use and closes it in `agent.close()`.
 
 Verified against `agent-framework` %%version=agent-framework%% and the `mcp` SDK it resolves (1.30 at the %%versions-checked%% check; first written for 1.6.0 and `mcp` 1.27).
 
@@ -57,13 +60,13 @@ asyncio.run(main())
 
 Notes:
 
-- `name` is a *tool group* name — it becomes the prefix for the tools exposed to the model (e.g. `filesystem_read_file`). Override with `tool_name_prefix="fs"` to pick a shorter prefix.
+- `name` identifies the MCP tool object (in logs and telemetry). It is **not** a prefix: the model sees the server's own tool names (`read_file`, `list_directory`, ...). Pass `tool_name_prefix="fs"` to expose `fs_read_file` and so on, which you need when two servers offer tools with the same name.
 - `command` + `args` + `env` are forwarded to `mcp.client.stdio.StdioServerParameters`.
 - Use `async with` so the subprocess is cleaned up when the agent finishes.
 
 ### Passing environment + encoding to a stdio child process
 
-`MCPStdioTool` forwards `env`, `args`, and `encoding` straight through to `StdioServerParameters`. Anything else — buffering knobs, custom `cwd`, etc. — comes through `**kwargs` (the constructor merges it with the explicit args before constructing `StdioServerParameters`). Use it to ship secrets to a child server or to pin the wire encoding when running on Windows:
+`MCPStdioTool` forwards `env`, `args`, and `encoding` straight through to `StdioServerParameters`; other `StdioServerParameters` fields, such as `cwd`, can be passed as extra keyword arguments. Use them to ship secrets to a child server or to pin the wire encoding when running on Windows:
 
 ```python
 import os
@@ -109,7 +112,7 @@ async with MCPStreamableHTTPTool(
 
 ### Per-request headers (auth tokens, tenant IDs)
 
-Use `header_provider` to inject a header derived from `function_invocation_kwargs` on the outer `agent.run(...)` call. This avoids building a new `httpx.AsyncClient` per tenant.
+Use `header_provider` to inject a header derived from `function_invocation_kwargs` on the outer `agent.run(...)` call. This avoids building a new `httpx.AsyncClient` per tenant. For headers that never change (an API key for a service account), use `static_headers={"X-Api-Key": ...}` instead.
 
 ```python
 from agent_framework import Agent, MCPStreamableHTTPTool
@@ -142,7 +145,7 @@ mcp = MCPStreamableHTTPTool(name="internal", url="https://mcp.corp/api", http_cl
 
 ## WebSocket
 
-`MCPWebsocketTool` opens a persistent bidirectional WebSocket connection to an MCP server. Requires `pip install 'mcp[ws]'`.
+`MCPWebsocketTool` opens a persistent bidirectional WebSocket connection to an MCP server. Requires `pip install 'mcp[ws]'`. WebSocket is not one of the MCP specification's standard transports and the MCP Python SDK marks its client as deprecated, so prefer streamable HTTP when the server offers it.
 
 ### Basic usage
 
@@ -169,25 +172,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Passing auth headers
+### Authentication
 
-`MCPWebsocketTool` forwards extra keyword arguments to the underlying WebSocket client. Pass `additional_headers` (or any kwarg your WebSocket library accepts) to authenticate:
-
-```python
-import os
-from agent_framework import MCPWebsocketTool
-
-ws_tool = MCPWebsocketTool(
-    name="events",
-    url="wss://events.example.com/mcp",
-    description="Authenticated event stream",
-    request_timeout=60,
-    additional_headers={
-        "Authorization": f"Bearer {os.environ['EVENTS_TOKEN']}",
-        "X-Client-Id": "agent-service",
-    },
-)
-```
+The MCP SDK's `websocket_client(url)` takes only a URL, and `MCPWebsocketTool` forwards extra keyword arguments to it, so there is no way to set request headers: an `additional_headers=` argument fails with `TypeError` when the tool connects. If the server accepts a token in the URL (`wss://events.example.com/mcp?token=...`), use that over TLS; otherwise use `MCPStreamableHTTPTool` with `static_headers=` or `header_provider=`.
 
 ### Per-tool approval with `MCPSpecificApproval`
 
@@ -198,8 +185,9 @@ from agent_framework import MCPWebsocketTool
 from agent_framework._mcp import MCPSpecificApproval  # TypedDict, not re-exported from agent_framework
 
 ws_approval: MCPSpecificApproval = {
-    "always_require_approval": ["rt_publish_event", "rt_delete_subscription"],
-    "never_require_approval": ["rt_subscribe", "rt_list_subscriptions"],
+    # The server's own tool names.
+    "always_require_approval": ["publish_event", "delete_subscription"],
+    "never_require_approval": ["subscribe", "list_subscriptions"],
 }
 
 async with MCPWebsocketTool(
@@ -210,20 +198,20 @@ async with MCPWebsocketTool(
     agent = Agent(client=OpenAIChatClient(), tools=rt)
 ```
 
-When a tool requires approval, the workflow emits a `function_approval_request` event. Respond with `event.data.to_function_approval_response(approved=True)` and re-run — see the [HITL page](./microsoft_agent_framework_python_hitl/) for the full loop.
+When a tool requires approval, the run stops with a `function_approval_request` in `response.user_input_requests`. Answer with `request.to_function_approval_response(approved=True)` on the same session — see the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval) for the full loop.
 
-> **Note:** `MCPWebsocketTool` keeps a single persistent connection open for the lifetime of the `async with` block. If the server drops the connection, call `await rt.connect(reset=True)` to re-establish it. WebSocket servers that rotate tokens will require you to rebuild the tool instance with the new credentials.
+> **Note:** `MCPWebsocketTool` keeps a single persistent connection open for the lifetime of the `async with` block. If the server drops the connection, call `await rt.connect(reset=True)` to re-establish it.
 
 ## Approval gates
 
-The `approval_mode` parameter accepts four shapes — three string sentinels and one typed dict:
+The `approval_mode` parameter accepts four values:
 
 | Value | Effect |
 |---|---|
-| `"always_require"` | Every tool invocation emits a `function_approval_request` event. |
-| `"never_require"` | Bypass approval entirely — the tool runs as soon as the model calls it. |
-| `MCPSpecificApproval` (dict) | Per-tool whitelist / blacklist. |
-| `None` (default) | Inherit the server's default — usually `"never_require"`. |
+| `"always_require"` | Every call to any of the server's tools needs approval. |
+| `"never_require"` | No approval; the tool runs as soon as the model calls it. |
+| `MCPSpecificApproval` (dict) | Per-tool lists, below. |
+| `None` (default) | Same as `"never_require"`. (MCP servers have no approval setting of their own.) |
 
 For per-tool control, use the typed dict — it gives you static type checking and the exact key names the framework expects:
 
@@ -245,7 +233,7 @@ mcp = MCPStdioTool(
 )
 ```
 
-Tools listed in **both** lists require approval (the safe default). Tools not in either list inherit the server-side default. When approval is required the workflow emits a `function_approval_request` event; respond with `event.data.to_function_approval_response(approved=True)` and re-run with that response. See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for the full loop.
+Names are the server's own tool names (or the prefixed names, when the raw name is already in normalised form). Tools listed in **both** lists require approval. Tools in **neither** list run without approval, so list every tool you consider risky, or use `"always_require"` and put the safe ones in `never_require_approval`. The approval loop is the same as for any tool; see the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval).
 
 ### Approval + middleware audit log
 
@@ -296,7 +284,7 @@ mcp = MCPStreamableHTTPTool(
 )
 ```
 
-Or disable MCP prompts entirely when you only want tools:
+`allowed_tools` matches the server's raw tool names. An empty list exposes nothing (use `load_tools=False` if you only want prompts). Or disable MCP prompts entirely when you only want tools:
 
 ```python
 MCPStdioTool(name="fs", command="...", load_prompts=False)
@@ -319,9 +307,24 @@ async with MCPStdioTool(
         print(f"prompt {prompt.name}: {prompt.description}")
 ```
 
+### Progressive disclosure for large servers
+
+With `use_progressive_disclosure=True` (experimental, `ExperimentalFeature.PROGRESSIVE_TOOLS`) the model initially sees only the tools named in `always_load=` plus three small loader tools that list, load and unload the server's other tools on demand. This keeps a 200-tool server from filling the context window with schemas:
+
+```python
+from agent_framework import MCPStreamableHTTPTool
+
+github = MCPStreamableHTTPTool(
+    name="github",
+    url="https://api.githubcopilot.com/mcp/",
+    use_progressive_disclosure=True,
+    always_load=["search_issues"],      # visible from the start
+)
+```
+
 ## Parsing tool results
 
-The default parser coerces MCP `CallToolResult` into a string for the model. Override it when the server returns structured data you want to surface as multi-part content (images plus alt text, JSON plus a summary, etc.):
+By default, when a result has both `content` and `structuredContent`, the structured part is preferred for the model-visible text (`tool_result_content="structured_first"`; the other modes are `"content_first"`, `"content_only"`, `"structured_only"` and `"both"`). Override it when the server returns structured data you want to surface as multi-part content (images plus alt text, JSON plus a summary, etc.):
 
 ```python
 from mcp import types
@@ -359,7 +362,7 @@ Per-tool overrides are also possible — connect once, inspect `mcp.functions`, 
 ```python
 async with MCPStreamableHTTPTool(name="analytics", url="https://analytics.example.com/mcp") as mcp:
     # Find the specific tool and override only its parser.
-    query = next(f for f in mcp.functions if f.name == "analytics_run_query")
+    query = next(f for f in mcp.functions if f.name == "run_query")   # no tool_name_prefix, so the raw name
     query.result_parser = lambda r: Content.from_text(f"rows: {len(r.content)}")
 
     agent = Agent(client=OpenAIChatClient(), tools=mcp)
@@ -385,8 +388,8 @@ async def direct_invocation() -> None:
         for fn in fs.functions:
             print(fn.name, "—", (fn.description or "")[:60])
 
-        # Call a tool by name; kwargs match the tool's JSON schema parameters
-        result = await fs.call_tool("fs_list_directory", path="/tmp")
+        # Call a tool by the server's own name; kwargs match its JSON schema parameters
+        result = await fs.call_tool("list_directory", path="/tmp")
         print("directory listing:", result)
 
         # If the server exposes prompts, fetch one
@@ -416,7 +419,7 @@ asyncio.run(direct_invocation())
 asyncio.run(http_direct())
 ```
 
-`call_tool` returns either a `str` (when the default parser is used) or `list[Content]` (when `parse_tool_results=` was set on the tool). The tool must be in `allowed_tools` (if that param is set) and the session must be connected — otherwise the call raises.
+`call_tool` takes the server's tool name and returns either a `str` or a `list[Content]`, depending on the result and on `parse_tool_results=`. The tool must be in `allowed_tools` (if that param is set) and the session must be connected — otherwise the call raises.
 
 `get_prompt` returns the rendered prompt text as a `str`. Prompts are only loaded when `load_prompts=True` (the default); disable with `MCPStdioTool(..., load_prompts=False)` to skip the prompts handshake entirely on servers that don't use them.
 
@@ -435,20 +438,23 @@ print(mcp.is_connected)       # False
 
 ## MCP sampling callbacks
 
-Some MCP servers call back into the client to perform model sampling on the client's behalf — for example, a planning server might ask the client to generate sub-task descriptions. Pass a `client=` parameter so the framework can satisfy those server-initiated sampling requests:
+Some MCP servers call back into the client to perform model sampling on the client's behalf (`sampling/createMessage`). The framework treats servers as untrusted, so **every sampling request is denied** unless you pass both a `client=` to run it and a `sampling_approval_callback=` that approves it. Approved requests are capped by `sampling_max_tokens` (default 4096) and `sampling_max_requests` per connection (default 25). Sampling is deprecated in the MCP specification (2026-07-28 revision) and the framework logs a deprecation warning when it is used:
 
 ```python
 from agent_framework import Agent, MCPStreamableHTTPTool
 from agent_framework.openai import OpenAIChatClient
 
-# The client= parameter is used when the MCP server sends a sampling request
-# back to your process. The framework routes it through OpenAIChatClient,
-# which means the same model/deployment handles both agent calls and server
-# callbacks — keeping billing and logging in one place.
+def approve_sampling(params) -> bool:
+    # params is the raw CreateMessageRequestParams; refuse anything large.
+    return (params.maxTokens or 0) <= 1_000
+
+
 mcp = MCPStreamableHTTPTool(
     name="planner",
     url="https://planner.example.com/mcp",
-    client=OpenAIChatClient(model="%%model=openai%%"),
+    client=OpenAIChatClient(model="%%model=openai-small%%"),   # runs approved sampling requests
+    sampling_approval_callback=approve_sampling,
+    sampling_max_requests=10,
 )
 
 async with mcp:
@@ -457,11 +463,15 @@ async with mcp:
     print(response.text)
 ```
 
-When no `client=` is passed, server-side sampling callbacks raise `NotImplementedError` — leaving it unset is safe for servers that don't use sampling.
+Leaving both unset is the safe default for servers that don't need sampling.
+
+## Long-running MCP tasks
+
+Tools that advertise `execution.taskSupport == "required"` run as MCP tasks: the server returns a task handle and the framework polls it until the result is ready. `task_options=MCPTaskOptions(...)` controls retention (`default_ttl`), the client-side deadline (`max_task_wait`) and whether cancelling the local run cancels the remote task (`cancel_remote_task_on_local_cancellation`, default `True`). The defaults are used when you pass nothing.
 
 ## Hosted MCP — the `SupportsMCPTool` protocol
 
-The three MCP classes above run the MCP client **in your process**. Some providers (notably OpenAI's Responses API via certain deployments, and the Foundry model garden) can run the MCP client **server-side** — you tell the provider the MCP URL, the provider opens the connection, discovers tools, and calls them for you. No subprocess or HTTP client in your Python process.
+The three MCP classes above run the MCP client **in your process**. `OpenAIChatClient`, `FoundryChatClient` and `AnthropicClient` can instead have the provider run it **server-side**: you give the provider the MCP URL, and it opens the connection, discovers tools and calls them. No subprocess or HTTP client runs in your Python process, and the server must be reachable from the provider's network.
 
 Chat clients that support this implement `SupportsMCPTool`. Feature-detect at runtime before calling `get_mcp_tool(...)`:
 
@@ -499,11 +509,12 @@ When to prefer hosted MCP:
 
 When to stick with in-process (`MCPStdioTool` / `MCPStreamableHTTPTool` / `MCPWebsocketTool`):
 
-- You need `header_provider=` for multi-tenant auth — hosted MCP typically doesn't support per-request headers.
-- You want `approval_mode` gating every individual tool — this is an in-process feature.
+- You need `header_provider=` for per-request, multi-tenant auth. Hosted MCP takes fixed `headers=` when you build the tool.
+- You want your own function middleware and FIDES policies to see each MCP call; hosted calls never pass through them. (Hosted MCP does have its own `approval_mode=`, enforced by the provider.)
+- The MCP server is on a private network or `localhost`.
 - You need to parse `CallToolResult` with a custom `parse_tool_results=` callback.
 
-The `SupportsMCPTool` protocol is `runtime_checkable`, so the `isinstance(...)` guard is a normal runtime check — no stub subclassing needed. See the [Advanced → Capability protocols](./microsoft_agent_framework_python_advanced/#capability-protocols--supports) section for the full set of `Supports*` protocols (file search, web search, code interpreter, image generation).
+The `SupportsMCPTool` protocol is `runtime_checkable`, so the `isinstance(...)` guard is a normal runtime check — no stub subclassing needed. See the [Advanced → Capability protocols](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#capability-protocols--supports) section for the full set of `Supports*` protocols (file search, web search, code interpreter, image generation).
 
 ## Lifecycle — connect, reset, close
 
@@ -527,17 +538,15 @@ finally:
 
 ### Reconnecting after a transport error
 
-If the remote server drops the connection or rotates a token, call `connect(reset=True)` to tear down the stale session and open a fresh one without replacing the tool instance:
+If the remote server drops the connection or rotates a token, call `connect(reset=True)` to tear down the stale session and open a fresh one without replacing the tool instance. Inside an agent run, a failing MCP call does not raise out of `agent.run()`; like any tool failure it becomes an error result for the model. Check the connection between runs instead:
 
 ```python
-try:
-    response = await agent.run("Query the MCP server")
-except ConnectionError:
+if not mcp.is_connected:
     await mcp.connect(reset=True)                           # reset + reconnect in one call
-    response = await agent.run("Query the MCP server")
+response = await agent.run("Query the MCP server")
 ```
 
-Pair `reset=True` with your own backoff logic when you want a long-lived MCP tool that self-heals across transient failures — the default `async with` scope can't cover that because it wants a clean open/close.
+When you call the server directly with `call_tool()`, transport failures raise `ToolException`; catch that, reconnect with backoff and retry.
 
 ### Lifetime and transport-level termination
 
@@ -634,18 +643,18 @@ async with MCPStdioTool(
 
 The two processes talk over MCP — kill or restart the child without touching the supervisor.
 
-### Deployed MCP servers
+### Serving over HTTP
 
-For HTTP/SSE deployments, the `agent_framework.devui` and `agent_framework_chatkit` hosting packages turn `as_mcp_server()` output into a streamable-HTTP endpoint with auth, multi-session routing, and OpenTelemetry tracing — see those sub-packages for production recipes.
+`as_mcp_server()` returns a low-level MCP `Server`; to serve it over streamable HTTP, mount it with the MCP SDK's `StreamableHTTPSessionManager` in an ASGI app, as [recipe 16](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/#recipe-16--expose-an-agent-over-mcp) shows, and put your own authentication in front of it. `agent-framework` %%version=agent-framework%% has no first-party HTTP host for it (DevUI and ChatKit do not serve MCP); an alpha `agent-framework-hosting-mcp` package appeared alongside 1.23.
 
 ## Common patterns
 
-**Multi-MCP agent.** Pass a list — every MCP tool's public functions are aggregated under its own prefix:
+**Multi-MCP agent.** Pass a list. Give each server a `tool_name_prefix` when their tool names could collide:
 
 ```python
 async with (
-    MCPStdioTool(name="fs", command="npx", args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"]) as fs,
-    MCPStreamableHTTPTool(name="learn", url="https://learn.microsoft.com/api/mcp") as learn,
+    MCPStdioTool(name="fs", command="npx", args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"], tool_name_prefix="fs") as fs,
+    MCPStreamableHTTPTool(name="learn", url="https://learn.microsoft.com/api/mcp", tool_name_prefix="learn") as learn,
 ):
     agent = Agent(client=OpenAIChatClient(), tools=[fs, learn])
 ```
@@ -664,3 +673,9 @@ async with MCPStdioTool(name="fs", command="...") as fs:
 ```
 
 **Quarantine risky servers.** Combine `approval_mode="always_require"` with function middleware that logs every invocation before approval.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected tool naming (`name` is not a prefix; use `tool_name_prefix`), the default approval (`None` means no approval; unlisted tools in an `MCPSpecificApproval` dict run unapproved), sampling (denied unless `sampling_approval_callback` approves; deprecated in MCP), WebSocket auth (no header support), hosted-MCP trade-offs and the reconnect example; removed an invented DevUI/ChatKit MCP hosting claim. Added `static_headers`, progressive disclosure, `tool_result_content` and MCP tasks. |

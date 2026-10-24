@@ -149,7 +149,28 @@ gcloud run deploy agent-service \
 
 - `--no-allow-unauthenticated` puts IAM in front of the service; callers need `roles/run.invoker`.
 - The service account needs `roles/aiplatform.user` (Gemini on Vertex AI), `roles/cloudsql.client`, `roles/secretmanager.secretAccessor` for the mounted secrets, and `roles/cloudtrace.agent` plus `roles/logging.logWriter` for telemetry.
-- Concurrency is mostly waiting on the model, so a single vCPU handles tens of concurrent requests; tune with load tests.
+- An agent request spends most of its time waiting on the model, so one instance can usually take many concurrent requests; set `--concurrency` from a load test rather than from a rule of thumb.
+
+### Deploying with adkgo
+
+The module includes a small deployment CLI, `adkgo`, for getting a launcher-based agent onto Cloud Run without writing a Dockerfile:
+
+```bash
+go install google.golang.org/adk/cmd/adkgo@v%%version=google.golang.org/adk%%
+
+adkgo deploy cloudrun \
+  --project_name my-gcp-project \
+  --region europe-west2 \
+  --service_name agent-service \
+  --entry_point_path ./cmd/agent
+```
+
+What it does, in order: builds the entry point with `CGO_ENABLED=0 GOOS=linux GOARCH=amd64`, writes a Dockerfile on `gcr.io/distroless/static-debian11` that runs `web -host 0.0.0.0 -port 8080` with the `api`, `a2a` and `webui` sub-launchers (switch each off with `--api=false`, `--a2a=false`, `--webui=false`), runs `gcloud run deploy --source` with `--no-allow-unauthenticated` and `--set-secrets=GOOGLE_API_KEY=GOOGLE_API_KEY:latest`, and finally starts `gcloud run services proxy` on `http://127.0.0.1:8081` so you can open the dev UI through your own credentials.
+
+- The entry point must use a launcher that understands those sub-commands, such as `full.NewLauncher()` or `prod.NewLauncher()` plus the web UI.
+- The secret mapping means the project needs a Secret Manager secret called `GOOGLE_API_KEY`, and the service uses the Gemini API key rather than Vertex AI unless your code configures otherwise. For Vertex AI with the service's identity, build the image yourself as shown above.
+- `--pubsub` and `--eventarc` add the trigger sub-launchers, with `--pubsub_max_retries`, `--pubsub_max_concurrent_runs` and their Eventarc equivalents.
+- `adkgo deploy agentengine` deploys to Vertex AI Agent Engine instead (`--name`, `--source_dir`, `--agent_engine_id` to update an existing instance, `--mem_deploy` to provision Memory Bank).
 
 ### Cloud Run Service YAML
 
@@ -727,5 +748,6 @@ Tests that use a fake `model.LLM` (see [Testing](/google-adk-guide/go/google_adk
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-24 | current | Added the `adkgo deploy` CLI (what it builds and deploys, and its secret and authentication defaults). Replaced an unsupported per-vCPU concurrency figure with advice to load-test. |
 | 2026-10-21 | current | Rewritten against the current release. Go code now uses the real serving packages (`server/adkrest`, `cmd/launcher/prod`, `telemetry`, `plugin`) instead of the non-existent `server/restapi` and `agent.Run(ctx, input)`; Go 1.25 build image; Artifact Registry instead of Container Registry; Workload Identity Federation in CI. |
 | April 2026 | 0.1.0 | Initial production guide. |

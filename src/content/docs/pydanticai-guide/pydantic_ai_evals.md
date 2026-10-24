@@ -32,7 +32,7 @@ Evaluation lives in the **`pydantic_evals`** package, installed with `pydantic-a
 - `Dataset(name=...)` is **required**.
 - `evaluate()` / `evaluate_sync()` options (`name`, `max_concurrency`, `progress`, `retry_task`, `retry_evaluators`, …) are **keyword-only**, as is constructing `EvaluationResult` / `EvaluatorFailure`.
 - An evaluator's name comes from `Evaluator.get_serialization_name()` (was the `name` classmethod); the `evaluation_name` / `evaluator_version` class attributes became `get_default_evaluation_name()` / `get_evaluator_version()`.
-- The `Python` evaluator was removed back in 1.0.1 for security reasons.
+- The `Python` evaluator (which evaluated a Python expression from the dataset file) was removed back in 1.0.1.
 
 ---
 
@@ -214,7 +214,58 @@ evaluators:
 
 Custom evaluators must be passed in `custom_evaluator_types=` when loading. `pydantic_evals.generation.generate_dataset(dataset_type=..., n_examples=...)` can draft cases with an LLM for you to review.
 
-## 5. Reports, regressions and CI
+## 5. Classification tasks: per-case checks, report evaluators and metrics
+
+Three more pieces are useful once a dataset grows:
+
+- **Per-case evaluators** — `Case(evaluators=[...])` adds checks that only make sense for one case, on top of the dataset-wide ones.
+- **Report evaluators** — `Dataset(report_evaluators=[...])` run once over the whole report rather than per case. `ConfusionMatrixEvaluator` tabulates predicted against expected labels; `PrecisionRecallEvaluator`, `ROCAUCEvaluator` and `KolmogorovSmirnovEvaluator` analyse a numeric score against a positive label.
+- **Attributes and metrics from inside the task** — `set_eval_attribute(name, value)` and `increment_eval_metric(name, amount)` record data on the current case (they do nothing outside an evaluation), so the task can report what it did without changing its return value.
+
+```python
+from typing import Literal
+
+from pydantic_ai import Agent
+from pydantic_evals import Case, Dataset, increment_eval_metric, set_eval_attribute
+from pydantic_evals.evaluators import ConfusionMatrixEvaluator, Contains, EqualsExpected
+
+Intent = Literal['refund', 'replace', 'escalate']
+
+agent = Agent('openai:%%model=openai-small%%', output_type=Intent, instructions='Classify the support message.')
+
+
+async def classify(message: str) -> Intent:
+    result = await agent.run(message)
+    set_eval_attribute('model', 'openai-small')                  # stored on the case
+    increment_eval_metric('requests', result.usage.requests)     # a numeric metric per case
+    return result.output
+
+
+dataset = Dataset(
+    name='intent-classifier',
+    cases=[
+        Case(name='broken', inputs='It arrived smashed, send another.', expected_output='replace'),
+        Case(name='money', inputs='I want my money back.', expected_output='refund'),
+        Case(
+            name='angry',
+            inputs='Third time asking. Get me a manager.',
+            expected_output='escalate',
+            evaluators=[Contains('escalate')],   # an extra check for this case only
+        ),
+    ],
+    evaluators=[EqualsExpected()],
+    report_evaluators=[ConfusionMatrixEvaluator()],   # runs once over all cases
+)
+
+report = dataset.evaluate_sync(classify)
+report.print(include_output=True, include_expected_output=True)
+print(report.cases[0].attributes, report.cases[0].metrics)
+#> {'model': 'openai-small'} {'requests': 1}
+```
+
+The printed report gets a "Metrics" column for the per-case metrics and, after the case table, the confusion matrix (rows are the expected labels, columns the predicted ones). A row with numbers off the diagonal shows which intents the model confuses.
+
+## 6. Reports, regressions and CI
 
 - `report.print(include_input=True, include_output=True)` renders the table; `report.render()` returns it as a string.
 - `report.averages()` gives aggregate scores, assertion pass rate and durations — assert on these in CI to catch regressions (e.g. fail the build if the pass rate drops below an agreed threshold).
@@ -222,11 +273,11 @@ Custom evaluators must be passed in `custom_evaluator_types=` when loading. `pyd
 - `repeat=N` on `evaluate()` runs every case N times to expose flaky behaviour; `retry_task=` / `retry_evaluators=` retry transient failures.
 - `max_concurrency=` bounds parallel cases — useful against provider rate limits.
 
-## 6. Logfire
+## 7. Logfire
 
 With Logfire configured, each `evaluate()` call becomes a trace: one span per case with inputs, output, scores and the agent's own spans underneath. The Logfire UI then lets you compare experiments over time. Nothing in the evaluation code changes — configuring Logfire is enough.
 
-## 7. Online evaluation — sampling production traffic
+## 8. Online evaluation — sampling production traffic
 
 `OnlineEvaluation` is a capability that runs evaluators in the background after each real agent run, without delaying the response:
 
@@ -251,7 +302,70 @@ agent = Agent(
 )
 ```
 
-Results are emitted as OpenTelemetry events attached to the run's span, so they land next to the trace in Logfire. Sampling rates and other settings come from `OnlineEvalConfig` (pass `config=`), and evaluation is skipped automatically inside `Dataset.evaluate()`.
+Results are emitted as OpenTelemetry `gen_ai.evaluation.result` events attached to the run's span, so they land next to the trace in Logfire. Evaluation is skipped automatically inside `Dataset.evaluate()`, so an agent with `OnlineEvaluation` can also be the task of an offline eval.
+
+To sample, wrap an evaluator in `OnlineEvaluator(evaluator=..., sample_rate=0.1)` (a float, or a function of a `SamplingContext` for per-request decisions). To send results somewhere other than OpenTelemetry — a database, a metrics counter — give a sink: per evaluator (`sink=`), per capability (`config=OnlineEvalConfig(...)`), or globally with `configure(...)`. The same machinery works on any function through the `@evaluate(...)` decorator:
+
+```python
+import asyncio
+from dataclasses import dataclass
+
+from pydantic_ai import Agent
+from pydantic_evals.evaluators import Evaluator, EvaluatorContext
+from pydantic_evals.online import CallbackSink, OnlineEvaluator, configure, evaluate, wait_for_evaluations
+from pydantic_evals.online_capability import OnlineEvaluation
+
+
+@dataclass
+class OutputNotEmpty(Evaluator):
+    def evaluate(self, ctx: EvaluatorContext) -> bool:
+        return bool(ctx.output)
+
+
+@dataclass
+class ShortEnough(Evaluator):
+    max_chars: int = 500
+
+    def evaluate(self, ctx: EvaluatorContext) -> bool:
+        return len(str(ctx.output)) <= self.max_chars
+
+
+received = []
+
+
+def record(results, failures, context):   # (EvaluationResults, EvaluatorFailures, EvaluatorContext)
+    received.extend((r.name, r.value) for r in results)
+
+
+configure(default_sink=CallbackSink(record))   # global defaults for every online evaluator
+
+agent = Agent(
+    'openai:%%model=openai%%',
+    name='assistant',
+    capabilities=[
+        OnlineEvaluation(
+            evaluators=[OutputNotEmpty(), OnlineEvaluator(evaluator=ShortEnough(), sample_rate=0.1)],
+        )
+    ],
+)
+
+
+@evaluate(OutputNotEmpty())          # online evaluation for a plain function
+async def summarise(text: str) -> str:
+    return text[:50]
+
+
+async def main():
+    await agent.run('Hello')
+    await summarise('Some long text')
+    await wait_for_evaluations()      # evaluations run in the background; wait before exiting
+    print(received)                   # ShortEnough appears in roughly one run in ten
+
+
+asyncio.run(main())
+```
+
+`disable_evaluation()` is a context manager that switches online evaluation off for a block (in tests, for example).
 
 ---
 
@@ -264,8 +378,9 @@ Results are emitted as OpenTelemetry events attached to the run's span, so they 
 
 ## Reference
 
-- `Dataset`, `Case` — `pydantic_evals` (`dataset.py`)
+- `Dataset`, `Case`, `set_eval_attribute`, `increment_eval_metric`, `CaseLifecycle` — `pydantic_evals`
+- `ConfusionMatrixEvaluator`, `PrecisionRecallEvaluator`, `ROCAUCEvaluator`, `KolmogorovSmirnovEvaluator`, `ReportEvaluator` — `pydantic_evals.evaluators`
 - `Evaluator`, `EvaluatorContext`, `EvaluationReason` and the built-ins — `pydantic_evals.evaluators`
 - `EvaluationReport` — `pydantic_evals.reporting`
-- `OnlineEvaluation` — `pydantic_evals.online_capability`; `OnlineEvalConfig` — `pydantic_evals.online`
+- `OnlineEvaluation` — `pydantic_evals.online_capability`; `OnlineEvalConfig`, `OnlineEvaluator`, `CallbackSink`, `configure`, `evaluate`, `wait_for_evaluations`, `disable_evaluation` — `pydantic_evals.online`
 - `generate_dataset` — `pydantic_evals.generation`

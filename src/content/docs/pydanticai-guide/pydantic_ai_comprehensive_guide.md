@@ -1064,7 +1064,7 @@ Capabilities bundle behaviour (hooks, instructions, tools, settings) and attach 
 | `SelectModel`, `ResolveModelId` | `pydantic_ai.capabilities` | [Choosing the model per step](#choosing-the-model-per-step) |
 | `RaiseContentFilterError`, `UseThreadExecutor`, `Caching`, `LocalWorkspace` | `pydantic_ai.capabilities` | [upstream capabilities docs](https://pydantic.dev/docs/ai/capabilities/overview/) |
 | `TemporalDurability`, `DBOSDurability`, `PrefectDurability` | `pydantic_ai.durable_exec.<engine>` | [Durable execution](/pydanticai-guide/pydantic_ai_durable_execution/) |
-| `OnlineEvaluation` | `pydantic_evals.online_capability` | [Evals](/pydanticai-guide/pydantic_ai_evals/#7-online-evaluation--sampling-production-traffic) |
+| `OnlineEvaluation` | `pydantic_evals.online_capability` | [Evals](/pydanticai-guide/pydantic_ai_evals/#8-online-evaluation--sampling-production-traffic) |
 
 ### Output, messages and streaming
 

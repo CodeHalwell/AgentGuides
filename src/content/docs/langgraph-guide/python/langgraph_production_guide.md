@@ -7,7 +7,7 @@ sidebar:
   label: "Production deployment"
 ---
 
-Checked against `langgraph` %%version=langgraph%%, `langgraph-sdk` %%version=langgraph-sdk%%, `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%% and `langgraph-cli` 0.4.37 (%%versions-checked%%). [Chapter 10](/langgraph-guide/python/chapter-10-production/) is the tutorial introduction to this page: checkpointer choice, durability, loop limits and testing are covered there.
+Checked against `langgraph` %%version=langgraph%%, `langgraph-sdk` %%version=langgraph-sdk%%, `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%% and `langgraph-cli` 0.4.38 (%%versions-checked%%). The SDK and `RemoteGraph` examples were run against a local `langgraph dev` server. [Chapter 10](/langgraph-guide/python/chapter-10-production/) is the tutorial introduction to this page: checkpointer choice, durability, loop limits and testing are covered there.
 
 ## Deployment options
 
@@ -61,13 +61,14 @@ my-app/
 | `graphs` | Graph ID → `path:variable`. The variable is a compiled graph, or a function that returns one (it can take a `RunnableConfig` to build the graph per run). |
 | `env` | A `.env` path or a mapping of environment variables |
 | `python_version` | `3.11`, `3.12` or `3.13` (default `3.11`) |
-| `image_distro` | Base image distribution: `debian` (default), `wolfi`, `bookworm`, `bullseye` |
+| `image_distro` | Base image distribution: `debian` (default), `wolfi` or `bookworm`. `bullseye` was removed in CLI 0.4.13 and is now rejected. |
 | `store.index` | Semantic search over the store (embedding model, dimensions, fields to embed) |
 | `store.ttl`, `checkpointer.ttl` | Expiry for store items and checkpoints. `default_ttl` is in **minutes**. |
-| `checkpointer.backend` | `"default"` (Postgres), `"mongo"` or `"custom"` |
+| `checkpointer.path` | Import path to an `@asynccontextmanager` function that yields your own `BaseCheckpointSaver`, replacing the server's Postgres checkpointer. `checkpointer.ttl.strategy` is `"delete"` or `"keep_latest"`. |
 | `auth.path` | A `langgraph_sdk.Auth` instance for custom authentication |
 | `http` | CORS, a custom Starlette/FastAPI `app` mounted next to the server's routes, and flags to disable route groups |
 | `dockerfile_lines`, `pip_config_file` | Extra Dockerfile lines; a pip config for private indexes |
+| `ui`, `webhooks`, `encryption` | Generative UI: a name → JS/TS file mapping for the components that `push_ui_message` refers to ([Chapter 6](/langgraph-guide/python/chapter-06-streaming-and-debugging/#connecting-to-a-react-front-end)); webhook settings; custom encryption for stored data |
 
 The full list is in the [CLI configuration reference](https://docs.langchain.com/langsmith/cli). Check the file with `langgraph validate`.
 
@@ -127,7 +128,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`client.runs.wait(...)` returns the final state instead; `client.runs.create(...)` starts a background run; `client.threads.get_state(thread_id)` reads state; `client.runs.stream(..., command={"resume": ...})` resumes an interrupt.
+Each `part` has `.event` (`"metadata"` first, then the stream mode) and `.data`, which is plain JSON: messages are dicts. `client.runs.wait(...)` returns the final state instead; `client.runs.create(...)` starts a background run; `client.threads.get_state(thread_id)` reads state; `client.runs.stream(..., command={"resume": ...})` resumes an interrupt.
 
 To use a deployed graph like a local one (including as a node in another graph), use [`RemoteGraph`](/langgraph-guide/python/reference-remote-graph/).
 

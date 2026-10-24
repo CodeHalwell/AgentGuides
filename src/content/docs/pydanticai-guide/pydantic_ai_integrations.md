@@ -30,15 +30,22 @@ Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-che
 
 ```python
 import asyncio
+import os
 from pathlib import Path
 
+from fastmcp.client.transports import PythonStdioTransport
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
-# The server script below is launched as a subprocess over stdio.
+# The server script below is launched as a subprocess over stdio. Stdio servers start with a
+# sanitised environment (PATH, HOME and a few others), so pass on what the server needs.
+transport = PythonStdioTransport(
+    Path('mcp_server.py'),
+    env={'ANTHROPIC_API_KEY': os.environ['ANTHROPIC_API_KEY']},
+)
 # init_timeout covers start-up plus the initialize handshake (default 5 s); a server that
 # imports pydantic_ai itself needs longer on a cold start.
-toolset = MCPToolset(Path('mcp_server.py'), init_timeout=30)
+toolset = MCPToolset(transport, init_timeout=30)
 agent = Agent('anthropic:%%model=anthropic%%', toolsets=[toolset])
 
 
@@ -52,6 +59,7 @@ asyncio.run(main())
 ```
 
 - `async with agent:` keeps the MCP sessions open across several runs; without it each run connects and disconnects.
+- **Environment variables do not reach stdio servers by default.** The MCP SDK passes only a short allow-list (`PATH`, `HOME`, `USER`, `SHELL`, `TERM` and their Windows equivalents). API keys and other settings must be given explicitly with `env=` on the transport, or with an `"env"` entry in an `mcpServers` config file.
 - Useful options: `tool_error_behavior=` (`'retry'`, `'error'`, `'failed'`), `process_tool_call=` (inject deps or headers per call), `sampling_model=` (let the server call back into an LLM), `elicitation_handler=`, `cache_tools=`, `include_instructions=` (forward the server's instructions to the model), `headers=` / `auth=` for HTTP servers.
 - Wrap in `PrefixedToolset` (`toolset.prefixed('docs')`) when two servers expose tools with the same name.
 - `agent.set_mcp_sampling_model(model)` sets the sampling model on every `MCPToolset` the agent has. Sampling and elicitation need a session the server can call back over; with a FastMCP 4 server that negotiates the newer stateless session, PydanticAI warns that `sampling_model` will never be called.
@@ -62,12 +70,15 @@ Tools are only one of the three things an MCP server offers. `MCPToolset` also r
 
 ```python
 import asyncio
+import os
 from pathlib import Path
 
+from fastmcp.client.transports import PythonStdioTransport
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPToolset
 
-toolset = MCPToolset(Path('mcp_server.py'), init_timeout=30)
+transport = PythonStdioTransport(Path('mcp_server.py'), env={'ANTHROPIC_API_KEY': os.environ['ANTHROPIC_API_KEY']})
+toolset = MCPToolset(transport, init_timeout=30)
 agent = Agent('anthropic:%%model=anthropic%%', toolsets=[toolset])
 
 

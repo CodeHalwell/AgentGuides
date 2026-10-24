@@ -368,7 +368,7 @@ If you genuinely need a readiness probe that proves the model deployment is reac
 
 ### Checkpoint hygiene
 
-`FileCheckpointStorage` and Cosmos / Redis backends accumulate over time. Add a scheduled task that prunes old checkpoints per workflow (`list_checkpoint_ids(workflow_name=...)` and `delete(checkpoint_id)` are part of the `CheckpointStorage` protocol):
+`FileCheckpointStorage` and the Cosmos DB backend accumulate checkpoints over time. Add a scheduled task that prunes old checkpoints per workflow (`list_checkpoint_ids(workflow_name=...)` and `delete(checkpoint_id)` are part of the `CheckpointStorage` protocol):
 
 ```python
 async def prune_checkpoints(storage, *, workflow_name: str, keep: int = 50) -> int:

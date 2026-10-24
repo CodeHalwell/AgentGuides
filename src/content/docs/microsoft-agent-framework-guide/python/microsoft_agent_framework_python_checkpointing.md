@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Checkpointing"
 description: "Persist workflow state with FileCheckpointStorage, InMemoryCheckpointStorage, or a custom CheckpointStorage backend. Resume long-running agents across process restarts."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Checkpointing"
+  order: 23
 ---
 
 Checkpointing captures the full execution state of a workflow at every superstep so you can pause, crash, redeploy, or hand off to a different process and pick up exactly where you left off. It's the backbone for long-running agent workflows, human-in-the-loop pauses that last days, and durable multi-agent orchestrations.
@@ -75,7 +78,7 @@ mem = InMemoryCheckpointStorage()
 disk = FileCheckpointStorage("/var/lib/agent-framework/checkpoints")
 ```
 
-For Azure Cosmos DB, install `agent-framework-azure-cosmos` and use `agent_framework_azure_cosmos.CosmosCheckpointStorage`. For Redis, install `agent-framework-redis` and pick the Redis-backed storage class.
+For Azure Cosmos DB, install `agent-framework-azure-cosmos` and use `agent_framework_azure_cosmos.CosmosCheckpointStorage`. Foundry hosted agents get `FoundryCheckpointStore` from `agent-framework-foundry-hosting`. There is **no** Redis checkpoint storage in `agent-framework-redis` (it provides history, context and vector-store classes only); write a custom backend, as below, for Redis, S3 or a SQL database.
 
 ### Hands-on: `InMemoryCheckpointStorage` round-trip
 
@@ -128,7 +131,7 @@ Three things to remember about the in-memory backend:
 
 ### Allow-listing app-specific types
 
-`FileCheckpointStorage` deserializes pickled state behind a strict allow-list. Out of the box it accepts Python primitives, `datetime` / `uuid`, every `agent_framework` type, and `openai.types`. **Anything else raises `WorkflowCheckpointException` on load.** This is deliberate — pickle lets attackers run arbitrary code if a malicious checkpoint sneaks into the storage path.
+`FileCheckpointStorage` deserializes pickled state behind a strict allow-list. Out of the box it accepts Python primitives, `datetime` / `uuid`, every `agent_framework` and `agent_framework_orchestrations` type, and `openai.types`. **Anything else raises `WorkflowCheckpointException`**, and since 1.22 the storage also checks this when it *saves*, so an unlisted type fails at the first checkpoint instead of at resume. This is deliberate — pickle lets attackers run arbitrary code if a malicious checkpoint sneaks into the storage path.
 
 When your workflow stores domain objects (Pydantic models, dataclasses, enums), declare them via `allowed_checkpoint_types`:
 
@@ -168,7 +171,7 @@ workflow = (
 
 Two operational notes:
 
-- The list is **frozen at construction time** — passing it later won't take effect. Build storage once at startup with the full app type set.
+- The `allowed_checkpoint_types` list is read at construction time. To allow a type process-wide instead (for every storage backend, including instances already created), call `register_checkpoint_type(ResearchState)` at import time.
 - The error message names the class that failed the allow-list, so missing entries are easy to fix during a staging run before production.
 
 For multi-tenant deployments where each tenant has its own type universe, build a tenant-keyed dict of storages instead of granting one global allow-list everything.
@@ -187,23 +190,25 @@ class CheckpointStorage(Protocol):
     async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]: ...
 ```
 
-A complete S3-backed implementation. Two design choices that keep the hot path cheap as the bucket grows:
+A complete S3-backed implementation. Checkpoint state contains framework objects (messages, agent responses), so it is not plain JSON: encode it the way the built-in backends do, with `encode_checkpoint_value` / `decode_checkpoint_value`. (They live in the private module `agent_framework._workflows._checkpoint_encoding`; the first-party Cosmos DB backend imports them from there too, so pin your framework version.) Decoding with an `allowed_types` set keeps the pickle allow-list in force. Two design choices keep the hot path cheap as the bucket grows:
 
 - **Flat object layout** (`{prefix}{checkpoint_id}.json`) so `load` and `delete` are single O(1) `get_object` / `delete_object` calls.
 - **Workflow-name routing via S3 user metadata** (`x-amz-meta-workflow-name`) plus a `{prefix}_index/{workflow_name}/{checkpoint_id}` zero-byte index marker. `list_*` and `get_latest` hit only the index, never the full bodies.
 
 ```python
 import json
-from dataclasses import asdict
+
 import aioboto3
 from agent_framework import WorkflowCheckpoint, WorkflowCheckpointException
+from agent_framework._workflows._checkpoint_encoding import decode_checkpoint_value, encode_checkpoint_value
 
 
 class S3CheckpointStorage:
-    def __init__(self, bucket: str, prefix: str = "checkpoints/") -> None:
+    def __init__(self, bucket: str, prefix: str = "checkpoints/", *, allowed_types: set[str] | None = None) -> None:
         self._bucket = bucket
         self._prefix = prefix.rstrip("/") + "/"
         self._session = aioboto3.Session()
+        self._allowed_types = frozenset(allowed_types or ())   # "module:qualname" entries
 
     # Flat keys keep load/delete O(1); the index handles workflow_name filtering.
     def _data_key(self, checkpoint_id: str) -> str:
@@ -213,7 +218,7 @@ class S3CheckpointStorage:
         return f"{self._prefix}_index/{workflow_name}/{checkpoint_id}"
 
     async def save(self, checkpoint: WorkflowCheckpoint) -> str:
-        body = json.dumps(asdict(checkpoint)).encode()
+        body = json.dumps(encode_checkpoint_value(checkpoint.to_dict())).encode()
         async with self._session.client("s3") as s3:
             await s3.put_object(
                 Bucket=self._bucket,
@@ -240,7 +245,7 @@ class S3CheckpointStorage:
             except s3.exceptions.NoSuchKey:
                 raise WorkflowCheckpointException(f"No checkpoint found with ID {checkpoint_id}")
             data = json.loads(await obj["Body"].read())
-        return WorkflowCheckpoint.from_dict(data)
+        return WorkflowCheckpoint.from_dict(decode_checkpoint_value(data, allowed_types=self._allowed_types))
 
     async def list_checkpoint_ids(self, *, workflow_name: str) -> list[str]:
         prefix = f"{self._prefix}_index/{workflow_name}/"
@@ -327,12 +332,13 @@ ConcurrentBuilder(participants=[...], checkpoint_storage=storage).build()
 MagenticBuilder(participants=[...], manager_agent=..., checkpoint_storage=storage).build()
 ```
 
-`HandoffBuilder` uses `.with_checkpointing(storage)` instead:
+`HandoffBuilder` and `GroupChatBuilder` take `checkpoint_storage=` too, and also have a `.with_checkpointing(storage)` method; `MagenticBuilder` has the same method:
 
 ```python
 from agent_framework_orchestrations import HandoffBuilder
 
-HandoffBuilder(participants=[...]).with_checkpointing(storage).build()
+HandoffBuilder(participants=[triage, billing], checkpoint_storage=storage).with_start_agent(triage).build()
+# equivalent: HandoffBuilder(participants=[triage, billing]).with_checkpointing(storage).with_start_agent(triage).build()
 ```
 
 ### Run-time (no storage at build time)
@@ -386,7 +392,7 @@ if latest and latest.pending_request_info_events:
     # Auto-approve everything the user has already signed off on in an upstream system.
     responses = {
         event.request_id: approval_store.lookup_decision(event.request_id)
-        for event in latest.pending_request_info_events
+        for event in latest.pending_request_info_events.values()   # dict: request_id -> WorkflowEvent
     }
 
     result = await workflow.run(
@@ -407,7 +413,7 @@ from agent_framework import CheckpointStorage
 
 
 async def delete_run(storage: CheckpointStorage, tip_checkpoint_id: str) -> int:
-    """Works with any CheckpointStorage backend — File, InMemory, Redis, Cosmos."""
+    """Works with any CheckpointStorage backend — file, in-memory, Cosmos DB or your own."""
     count = 0
     cursor = await storage.load(tip_checkpoint_id)
     while True:
@@ -457,7 +463,7 @@ class CounterExecutor(Executor):
 
 ### Persisting a dataclass
 
-Dataclasses work cleanly because the built-in encoder picks up anything pickle-safe — register the type in `allowed_checkpoint_types` and it round-trips:
+Return plain JSON-compatible data from `on_checkpoint_save` and rebuild the object in `on_checkpoint_restore`; then no allow-list entry is needed at all. (If you returned the dataclass itself, it would be pickled and would have to be listed in `allowed_checkpoint_types` or registered with `register_checkpoint_type`.)
 
 ```python
 from dataclasses import dataclass, field, asdict
@@ -495,10 +501,7 @@ class OrderCollector(Executor):
         )
 
 
-storage = FileCheckpointStorage(
-    "/var/lib/agent-framework/checkpoints",
-    allowed_checkpoint_types=["__main__:OrderState"],
-)
+storage = FileCheckpointStorage("/var/lib/agent-framework/checkpoints")   # only plain data is saved
 ```
 
 ### What `AgentExecutor` saves — `AgentExecutorCheckpointState`
@@ -602,13 +605,13 @@ Only accept types you fully control. Treat the checkpoint directory as a trusted
 
 `FileCheckpointStorage` writes `checkpoint_id.json.tmp` then renames atomically, so a crash mid-write never leaves partial state on disk. `InMemoryCheckpointStorage` deep-copies on save and is safe inside a single process but not across processes.
 
-For multi-process workflows (e.g. Azure Functions scaled out) use Cosmos or Redis storage — `FileCheckpointStorage` is not designed for concurrent writers from different machines.
+For multi-process workflows (e.g. Azure Functions scaled out) use Cosmos DB or a custom shared backend — `FileCheckpointStorage` is not designed for concurrent writers from different machines.
 
 ## Patterns
 
 **Long-running Magentic research.** Build with `MagenticBuilder(..., checkpoint_storage=storage, enable_plan_review=True)`. The plan-review HITL event is persisted; the user can come back hours later and approve, and the workflow resumes in a different pod.
 
-**Crash-recovery for tool-heavy agents.** Every tool loop iteration is a superstep. If the pod dies mid-tool-call, start a new pod, call `storage.get_latest(workflow_name=...)`, pass the ID to `workflow.run(...)` — the tool call re-issues, no duplicate billing of previous tools.
+**Crash recovery.** Checkpoints are taken between supersteps, so after a crash `storage.get_latest(workflow_name=...)` plus `workflow.run(checkpoint_id=...)` re-runs only the superstep that was in flight. An agent node's whole tool loop runs inside one superstep, so its tool calls from that step run again: make tools idempotent, or split long tool-driven work into several executors.
 
 **Handoff with audit trail.** `previous_checkpoint_id` chains checkpoints. Walk the chain to reconstruct the full decision history for compliance.
 
@@ -616,4 +619,10 @@ For multi-process workflows (e.g. Azure Functions scaled out) use Cosmos or Redi
 
 ## Observability
 
-Each checkpoint save/load emits structured logs on `agent_framework._workflows._checkpoint`. When OpenTelemetry is on (see [Observability](./microsoft_agent_framework_python_observability/)), checkpoint operations appear as events inside the `workflow.run` span with `workflow.id` and `workflow.name` attributes.
+Checkpoint saves, loads and deletes are logged (mostly at `DEBUG`) on the `agent_framework` logger. There is no dedicated checkpoint span; with OpenTelemetry on (see [Observability](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/)), the surrounding workflow run and superstep spans show where a resumed run picked up.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Removed the non-existent Redis checkpoint storage; fixed the S3 example, which JSON-encoded raw checkpoint state (it now uses the framework's checkpoint encoding and allow-list); corrected the handoff/group-chat checkpoint options, the crash-recovery claim (a tool loop is one superstep, so its calls re-run), the dataclass example and the telemetry note; added `register_checkpoint_type` and save-time type validation. |
