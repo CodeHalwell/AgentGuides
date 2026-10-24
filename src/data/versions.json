@@ -153,6 +153,16 @@
       "version": "0.12.1",
       "guide": "llamaindex-guide"
     },
+    "llama-index-workflows": {
+      "registry": "pypi",
+      "version": "2.26.1",
+      "guide": "llamaindex-guide"
+    },
+    "@llamaindex/workflow-core": {
+      "registry": "npm",
+      "version": "1.3.4",
+      "guide": "llamaindex-guide"
+    },
     "haystack-ai": {
       "registry": "pypi",
       "version": "3.4.1",
@@ -162,6 +172,11 @@
       "registry": "pypi",
       "version": "1.26.0",
       "guide": "smolagents-guide"
+    },
+    "agno": {
+      "registry": "pypi",
+      "version": "3.1.10",
+      "guide": "agno-guide"
     },
     "semantic-kernel": {
       "registry": "pypi",
@@ -206,12 +221,17 @@
     "strands-agents": {
       "registry": "pypi",
       "version": "1.62.0",
-      "guide": "amazon-bedrock-agents-guide"
+      "guide": "strands-agents-guide"
     },
     "@strands-agents/sdk": {
       "registry": "npm",
-      "version": "1.21.0",
-      "guide": "amazon-bedrock-agents-guide"
+      "version": "1.22.0",
+      "guide": "strands-agents-guide"
+    },
+    "strands-agents-tools": {
+      "registry": "pypi",
+      "version": "0.8.10",
+      "guide": "strands-agents-guide"
     },
     "bedrock-agentcore-ts": {
       "registry": "npm",
