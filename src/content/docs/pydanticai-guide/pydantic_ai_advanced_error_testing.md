@@ -541,7 +541,8 @@ agent = Agent('openai:%%model=openai%%', output_type=Strict, retries=1)
 def test_messages_on_failure():
     with capture_run_messages() as messages:
         with pytest.raises(UnexpectedModelBehavior):
-            with agent.override(model=TestModel(custom_output_text='not json')):
+            # output-tool arguments that fail validation (the required field is missing)
+            with agent.override(model=TestModel(custom_output_args={'wrong_field': 'x'})):
                 agent.run_sync('go')
 
     # Messages contain the full conversation up to the point of failure

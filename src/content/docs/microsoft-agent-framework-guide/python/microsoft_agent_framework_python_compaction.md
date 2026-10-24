@@ -495,6 +495,8 @@ Use `TokenBudgetComposedStrategy` instead when you want summarisation in the pip
 
 Two places: on the **agent or client** (`compaction_strategy=`, applied to every model call, including each call inside a tool loop) or in the **session pipeline** (`CompactionProvider`, applied to the history loaded for a run and, optionally, to the stored history afterwards). The provider is the usual choice for conversations; the agent-level strategy is a safety net for long tool loops within one run.
 
+Compaction can only shrink history the framework holds. `OpenAIChatClient` (Responses API) and `FoundryChatClient` store the conversation on the service by default and continue it with a response or conversation id, and the service's copy is outside compaction's reach. With those clients, set `default_options={"store": False}` on the agent when you rely on a local history provider and compaction; otherwise the service keeps (and is sent) its own full copy as well.
+
 ### Per-session via `CompactionProvider`
 
 ```python
@@ -1246,7 +1248,7 @@ asyncio.run(main())
 
 ## `CompactionProvider` — plug compaction into the session pipeline
 
-For most use-cases, pass a `compaction_strategy=` directly to `Agent`. Use `CompactionProvider` when you need **two separate compaction passes**:
+`Agent(compaction_strategy=...)` compacts every model call; `CompactionProvider` works on the session's history and offers **two separate passes**:
 
 - `before_strategy`: compact the messages already loaded into context (from the history provider) **before** they reach the model.
 - `after_strategy`: compact the messages stored by the history provider **after** the model replies (so the next turn starts leaner).
@@ -1316,3 +1318,9 @@ CompactionProvider(
 | `history_source_id` | `"in_memory"` | Must match the `source_id` of the history provider you're pairing with |
 
 > **Tip:** `CompactionProvider` requires a history provider to be registered in `context_providers` before it. The framework's default `InMemoryHistoryProvider` uses `source_id="in_memory"` — so the default `history_source_id` value works out of the box for most setups.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected the grouping model (a user message and its reply are separate groups) and the sliding-window example output; replaced an `annotate_message_groups` example that read non-existent keys; documented that `after_strategy` only works on history in `session.state` (not file, Redis or Cosmos history) and the `store=False` requirement with Responses-API clients; fixed the lifecycle diagram's method names, the per-client `compaction_strategy` claim (only `OpenAIChatClient` and `FoundryChatClient` take it; use `Agent(compaction_strategy=...)`), and the tiktoken example (`encoding_for_model` fails for current model names). Added `preserve_first_user_group` and `max_summary_input_tokens`. |

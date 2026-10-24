@@ -133,7 +133,79 @@ await agent.invoke('Hi')
 console.log(`model calls: ${counter.count}`, agent.tools.map((t) => t.name))
 ```
 
-Ready-made plugins live under `@strands-agents/sdk/vended-plugins/*`: `skills` (Agent Skills from `SKILL.md` folders), `context-offloader`, `context-injector` and `goal`.
+Ready-made plugins live under `@strands-agents/sdk/vended-plugins/*`: `skills` (Agent Skills from `SKILL.md` folders), `context-injector`, `goal` and `context-offloader`. The last three are shown below; they behave like their Python counterparts.
+
+### Context injection
+
+`ContextInjector` adds text to the model input for one call without storing it in `agent.messages` or the session, which suits values that go stale, such as the current time. `renderContent` returns the text, or `undefined` to skip. The default `trigger`, `'userTurn'`, injects only for a fresh user message; `'everyTurn'` injects before every model call, and a function gives finer control:
+
+```typescript
+import { Agent } from '@strands-agents/sdk'
+import { ContextInjector } from '@strands-agents/sdk/vended-plugins/context-injector'
+
+const agent = new Agent({
+  model: 'us.anthropic.%%model=anthropic%%',
+  plugins: [new ContextInjector({ renderContent: async () => `<now>${new Date().toISOString()}</now>` })],
+  printer: false,
+})
+
+await agent.invoke('What time is it?')
+console.log(JSON.stringify(agent.messages[0]?.content)) // only the user's text: the injected block is not kept
+```
+
+The text reaches the model verbatim, so escape any field a user influences.
+
+### Goal loops
+
+`GoalLoop` re-runs the agent until its answer meets a goal. After each invocation it checks the answer; if the check fails, it sends the feedback back as a new user message and continues, until the goal is met, `maxAttempts` is reached, `timeout` (milliseconds) elapses or one of the call's `limits` is hit. The goal is a sentence judged by a model, or a function returning `true`, `false` or `{ passed, feedback }`:
+
+```typescript
+import { Agent } from '@strands-agents/sdk'
+import type { Message } from '@strands-agents/sdk'
+import { GoalLoop } from '@strands-agents/sdk/vended-plugins/goal'
+
+const atMostFiftyWords = (response: Message) => {
+  const text = response.content.map((block) => (block.type === 'textBlock' ? block.text : '')).join(' ')
+  const words = text.split(/\s+/).filter(Boolean).length
+  return words <= 50 ? true : { passed: false, feedback: `Too long (${words} words). Cut it to 50 words or fewer.` }
+}
+
+const goal = new GoalLoop({ goal: atMostFiftyWords, maxAttempts: 3, timeout: 60_000 })
+const agent = new Agent({ model: 'us.anthropic.%%model=anthropic%%', plugins: [goal], printer: false })
+
+console.log((await agent.invoke('Explain how a rainbow forms.')).toString())
+console.log(goal.lastResult(agent)) // { passed, stopReason: 'satisfied' | 'maxAttempts' | 'timeout' | 'limit', attempts }
+```
+
+`maxAttempts` and `timeout` both default to unlimited, so set at least one. A second `GoalLoop` on the same agent throws, because both would use `AfterInvocationEvent.resume`.
+
+### Offloading large tool results
+
+`ContextOffloader` intercepts tool results above `maxResultTokens` (2,500 by default), saves the full content to a storage backend and leaves the model a preview of `previewTokens` (1,000 by default). With `includeRetrievalTool` (on by default) the model also gets a `retrieve_offloaded_content` tool that fetches a pattern match or a line range. Stored content is deleted after `evictAfterCycles` agent-loop cycles (20 by default; `null` disables it). The module exports `InMemoryStorage`, `FileStorage` and `S3Storage` for the content:
+
+```typescript
+import { Agent, tool } from '@strands-agents/sdk'
+import { ContextOffloader, InMemoryStorage } from '@strands-agents/sdk/vended-plugins/context-offloader'
+import { z } from 'zod'
+
+const bigReport = tool({
+  name: 'big_report',
+  description: 'Return the full nightly report.',
+  inputSchema: z.object({}),
+  callback: () => 'line of report data\n'.repeat(4000),
+})
+
+const agent = new Agent({
+  model: 'us.anthropic.%%model=anthropic%%',
+  tools: [bigReport],
+  plugins: [new ContextOffloader({ storage: new InMemoryStorage(), maxResultTokens: 500, previewTokens: 100 })],
+  printer: false,
+})
+
+await agent.initialize() // plugins add their tools when the agent initialises
+console.log(agent.tools.map((t) => t.name)) // [ 'big_report', 'retrieve_offloaded_content' ]
+await agent.invoke("Summarise tonight's report.")
+```
 
 ## Interventions
 
