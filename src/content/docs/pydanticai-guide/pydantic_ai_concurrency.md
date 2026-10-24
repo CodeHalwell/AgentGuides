@@ -161,18 +161,20 @@ class RedisLimiter(AbstractConcurrencyLimiter):
     async def acquire(self, source: str) -> None:
         # Local semaphore prevents local over-subscription
         await self._local_sem.acquire()
-        # Remote lock prevents cross-process over-subscription
+        # INCR is atomic, so claim a slot first and give it back if we overshot;
+        # a separate GET-then-INCR would let two processes take the last slot
         while True:
-            count = int(await self._redis.get(self._key) or 0)
-            if count < self._max:
-                await self._redis.incr(self._key)
+            if await self._redis.incr(self._key) <= self._max:
                 return
+            await self._redis.decr(self._key)
             await asyncio.sleep(0.05)
 
     def release(self) -> None:
         self._local_sem.release()
         asyncio.create_task(self._redis.decr(self._key))
 ```
+
+`release()` is synchronous in the interface, hence the fire-and-forget task; give the key an expiry (or a periodic reconciliation) so slots held by a crashed process are eventually recovered.
 
 ## `AnyConcurrencyLimit` type alias
 

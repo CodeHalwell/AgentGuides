@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Error handling & recovery"
+  order: 52
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.types`, `langgraph.graph.state`, `langgraph.runtime`, `langgraph.errors`).
@@ -360,33 +361,53 @@ class GraphRecursionError(RecursionError):
     pass   # carries an ErrorCode.GRAPH_RECURSION_LIMIT message
 ```
 
-Two ways to handle it:
+Two ways to handle it. Both use this loop, which needs 30 steps to finish:
+
+```python
+from typing_extensions import TypedDict
+from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import InMemorySaver
+
+
+class LoopState(TypedDict):
+    count: int
+
+
+def step(state: LoopState) -> dict:
+    return {"count": state["count"] + 1}
+
+
+loop_builder = (
+    StateGraph(LoopState)
+    .add_node("step", step)
+    .add_edge(START, "step")
+    .add_conditional_edges("step", lambda s: END if s["count"] >= 30 else "step")
+)
+```
 
 **Option 1 — raise the limit for long workflows:**
 
 ```python
-result = graph.invoke(
-    {"data": "input", "status": ""},
-    {"recursion_limit": 100},   # second positional arg is the config
-)
+loop = loop_builder.compile()
+result = loop.invoke({"count": 0}, {"recursion_limit": 100})   # the config is the second argument
+print(result)   # {'count': 30}
 ```
 
-**Option 2 — catch it at the call site and resume from checkpoint:**
+**Option 2 — catch it at the call site and resume from the checkpoint:**
 
 ```python
 from langgraph.errors import GraphRecursionError
-from langgraph.checkpoint.memory import InMemorySaver
 
-checkpointer = InMemorySaver()
-graph = builder.compile(checkpointer=checkpointer)
+loop = loop_builder.compile(checkpointer=InMemorySaver())
 cfg = {"configurable": {"thread_id": "long-run-1"}, "recursion_limit": 25}
 
 try:
-    result = graph.invoke({"data": "start", "status": ""}, cfg)
+    result = loop.invoke({"count": 0}, cfg)
 except GraphRecursionError:
     # The checkpoint was saved up to the last successful step.
-    # Resume by passing None as input — LangGraph reloads from the checkpoint.
-    result = graph.invoke(None, {**cfg, "recursion_limit": 50})
+    # Resume by passing None as input: the new limit applies to this invoke only.
+    result = loop.invoke(None, {**cfg, "recursion_limit": 50})
+print(result)   # {'count': 30}
 ```
 
 ### `ErrorCode` — structured error taxonomy (source-verified)
@@ -410,25 +431,32 @@ The code string is embedded in the exception message — inspect it via `str(exc
 
 ```python
 try:
-    graph.invoke({"data": "x", "status": ""}, {"recursion_limit": 5})
+    loop_builder.compile().invoke({"count": 0}, {"recursion_limit": 5})
 except RecursionError as exc:
     if "GRAPH_RECURSION_LIMIT" in str(exc):
         print("Graph hit recursion limit — increase recursion_limit in config")
-    raise
 ```
 
 ### Error type hierarchy summary
 
-```
+```text
 BaseException
  └── Exception
       ├── NodeTimeoutError       # run_timeout or idle_timeout exceeded
       ├── NodeCancelledError     # node body raised asyncio.CancelledError
-      ├── EmptyInputError        # graph.invoke() received an empty input
+      ├── InvalidUpdateError     # e.g. two writes to a key without a reducer
+      ├── EmptyInputError        # the graph received an empty input
+      ├── TaskNotFound           # executor cannot find a task (distributed mode)
       ├── RecursionError
       │    └── GraphRecursionError   # recursion_limit steps exhausted
-      └── TaskNotFound         # executor cannot find a task (distributed mode)
+      └── GraphBubbleUp          # control flow, not failures: don't catch these broadly
+           ├── GraphInterrupt    # interrupt() paused the run
+           │    └── NodeInterrupt (deprecated)
+           ├── ParentCommand     # Command(graph=Command.PARENT) travelling upwards
+           └── GraphDrained      # RunControl.request_drain() stopped the run
 ```
+
+`NodeError` (the error-handler argument) is a dataclass, not an exception. All of these live in `langgraph.errors`. A broad `except Exception:` inside a node also catches `GraphInterrupt`, which breaks `interrupt()`; re-raise `GraphBubbleUp` if you must catch everything.
 
 ---
 
@@ -437,7 +465,7 @@ BaseException
 | Scenario | LangGraph native | Why prefer native |
 |---|---|---|
 | Retry on HTTP errors | `RetryPolicy(retry_on=...)` | Integrated with the graph execution loop; works with checkpointers |
-| Custom backoff | `RetryPolicy(initial_interval, backoff_factor, jitter)` | No extra dependency; same `NamedTuple` as `TimeoutPolicy` |
+| Custom backoff | `RetryPolicy(initial_interval, backoff_factor, max_interval, jitter)` | No extra dependency; applies per attempt inside the graph loop |
 | Timeout | `TimeoutPolicy(run_timeout=..., idle_timeout=...)` | Cooperative cancellation via asyncio; heartbeat support |
 | Global fallback | `set_node_defaults(error_handler=...)` | One line; no decorator boilerplate per node |
 | Resume after crash | `graph.invoke(None, config)` | Requires checkpointer; saves/restores state automatically |

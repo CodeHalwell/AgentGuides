@@ -21,9 +21,12 @@ Pick the right one for your use case.
 ## Minimal runnable example
 
 ```python
+import asyncio
+
 from pydantic_ai import Agent
 
 agent = Agent('openai:%%model=openai%%')
+
 
 async def main():
     async with agent.run_stream('Tell me a joke.') as stream:
@@ -31,9 +34,12 @@ async def main():
             print(chunk, end='', flush=True)
         print('\n---')
         print('final:', await stream.get_output())
+
+
+asyncio.run(main())
 ```
 
-`run_stream` is an `@asynccontextmanager`. You **must** enter it (`async with`) and iterate to the end — exiting early cancels the underlying request.
+`run_stream` is an async context manager: enter it with `async with` and consume the stream inside the block. Leaving the block early closes the stream and stops reading the response.
 
 ## The three streaming APIs
 
@@ -48,20 +54,29 @@ async def main():
 ## `run_stream` — validated output, token by token
 
 ```python
+import asyncio
+
 from pydantic import BaseModel
 from pydantic_ai import Agent
+
 
 class City(BaseModel):
     name: str
     population: int
 
+
 agent = Agent('openai:%%model=openai%%', output_type=City)
+
 
 async def main():
     async with agent.run_stream('Tell me about Paris.') as stream:
         async for partial in stream.stream_output():
             print(partial)   # City with progressively-filled fields
         final: City = await stream.get_output()
+    print(final)
+
+
+asyncio.run(main())
 ```
 
 Key methods on `StreamedRunResult` (`result.py`):
@@ -84,9 +99,24 @@ Key methods on `StreamedRunResult` (`result.py`):
 Use when you want every tool call, retry, and delta observed by the graph, not just the final output:
 
 ```python
+import asyncio
+
+from pydantic_ai import Agent, AgentRunResultEvent
 from pydantic_ai.messages import (
-    PartStartEvent, PartDeltaEvent, FunctionToolCallEvent, FunctionToolResultEvent,
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    PartDeltaEvent,
+    PartStartEvent,
 )
+
+agent = Agent('openai:%%model=openai%%')
+
+
+@agent.tool_plain
+def search_docs(query: str) -> list[str]:
+    """Search the documentation."""
+    return [f'Result for {query}']
+
 
 async def main():
     async with agent.run_stream_events('Search docs for X.') as events:
@@ -99,9 +129,14 @@ async def main():
                 print(f'→ {event.part.tool_name}({event.part.args_as_json_str()})')
             elif isinstance(event, FunctionToolResultEvent):
                 print(f'← {event.part.tool_name} = {event.part.content!r}')
+            elif isinstance(event, AgentRunResultEvent):
+                print('output:', event.result.output)
+
+
+asyncio.run(main())
 ```
 
-Since 2.0, `run_stream_events()` is an **async context manager only** — the V1 form `async for event in agent.run_stream_events(...)` no longer works. Entering the context without iterating never starts the run; the handle also exposes `cancel()`, `usage`, `all_messages()` and, after completion, `result`. `FunctionToolResultEvent.result` was renamed to `.part` in 2.0.
+Since 2.0, `run_stream_events()` is an **async context manager only** — the V1 form `async for event in agent.run_stream_events(...)` no longer works. Entering the context without iterating never starts the run; the handle also exposes `cancel()`, `usage`, `all_messages()` / `new_messages()` and, after completion, `result`. `FunctionToolResultEvent.result` was renamed to `.part` in 2.0. Unlike `run_stream`, the run goes to completion: tools requested after the first output still execute.
 
 Event types (`messages.py`):
 
@@ -118,30 +153,50 @@ Event types (`messages.py`):
 ## `agent.iter(...)` — drive the graph yourself
 
 ```python
-async with agent.iter('What is 2 + 2?') as run:
-    async for node in run:
-        match node.__class__.__name__:
-            case 'UserPromptNode':  print('> user prompt')
-            case 'ModelRequestNode': print('> model request')
-            case 'CallToolsNode':   print('> tool call/return step')
-            case 'End':             print('> done', node.data)
+import asyncio
 
-# After iteration, the result is available:
-result = run.result  # AgentRunResult[OutputDataT] | None
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%')
+
+
+async def main():
+    async with agent.iter('What is 2 + 2?') as run:
+        async for node in run:
+            match node.__class__.__name__:
+                case 'UserPromptNode':   print('> user prompt')
+                case 'ModelRequestNode': print('> model request')
+                case 'CallToolsNode':    print('> tool call/return step')
+                case 'End':              print('> done', node.data)
+    print(run.result.output)   # AgentRunResult, available once the run has ended
+
+
+asyncio.run(main())
 ```
 
-You can also `await run.next(my_node)` to drive step-by-step, or call `run.ctx.state` / `run.ctx.deps` to introspect.
+You can also `await run.next(node)` to drive step by step, read `run.ctx.state` / `run.ctx.deps` to introspect, and inside a node stream that step's events with `async with node.stream(run.ctx) as stream:` (for `ModelRequestNode` and `CallToolsNode`).
 
 ## `event_stream_handler=` — tap events without changing API shape
 
 Any of `run`, `run_sync`, `run_stream` or `iter` accept an `event_stream_handler: EventStreamHandler[Deps]` (`agent/abstract.py`), a callable `(RunContext, AsyncIterable[AgentStreamEvent]) -> Awaitable[None]` that fires with the event stream. The run's return type is unchanged. (Only the per-run argument survives in 2.0; the agent-level `Agent(event_stream_handler=...)` became `capabilities=[ProcessEventStream(...)]`.)
 
 ```python
-async def tap(ctx, events):
-    async for e in events:
-        metrics.observe(e.__class__.__name__)
+from collections import Counter
+from collections.abc import AsyncIterable
 
-result = await agent.run('hi', event_stream_handler=tap)
+from pydantic_ai import Agent, AgentStreamEvent, RunContext
+
+agent = Agent('openai:%%model=openai%%')
+event_counts: Counter[str] = Counter()
+
+
+async def tap(ctx: RunContext[None], events: AsyncIterable[AgentStreamEvent]) -> None:
+    async for e in events:
+        event_counts[type(e).__name__] += 1
+
+
+result = agent.run_sync('hi', event_stream_handler=tap)
+print(result.output, dict(event_counts))
 ```
 
 ## Sync streaming — `run_stream_sync`
@@ -163,9 +218,56 @@ Under the hood this wraps the async streamer in `sync_async_iterator`; don't cal
 
 ## Debouncing and partial validation
 
-- Structured output + partial validation: Pydantic's experimental [partial validator](https://docs.pydantic.dev/latest/concepts/experimental/#partial-validation) is enabled on each `stream_output` yield. Required fields that haven't arrived are left unset.
+- Structured output + partial validation: Pydantic's experimental [partial validator](https://docs.pydantic.dev/latest/concepts/experimental/#partial-validation) runs on each `stream_output` yield. It completes truncated strings and lists, but it cannot invent a **required** field that has not arrived: a partial that is still missing one fails validation and is skipped. If every field is required, the first yield comes only once the last field has started. Give the fields that should appear progressively a default (`None`, `[]`), as below.
 - Text streaming: no validation during delta streaming. Validators only run inside `get_output()`.
 - Debounce default (`0.1` s) is chosen to balance perceived latency vs. per-chunk parsing cost. Set `None` for token-by-token; set larger values (`0.25`–`0.5`) for long structured outputs.
+
+The effect is easy to see with a `FunctionModel` that streams an output-tool call twelve characters at a time:
+
+```python
+import asyncio
+import json
+
+from pydantic import BaseModel
+from pydantic_ai import Agent
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
+
+
+class Report(BaseModel):
+    title: str                           # required: nothing is yielded until it starts
+    summary: str | None = None           # optional: streams in progressively
+    key_findings: list[str] = []
+    confidence_score: float | None = None
+
+
+FULL = json.dumps({'title': 'Solar', 'summary': 'Panels are cheap now', 'key_findings': ['cost fell', 'output rose']})
+
+
+async def stream_fn(messages, info: AgentInfo):
+    name = info.output_tools[0].name
+    for i in range(0, len(FULL), 12):
+        yield {0: DeltaToolCall(name=name if i == 0 else None, json_args=FULL[i : i + 12])}
+
+
+agent = Agent(FunctionModel(stream_function=stream_fn), output_type=Report)
+
+
+async def main():
+    async with agent.run_stream('Write the report.') as stream:
+        async for partial in stream.stream_output(debounce_by=None):
+            print(partial.model_dump(exclude_none=True))
+
+
+asyncio.run(main())
+```
+
+```
+{'title': 'S', 'key_findings': []}
+{'title': 'Solar', 'key_findings': []}
+{'title': 'Solar', 'summary': 'Panel', 'key_findings': []}
+...
+{'title': 'Solar', 'summary': 'Panels are cheap now', 'key_findings': ['cost fell', 'output rose']}
+```
 
 ## Streaming over HTTP (FastAPI)
 
@@ -193,6 +295,8 @@ For the AG UI / Vercel AI SDK protocols, use the dedicated adapters (`pydantic_a
 
 ## Patterns
 
+The first, second and fifth patterns are sketches: `q` is the user's prompt and `ui` stands for your front end.
+
 ### 1. Cumulative text that the UI can overwrite
 
 ```python
@@ -219,23 +323,55 @@ async with agent.run_stream(q) as s:
 ### 3. Track token usage while streaming
 
 ```python
-async with agent.run_stream(q) as s:
-    async for _ in s.stream_text(delta=True):
-        pass
-    await s.get_output()
-    used = s.usage  # RunUsage — a property since 2.0 (was s.usage() in V1)
-print(used)
+import asyncio
+
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%')
+
+
+async def main():
+    async with agent.run_stream('Write a limerick.') as s:
+        async for _ in s.stream_text(delta=True):
+            pass
+        await s.get_output()
+        used = s.usage  # RunUsage — a property since 2.0 (was s.usage() in V1)
+    print(used)
+
+
+asyncio.run(main())
 ```
 
 ### 4. Tool-call tracing via `run_stream_events`
 
 ```python
-async with agent.run_stream_events(q) as events:
-    async for e in events:
-        if isinstance(e, FunctionToolCallEvent):
-            logger.info('tool_call', name=e.part.tool_name, args=e.part.args)
-        elif isinstance(e, FunctionToolResultEvent):
-            logger.info('tool_result', name=e.part.tool_name)
+import asyncio
+import logging
+
+from pydantic_ai import Agent
+from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('agent.tools')
+agent = Agent('openai:%%model=openai%%')
+
+
+@agent.tool_plain
+def lookup(sku: str) -> str:
+    """Stock level for a SKU."""
+    return f'{sku}: 12 in stock'
+
+
+async def main():
+    async with agent.run_stream_events('Is ABC in stock?') as events:
+        async for e in events:
+            if isinstance(e, FunctionToolCallEvent):
+                logger.info('tool_call %s %s', e.part.tool_name, e.part.args)
+            elif isinstance(e, FunctionToolResultEvent):
+                logger.info('tool_result %s', e.part.tool_name)
+
+
+asyncio.run(main())
 ```
 
 ### 5. Cancel mid-stream
@@ -334,7 +470,7 @@ asyncio.run(main())
 - **Validators only run once** (in `get_output()` or on the final yield of `stream_output`). Partial yields are best-effort.
 - **Don't mix `stream_text(delta=True)` and `stream_output()` on the same result** — both drain the underlying iterator.
 - **`run_stream_sync` from an async caller** will raise; use `run_stream` directly.
-- **OpenAI strict-mode structured output** streams schemas that Pydantic's partial validator cannot always consume cleanly. If you see `ValidationError` spam during partial yields, raise `debounce_by` or use text streaming + one-shot `get_output()`.
+- **`TextOutput` and `stream_text()`**: `stream_text()` yields the raw text and does not apply a `TextOutput` function; use `stream_output()` to stream the function's result.
 
 ## Reference
 

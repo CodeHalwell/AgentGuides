@@ -57,7 +57,7 @@ async def stream_text(q: str = Query(..., min_length=1)):
 
 ## Pattern 2: Structured output streaming
 
-Streams *partial* Pydantic objects as the model fills in each field. Ideal for progress indicators on long structured outputs.
+Streams *partial* Pydantic objects as the model fills in each field. Partial validation cannot supply a missing **required** field, so give every field after the first a default; otherwise nothing is sent until the last field has begun (see [debouncing and partial validation](/pydanticai-guide/pydantic_ai_streaming/#debouncing-and-partial-validation)).
 
 ```python
 import json
@@ -70,9 +70,9 @@ app = FastAPI()
 
 class ResearchReport(BaseModel):
     title: str
-    summary: str
-    key_findings: list[str]
-    confidence_score: float
+    summary: str | None = None             # defaults let partials stream before these arrive
+    key_findings: list[str] = []
+    confidence_score: float | None = None
 
 agent = Agent('openai:%%model=openai%%', output_type=ResearchReport)
 
@@ -83,7 +83,7 @@ async def stream_structured(q: str = Query(...)):
             # stream_output() yields partial ResearchReport instances
             # as each field is filled in by the model
             async for partial in stream.stream_output(debounce_by=0.1):
-                # model_dump excludes None (unfilled) fields
+                # exclude_none drops the optional fields that have not arrived yet
                 payload = partial.model_dump(exclude_none=True)
                 yield f'data: {json.dumps(payload)}\n\n'
 
@@ -212,6 +212,8 @@ async def chat(req: ChatRequest):
 
     return StreamingResponse(event_generator(), media_type='text/event-stream')
 ```
+
+To keep usage totals and pending approvals with the session as well, store `stream.result.conversation` (serialised with `ConversationTypeAdapter`) instead of the bare messages and pass it back as `conversation=`; see [Conversation](/pydanticai-guide/pydantic_ai_message_history/#conversation--carry-the-whole-conversation-not-just-the-messages).
 
 ---
 

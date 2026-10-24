@@ -8,9 +8,9 @@ sidebar:
   order: 30
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/workflow/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted; the human-in-the-loop helpers changed after 2.10 (see that section).
+Verified against `google-adk` %%version=google-adk%% (`google/adk/workflow/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini. The human-in-the-loop helpers changed after 2.10 (see that section).
 
-`Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`) — wire it to a `Runner` via `App(root_agent=workflow)`.
+`Workflow` is the graph-based orchestrator that replaces `SequentialAgent`, `ParallelAgent`, and `LoopAgent` in ADK 2.x. It is a `BaseNode` (not a `BaseAgent`). Wire it to a `Runner` with `App(root_agent=workflow)`, which is also where plugins and resumability go; `Runner(agent=workflow, ...)` and `Runner(node=workflow, ...)` work too.
 
 ## Public surface
 
@@ -78,7 +78,7 @@ A tuple in `edges=` is a **chain** — each adjacent pair becomes an `Edge`. `ST
 
 ## Edge syntax
 
-Four ways to declare edges, all verified in `workflow/_workflow_graph.py`:
+Four ways to declare edges:
 
 ### 1. Chain (tuple)
 
@@ -136,7 +136,8 @@ wf = Workflow(name="demo", edges=[(START, writer)])
 | `LlmAgent` with `mode=None`, no `parent_agent` | `'single_turn'` |
 | `LlmAgent` with `mode=None`, `parent_agent` provided | `'chat'` |
 | `LlmAgent` with `mode='task'` or `mode='chat'` | forces `wait_for_output=True` |
-| Any `LlmAgent` | forces `rerun_on_resume=True` |
+| `LlmAgent` in `single_turn` mode, `include_contents` not set | sets `include_contents='none'`: the node sees only its input, not the conversation |
+| Any `LlmAgent` | defaults `rerun_on_resume=True` |
 
 To control the mode explicitly, set it on the `LlmAgent` before placing it in the edge:
 
@@ -227,10 +228,10 @@ from google.adk.workflow import RetryConfig, node, Workflow, START
     timeout=15.0,         # NodeTimeoutError if the node takes > 15s
     rerun_on_resume=True,
 )
-async def resilient_fetch(url: str, ctx) -> dict:
+async def resilient_fetch(node_input: str, ctx) -> dict:
     import httpx
     async with httpx.AsyncClient() as client:
-        resp = await client.get(url, timeout=10.0)
+        resp = await client.get(node_input, timeout=10.0)   # node_input is the URL
         resp.raise_for_status()
         return resp.json()
 
@@ -240,12 +241,12 @@ pipeline = Workflow(
 )
 ```
 
-`NodeTimeoutError` is raised when a node exceeds its `timeout`. It IS retried (only when `exceptions` is `None` or includes `NodeTimeoutError`), so set a timeout shorter than `max_delay * max_attempts` if you want the workflow to eventually fail fast.
+`NodeTimeoutError` is raised when a node exceeds its `timeout`, and it counts as a failure for retries: with `exceptions=None` a timed-out node is retried, and with an `exceptions` list it is retried only if `"NodeTimeoutError"` is in the list. The worst-case time for a node is therefore roughly `max_attempts × timeout` plus the delays between attempts.
 
 Signatures recognised by `FunctionNode`:
 - `node_input` — the incoming value (the predecessor's output, or the user's `new_message` for START successors).
 - `ctx` — the `Context` (state, `run_node`, `route`, `interrupt`, artifact helpers).
-- Any other parameter must be declared in the enclosing `Workflow.state_schema` — the framework injects its current value.
+- Any other parameter is read from session state by name. A missing key without a default fails the node with `WorkflowDataError: Missing value for parameter ...`, and if the workflow has a `state_schema` the name must be one of its fields (checked when the `Workflow` is built). A common mistake is naming the input after its meaning (`draft`, `url`) instead of `node_input`: that parameter is then looked up in state.
 
 That is the default `parameter_binding="state"`. With `@node(parameter_binding="node_input")` the parameters are filled from the fields of a `dict`/Pydantic `node_input` instead, and `input_schema`/`output_schema` are inferred from the signature (this is the mode used when a node acts as an agent's tool):
 
@@ -261,7 +262,7 @@ Return types are honoured: returning a value sets `ctx.output`; yielding values 
 
 ## `Node` subclass
 
-Use when you need class-level state or `parallel_worker=True`:
+Use when you need a node with its own fields and logic:
 
 ```python
 from google.adk.workflow import Node
@@ -278,7 +279,7 @@ class DedupeNode(Node):
         yield fresh
 ```
 
-Setting `parallel_worker=True` lets the node be invoked concurrently per trigger without sharing state with other invocations.
+`parallel_worker=True` (on `Node` or `@node`) makes the node a map step: given a list as input, it runs once per item in parallel and outputs the list of results. `max_parallel_workers` caps how many run at once.
 
 ## `Workflow` fields
 
@@ -344,7 +345,7 @@ wf = Workflow(
 - A `(START, (a, b, c, d, e, f), join)` fan-out with `max_concurrency=2` runs `a, b` in parallel, then `c, d`, then `e, f`, then `join`.
 - A single node that internally does `await asyncio.gather(*[ctx.run_node(...) for _ in range(20)])` still fans out to 20 dynamic tasks regardless of `max_concurrency`.
 
-**`rerun_on_resume=True` (workflow level, default).** On session resume, the whole workflow's SETUP → LOOP → FINALIZE re-scans historical events via `_LoopState.replay_manager.scan_workflow_events` to rebuild `recovered_executions`, then only replays nodes whose `run_id` isn't already in the barrier. Set `rerun_on_resume=False` (and set it on individual nodes too) if you have side-effect-heavy nodes you never want to re-execute.
+**`rerun_on_resume=True` (workflow level, default).** When a paused workflow resumes, it rebuilds its progress from the session's events and runs only the nodes that had not finished. Nodes default to `rerun_on_resume=False`: an interrupted node is completed with the resume response as its output rather than run again. Set `rerun_on_resume=True` on a node that needs to see the response (`ctx.resume_inputs`) and carry on, as in [Human-in-the-loop](#human-in-the-loop).
 
 ## Routing and conditions
 
@@ -385,17 +386,17 @@ Replace `LoopAgent` with a routing map that either loops back to the same node o
 ```python
 from google.adk.workflow import Workflow, node, START
 
-@node(rerun_on_resume=True)
-async def critic(draft: str, ctx) -> str:
-    if len(draft) < 500:
+@node
+async def critic(node_input: str, ctx) -> str:
+    if len(node_input) <= 500:
         ctx.route = "done"
-        return draft
+        return node_input
     ctx.route = "continue"
-    return draft[:500]  # trimmed draft fed back in
+    return node_input[:500]  # trimmed draft fed back in
 
 @node
-def publish(draft: str) -> str:
-    return draft  # terminal: no outgoing edge
+def publish(node_input: str) -> str:
+    return node_input  # terminal: no outgoing edge
 
 loop = Workflow(
     name="refine",
@@ -435,35 +436,87 @@ wf = Workflow(
 
 ## Dynamic nodes (`ctx.run_node`)
 
-Call another node from inside a node — the result is awaited in-place. **The caller must have `rerun_on_resume=True`** or `run_node` raises `ValueError` (`agents/context.py`).
+Call another node from inside a node — the result is awaited in place. **The caller must have `rerun_on_resume=True`**, or `run_node` raises `ValueError: A node must have rerun_on_resume=True`: if the child pauses, the workflow resumes by running the parent again.
 
 ```python
 @node(rerun_on_resume=True)
-async def supervisor(q: str, ctx):
-    research = await ctx.run_node(research_agent, q)
+async def supervisor(node_input: str, ctx):
+    research = await ctx.run_node(research_agent, node_input)
     answer = await ctx.run_node(writer_agent, research)
     return answer
 ```
 
 ## Human-in-the-loop
 
-Yield a `RequestInput` from a node to pause the workflow until `Runner.run_async` is called again with a `new_message` carrying a matching function-response. Pair with `auth_config=` on the `@node` to gate on an OAuth flow.
+Yield a `RequestInput` from a node to pause the workflow. The run ends with an `adk_request_input` function call whose ID is the `interrupt_id`; the workflow resumes when `Runner.run_async` is called again on the same session with a `FunctionResponse` of that ID and name. With `rerun_on_resume=True` the node runs again and finds the response in `ctx.resume_inputs[interrupt_id]`; without it, the response itself becomes the node's output. `yield` does not return the answer: the node is re-run instead.
 
 ```python
-from google.adk.events.request_input import RequestInput
+import asyncio
+
+from google.adk.apps import App
+from google.adk.events import RequestInput
+from google.adk.runners import InMemoryRunner
+from google.adk.workflow import START, Workflow, node
+from google.genai import types
+
+
+@node
+def draft(node_input: str) -> str:
+    return f"Draft post about {node_input}"
+
 
 @node(rerun_on_resume=True)
-async def approve(draft: str, ctx):
-    decision = yield RequestInput(
-        interrupt_id="approval_001",
-        message="Approve the draft? yes/no",
-    )
-    if decision == "yes":
-        return draft
-    ctx.route = "rewrite"
+def approve(node_input: str, ctx):
+    decision = ctx.resume_inputs.get("approval")
+    if decision is None:                       # first run: ask and pause
+        yield RequestInput(interrupt_id="approval", message=f"Publish this? {node_input}")
+        return
+    ctx.route = "publish" if decision.get("approved") else "rewrite"
+    yield node_input
+
+
+@node
+def publish(node_input: str) -> str:
+    return f"published: {node_input}"
+
+
+@node
+def rewrite(node_input: str) -> str:
+    return "sent back for rewriting"
+
+
+review = Workflow(
+    name="review",
+    edges=[(START, draft, approve, {"publish": publish, "rewrite": rewrite})],
+)
+
+
+async def main():
+    runner = InMemoryRunner(app=App(name="review_app", root_agent=review))
+    session = await runner.session_service.create_session(app_name="review_app", user_id="u1")
+
+    pending = None
+    async for event in runner.run_async(
+        user_id="u1", session_id=session.id,
+        new_message=types.Content(role="user", parts=[types.Part(text="pricing")]),
+    ):
+        for call in event.get_function_calls():
+            if call.name == "adk_request_input":
+                pending = call.id                      # == the interrupt_id
+                print("paused:", call.args["message"])
+
+    answer = types.Content(role="user", parts=[types.Part(function_response=types.FunctionResponse(
+        id=pending, name="adk_request_input", response={"approved": True},
+    ))])
+    async for event in runner.run_async(user_id="u1", session_id=session.id, new_message=answer):
+        if event.output is not None:
+            print(event.output)
+
+
+asyncio.run(main())
 ```
 
-Combine with `ResumabilityConfig(is_resumable=True)` on the `App` so state is persisted across the pause.
+Pair with `auth_config=` on the `@node` to gate a node on an OAuth flow instead of a free-form answer. For pauses that can outlast the process, use a persistent session service (next section).
 
 ## Retries and timeouts
 
@@ -471,7 +524,7 @@ Combine with `ResumabilityConfig(is_resumable=True)` on the `App` so state is pe
 from google.adk.workflow import node, RetryConfig
 
 @node(retry_config=RetryConfig(max_attempts=3, backoff_factor=2.0), timeout=30.0)
-async def flaky(q: str, ctx): ...
+async def flaky(node_input: str, ctx): ...
 ```
 
 A node that exceeds `timeout` is cancelled and raises `NodeTimeoutError`. If retries are configured, the node is restarted.
@@ -491,7 +544,7 @@ A node that exceeds `timeout` is cancelled and raises `NodeTimeoutError`. If ret
 Wrap the scraper with `retry_config=RetryConfig(max_attempts=5)` and `timeout=20`. Log retries via `LoggingPlugin` on the `App`.
 
 ### 5 — HITL review gate
-Insert a `@node(rerun_on_resume=True, auth_config=...)` that yields `RequestInput` between producer and publisher. The workflow pauses, the event is persisted, `Runner.run_async` resumes on the next user turn.
+Insert a `@node(rerun_on_resume=True)` that yields `RequestInput` between producer and publisher, as in [Human-in-the-loop](#human-in-the-loop). The workflow pauses, the event is persisted, and `Runner.run_async` resumes it when the answer arrives. Since 2.12.0, `@node(require_confirmation=True)` does the same for a plain yes/no approval before a node runs.
 
 ### 6 — `state_schema` — validated shared state
 
@@ -664,23 +717,19 @@ asyncio.run(main())
 
 ## HITL with persisted sessions
 
-For real pause/resume you need a `DatabaseSessionService` so state survives the process restart between user turns.
+For a pause that can outlast the process (a person approves tomorrow), keep sessions in a database. The first request runs until the workflow pauses and returns the interrupt ID; a later request, possibly in another process, answers it:
 
 ```python
 import asyncio
+
 from google.adk.agents import LlmAgent
 from google.adk.apps import App, ResumabilityConfig
+from google.adk.events import RequestInput
 from google.adk.runners import Runner
 from google.adk.sessions import DatabaseSessionService
-from google.adk.events.request_input import RequestInput
-from google.adk.workflow import Workflow, node, START
+from google.adk.workflow import START, Workflow, node
+from google.adk.workflow.utils._workflow_hitl_utils import create_request_input_response
 from google.genai import types
-
-REQUEST_INPUT = "adk_request_input"   # function-call name RequestInput is surfaced as
-
-def request_input_ids(event) -> list[str]:
-    """Interrupt ids of any RequestInput pauses carried by this event."""
-    return [fc.id for fc in event.get_function_calls() if fc.name == REQUEST_INPUT]
 
 drafter = LlmAgent(
     name="drafter",
@@ -689,101 +738,91 @@ drafter = LlmAgent(
     mode="single_turn",
 )
 
+
 @node(rerun_on_resume=True)
-async def human_review(node_input: str, ctx):
-    # Pause the workflow and wait for the user to approve or reject.
-    decision = yield RequestInput(
-        interrupt_id="email_review",
-        message=f"Draft:\n\n{node_input}\n\nApprove? (yes/no)",
-    )
-    # decision is the FunctionResponse payload dict, e.g. {"result": "yes"}
-    result = decision.get("result", "") if isinstance(decision, dict) else str(decision)
-    if result.strip().lower() == "yes":
-        ctx.state["approved_email"] = node_input
-        ctx.output = node_input
+def human_review(node_input: str, ctx):
+    decision = ctx.resume_inputs.get("email_review")
+    if decision is None:
+        yield RequestInput(
+            interrupt_id="email_review",
+            message=f"Draft:\n\n{node_input}\n\nApprove? (yes/no)",
+        )
         return
-    ctx.route = "revise"
-    ctx.output = node_input
-    return   # send back for another draft pass
+    # A response of exactly {"result": value} arrives unwrapped, as value.
+    if str(decision).strip().lower() == "yes":
+        ctx.route = "approved"
+        yield node_input
+        return
+    ctx.route = "revise"                    # loop back for another draft
+    yield node_input
+
+
+@node
+def send(node_input: str, ctx) -> str:
+    ctx.state["approved_email"] = node_input
+    return "email queued"
+
 
 approval_wf = Workflow(
     name="email_approval",
-    edges=[
-        # drafter → human_review on every pass (chain handles re-review automatically)
-        # human_review routing: "revise" loops back to drafter; no route = approved = done
-        (START, drafter, human_review, {
-            "revise": drafter,   # rejection: loop back for another draft
-            # No DEFAULT_ROUTE — when human_review sets no route, the workflow ends
-        }),
-    ],
+    edges=[(START, drafter, human_review, {"approved": send, "revise": drafter})],
 )
 
+app = App(
+    name="email_app",
+    root_agent=approval_wf,
+    resumability_config=ResumabilityConfig(is_resumable=True),
+)
+
+
+def request_input_ids(event) -> list[str]:
+    """Interrupt ids of any RequestInput pauses carried by this event."""
+    return [fc.id for fc in event.get_function_calls() if fc.name == "adk_request_input"]
+
+
+async def start(runner: Runner) -> str | None:
+    """First request: runs until the workflow pauses; returns the interrupt id."""
+    await runner.session_service.create_session(app_name="email_app", user_id="u1", session_id="s1")
+    message = types.Content(role="user", parts=[types.Part(text="noise-cancelling headphones for office workers")])
+    interrupt_id = None
+    async for event in runner.run_async(user_id="u1", session_id="s1", new_message=message):
+        for call_id in request_input_ids(event):
+            interrupt_id = call_id
+            print("Workflow paused, waiting for approval.")
+    return interrupt_id
+
+
+async def resume(runner: Runner, interrupt_id: str, answer: str) -> None:
+    """Later request (possibly another process): answers the pause."""
+    response = types.Content(role="user", parts=[create_request_input_response(interrupt_id, {"result": answer})])
+    async for event in runner.run_async(user_id="u1", session_id="s1", new_message=response):
+        if event.output is not None:
+            print("output:", event.output)
+
+
 async def main():
-    session_svc = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
-    await session_svc.prepare_tables()   # public method (source: database_session_service.py); also called lazily on first use
+    sessions = DatabaseSessionService("sqlite+aiosqlite:///./sessions.db")
+    runner = Runner(app=app, session_service=sessions)
+    interrupt_id = await start(runner)
+    # ... store interrupt_id with your task and show the draft to a person ...
+    if interrupt_id:
+        await resume(Runner(app=app, session_service=sessions), interrupt_id, "yes")
 
-    app = App(
-        name="email_app",
-        root_agent=approval_wf,
-        resumability_config=ResumabilityConfig(is_resumable=True),
-    )
-    runner = Runner(app=app, session_service=session_svc)
-
-    await session_svc.create_session(
-        app_name="email_app", user_id="u1", session_id="s1"
-    )
-
-    # First run — triggers the HITL pause
-    # run_async is keyword-only; wrap the user text in types.Content
-    user_msg = types.Content(
-        role="user",
-        parts=[types.Part(text="noise-cancelling headphones for office workers")],
-    )
-    async for event in runner.run_async(
-        new_message=user_msg,
-        user_id="u1", session_id="s1",
-    ):
-        # A RequestInput pause arrives as an `adk_request_input` function call
-        # (event.actions.requested_auth_configs is for OAuth, not HITL interrupts)
-        if request_input_ids(event):
-            print("Workflow paused. Waiting for human approval.")
-        if hasattr(event, "content") and event.content:
-            print(event.content.parts[0].text if event.content.parts else "")
 
 asyncio.run(main())
 ```
 
-To resume, send a `FunctionResponse` that matches the `interrupt_id` emitted by the `RequestInput` — plain text does not work here. The `has_request_input_function_call` / `get_request_input_interrupt_ids` helpers that `_workflow_hitl_utils` shipped up to 2.10 have been removed; read the id from the event's `adk_request_input` function call (the `request_input_ids` helper above), then build the response with `create_request_input_response`, which is still there (it is a private module, so pin your ADK version if you rely on it):
-
-```python
-from google.adk.workflow.utils._workflow_hitl_utils import create_request_input_response
-
-# Collect the interrupt_id emitted during the first run
-interrupt_id = None
-async for event in runner.run_async(new_message=user_msg, user_id="u1", session_id="s1"):
-    ids = request_input_ids(event)
-    if ids:
-        interrupt_id = ids[0]
-
-# Resume with a matching FunctionResponse
-approval_response = types.Content(
-    role="user",
-    parts=[create_request_input_response(interrupt_id, {"result": "yes"})],
-)
-async for event in runner.run_async(
-    new_message=approval_response,
-    user_id="u1", session_id="s1",
-):
-    if event.content:
-        print(event.content.parts[0].text if event.content.parts else "")
-```
+- Send a `FunctionResponse` that matches the `interrupt_id`: plain text does not resume a paused node. A response of exactly `{"result": value}` reaches the node unwrapped, as `value`; any other dict arrives as is.
+- `create_request_input_response` builds that part. It lives in a private module, so pin your ADK version if you rely on it, or build the `types.Part` yourself as in the previous section. The `has_request_input_function_call` and `get_request_input_interrupt_ids` helpers that module shipped up to 2.10 have been removed; read the ID from the event's `adk_request_input` function call, as `request_input_ids` does.
+- `DatabaseSessionService` creates its tables on first use (`await sessions.prepare_tables()` does it eagerly). With `ResumabilityConfig(is_resumable=True)` on the `App`, an invocation interrupted by a crash can also be resumed from the session's events.
+- Give every node that can be on a routing branch somewhere to go: if a node has routing edges and sets no matching route, the branch ends with a logged warning (`... none were matched by the emitted route(s)`), which is why approval routes to `send` above.
 
 ## Gotchas
 
 - Nodes are **Pydantic models** — if you subclass `Node`, annotate fields or they won't serialise.
-- `Workflow` is not a `BaseAgent`. `Runner(agent=workflow)` fails. Use `App(root_agent=workflow)` and `Runner(app=app, session_service=...)`, or pass it as `Runner(node=workflow, app_name=..., session_service=...)`.
+- `Workflow` is not a `BaseAgent`, and it cannot be an `LlmAgent` sub-agent. As a root it works with `App(root_agent=workflow)`, `Runner(node=workflow, ...)` or `Runner(agent=workflow, ...)`; use `App` when you need plugins or resumability.
 - `ctx.run_node(callable)` requires `rerun_on_resume=True` on the calling node.
-- `wait_for_output=True` means a node *must* yield output/route before it's marked complete. Forget that and the workflow deadlocks.
+- `wait_for_output=True` means a node is not complete until it yields an output. A node with it set that finishes without one leaves its successors waiting.
 - When a tuple contains only one element (e.g. `(START, single_node)`), you still get a single edge — not sugar for fan-out. Fan-out needs a **nested** tuple: `(START, (a, b))`.
-- Setting `nodes=` explicitly on `Workflow` raises — nodes are inferred from `edges`.
+- Nodes are inferred from `edges`; there is no `nodes=` field (an unknown keyword is ignored, not rejected).
 - `state_schema` validates `ctx.state` writes — fields on the schema class can be injected directly as node parameters; this is the recommended way to thread typed state through a pipeline.

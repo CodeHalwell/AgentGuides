@@ -5,7 +5,7 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Ref · RemoteGraph"
-  order: 39
+  order: 38
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** / **`langgraph-sdk==%%version=langgraph-sdk%%`** (module: `langgraph.pregel.remote`).

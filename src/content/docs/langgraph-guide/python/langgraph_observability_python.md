@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Observability"
+  order: 53
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.types`, `langgraph.graph.state`).

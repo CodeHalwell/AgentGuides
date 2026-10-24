@@ -210,9 +210,10 @@ evaluators:
   - get_weather
 - MaxToolCalls: 2
 - MaxModelRequests: 3
+report_evaluators: []
 ```
 
-Custom evaluators must be passed in `custom_evaluator_types=` when loading. `pydantic_evals.generation.generate_dataset(dataset_type=..., n_examples=...)` can draft cases with an LLM for you to review.
+Custom evaluators must be passed in `custom_evaluator_types=` when loading. Give the dataset its generic parameters (`Dataset[str, str, None](...)` or `Dataset[str, str].from_file(...)`) so the inputs and outputs are typed; without them `to_file()` warns and falls back to `Any`. `pydantic_evals.generation.generate_dataset(dataset_type=..., n_examples=...)` can draft cases with an LLM for you to review.
 
 ## 5. Classification tasks: per-case checks, report evaluators and metrics
 

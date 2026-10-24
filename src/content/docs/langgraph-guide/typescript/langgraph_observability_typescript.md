@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Observability"
+  order: 35
 ---
 
 

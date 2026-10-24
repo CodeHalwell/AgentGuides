@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Performance"
+  order: 54
 ---
 
 Checked against `langgraph` %%version=langgraph%% and `langchain` %%version=langchain%% (%%versions-checked%%). This page lists the levers LangGraph gives you, roughly in order of effect. It quotes no benchmark figures: measure your own graph with LangSmith traces, which show the time spent in each node and model call.

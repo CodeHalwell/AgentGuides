@@ -8,7 +8,7 @@ sidebar:
   order: 20
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; `LangGraphAgent` requires 2.5.0+; `ManagedAgent` requires 2.4.0+. Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini. `ManagedAgent` arrived in 2.4.0; `LangGraphAgent` needs the `langgraph` package.
 
 ADK exposes one LLM-backed agent (`LlmAgent`, also re-exported as `Agent`), three *shell* agents for composition (`SequentialAgent`, `ParallelAgent`, `LoopAgent` — deprecated in 2.x), a LangGraph bridge (`LangGraphAgent`), and a remote-agent client (`RemoteA2aAgent`). New projects should compose with `Workflow` rather than the deprecated shell agents — see the [workflows page](/google-adk-guide/python/workflows/).
 
@@ -72,7 +72,7 @@ agent = LlmAgent(
     description="Answers research questions with web search.",
     instruction="You are a research assistant. Cite the URLs you consulted.",
     tools=[google_search],
-    output_schema=Reply,                 # optional; tools still work alongside output_schema (since 2.3.0)
+    output_schema=Reply,                 # optional; tools still work alongside output_schema
     output_key="latest_reply",           # writes final text to session.state[key]
     include_contents="default",          # or "none" to wipe history
     disallow_transfer_to_parent=False,
@@ -91,8 +91,8 @@ agent = LlmAgent(
 | `static_instruction` | `types.ContentUnion` | `None` | For context-cache friendly prefixes |
 | `tools` | `list[Callable \| BaseTool \| BaseToolset]` | `[]` | Callables are auto-wrapped as `FunctionTool` |
 | `generate_content_config` | `types.GenerateContentConfig` | `None` | Temperature, safety, thinking, etc. |
-| `mode` | `'chat' \| 'task' \| 'single_turn' \| None` | `None` | Root `LlmAgent` must have `mode='chat'` |
-| `input_schema` / `output_schema` | Pydantic model / schema | `None` | `output_schema` and `tools` can be used together (since 2.3.0) |
+| `mode` | `'chat' \| 'task' \| 'single_turn' \| None` | `None` | A root `LlmAgent` must be `'chat'` (the default) or `'task'` |
+| `input_schema` / `output_schema` | Pydantic model / schema | `None` | `output_schema` and `tools` can be used together |
 | `output_key` | `str` | `None` | Writes final text to `session.state[key]` |
 | `include_contents` | `'default' \| 'none'` | `'default'` | `'none'` → stateless single-turn |
 | `planner` | `BasePlanner` | `None` | `BuiltInPlanner` forwards `thinking_config` to the model |
@@ -147,8 +147,8 @@ A bare string is looked up in `LLMRegistry`. The registered prefixes are `Gemini
 ```python
 from google.adk.models import Gemini, LiteLlm
 
-# Gemini with explicit base URL and speech config
-agent = LlmAgent(name="voice", model=Gemini(model="%%model=gemini-flagship%%"))
+# A Gemini instance, where per-model settings such as retry_options go
+agent = LlmAgent(name="analyst", model=Gemini(model="%%model=gemini-flagship%%"))
 
 # OpenAI via LiteLlm (requires `pip install google-adk[extensions]`)
 agent = LlmAgent(name="gpt", model=LiteLlm(model="openai/%%model=openai%%"))
@@ -237,10 +237,10 @@ The `mode` field controls dispatch behaviour, agent-transfer eligibility, and ho
 | `'chat'` | Continuous conversation loop | Injected (if `sub_agents` set) | `'default'` (full history) | Root `LlmAgent`; first node after `START` in a `Workflow` |
 | `None` | Resolved by context | — | — | Root `LlmAgent` (runner → `'chat'`); `Workflow` node (`build_node()` → `'single_turn'`) |
 | `'single_turn'` | One LLM call, then exit | **Not** injected | `'none'` (stateless) | Any `Workflow` node; `build_node()` default |
-| `'task'` | Structured I/O with `FinishTaskTool` handshake | **Not** injected | `'default'` | Sub-agent of a `mode='chat'` coordinator; or `ctx.run_node()` |
+| `'task'` | Multi-round work that ends with a `finish_task` call | **Not** injected | `'default'` | Sub-agent of a `mode='chat'` coordinator, a `Workflow` node, `ctx.run_node()`, or the root |
 
 > When `mode=None`, the runner auto-sets `'chat'` for a root `LlmAgent`, but `build_node()` resolves it to `'single_turn'` when the agent is placed inside a `Workflow`.
-> `mode='task'` agents **cannot** be placed as static graph nodes in a `Workflow` — `Workflow.__init__` raises `ValueError`. Use them as `sub_agents` of a chat coordinator or dispatch them via `ctx.run_node()`.
+> A `mode='task'` agent works as a static `Workflow` node: it is offered a `finish_task` tool, keeps going until it calls it, and the validated arguments become the node's output. A `RemoteA2aAgent` in task mode is the exception: it is only supported in tool-delegation mode, not as a standalone node.
 
 ### `mode='chat'` — conversational root agent
 
@@ -346,7 +346,7 @@ asyncio.run(main())
 
 `task` mode agents accept a structured `input_schema` and return a validated `output_schema`. The ADK uses a `FinishTaskTool` handshake internally: the LLM calls `finish_task(result=...)` when ready, ADK validates the Pydantic model, and the result surfaces as `event.output` on the parent. If validation fails, the model is prompted to retry.
 
-> **Important:** `mode='task'` agents must be in a chat coordinator's `sub_agents` or dispatched via `ctx.run_node()`. They **cannot** be static `Workflow` graph nodes.
+> Task agents can be a chat coordinator's `sub_agents` (below), static `Workflow` nodes, or dispatched with `ctx.run_node()`.
 
 ```python
 import asyncio
@@ -495,13 +495,11 @@ async def main():
 asyncio.run(main())
 ```
 
-**How it works internally:** `build_node()` sees `parallel_worker=True` and wraps the `LlmAgent` in a `_ParallelWorker` node. When the predecessor outputs a list, `_ParallelWorker` fans out — spawning one `LlmAgent` invocation per element — and collects the results back into a list that it passes to the next node. `max_parallel_workers` is a `_ParallelWorker` constructor argument that caps concurrent worker count; use `_ParallelWorker(node=agent, max_parallel_workers=N)` directly in `edges`. `LlmAgent.parallel_worker=True` is only the signal that wrapping should happen — it does not accept a concurrency cap itself. `@node`-decorated functions emit results via `event.output`; `LlmAgent` nodes emit via `event.content`.
-
-> The `parallel_worker` feature is available in google-adk 2.4.0+. Passing `max_parallel_workers` to the `@node` decorator without `parallel_worker=True` raises `WorkflowConfigurationError`.
+**How it works:** `node(agent, parallel_worker=True)` wraps the agent in a parallel-worker node. When the predecessor outputs a list, it runs the agent once per element, at most `max_parallel_workers` at a time, and passes the list of results to the next node in input order. Setting `parallel_worker=True` on the `LlmAgent` itself has the same effect when the agent is placed in an edge, but has no concurrency cap; use `node(...)` when you need one. Passing `max_parallel_workers` without `parallel_worker=True` raises `WorkflowConfigurationError`.
 
 ## Transfer and routing
 
-An `LlmAgent` with `sub_agents=[...]` gets the `transfer_to_agent` tool injected automatically. The runner's `_find_agent_to_run` routes the next user message to the last-replying transferable agent (`runners.py`).
+An `LlmAgent` with `sub_agents=[...]` gets the `transfer_to_agent` tool injected automatically. On the next user message, the runner routes to the agent that replied last, as long as transfers allow it to keep the conversation.
 
 ```python
 from google.adk.agents import LlmAgent
@@ -525,10 +523,11 @@ Set `code_executor=` on an `LlmAgent` to let the model run code:
 |---|---|---|
 | `BuiltInCodeExecutor` | Gemini-side (safe, sandboxed) | none |
 | `UnsafeLocalCodeExecutor` | current Python process | none — **unsafe** |
-| `VertexAiCodeExecutor` | Vertex AI extension | `google-adk[extensions]` |
+| `AgentEngineSandboxCodeExecutor` | Vertex AI Agent Engine code sandbox | none beyond Google Cloud credentials |
 | `ContainerCodeExecutor` | Local Docker container | `google-adk[extensions]` |
 | `GkeCodeExecutor` | GKE pod | `google-adk[extensions]` |
-| `AgentEngineSandboxCodeExecutor` | Agent Engine sandbox | `google-adk[extensions]` |
+| `CloudRunSandboxCodeExecutor` | Cloud Run sandbox (`google.adk.integrations.cloud_run`) | Google Cloud credentials |
+| `VertexAiCodeExecutor` | Vertex AI Code Interpreter extension | **Deprecated**; needs `google-cloud-aiplatform>=2.2,<3` installed separately |
 
 ```python
 from google.adk.code_executors import BuiltInCodeExecutor
@@ -541,7 +540,7 @@ agent = LlmAgent(
 )
 ```
 
-Note: when `RunConfig.support_cfc=True` and the agent's model is `gemini-2.*`, the runner swaps in `BuiltInCodeExecutor` automatically (`runners.py`).
+Note: `RunConfig(support_cfc=True)` (compositional function calling) makes the root agent use `BuiltInCodeExecutor` whatever `code_executor` says, and the runner raises `ValueError: CFC is not supported for model ...` unless the model name starts with `gemini-2`.
 
 Every executor inherits these `BaseCodeExecutor` fields:
 
@@ -609,9 +608,27 @@ agent = LlmAgent(
 
 **What actually reaches the model.** Because execution happens server-side, code and output events are **not** emitted as function calls. Gemini returns `types.Part.executable_code` (the program it ran) and `types.Part.code_execution_result` (stdout / stderr) inline in the response content. To audit each step, walk `event.content.parts` and pull those two Part types out — `event.get_function_calls()` returns `[]` for built-in code execution because no tool call was invoked from the client side.
 
-### `VertexAiCodeExecutor` — reuse an existing Code Interpreter extension
+### `AgentEngineSandboxCodeExecutor` — managed sandbox on Google Cloud
 
-Source-verified against `google.adk.code_executors.vertex_ai_code_executor`. Unlike `BuiltInCodeExecutor`, this one **actually runs code client-side via a Vertex AI Extension** and turns any file output (images, CSVs, JSON) into ADK artifacts.
+Runs model-written code in a Vertex AI Agent Engine code-execution sandbox, outside your process. Pass an existing `agent_engine_resource_name` (`projects/.../locations/.../reasoningEngines/...`) and the executor creates a sandbox per session; pass `sandbox_resource_name` to pin one; pass neither and it creates an Agent Engine for you.
+
+```python
+from google.adk.agents import LlmAgent
+from google.adk.code_executors import AgentEngineSandboxCodeExecutor
+
+analyst = LlmAgent(
+    name="analyst",
+    model="%%model=gemini%%",
+    instruction="Answer data questions by writing and running Python.",
+    code_executor=AgentEngineSandboxCodeExecutor(
+        agent_engine_resource_name="projects/my-project/locations/us-central1/reasoningEngines/123",
+    ),
+)
+```
+
+### `VertexAiCodeExecutor` — deprecated
+
+`VertexAiCodeExecutor` is deprecated in %%version=google-adk%%: Vertex AI Extensions is being retired and the Code Interpreter extension it wraps has no replacement, so ADK points to `AgentEngineSandboxCodeExecutor` instead. `google-adk[gcp]` no longer installs what it needs; existing code keeps working with `google-cloud-aiplatform>=2.2,<3` installed and logs a deprecation warning. For reference, it runs code client-side via the extension and turns file output (images, CSVs, JSON) into ADK artifacts:
 
 ```python
 from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
@@ -651,7 +668,7 @@ agent = LlmAgent(
 
 ## Deprecated shell agents (still supported)
 
-All three accept `name` and `sub_agents` via `BaseAgent`. They emit `DeprecationWarning` on import and will be removed in a future release.
+All three accept `name` and `sub_agents` via `BaseAgent`. Creating one emits a `DeprecationWarning` (the classes are marked with `typing_extensions.deprecated`), and they will be removed in a future release. `Workflow` cannot yet be an `LlmAgent` sub-agent, so these remain the way to put a fixed pipeline under a transferring coordinator.
 
 ### SequentialAgent
 
@@ -685,20 +702,23 @@ Sub-agents run concurrently in isolated branches. `run_live` is **not supported*
 
 ```python
 from google.adk.agents import LoopAgent, LlmAgent
+from google.adk.tools import exit_loop
 
 critic = LlmAgent(
     name="critic",
+    model="%%model=gemini%%",
     instruction=(
-        "Read state['draft']. If good enough, set actions.escalate=True. "
-        "Otherwise rewrite it and store it back to state['draft']."
+        "Here is the draft: {draft?}. If it is good enough, call exit_loop. "
+        "Otherwise reply with an improved draft only."
     ),
+    tools=[exit_loop],      # sets actions.escalate, which ends the loop
     output_key="draft",
 )
 
 loop = LoopAgent(name="refine", sub_agents=[critic], max_iterations=5)
 ```
 
-Exit conditions: `max_iterations` reached, or any event with `actions.escalate=True`. `max_iterations=None` means loop until an escalate.
+Exit conditions: `max_iterations` reached, or any event with `actions.escalate=True`. A model cannot set that flag by itself; the `exit_loop` tool (or a callback or tool that sets `tool_context.actions.escalate = True`) does it. `max_iterations=None`, the default, means loop until something escalates.
 
 ## LangGraphAgent
 
@@ -785,10 +805,10 @@ fanout = Workflow(name="fanout", edges=[(START, (algo_a, algo_b))])
 ## Patterns
 
 ### 1 — Specialists with a triage parent
-Set `sub_agents=[a, b]` on a parent `LlmAgent` to get `transfer_to_agent` routing. Disable `disallow_transfer_to_peers` on specialists so they can bounce between one another without returning to root.
+Set `sub_agents=[a, b]` on a parent `LlmAgent` to get `transfer_to_agent` routing. Leave `disallow_transfer_to_peers` at its default (`False`) on the specialists if they should be able to hand over to one another without going back through the root.
 
 ### 2 — Produce → Validate with `output_schema`
-An `LlmAgent` with `output_schema=MyPydanticModel` emits a validated structured reply. Since 2.3.0, `tools` can be used alongside `output_schema` — the ADK exposes tools during the thought loop and enforces the schema only on the final output. Wire structured-output agents downstream via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
+An `LlmAgent` with `output_schema=MyPydanticModel` emits a validated structured reply. `tools` can be used alongside `output_schema`: the model may call tools during the turn and the schema applies to the final answer (for models that cannot combine the two natively, ADK adds a `set_model_response` tool for the final answer). Wire structured-output agents downstream via `Workflow` or chain `output_key` → prompt template (`{draft}` placeholders).
 
 ### 3 — ReAct via `BuiltInPlanner`
 
@@ -849,7 +869,6 @@ agent = LlmAgent(
         thinking_config=types.ThinkingConfig(include_thoughts=True)
     ),
     after_model_callback=capture_thoughts,
-    tools=[...],
 )
 ```
 
@@ -877,16 +896,16 @@ agent = LlmAgent(
 
 ```
 /*PLANNING*/
-1. Use google_search to find the current CEO of Anthropic.
-2. Return the name in the final answer.
+1. Use get_stock_price to look up GOOG.
+2. Report the price in the final answer.
 /*REASONING*/
 Executing step 1.
 /*ACTION*/
-<function_call>google_search(query="Anthropic CEO 2025")</function_call>
+<function_call>get_stock_price(ticker="GOOG")</function_call>
 /*REASONING*/
-Found: Dario Amodei is CEO.
+The tool returned a price in USD.
 /*FINAL_ANSWER*/
-The CEO of Anthropic is Dario Amodei.
+GOOG last traded at the price the tool returned.
 ```
 
 **Tag semantics (from `planners/plan_re_act_planner.py`):**
@@ -1003,8 +1022,8 @@ from google.adk.agents import LlmAgent
 
 remote = RemoteA2aAgent(
     name="remote_specialist",
-    agent_card="https://specialist.internal/.well-known/agent.json",
-    timeout=30.0,
+    agent_card="https://specialist.internal/.well-known/agent-card.json",
+    timeout=30.0,          # seconds per request; the default is 600
 )
 
 root = LlmAgent(
@@ -1038,7 +1057,7 @@ managed_search = ManagedAgent(
     name="web_researcher",
     description="Answers questions that need live web search.",
     agent_id="antigravity-preview-05-2026",   # your Managed Agent ID
-    mode="single_turn",                        # required when used as a sub_agents member
+    mode="single_turn",                        # run as an inline tool of the parent; None = a transfer target
     tools=[types.Tool(google_search=types.GoogleSearch())],
 )
 
@@ -1073,7 +1092,7 @@ async def main():
 asyncio.run(main())
 ```
 
-**`mode='single_turn'`** — set this when placing a `ManagedAgent` inside a `LlmAgent.sub_agents` list. ADK wraps it as a `_SingleTurnAgentTool` automatically.
+**`mode='single_turn'`** makes the managed agent an inline single-turn tool of its parent `LlmAgent`, with its internal events kept in the shared session; it is the only mode supported. Leave `mode=None` (the default) for a sub-agent the parent transfers the conversation to.
 
 **`RemoteMcpServer`** — pass a `RemoteMcpServer` instance in `tools=` to connect the managed agent to an HTTP-streamable MCP server running server-side. Unlike client-side `McpToolset`, ADK forwards the server URL and auth headers to the Managed Agents API; the API connects and executes the MCP tools without local transport overhead.
 
@@ -1098,13 +1117,13 @@ managed_maps = ManagedAgent(
 
 ## Gotchas
 
-- `output_schema` and `tools` can be used together (since 2.3.0) — tools run during the thought loop and the schema is enforced on the final reply only (`llm_agent.py`).
+- `output_schema` and `tools` can be used together: tools run during the turn and the schema applies to the final reply only.
 - `global_instruction` is deprecated at the agent level; use `GlobalInstructionPlugin` at the `App` level.
-- A root `LlmAgent` must have `mode='chat'` or the runner auto-sets it. `mode='single_turn'` agents belong as `Workflow` nodes. `mode='task'` agents **cannot** be static `Workflow` graph nodes (`Workflow.__init__` raises `ValueError`) — place them in a chat coordinator's `sub_agents` or dispatch via `ctx.run_node()`. See [LlmAgent modes](#llmagent-modes).
+- A root `LlmAgent` must be in `mode='chat'` (set for you when `mode` is `None`) or `mode='task'`; a root in `single_turn` mode raises `ValueError`. `single_turn` agents belong in `Workflow`s. See [LlmAgent modes](#llmagent-modes).
 - `LoopAgent.run_live` is **not implemented** — `ParallelAgent.run_live` also raises `NotImplementedError`.
-- When a sub-agent has no `model`, it inherits from the nearest ancestor `LlmAgent`. If the root also omits `model`, the default is resolved via `LlmAgent._default_model` (`gemini-3.5-flash` in 2.3.0).
+- When a sub-agent has no `model`, it inherits from the nearest ancestor `LlmAgent`. If the root also omits `model`, `LlmAgent.DEFAULT_MODEL` (`gemini-3.5-flash` in %%version=google-adk%%) is used, or whatever `LlmAgent.set_default_model(...)` set.
 - Callables passed to `tools=` are wrapped as `FunctionTool(func=callable)` automatically. Pass an explicit `FunctionTool` only when you need `require_confirmation=`.
 - `LangGraphAgent` requires `langchain-core` and `langgraph` installed separately — they are not ADK dependencies.
 - `RemoteA2aAgent` is `@a2a_experimental` — import paths and wire protocol may change in future minor releases.
 - `ManagedAgent.tools` only accepts `types.Tool`, `BaseTool`, or `RemoteMcpServer` — a plain callable or `FunctionTool` raises a `NotImplementedError` at runtime because client-side tools are not supported in server-hosted execution.
-- `ManagedAgent` is available from `google.adk.agents` since 2.4.0.
+- `ManagedAgent` is available from `google.adk.agents` since 2.4.0, and needs a project with access to the Managed Agents API.

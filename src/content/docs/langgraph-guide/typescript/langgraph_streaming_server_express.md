@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Streaming server (Express)"
+  order: 40
 ---
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% (checked %%versions-checked%%).

@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Production"
+  order: 30
 ---
 
 Checked against `@langchain/langgraph` %%version=@langchain/langgraph%%, `langchain` %%version=langchainjs%% and `@langchain/langgraph-checkpoint` %%version=@langchain/langgraph-checkpoint%% (%%versions-checked%%). The examples type-check under `strict` and, apart from the Postgres and SDK ones (which need a database and a running server), run as shown.

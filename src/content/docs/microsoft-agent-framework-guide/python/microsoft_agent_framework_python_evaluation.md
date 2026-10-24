@@ -3,11 +3,14 @@ title: "Microsoft Agent Framework (Python) — Evaluation"
 description: "Quality gates for agents and workflows: evaluate_agent, evaluate_workflow, LocalEvaluator, @evaluator decorator, keyword_check and tool_call helpers."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Evaluation"
+  order: 31
 ---
 
 `agent_framework` ships a lightweight evaluation harness built into the core package. It runs a list of queries against an agent (or pre-recorded responses), extracts a normalised `EvalItem` per query, then applies a set of **checks** that produce pass/fail + score results. The same pattern scales to workflows via `evaluate_workflow`.
 
-Everything is in-process by default — no Azure AI Foundry / Microsoft Foundry dependency required. Plug a cloud evaluator in alongside `LocalEvaluator` when you want LLM-judge / risk / groundedness checks.
+Everything is in-process by default — no Microsoft Foundry dependency required. Plug a cloud evaluator in alongside `LocalEvaluator` when you want LLM-judge / risk / groundedness checks.
 
 Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._evaluation`, re-checked %%versions-checked%%; first written for 1.6.0). This module is marked `experimental` — API may evolve.
 
@@ -177,7 +180,7 @@ When the judge is itself an LLM call, async + a semaphore is the right shape —
 
 ```python
 import asyncio
-from agent_framework import CheckResult, evaluator
+from agent_framework import CheckResult, Message, evaluator
 from agent_framework.openai import OpenAIChatClient
 
 judge_client = OpenAIChatClient(model="%%model=openai-small%%")
@@ -194,12 +197,9 @@ the first line and a one-line reason on the second.
 async def factuality(query: str, response: str, context: str) -> CheckResult:
     async with judge_semaphore:
         result = await judge_client.get_response(
-            messages=[
-                {"role": "system", "content": JUDGE_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Question: {query}\nContext: {context}\nResponse: {response}",
-                },
+            [
+                Message(role="system", contents=[JUDGE_PROMPT]),
+                Message(role="user", contents=[f"Question: {query}\nContext: {context}\nResponse: {response}"]),
             ],
         )
     score_line, _, reason = result.text.partition("\n")
@@ -266,8 +266,9 @@ def split_before_tool(tool_name: str) -> ConversationSplitter:
             for c in msg.contents or []:
                 if getattr(c, "type", None) == "function_call" and getattr(c, "name", None) == tool_name:
                     return conversation[:i], conversation[i:]
-        # No matching tool call — fall back to the static last-turn splitter.
-        return EvalItem._split_last_turn_static(conversation)
+        # No matching tool call: split after the last user message, like LAST_TURN.
+        last_user = max((i for i, m in enumerate(conversation) if m.role == "user"), default=-1)
+        return conversation[: last_user + 1], conversation[last_user + 1 :]
 
     return _split
 
@@ -589,16 +590,20 @@ class FederatedEvaluator:
         )
 ```
 
-This is the pattern Microsoft Foundry's `FoundryEvals` uses internally to combine groundedness, relevance, and safety into a single result object — with a custom `Evaluator` you can do the same for whichever scorers you have.
+Callers see one `EvalResults`, so the merge is invisible to the code that gates on it.
 
 ## Cloud + local composition
 
-Microsoft Foundry ships a richer evaluator with groundedness, relevance, safety, and PII checks. Install `agent-framework-foundry` and mix it in — `evaluate_agent` accepts a list:
+`FoundryEvals` (in `agent-framework-foundry`) runs Microsoft Foundry's hosted evaluators: model-judged quality checks (`FoundryEvals.RELEVANCE`, `COHERENCE`, `FLUENCY`, `GROUNDEDNESS`, `RESPONSE_COMPLETENESS`, `SIMILARITY`, `INTENT_RESOLUTION`, `TASK_ADHERENCE`, `TASK_COMPLETION`), tool-use checks (`TOOL_CALL_ACCURACY`, `TOOL_SELECTION`, `TOOL_INPUT_ACCURACY`, `TOOL_OUTPUT_UTILIZATION`, `TOOL_CALL_SUCCESS`, `TASK_NAVIGATION_EFFICIENCY`) and safety checks (`VIOLENCE`, `SEXUAL`, `SELF_HARM`, `HATE_UNFAIRNESS`). Pick them with `evaluators=[...]`; `model=` is the judge deployment. Runs are asynchronous on the service (`poll_interval`, `timeout` default 180 s). Mix it with local checks — `evaluate_agent` accepts a list:
 
 ```python
 from agent_framework.foundry import FoundryEvals
 
-foundry_evals = FoundryEvals(project_client=project, model="%%model=openai-small%%")
+foundry_evals = FoundryEvals(
+    project_client=project,                     # an azure.ai.projects AIProjectClient
+    model="%%model=openai-small%%",
+    evaluators=[FoundryEvals.RELEVANCE, FoundryEvals.TOOL_CALL_ACCURACY, FoundryEvals.VIOLENCE],
+)
 
 all_results = await evaluate_agent(
     agent=agent,
@@ -614,12 +619,17 @@ One `EvalResults` comes back per evaluator — local first, then foundry. Merge 
 
 ## Failing the build
 
-`EvalResults.result_counts["failed"]` is non-zero when any item fails any check. Call `results.raise_for_status()` to raise `ValueError` when failures are present — the test run halts and the failure reasons surface in `EvalItemResult.scores`. Pass an optional message to customise the exception text:
+`EvalResults.result_counts["failed"]` is non-zero when any item fails any check. Call `results.raise_for_status()` to raise `EvalNotPassedError` (from `agent_framework`; a plain `Exception` subclass) when anything failed or errored — the test run halts and the failure reasons surface in `EvalItemResult.scores`. Pass an optional message to replace the default summary text:
 
 ```python
+from agent_framework import EvalNotPassedError
+
 [results] = await evaluate_agent(agent=agent, queries=queries, evaluators=local)
-results.raise_for_status("weather agent quality gate failed")
-# → ValueError: weather agent quality gate failed (2 failed, 0 errored)
+try:
+    results.raise_for_status("weather agent quality gate failed")
+except EvalNotPassedError as exc:
+    print(exc)    # weather agent quality gate failed Failed: <check>: failed; ...
+    raise
 ```
 
 Convenience properties let you branch without walking the count dict:
@@ -941,7 +951,7 @@ for query in test_queries:
 
 # Score with Foundry (groundedness, relevance, safety, …)
 foundry = FoundryEvals(project_client=project, model="%%model=openai-small%%")
-[foundry_results] = await foundry.evaluate(responses, eval_name="order-agent-v2")
+foundry_results = await foundry.evaluate(responses, eval_name="order-agent-v2")   # one EvalResults
 foundry_results.raise_for_status()
 ```
 
@@ -951,10 +961,16 @@ foundry_results.raise_for_status()
 
 **Nightly regression.** Record production transcripts → evaluate offline with `responses=...` and an LLM judge → post pass/fail trend to a dashboard.
 
-**Per-PR quality gate.** Run `evaluate_agent` against a small curated test set on every PR; block merge if failures appear. Pair with [Observability](./microsoft_agent_framework_python_observability/) so regressions surface as traces too.
+**Per-PR quality gate.** Run `evaluate_agent` against a small curated test set on every PR; block merge if failures appear. Pair with [Observability](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/) so regressions surface as traces too.
 
 **Compare two models.** Build two agents — one per `OpenAIChatClient(model=...)` — and call `evaluate_agent` on each. Since `LocalEvaluator` is cheap, run thousands of queries locally in minutes.
 
 **Evaluate orchestrations.** `evaluate_workflow` accepts any `Workflow`, including those produced by `SequentialBuilder`, `GroupChatBuilder`, and `MagenticBuilder`. Same checks, same score aggregation.
 
 **Multi-turn evaluation.** Use `EvalItem.per_turn_items` to split recorded conversations and evaluate every intermediate response, not just the final one. Feed those items directly to `LocalEvaluator.evaluate()` for cheap CI coverage of conversation flows.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Fixed the LLM-judge example (chat clients take `Message` objects, not dicts), the custom splitter (no longer calls a private method), `raise_for_status()` (raises `EvalNotPassedError`, not `ValueError`) and `FoundryEvals.evaluate()` (returns one `EvalResults`); listed the Foundry evaluator constants; removed an unsupported claim about `FoundryEvals` internals. |

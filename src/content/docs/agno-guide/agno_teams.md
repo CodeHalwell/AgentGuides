@@ -18,11 +18,13 @@ A `Team` is a leader model plus a list of members (agents or other teams). The l
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.team import Team
+from agno.tools.websearch import WebSearchTools   # pip install ddgs
 
 researcher = Agent(
     name="Researcher",
-    role="Finds facts and figures",
+    role="Finds facts and figures on the web",
     model=OpenAIResponses(id="%%model=openai-small%%"),
+    tools=[WebSearchTools()],            # without a tool, the Researcher could only recall what the model knows
 )
 writer = Agent(
     name="Writer",
@@ -35,6 +37,7 @@ team = Team(
     model=OpenAIResponses(id="%%model=openai%%"),
     members=[researcher, writer],
     instructions="Check facts with the Researcher before the Writer drafts anything.",
+    share_member_interactions=True,      # the Writer is shown what the Researcher was asked and answered
 )
 
 run = team.run("Write two sentences on where Leeds is.")
@@ -48,7 +51,7 @@ The leader's system message lists the members by id:
 ```text
 <team_members>
 <member id="researcher" name="Researcher">
-  Role: Finds facts and figures
+  Role: Finds facts and figures on the web
 </member>
 <member id="writer" name="Writer">
   Role: Writes short, clear copy
@@ -57,6 +60,8 @@ The leader's system message lists the members by id:
 ```
 
 A member's id is its `id` if you set one, otherwise its `name` made URL-safe (lower case, hyphens). Give members a `role` (and a `description` if needed): it is the only thing the leader knows about them besides the name, unless `add_member_tools_to_context=True` also lists their tools.
+
+Members only see what the leader writes in the task, unless you share more. In the example above the Writer is a separate agent: without `share_member_interactions=True` it receives only the task text the leader chose to write for it, and the Researcher's findings reach it only if the leader copies them in. With the setting on, Agno prefixes the Writer's input with a `<member_interaction_context>` block listing each earlier member's task and response (checked by logging what the Writer's model received in both cases). See [Sharing context with members](#sharing-context-with-members).
 
 ## Modes
 
@@ -77,11 +82,13 @@ from agno.team import Team, TeamMode
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.team import Team, TeamMode
+from agno.tools.websearch import WebSearchTools
 
 team = Team(
     model=OpenAIResponses(id="%%model=openai%%"),
     members=[
-        Agent(name="Researcher", role="Finds facts", model=OpenAIResponses(id="%%model=openai-small%%")),
+        Agent(name="Researcher", role="Finds facts", model=OpenAIResponses(id="%%model=openai-small%%"),
+              tools=[WebSearchTools()]),
         Agent(name="Writer", role="Writes copy", model=OpenAIResponses(id="%%model=openai-small%%")),
     ],
     mode=TeamMode.coordinate,
@@ -111,6 +118,8 @@ front_desk = Team(
 run = front_desk.run("I was charged twice this month")
 # run.content is Billing's answer; the leader model was called once, to choose
 ```
+
+The members here have no tools, so they answer from the model's general knowledge. A real front desk gives each specialist the tools for its department (an invoice lookup for Billing, a status check for Technical), as in the [front-desk recipe](/agno-guide/agno_recipes/#front-desk-classify-then-route).
 
 ### Broadcast
 
@@ -143,11 +152,13 @@ print(len(run.member_responses))  # 2
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.team import Team, TeamMode
+from agno.tools.websearch import WebSearchTools
 
 project = Team(
     model=OpenAIResponses(id="%%model=openai%%"),
     members=[
-        Agent(name="Researcher", role="Gathers sources", model=OpenAIResponses(id="%%model=openai-small%%")),
+        Agent(name="Researcher", role="Gathers sources", model=OpenAIResponses(id="%%model=openai-small%%"),
+              tools=[WebSearchTools()]),
         Agent(name="Analyst", role="Draws conclusions from sources", model=OpenAIResponses(id="%%model=openai-small%%")),
     ],
     mode=TeamMode.tasks,
@@ -186,13 +197,17 @@ A member can be a `Team`. It appears in the leader's member list with `type="tea
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.team import Team
+from agno.tools.arxiv import ArxivTools   # pip install arxiv pypdf
+from agno.tools.websearch import WebSearchTools
 
 research = Team(
     name="Research",
     model=OpenAIResponses(id="%%model=openai%%"),
     members=[
-        Agent(name="Web", role="Searches the web", model=OpenAIResponses(id="%%model=openai-small%%")),
-        Agent(name="Papers", role="Reads papers", model=OpenAIResponses(id="%%model=openai-small%%")),
+        Agent(name="Web", role="Searches the web", model=OpenAIResponses(id="%%model=openai-small%%"),
+              tools=[WebSearchTools()]),
+        Agent(name="Papers", role="Reads papers on arXiv", model=OpenAIResponses(id="%%model=openai-small%%"),
+              tools=[ArxivTools()]),
     ],
 )
 editorial = Team(

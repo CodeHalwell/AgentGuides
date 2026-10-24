@@ -16,7 +16,7 @@ Graphs live in the separate **`pydantic_graph`** package, installed with `pydant
 
 Most applications do not need one. An `Agent` already runs a loop of model calls and tool calls, and ordinary Python (`if`, `await`, `asyncio.gather`) composes several agents perfectly well. Reach for `pydantic_graph` when you want:
 
-- an explicit, typed state machine whose edges are checked when the graph is **built**;
+- an explicit, typed state machine: a type checker (pyright, mypy) checks that each edge's source output fits its destination's input, and `build()` checks the structure (every node reachable, no dead ends);
 - fan-out / fan-in over a list with a defined join;
 - a diagram of the workflow generated from the code (`graph.render()`);
 - step-by-step control of execution (`graph.iter()`).
@@ -39,9 +39,10 @@ PydanticAI's own agent loop is implemented on `pydantic_graph`; that is what `ag
 
 | Concept | API | Notes |
 |---|---|---|
-| Builder | `GraphBuilder(state_type=, deps_type=, input_type=, output_type=)` | Collects steps and edges; `build()` validates and returns a `Graph`. |
+| Builder | `GraphBuilder(state_type=, deps_type=, input_type=, output_type=)` | Collects steps and edges; `build()` validates the structure and returns a `Graph`. |
 | Step | `@builder.step` on `async def f(ctx: StepContext[State, Deps, Input]) -> Output` | `ctx.state` (mutable, shared), `ctx.deps`, `ctx.inputs` (the previous step's output). |
-| Edge | `builder.edge_from(a).to(b)` / `builder.add_edge(a, b)` | Output type of `a` must fit the input type of `b`. |
+| Stream step | `@builder.stream` on an async generator | Each yielded item can be sent down its own branch with `.map()`. |
+| Edge | `builder.edge_from(a).to(b)` / `builder.add_edge(a, b)` | Output type of `a` must fit the input type of `b` — checked by your type checker, not at run time. |
 | Start / end | `builder.start_node`, `builder.end_node` | The graph's `inputs=` flows out of the start node; whatever reaches the end node is the result. |
 | Decision | `builder.decision().branch(builder.match(T).to(step))` | Routes on the **type** of the value (with an optional `matches=` predicate). |
 | Fan-out / fan-in | `.map()` on an edge, `builder.join(reducer, ...)` | One parallel branch per item, collected by a reducer such as `reduce_list_append`. |
@@ -257,9 +258,54 @@ output: 3
 
 ## 4. Driving a graph step by step
 
-`graph.iter(...)` is an async context manager yielding a `GraphRun`. Iterating it yields, at each step, the list of `GraphTask`s about to run (each has a `node_id` and `inputs`), and finally an end marker; `run.output` holds the result. Use it for progress reporting, or to stop early by breaking out of the loop.
+`graph.iter(...)` is an async context manager yielding a `GraphRun`. Iterating it yields, at each step, the list of `GraphTask`s about to run (each has a `node_id` and `inputs`), and finally an `EndMarker`; `run.output` holds the result. Use it for progress reporting, or to stop early by breaking out of the loop. If a node raises, the next iteration re-raises the error; `run.override_next(...)` lets a supervisor redirect the graph to other tasks (or an `EndMarker`) instead.
 
-## 5. Agents inside steps
+`graph.run(...)` has a synchronous twin, `graph.run_sync(...)`, for scripts. `graph.render(title=..., direction=...)` sets the Mermaid diagram's title and layout direction.
+
+## 5. Streaming steps — fan out as items arrive
+
+`@g.stream` turns an async generator into a step. Mapped with `.map()`, each yielded item starts its own branch as soon as it is produced, so slow producers (paginated APIs, search results, an agent streaming a list) overlap with the work done on each item:
+
+```python
+import asyncio
+
+from pydantic_graph import GraphBuilder, StepContext, reduce_list_append
+
+g = GraphBuilder(input_type=list[str], output_type=list[str])
+
+
+@g.stream
+async def fetch_pages(ctx: StepContext[None, None, list[str]]):
+    for url in ctx.inputs:
+        await asyncio.sleep(0.01)          # stand-in for an HTTP request
+        yield f'<html>{url}</html>'
+
+
+@g.step
+async def extract_title(ctx: StepContext[None, None, str]) -> str:
+    return ctx.inputs.removeprefix('<html>').removesuffix('</html>').upper()
+
+
+collect = g.join(reduce_list_append, initial_factory=list[str])
+
+g.add(
+    g.edge_from(g.start_node).to(fetch_pages),
+    g.edge_from(fetch_pages).map().to(extract_title),
+    g.edge_from(extract_title).to(collect),
+    g.edge_from(collect).to(g.end_node),
+)
+graph = g.build()
+
+print(sorted(graph.run_sync(inputs=['a.example', 'b.example'])))
+```
+
+```
+['A.EXAMPLE', 'B.EXAMPLE']
+```
+
+Branches finish in whatever order they finish, so sort (or key) the joined result if order matters.
+
+## 6. Agents inside steps
 
 A step is plain async code, so an agent call is just `await agent.run(...)` (example 1). A few practical rules:
 
@@ -272,14 +318,14 @@ A step is plain async code, so an agent call is just `await agent.run(...)` (exa
 
 ## Gotchas
 
-- **Types are the routing table.** Edges and decisions are checked from annotations at `build()` time. A step annotated `-> dict` cannot feed a step expecting `Triage`.
+- **Types are the routing table — for the type checker.** `build()` checks the graph's *structure*: edges from the start node and to the end node exist, every node is reachable and none is a dead end (pass `validate_graph_structure=False` to skip). It does not compare types: a step returning `dict` wired to a step expecting `Triage` builds and runs, and fails only when the second step uses its input. Run pyright or mypy over graph code to catch those mismatches. Decisions are the exception — `match()` tests the value's type at run time to choose a branch.
 - **`match()` needs a type**: `builder.match('billing')` fails; use `builder.match(Literal['billing'])` or `matches=`.
 - **No built-in persistence.** If the process dies mid-graph, the run is gone. Put the graph inside a durable workflow (Temporal / DBOS / Prefect) if it must survive restarts.
 - **State is shared across parallel branches.** Branches created by `.map()` run concurrently and see the same `ctx.state`; prefer returning values to a join over mutating shared state.
 
 ## Reference
 
-- `GraphBuilder`, `Graph`, `GraphRun`, `GraphTask`, `StepContext`, `BaseNode`, `End`, `GraphRunContext`, reducers — `pydantic_graph` (top-level exports)
+- `GraphBuilder`, `Graph`, `GraphRun`, `GraphTask`, `EndMarker`, `ErrorMarker`, `StepContext`, `BaseNode`, `End`, `GraphRunContext`, reducers, `GraphSetupError`, `GraphRuntimeError` — `pydantic_graph` (top-level exports)
 - Edge-path builders and markers — `pydantic_graph.paths`
 - Decisions — `pydantic_graph.decision`; joins and reducers — `pydantic_graph.join`
 - Lower-level types (`Path`, `Fork`, `Join`, ID types) are in the [upstream graph docs](https://pydantic.dev/docs/ai/graph/graph/) and the `pydantic_graph` docstrings

@@ -8,7 +8,7 @@ sidebar:
   order: 16
 ---
 
-Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source package: `pydantic_ai.durable_exec`. The Temporal, DBOS and Prefect examples below were run against temporalio 1.34, dbos 3.3 and prefect 3.9.
+Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source package: `pydantic_ai.durable_exec`. The Temporal, DBOS and Prefect examples below were run against temporalio 1.34 (with a local `temporal` dev server), dbos 3.3 (SQLite) and prefect 3.9 (ephemeral local server), with `TestModel` standing in for the model.
 
 ## What durable execution gives you
 
@@ -104,10 +104,13 @@ async def main():
         print(output)
 
 
-asyncio.run(main())
+if __name__ == '__main__':   # required: the workflow sandbox re-imports this module
+    asyncio.run(main())
 ```
 
 Points worth knowing:
+
+- **Guard the entry point.** Temporal validates each workflow by re-importing its module inside a sandbox. A bare `asyncio.run(main())` at module level runs again during that import and fails with `RuntimeError: Failed validating workflow` (caused by `asyncio.run() cannot be called from a running event loop`). Keep the worker start-up under `if __name__ == '__main__':`, or put workflows and agents in their own module.
 
 - **`PydanticAIPlugin`** installs the Pydantic payload converter (so messages, deps and outputs serialise correctly) and registers the activities of every agent listed in `__pydantic_ai_agents__`. `AgentPlugin(agent)` registers a single agent when you are not using `PydanticAIWorkflow`.
 - **Activity configuration** is layered: `activity_config` (base, default 60-second `start_to_close_timeout`) → `model_activity_config` → `toolset_activity_config={toolset_id: ...}`. Per-tool configuration moved to tool metadata (`metadata={'temporal': ...}` on the tool, or a `SetToolMetadata` capability).

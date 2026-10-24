@@ -150,7 +150,7 @@ from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 
 remote_solver = RemoteA2aAgent(
     name="remote_solver",
-    agent_card="https://agents.example.com/.well-known/agent.json",  # URL, path, or AgentCard
+    agent_card="https://agents.example.com/.well-known/agent-card.json",  # URL, path, or AgentCard
     description="Math solver hosted elsewhere",
     timeout=30.0,
 )
@@ -180,7 +180,7 @@ from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes,
 
 secure_peer = RemoteA2aAgent(
     name="secure_peer",
-    agent_card="https://secure-agent.example.com/.well-known/agent.json",
+    agent_card="https://secure-agent.example.com/.well-known/agent-card.json",
     auth_scheme=HTTPBearer(scheme="bearer"),
     auth_credential=AuthCredential(
         auth_type=AuthCredentialTypes.HTTP,
@@ -201,7 +201,7 @@ class ResearchOutput(BaseModel):
 
 researcher = RemoteA2aAgent(
     name="researcher",
-    agent_card="https://research.example.com/.well-known/agent.json",
+    agent_card="https://research.example.com/.well-known/agent-card.json",
     mode="task",
     output_schema=ResearchOutput,
 )
@@ -229,7 +229,7 @@ cfg = A2aRemoteAgentConfig(
         RequestInterceptor(before_request=add_auth_header),
     ],
 )
-agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-known/agent.json", config=cfg)
+agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-known/agent-card.json", config=cfg)
 ```
 
 `ParametersConfig` carries `request_metadata` and `client_call_context` per outgoing message. Modify it inside a `before_request` hook; the return value `(message, params)` is forwarded to the A2A send call. `after_request` receives each incoming `A2AEvent` and can filter or transform it. See `a2a/agent/config.py`.
@@ -427,8 +427,8 @@ async def main():
     weather_remote = RemoteA2aAgent(
         name="weather_specialist",
         description="Remote weather agent that can answer weather questions.",
-        # The agent card URL — served by the A2A server at /.well-known/agent.json
-        agent_card="http://localhost:8080/.well-known/agent.json",
+        # The agent card URL — served by the A2A server at /.well-known/agent-card.json
+        agent_card="http://localhost:8080/.well-known/agent-card.json",
     )
 
     # Orchestrator routes questions to the remote agent via A2A protocol

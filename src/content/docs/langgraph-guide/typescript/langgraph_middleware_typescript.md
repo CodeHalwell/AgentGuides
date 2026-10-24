@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Middleware & guardrails"
+  order: 25
 ---
 
 > Verified against `@langchain/langgraph` %%version=@langchain/langgraph%% and `langchain` %%version=langchainjs%% (checked %%versions-checked%%).

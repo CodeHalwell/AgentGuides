@@ -172,14 +172,36 @@ async def enforce_policy(ctx, *, output_context, output):
 Pass `timeout=` (seconds) to any hook decorator. If the hook function takes longer, `HookTimeoutError` is raised:
 
 ```python
+import asyncio
+
+from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks, HookTimeoutError
 
 hooks = Hooks()
+
+
+async def some_external_check() -> None:
+    await asyncio.sleep(5)   # stands in for a slow policy service
+
 
 @hooks.on.before_tool_execute(timeout=2.0)
 async def slow_guard(ctx, *, call, tool_def, args):
     await some_external_check()  # must finish in < 2 s
     return args
+
+
+agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
+
+
+@agent.tool_plain
+def transfer(amount: float) -> str:
+    return f'sent {amount}'
+
+
+try:
+    agent.run_sync('Send 10.')
+except HookTimeoutError as exc:   # an AgentRunError and a TimeoutError
+    print('hook timed out:', exc)
 ```
 
 ## Wrapping hooks — full control of the call chain
@@ -203,21 +225,26 @@ async def time_model_request(ctx, *, request_context, handler):
 @hooks.on.tool_execute
 async def wrap_tool(ctx, *, call, tool_def, args, handler):
     print(f'→ executing {tool_def.name}')
-    result = await handler(call, tool_def, args)
+    result = await handler(args)   # the handler takes only the (possibly modified) validated args
     print(f'← {tool_def.name} returned')
     return result
 ```
+
+Returning without calling `handler` skips the operation, and the wrap hook's return value is used instead.
 
 ## Composing multiple Hooks instances
 
 Stack several `Hooks` objects in the `capabilities=` list — they run in order:
 
 ```python
+from collections import Counter
+
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
 
 audit_hooks = Hooks()
 metrics_hooks = Hooks()
+metrics: Counter[str] = Counter()
 
 @audit_hooks.on.before_tool_execute(tools=['write_db'])
 async def audit_write(ctx, *, call, tool_def, args):
@@ -226,7 +253,7 @@ async def audit_write(ctx, *, call, tool_def, args):
 
 @metrics_hooks.on.after_run
 async def record_metric(ctx, *, result):
-    metrics.increment('agent.run.completed')
+    metrics['agent.run.completed'] += 1
     return result
 
 agent = Agent('openai:%%model=openai%%', capabilities=[audit_hooks, metrics_hooks])
@@ -237,35 +264,55 @@ agent = Agent('openai:%%model=openai%%', capabilities=[audit_hooks, metrics_hook
 Hooks can also be passed at `run()` time for one-shot observability:
 
 ```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import Hooks
+
+agent = Agent('openai:%%model=openai%%')
 one_time = Hooks()
+
 
 @one_time.on.before_model_request
 async def debug_this_request(ctx, request_context):
-    print('DEBUG:', request_context.messages)
+    print('DEBUG:', len(request_context.messages), 'messages')
     return request_context
 
-result = await agent.run('test prompt', capabilities=[one_time])
+
+result = agent.run_sync('test prompt', capabilities=[one_time])   # only this run is hooked
 ```
 
 ## Event streaming hook
 
-`wrap_run_event_stream` intercepts the raw event stream for custom event processing:
+`@hooks.on.event` observes every event in the run's stream — model deltas, tool calls and results, custom events — whether the run is streamed or not. Pass event classes to receive only those; `@hooks.on.run_event_stream` instead wraps the whole stream when you need to transform or drop events.
 
 ```python
-from collections.abc import AsyncIterable
 from pydantic_ai import Agent
 from pydantic_ai.capabilities import Hooks
-from pydantic_ai.messages import AgentStreamEvent
+from pydantic_ai.messages import AgentStreamEvent, FunctionToolCallEvent, FunctionToolResultEvent
 
 hooks = Hooks()
+sent: list[dict] = []   # stands in for a websocket or message queue
+
 
 @hooks.on.event
-async def forward_events(ctx, event: AgentStreamEvent) -> AgentStreamEvent:
-    # Forward every event to a websocket, message queue, etc.
-    await ws.send_json({'type': event.__class__.__name__})
-    return event
+async def forward_events(ctx, event: AgentStreamEvent) -> None:
+    sent.append({'type': type(event).__name__})
+
+
+@hooks.on.event(FunctionToolCallEvent, FunctionToolResultEvent)
+async def audit_tools(ctx, event) -> None:
+    print('tool event:', event.part.tool_name)
+
 
 agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
+
+
+@agent.tool_plain
+def lookup(city: str) -> str:
+    return f'Sunny in {city}'
+
+
+agent.run_sync('Weather in Leeds?')
+print(sent[:3])
 ```
 
 ## Complete observability pattern
@@ -403,8 +450,48 @@ agent = Agent('openai:%%model=openai%%', capabilities=[hooks])
 The example also shows `OutputContext`, which output hooks receive: it tells you *how* the output was produced (`mode` — `'tool'`, `'native'`, `'prompted'`, `'text'`, `'image'` — plus `output_type`, `tool_call`, `tool_def`, `allows_text`, `allows_image`, `allows_deferred_tools`). `@agent.output_validator` does not get it; use the `before_/after_output_validate` or `output_process` hooks.
 
 ```python
-{code}
+from pydantic import BaseModel
+from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai.capabilities import Capability, Hooks
+from pydantic_ai.output import OutputContext
+
+finance = Capability(
+    id='finance',
+    description='Stock prices and portfolio maths.',
+    instructions='Quote prices in USD with two decimal places.',
+    defer_loading=True,
+)
+
+
+@finance.tool
+def get_stock_price(ctx: RunContext[object], ticker: str) -> float:
+    """Latest closing price for a ticker."""
+    return {'ACME': 151.2}.get(ticker.upper(), 0.0)
+
+
+class Quote(BaseModel):
+    ticker: str
+    price: float
+
+
+hooks = Hooks()
+
+
+@hooks.on.after_output_validate
+async def check_quote(ctx, *, output_context: OutputContext, output):
+    via = output_context.tool_def.name if output_context.tool_def else 'text'
+    print(f'output arrived in {output_context.mode!r} mode via {via}')
+    if isinstance(output, Quote) and output.price <= 0:
+        raise ModelRetry('The price must be positive; look it up with get_stock_price.')
+    return output
+
+
+agent = Agent('openai:%%model=openai%%', output_type=Quote, capabilities=[finance, hooks])
+result = agent.run_sync('What is ACME trading at?')
+print(result.output)
 ```
+
+Until the model calls `load_capability('finance')`, the request's instructions only list the capability ("The following capabilities are deferred and can be loaded using the `load_capability` tool…") and `get_stock_price` is sent with `defer_loading=True`.
 
 For anything more involved — state across hooks, configuration, serialisation into an `AgentSpec` — subclass `AbstractCapability` and override the `before_*` / `after_*` / `wrap_*` / `on_*_error` methods, `get_instructions`, `get_toolset` or `get_model_settings`.
 

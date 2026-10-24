@@ -174,11 +174,13 @@ def review(si: StepInput) -> StepOutput:
 
 
 def revision_brief(si: StepInput) -> StepOutput:
-    # Becomes the writer's input for the next round (forward_iteration_output=True)
+    # Becomes the writer's input for the next round (forward_iteration_output=True).
+    # Look steps up by name: from round two, previous_step_content is not reliably this
+    # round's review (in testing it held round one's brief).
     return StepOutput(content=(
         f"{si.get_step_content('notes')}\n\n"
         f"Previous draft:\n{si.get_step_content('write')}\n\n"
-        f"Reviewer feedback:\n{si.previous_step_content}"
+        f"Reviewer feedback:\n{si.get_step_content('review')}"
     ))
 
 

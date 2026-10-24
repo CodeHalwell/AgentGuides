@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Recipes"
+  order: 20
 ---
 
 **Production-Ready Code Examples and Practical Implementations**

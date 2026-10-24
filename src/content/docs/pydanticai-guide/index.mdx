@@ -96,15 +96,18 @@ Condensed version history. The upstream [changelog](https://pydantic.dev/docs/ai
 
 | Version | Date | Highlights |
 |---------|------|-----------|
-| 1.0.0 | Sep 2025 | API stability commitment for the 1.x line. |
-| 1.84–1.88 | Apr 2026 | Embeddings API, AG-UI adapter, `ApprovalRequiredToolset`, `DeferredLoadingToolset`; capabilities system introduced (`Hooks`, `AbstractCapability`). |
-| 1.89–1.99 | May 2026 | `DeferredToolCalls` → `DeferredToolRequests`; `AgentRun` exported; `ConcurrencyLimiter`; `pydantic_ai.ui.ag_ui`; `common_tools`. |
-| 1.100–1.107 | May–Jun 2026 | Most V2 removals announced via deprecation warnings; `MCPToolset`; native tool suite; `GraphBuilder`; agent graph nodes public. |
+| 1.0.0 | Sep 2025 | API stability commitment for the 1.x line. `FallbackModel`, `ApprovalRequiredToolset` and `DeferredToolRequests` already present. |
+| 1.1–1.40 | Sep 2025 – Jan 2026 | AG-UI adapter (`AGUIAdapter`), `WebFetchTool`, embeddings API (`Embedder`). |
+| 1.41–1.75 | Jan–Apr 2026 | `ConcurrencyLimiter`; capabilities system (`AbstractCapability`, `Hooks`) and `AgentSpec`. |
+| 1.76–1.94 | Apr–May 2026 | `DeferredLoadingToolset` and `ToolSearch`; `ToolOrOutput`. |
+| 1.95–1.107 | May–Jun 2026 | V2 removals announced as `PydanticAIDeprecationWarning`s; `NativeOrLocalTool` capabilities; `MCPToolset` (1.97). |
 | **2.0.0** | **Jun 2026** | **Major version.** `openai:` means the Responses API; `builtin_tools=` → `capabilities=[NativeTool(...)]`; `MCPServer*` → `MCPToolset`; `result.usage` is a property; `run_stream_events()` is a context manager; default `end_strategy='graceful'`; `ModelProfile` is a `TypedDict`; slimmer default extras; graph persistence removed. See [Upgrading from V1](./pydantic_ai_comprehensive_guide/#upgrading-from-v1). |
-| 2.1–2.13 | Jun–Jul 2026 | `FallbackModel` response handlers, `Embedder`, server-side compaction, `OnlineEvaluation`, `NativeOrLocalTool` with the `MCP` / `WebSearch` / `WebFetch` / `ImageGeneration` / `Thinking` capabilities, `ToolOrOutput`, `AgentSpec` YAML/JSON. |
-| 2.14 | Jul 2026 | Durability capabilities (`TemporalDurability`, `DBOSDurability`, `PrefectDurability`) — the wrapper agents are deprecated; `SelectModel` / `ResolveModelId`. |
-| 2.15–2.40 | Jul–Sep 2026 | `ToolFailed`, `AdvisorTool`, `CancellationToken` / `RunCancelled`, `RunUsage.cost`, realtime voice sessions (`agent.realtime()`). |
-| 2.41–2.59 | Sep–Oct 2026 | `Caching` and `LocalWorkspace` capabilities, plus steady provider and model additions. |
+| 2.10–2.13 | Jul 2026 | `SelectModel` and `ResolveModelId` capabilities. |
+| 2.14 | Jul 2026 | Durability capabilities (`TemporalDurability`, `DBOSDurability`, `PrefectDurability`); the wrapper agents are deprecated. |
+| 2.15–2.40 | Jul–Sep 2026 | `ToolFailed`, `AdvisorTool`, `CancellationToken` / `RunCancelled`, realtime voice sessions (`agent.realtime()`). |
+| 2.51–2.59 | Sep–Oct 2026 | `Caching` and `LocalWorkspace` capabilities. |
+
+Version ranges are where a feature first appears in the published wheels; the changelog has exact versions.
 
 ## Install, minimal example
 

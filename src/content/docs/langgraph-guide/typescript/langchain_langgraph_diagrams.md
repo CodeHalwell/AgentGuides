@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Diagrams"
+  order: 45
 ---
 
 Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications.
