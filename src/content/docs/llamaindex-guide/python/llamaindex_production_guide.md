@@ -509,7 +509,7 @@ def spend_usd() -> float:
     ) / 1_000_000
 ```
 
-The counter is process-wide and counts every call since the last `token_counter.reset_counts()`. Export the totals as metrics, or read the provider's own usage block from `LLMChatEndEvent.response.raw` in an [event handler](/llamaindex-guide/python/llamaindex_observability_python/#3-custom-event-handlers) for billing-grade numbers.
+The counter is process-wide and counts every call since the last `token_counter.reset_counts()`. For LLM calls it uses the token counts the provider returns and falls back to the tokenizer when there are none; embedding counts are always tokenizer estimates. Export the totals as metrics, or read per-call usage in an [event handler](/llamaindex-guide/python/llamaindex_observability_python/#4-custom-event-handlers). `TokenCountingHandler(token_budget=...)` raises once total LLM tokens pass a limit, which is useful as a circuit breaker.
 
 ## 6. Evaluation as a release gate
 
@@ -709,4 +709,5 @@ Integration packages are versioned separately from core. Let pip resolve them ag
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 0.14.25 | Cost section corrected: `TokenCountingHandler` uses the provider's reported usage for LLM calls and only estimates when none is reported; mentioned `token_budget`. |
 | 2026-10-21 | 0.14.25 | Rewritten around one working app. The previous edition registered three `/query` handlers (so authentication and rate limiting never ran), referenced `/health` and `/ready` routes that did not exist, used `JSONResponse` without importing it, had a cost tracker that never recorded usage, and was mostly generic FastAPI, Kubernetes, nginx and sharding material. New: incremental ingestion with stable node IDs, vector store selection, tenant filtering, `WorkflowServer` and `llamactl`, evaluation gate, offline tests (all run), current GitHub Actions. |

@@ -66,6 +66,11 @@ Numbers are the comprehensive guide's section numbers; unnumbered steps are sepa
   <LinkCard title="LlamaHub tools & MCP" href="./llamaindex_comprehensive_guide/#17-llamahub-tools-and-mcp" />
   <LinkCard title="Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" />
   <LinkCard title="Advanced retrieval" href="./llamaindex_comprehensive_guide/#19-advanced-retrieval" />
+  <LinkCard title="Response modes" href="./llamaindex_comprehensive_guide/#37-query-engines" />
+  <LinkCard title="Chat engines" href="./llamaindex_comprehensive_guide/#38-chat-engines" />
+  <LinkCard title="Chunking and metadata extraction" href="./llamaindex_comprehensive_guide/#311-chunking-strategies-and-metadata-extraction" />
+  <LinkCard title="Small-to-big retrieval" href="./llamaindex_comprehensive_guide/#196-small-to-big-retrieval-sentence-windows-and-auto-merging" />
+  <LinkCard title="Citations" href="./llamaindex_comprehensive_guide/#198-answers-with-citations" />
   <LinkCard title="Workflows" href="./llamaindex_workflows/" />
   <LinkCard title="Workflow checkpointing" href="./llamaindex_workflows/#11-checkpointing-and-resuming" />
   <LinkCard title="Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" />
@@ -134,6 +139,7 @@ Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/python/llamaindex_co
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 0.14.25 / workflows 2.26.1 | Audit against an installed release. New: response modes, chat engine modes, filters, chunking and metadata extraction, sentence-window and auto-merging retrieval, HyDE, citations (comprehensive guide); span and event reference, token budgets and local tracing (observability); chat-engine route, client and tests (streaming server); cited-answer and text-to-SQL recipes. Corrected: the observability page said agents emit `AgentToolCallEvent` (they do not) and that token counts are only tokenizer estimates (LLM counts use the provider's usage when reported); the ReAct and router diagrams. |
 | 2026-10-24 | 0.14.25 / workflows 2.26.1 | Added the [Workflows](/llamaindex-guide/python/llamaindex_workflows/) page; the Zero → Hero step for custom workflows now points to it. |
 | 2026-10-21 | 0.14.25 | Zero → Hero cards now carry the comprehensive guide's section numbers; links added for the new property graph, multimodal, LlamaParse, serving and evaluation-dataset sections; production guide rewritten. |
 | 2026-10-21 | 0.14.25 | Version now read from the site's version registry. Minimal example rewritten for `FunctionAgent` (the previous one used the removed `ReActAgent.from_tools` / `.chat()` API). `llama-agents` references replaced with `AgentWorkflow` and LlamaAgents/`llamactl`. Comprehensive guide, advanced pages and recipes re-verified against an installed copy. |

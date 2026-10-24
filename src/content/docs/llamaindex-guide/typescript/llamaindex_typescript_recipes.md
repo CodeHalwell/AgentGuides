@@ -30,6 +30,7 @@ npm install @llamaindex/workflow @llamaindex/core @llamaindex/openai zod     # R
 8. [Stateful Conversation Workflow](#recipe-8-stateful-conversation-workflow)
 9. [Parallel Tool Execution](#recipe-9-parallel-tool-execution)
 10. [Customer Support Triage](#recipe-10-customer-support-triage)
+11. [Filtered retrieval and a chat engine](#recipe-11-filtered-retrieval-and-a-chat-engine)
 
 ---
 
@@ -649,10 +650,74 @@ export async function triageTicket(id: string, body: string) {
 
 ---
 
+## Recipe 11: Filtered retrieval and a chat engine
+
+The `llamaindex` package also has what Recipe 1 does not show: chunking settings, metadata filters on a retriever, and a chat engine that keeps the conversation. Install as in [Recipe 1](#recipe-1-rag-with-vectorstoreindex).
+
+```typescript
+import {
+  ContextChatEngine,
+  Document,
+  FilterOperator,
+  SentenceSplitter,
+  Settings,
+  VectorStoreIndex,
+  type MetadataFilters,
+} from 'llamaindex';
+import { OpenAI, OpenAIEmbedding } from '@llamaindex/openai';
+
+const llm = new OpenAI({ model: '%%model=openai-small%%' });
+Settings.llm = llm;
+Settings.embedModel = new OpenAIEmbedding({ model: 'text-embedding-3-small' });
+Settings.nodeParser = new SentenceSplitter({ chunkSize: 256, chunkOverlap: 32 });
+
+const index = await VectorStoreIndex.fromDocuments([
+  new Document({ text: 'Staff receive 25 days of paid holiday a year.', metadata: { department: 'hr', file: 'leave.md' } }),
+  new Document({ text: 'Production deployments need two approvals.', metadata: { department: 'engineering', file: 'deploy.md' } }),
+]);
+
+const hrOnly: MetadataFilters = {
+  filters: [{ key: 'department', operator: FilterOperator.EQ, value: 'hr' }],
+};
+
+// Retrieval restricted by metadata
+const retriever = index.asRetriever({ similarityTopK: 3, filters: hrOnly });
+for (const hit of await retriever.retrieve({ query: 'How much holiday do I get?' })) {
+  console.log(hit.score?.toFixed(3), hit.node.metadata.file);
+}
+
+// A chat engine over the same retriever keeps the conversation
+const chat = new ContextChatEngine({
+  retriever,
+  chatModel: llm,
+  systemPrompt: 'Answer from the context. Say so when the context does not answer.',
+});
+const first = await chat.chat({ message: 'How much holiday do I get?' });
+console.log(first.message.content, first.sourceNodes?.length);
+const second = await chat.chat({ message: 'And does that include bank holidays?' });
+console.log(second.message.content);
+
+// Streaming
+const stream = await chat.chat({ message: 'Summarise that in five words.', stream: true });
+for await (const chunk of stream) process.stdout.write(chunk.delta);
+console.log();
+await chat.reset();
+```
+
+Notes:
+
+- `Settings.nodeParser` sets the chunking for every index built afterwards. `SentenceSplitter` keeps sentences together; the other parsers (`MarkdownNodeParser`, `SentenceWindowNodeParser`, `TokenTextSplitter`) are in the same package.
+- `filters` takes the same shape the vector stores use: a list of `{ key, operator, value }` and an optional `condition` (`'and'` or `'or'`). Operators include `==`, `!=`, `>`, `>=`, `<`, `<=`, `in`, `nin`, `any`, `all`, `contains` and `text_match`; each vector store supports a subset, so check the store you use. Filtering happens in the retriever, so other departments' text never reaches the prompt.
+- `ContextChatEngine` retrieves for each message, puts the context in the system prompt and keeps the history in its memory. Create one per conversation; `chat.reset()` clears it. `index.asChatEngine(...)` is a shortcut that builds a `ContextChatEngine` over the index's default retriever.
+- `chat({ message, stream: true })` returns an async iterable of chunks with a `delta`; without `stream` it resolves to a single response with `message.content` and `sourceNodes`.
+
+---
+
 ## Revision history
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | final releases | Added Recipe 11 (metadata-filtered retrieval, chunking settings and a chat engine), type-checked with `tsc --strict` and run against a stubbed OpenAI endpoint. |
 | 2026-10-21 | final releases | Recipe 1 replaced: it stubbed retrieval; it now builds a real `VectorStoreIndex` with a retriever, a query engine and an agent tool (run with fake models). Unused `or` imports removed. |
 | 2026-10-21 | @llamaindex/workflow 1.1.25 | Deprecation notice added. Recipe 7 tools switched to Zod schemas and `run()` usage corrected; Recipe 8 rewritten (state middleware does not persist between runs, and `ChatMessage` is exported from `@llamaindex/core/llms`, not `@llamaindex/openai`). Model names updated. |
 | 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous recipes used `llama-index-workflows` (non-existent package), `extends Workflow`, `@step()`, `new StartEvent`, `new StopEvent`, `workflow.run()`. All replaced with functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`. 10 recipes rewritten, API verified against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node`. |

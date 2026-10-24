@@ -262,62 +262,38 @@ Unified Ranked Results
 
 ### ReAct Loop (`ReActAgent`)
 
+`ReActAgent` prompts the LLM to write its reasoning as text in a fixed format, parses that text, runs the tool it names, and feeds the result back as an observation. Any LLM works, because no native tool-calling support is needed.
+
 ```
 ┌─────────────────────┐
-│ User Query/Goal     │
+│ User message        │
 └──────────┬──────────┘
            │
            ▼
-┌─────────────────────┐
-│ OBSERVE             │
-│ - Current State     │
-│ - Available Tools   │
-│ - Context           │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────┐
-│ THINK               │
-│ LLM Reasons About   │
-│ What To Do Next     │
-└──────────┬──────────┘
-           │
-           ▼
-    ┌──────────────┐
-    │ Decision     │
-    ├──────────────┤
-    │ Use Tool?    │
-    └──┬────────┬──┘
-       │        │
-       YES     NO
-       │        │
-       ▼        ▼
-    ┌───────┐ ┌─────────────┐
-    │ ACT   │ │ Generate    │
-    │       │ │ Final       │
-    │Execute│ │ Answer      │
-    │Tool   │ │             │
-    └───┬───┘ └─────────────┘
-        │            │
-        └─────┬──────┘
-              │
-              ▼
-         ┌─────────────┐
-         │ Loop Check  │
-         ├─────────────┤
-         │ Max Iters?  │
-         │ Done?       │
-         └──┬─────┬────┘
-            │     │
-           YES   NO
-            │     │
-            │     └──▶ Loop Back
-            │          to OBSERVE
-            ▼
-       ┌─────────────┐
-       │ Return      │
-       │ Response    │
-       └─────────────┘
+┌─────────────────────────────────────┐
+│ LLM writes                          │◀────────────────┐
+│   Thought: I need the price         │                 │
+│   Action: get_price                 │                 │
+│   Action Input: {"item": "pen"}     │                 │
+└──────────┬──────────────────────────┘                 │
+           │ parse the text                             │
+           ▼                                            │
+    ┌──────────────┐                                    │
+    │ Action named?│                                    │
+    └──┬────────┬──┘                                    │
+      YES       NO                                      │
+       │        │                                       │
+       ▼        ▼                                       │
+┌─────────────┐ ┌─────────────────────────┐             │
+│ Run the tool│ │ LLM wrote               │             │
+│ (Action)    │ │   Answer: ...           │             │
+└──────┬──────┘ │ Return it as the        │             │
+       │        │ AgentOutput             │             │
+       ▼        └─────────────────────────┘             │
+┌─────────────────────┐                                 │
+│ Observation: result │ ─ added to the history ─────────┘
+└─────────────────────┘
+  (stops with an error after max_iterations rounds, 20 by default)
 ```
 
 ### Function Calling Agent (`FunctionAgent`)
@@ -428,40 +404,28 @@ Final answer (orchestrator keeps control throughout)
 
 ## Query Processing
 
-### Query Engine Selection Flow
+### Query Engine Selection Flow (`RouterQueryEngine`)
+
+The router does not analyse the query itself. It shows a selector LLM the description of each `QueryEngineTool` and asks which to use, then forwards the query. Descriptions are the routing signal, so write them carefully.
 
 ```
 User Query
     │
     ▼
-Router Engine
-    │
-    ├─ Query Analysis
-    │  ├─ Domain detection
-    │  ├─ Complexity analysis
-    │  └─ Intent extraction
-    │
-    ├─ Engine Candidates
-    │  ├─ Vector Search Engine
-    │  ├─ Keyword Search Engine
-    │  ├─ Hierarchical Engine
-    │  └─ Hybrid Engine
+RouterQueryEngine
     │
     ▼
-LLM Selection Logic
-    │
-    ├─ Score each engine
-    ├─ Rank by relevance
-    └─ Select best match
-    │
+Selector (LLMSingleSelector or LLMMultiSelector)
+    │   prompt: the query + a numbered list of tool descriptions
+    │   LLM replies with a choice (or choices) and a reason
     ▼
-Selected Query Engine
+Chosen QueryEngineTool(s)
     │
+    ├─ single selector: that engine's response is returned
+    └─ multi selector: each chosen engine answers, then a
+       summariser LLM call combines the answers
     ▼
-Retrieval + Generation
-    │
-    ▼
-Response
+Response (the selection is in response.metadata["selector_result"])
 ```
 
 ### Sub-Question Decomposition
@@ -493,6 +457,50 @@ LLM Decomposition
               │
               ▼
        Final Answer
+```
+
+---
+
+### Chat engine: `condense_plus_context`
+
+```
+Turn N: user message
+    │
+    ▼
+Condense (LLM call): chat history + message  ──▶  standalone question
+    │
+    ▼
+Retriever(standalone question)  ──▶  nodes (post-processors applied)
+    │
+    ▼
+System prompt = instructions + retrieved context
+    │
+    ▼
+LLM(system prompt + chat history + user message)  ──▶  answer
+    │
+    ▼
+Memory: user message and answer appended
+```
+
+On the first turn the history is empty, so the condense call is skipped and the message is used as written.
+
+### Small-to-big retrieval
+
+```
+Indexing                              Querying
+────────                              ────────
+HierarchicalNodeParser                Query
+  parent 2048 ─ child 512 ─ leaf 128    │
+        │                               ▼
+        ├─ all levels ──▶ docstore    Vector search over leaves only
+        └─ leaves only ─▶ vector      (AutoMergingRetriever)
+                          index         │
+                                        ▼
+                                      More than half of a parent's leaves hit?
+                                        ├─ yes: replace them with the parent
+                                        └─ no:  keep the leaves
+                                        ▼
+                                      Context for the LLM
 ```
 
 ---
