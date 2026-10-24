@@ -178,6 +178,7 @@ const resultEvent = workflowEvent<Record<string, number>>();
 
 const { withState } = createStatefulMiddleware(() => ({
   expected: 0,
+  completed: 0,                          // count jobs, not keys: inputs may repeat
   results: {} as Record<string, number>,
 }));
 const workflow = withState(createWorkflow());
@@ -194,7 +195,8 @@ workflow.handle([jobEvent], async (ctx, ev) => {
 
 workflow.handle([doneEvent], (ctx, ev) => {                                 // fan in
   ctx.state.results[ev.data.item] = ev.data.length;
-  if (Object.keys(ctx.state.results).length === ctx.state.expected) {
+  ctx.state.completed += 1;
+  if (ctx.state.completed === ctx.state.expected) {
     return resultEvent.with(ctx.state.results);
   }
 });
