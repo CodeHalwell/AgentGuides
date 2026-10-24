@@ -8,7 +8,7 @@ sidebar:
   order: 5
 ---
 
-Checked against `strands-agents` %%version=strands-agents%% (%%versions-checked%%) and `strands-agents-evals` 1.7.0 (the release current on that date; this package is not yet in the site's version data). Every example ran against an offline Bedrock stub; spans were captured with an in-memory exporter.
+Checked against `strands-agents` %%version=strands-agents%% (%%versions-checked%%) and `strands-agents-evals` %%version=strands-agents-evals%%. Every example ran against an offline Bedrock stub; spans were captured with an in-memory exporter.
 
 ## What you get without configuration
 
@@ -121,7 +121,7 @@ Trace content can include prompts and tool inputs. Treat your tracing backend as
 `strands-agents-evals` is a separate package for testing agents: you write cases, a task function that runs your agent on a case, and evaluators that score the output or the tool trajectory.
 
 ```bash
-pip install strands-agents-evals
+pip install strands-agents-evals==%%version=strands-agents-evals%%
 ```
 
 ```python

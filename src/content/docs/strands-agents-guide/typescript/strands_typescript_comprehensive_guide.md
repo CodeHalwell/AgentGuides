@@ -448,7 +448,7 @@ console.log(later.messages.length) // 2
 const inS3 = new SessionManager({ sessionId: 'user-42', storage: new S3Storage('agent-sessions', { prefix: 'prod/' }) })
 ```
 
-`saveLatestOn` controls when the latest snapshot is written (`'invocation'` by default), and `snapshotTrigger` writes immutable checkpoints you can restore later. Graphs and swarms accept a `sessionManager` too. For long-term memory that is extracted and searched rather than replayed, the SDK has a `MemoryManager` with pluggable stores, and AgentCore Memory is available through `bedrock-agentcore` (see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/)).
+Session IDs may contain only lowercase letters, digits, hyphens and underscores; anything else throws when the `SessionManager` is created (agent `id`s are checked the same way when a snapshot is saved), so normalise user or tenant IDs first. This is stricter than Python, which only rejects path separators. `saveLatestOn` controls when the latest snapshot is written (`'invocation'` by default), and `snapshotTrigger` writes immutable checkpoints you can restore later. Graphs and swarms accept a `sessionManager` too. For long-term memory that is extracted and searched rather than replayed, the SDK has a `MemoryManager` with pluggable stores, and AgentCore Memory is available through `bedrock-agentcore` (see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/)).
 
 ## Limits, cancellation and errors
 

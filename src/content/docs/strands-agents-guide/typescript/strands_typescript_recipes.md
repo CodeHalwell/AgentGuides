@@ -52,7 +52,8 @@ function supportAgent(customerId: string): Agent {
     model: 'us.anthropic.%%model=anthropic%%',
     systemPrompt: 'You are a support agent for Example Ltd. Use tools; never guess order details.',
     tools: [orderStatus],
-    sessionManager: new SessionManager({ sessionId: `support-${customerId}`, storage: new LocalFileStorage('./sessions') }),
+    // session IDs may contain only lowercase letters, digits, hyphens and underscores
+    sessionManager: new SessionManager({ sessionId: `support-${customerId.toLowerCase()}`, storage: new LocalFileStorage('./sessions') }),
     printer: false,
   })
 }

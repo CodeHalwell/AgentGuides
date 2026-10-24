@@ -1,0 +1,82 @@
+---
+title: "Strands Agents (TypeScript)"
+description: "The TypeScript Strands Agents SDK for Node.js: install, a first agent, and pages on Zod tools and MCP, hooks and interrupts, graphs, swarms and A2A, production and how it differs from Python."
+framework: "strands"
+language: "typescript"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+`@strands-agents/sdk` brings the Strands agent loop to Node.js: the same model-driven design as the Python SDK, with tools defined by Zod schemas and typed end to end.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    npm install @strands-agents/sdk@%%version=@strands-agents/sdk%% zod
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **@strands-agents/sdk %%version=@strands-agents/sdk%%** · checked %%versions-checked%% · Node.js 22+ · ESM only
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Agents inside Node.js services, typed tools, graphs and swarms, agents on AgentCore Runtime or Lambda.
+  </Card>
+</CardGrid>
+
+## A first agent
+
+```typescript
+import { Agent, tool } from '@strands-agents/sdk'
+import { z } from 'zod'
+
+const wordCount = tool({
+  name: 'word_count',
+  description: 'Count the words in a piece of text.',
+  inputSchema: z.object({ text: z.string() }),
+  callback: ({ text }) => text.split(/\s+/).filter(Boolean).length,
+})
+
+const agent = new Agent({
+  model: 'us.anthropic.%%model=anthropic%%',
+  tools: [wordCount],
+  printer: false,
+})
+
+console.log((await agent.invoke("How many words are in 'the quick brown fox'?")).toString())
+```
+
+<Aside type="caution" title="Where TypeScript lags Python">
+  No `strands-agents-tools` equivalent (vended tools only), no `workflow` tool, no evals package, no real-time voice agent, fewer model providers (no LiteLLM, Ollama, Mistral or SageMaker classes), and graphs and swarms are unbounded unless you set limits. The full comparison is on the [production page](/strands-agents-guide/typescript/strands_typescript_production/#where-typescript-differs-from-python).
+</Aside>
+
+## Pages
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="/strands-agents-guide/typescript/strands_typescript_comprehensive_guide/" description="Set-up, the loop, invoke and stream, providers, structured output, conversation, state, sessions, limits" />
+  <LinkCard title="Tools and MCP" href="/strands-agents-guide/typescript/strands_typescript_tools_and_mcp/" description="Zod and JSON Schema tools, tool context, streaming tools, vended tools, MCP clients" />
+  <LinkCard title="Hooks and interrupts" href="/strands-agents-guide/typescript/strands_typescript_hooks_and_interrupts/" description="Hook events, plugins, interventions, interrupts, retries, middleware" />
+  <LinkCard title="Multi-agent and A2A" href="/strands-agents-guide/typescript/strands_typescript_multi_agent/" description="Agents as tools, Graph, Swarm, orchestrator streaming, A2A server and client" />
+  <LinkCard title="Recipes" href="/strands-agents-guide/typescript/strands_typescript_recipes/" description="Support agent, approvals across requests, research graph, batch extraction" />
+  <LinkCard title="Production" href="/strands-agents-guide/typescript/strands_typescript_production/" description="AgentCore Runtime, Lambda, Express, limits, tracing, testing, Python comparison" />
+</CardGrid>
+
+## Things that catch people out
+
+- **`printer` defaults to `true`**: the agent writes its answer to stdout. Turn it off in servers.
+- **`OpenAIModel` uses the Responses API by default**; pass `api: 'chat'` for Chat Completions (the Python class is the other way round).
+- **Session IDs** may contain only lowercase letters, digits, hyphens and underscores.
+- **Timeouts are milliseconds** and `Graph`/`Swarm` limits default to `Infinity`.
+- **Optional peers**: install the OpenTelemetry and A2A packages within the ranges the SDK declares; `bedrock-agentcore` and the Strands A2A module want different major versions of `@a2a-js/sdk`.
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-24 | %%version=@strands-agents/sdk%% | New standalone TypeScript guide in the Strands Agents section, expanding the TypeScript Strands page from the Amazon Bedrock guide into comprehensive, tools, hooks, multi-agent, recipes and production pages. All examples type-check under `strict` and run against an offline Bedrock stub. |
+
+**Python:** see [Strands Agents (Python)](/strands-agents-guide/python/).
