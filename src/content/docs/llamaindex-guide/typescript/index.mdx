@@ -41,6 +41,7 @@ No further versions will be published, so these are the versions the guides docu
 | Package | Final release | Contents |
 |---|---|---|
 | `@llamaindex/workflow` | 1.1.25 | Workflow runtime (`createWorkflow`, `workflowEvent`, `run`) and agents (`agent`, `multiAgent`), built on `@llamaindex/workflow-core` 1.3.x |
+| `@llamaindex/workflow-core` | %%version=@llamaindex/workflow-core%% | The engine itself: events, handlers, stream, state and validation middleware ([page](/llamaindex-guide/typescript/llamaindex_workflow_core/)) |
 | `@llamaindex/core` | 0.6.23 | LLM, tool, memory and schema interfaces |
 | `@llamaindex/openai` | 0.4.23 | OpenAI LLM and embeddings (other providers have their own package) |
 | `llamaindex` | %%version=llamaindex%% | Indexes, readers, node parsers, query and chat engines |
@@ -62,8 +63,9 @@ With two copies installed, `llamaindex` prints *"llamaindex was already imported
   <LinkCard title="4 · Event handling & routing" href="./llamaindex_workflows_typescript_comprehensive_guide/#4-event-handling-and-routing" description="Typed event handlers · 20 min" />
   <LinkCard title="5 · Complete RAG workflow" href="./llamaindex_workflows_typescript_comprehensive_guide/#5-complete-rag-workflow-example" description="Full end-to-end RAG agent · 30 min" />
   <LinkCard title="6 · Agent coordination" href="./llamaindex_workflows_typescript_comprehensive_guide/#6-agent-coordination" description="Multi-agent workflows · 25 min" />
-  <LinkCard title="7 · RAG with VectorStoreIndex" href="./llamaindex_typescript_recipes/#recipe-1-rag-with-vectorstoreindex" description="Index, retriever, query engine, agent tool · 15 min" />
-  <LinkCard title="8 · Production" href="./llamaindex_typescript_production_guide/" description="Express service, caching, metrics, tests, CI · 30 min" />
+  <LinkCard title="7 · The workflows engine" href="./llamaindex_workflow_core/" description="@llamaindex/workflow-core: joins, state, streaming, HITL snapshots, retries · 30 min" />
+  <LinkCard title="8 · RAG with VectorStoreIndex" href="./llamaindex_typescript_recipes/#recipe-1-rag-with-vectorstoreindex" description="Index, retriever, query engine, agent tool · 15 min" />
+  <LinkCard title="9 · Production" href="./llamaindex_typescript_production_guide/" description="Express service, caching, metrics, tests, CI · 30 min" />
 </CardGrid>
 
 ## Jump to a topic
@@ -74,12 +76,15 @@ With two copies installed, `llamaindex` prints *"llamaindex was already imported
   <LinkCard title="RAG workflow example" href="./llamaindex_workflows_typescript_comprehensive_guide/#5-complete-rag-workflow-example" />
   <LinkCard title="Multi-agent coordination" href="./llamaindex_workflows_typescript_comprehensive_guide/#6-agent-coordination" />
   <LinkCard title="Async operations" href="./llamaindex_workflows_typescript_comprehensive_guide/#3-async-operations-and-promises" />
+  <LinkCard title="Human-in-the-loop and snapshots" href="./llamaindex_workflow_core/#5-human-in-the-loop" />
+  <LinkCard title="Errors and retries" href="./llamaindex_workflow_core/#6-errors-retries-and-timeouts" />
 </CardGrid>
 
 ## Reference
 
 <CardGrid>
   <LinkCard title="Workflows comprehensive" href="./llamaindex_workflows_typescript_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Workflows engine" href="./llamaindex_workflow_core/" description="@llamaindex/workflow-core on its own: subpath exports, middleware, streaming, HITL." />
   <LinkCard title="Recipes" href="./llamaindex_typescript_recipes/" />
   <LinkCard title="Production guide" href="./llamaindex_typescript_production_guide/" />
 </CardGrid>
@@ -126,6 +131,7 @@ Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/typescript/llamainde
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-10-24 | workflow-core 1.3.4 | Added the [workflows engine](/llamaindex-guide/typescript/llamaindex_workflow_core/) page for `@llamaindex/workflow-core`, with a working snapshot/resume example; listed the package under final releases. |
 | 2026-10-21 | final releases | Final package versions now listed once, in [Final releases](#final-releases), with the note that `llamaindex` pins `@llamaindex/workflow` 1.1.24. Corrected the claim that `llamaindex` re-exports the workflow API. Node 22+ (Node 20 reached end of life in April 2026). Added a real `VectorStoreIndex` RAG recipe; production guide rebuilt to compile under its own config. |
 | 2026-10-21 | llamaindex 0.12.1 / @llamaindex/workflow 1.1.25 | Added the upstream deprecation notice (repository and npm packages deprecated). Minimal example fixed — it passed a Zod schema as `workflowEvent({ data })`, which is not a valid option and does not type-check. Version card now reads from the site's version registry. Comprehensive guide, recipes and production guide re-checked with `tsc`. |
 | 2026-05-04 | @llamaindex/workflow 1.1.25 | Bumped 1.1.24 → 1.1.25. Fixed broken minimal example: corrected handler signature to `(ctx, start)` (was incorrectly `({ data })`); removed unsupported chaining on `handle()`; replaced deprecated `runWorkflow()` with `run().until().toArray()`. Added "What's new in 1.1.25" section documenting `runWorkflow` deprecation and `handle()` void-return behaviour. Snippet executed against installed 1.1.25 in `.routine-envs/check-0504-node`. |

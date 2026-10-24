@@ -7,7 +7,7 @@ sidebar:
   label: "Workflow patterns"
 ---
 
-> Verified against `llama-index-core` %%version=llama-index%% (checked %%versions-checked%%). For multi-agent routing and human-in-the-loop see [Advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).
+> Verified against `llama-index-core` %%version=llama-index%% and `llama-index-workflows` %%version=llama-index-workflows%% (checked %%versions-checked%%). The Workflows API itself is covered on the [Workflows page](/llamaindex-guide/python/llamaindex_workflows/); for multi-agent routing and human-in-the-loop see [Advanced agents](/llamaindex-guide/python/llamaindex_advanced_agents_python/).
 
 Earlier versions of this page were built on the retired `llama-agents` package (`AgentOrchestrator`, `SimpleMessageQueue`) and on an `AgentWorkflow.from_tools(...)` constructor that never existed. The patterns below use the current Workflows runtime.
 
@@ -125,16 +125,23 @@ The union return type (`Rewrite | StopEvent`) is how a step declares that it may
 ## 3. Step retries
 
 ```python
-from llama_index.core.workflow.retry_policy import ConstantDelayRetryPolicy
+from llama_index.core.workflow import StartEvent, StopEvent, Workflow, step
+from workflows.retry_policy import retry_policy, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 class Ingest(Workflow):
-    @step(retry_policy=ConstantDelayRetryPolicy(delay=5, maximum_attempts=4))
+    @step(
+        retry_policy=retry_policy(
+            retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+            wait=wait_exponential(multiplier=1, max=30),
+            stop=stop_after_attempt(4),
+        )
+    )
     async def fetch(self, ev: StartEvent) -> StopEvent:
-        # any exception here re-runs the step after 5 s, up to 4 attempts
+        # a ConnectionError or TimeoutError here re-runs the step, up to 4 attempts
         ...
 ```
 
-Use retry policies for idempotent steps only.
+Use retry policies for idempotent steps only. `ConstantDelayRetryPolicy` (the only policy re-exported by `llama_index.core.workflow.retry_policy`) still works but is deprecated. For a fallback once retries are exhausted, add a `@catch_error` handler; see [Workflows: errors, retries and timeouts](/llamaindex-guide/python/llamaindex_workflows/#8-errors-retries-and-timeouts).
 
 ---
 
