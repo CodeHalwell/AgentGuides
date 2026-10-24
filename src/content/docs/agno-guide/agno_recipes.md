@@ -134,18 +134,23 @@ for ref in run.references or []:
 
 ## Research and write, with a review loop
 
-A workflow that searches two sources in parallel, drafts, and loops on review until the reviewer approves or three rounds pass. Short inputs skip research. Each round after the first gives the writer the notes, its previous draft and the reviewer's feedback, so it revises rather than starting again.
+A workflow that searches two sources in parallel (recent news through `WebSearchTools`, background through `WikipediaTools`; `pip install ddgs wikipedia`), drafts, and loops on review until the reviewer approves or three rounds pass. Short inputs skip research. Each round after the first gives the writer the notes, its previous draft and the reviewer's feedback, so it revises rather than starting again.
 
 ```python
 from typing import List
 
 from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
+from agno.tools.websearch import WebSearchTools
+from agno.tools.wikipedia import WikipediaTools
 from agno.workflow import Condition, Loop, Parallel, Step, StepInput, StepOutput, Workflow
 
 model = OpenAIResponses(id="%%model=openai%%")
-news = Agent(name="News", model=model, instructions="Find recent news on the topic. Bullet points.")
-background = Agent(name="Background", model=model, instructions="Give background facts on the topic.")
+news = Agent(name="News", model=model,
+             tools=[WebSearchTools(enable_search=False, timelimit="w")],   # search_news only, past week
+             instructions="Search the news for the topic and list what you found as bullet points with sources.")
+background = Agent(name="Background", model=model, tools=[WikipediaTools()],
+                   instructions="Look the topic up on Wikipedia and give the key background facts.")
 writer = Agent(name="Writer", model=model, instructions="Write or revise a 150-word briefing from the notes and feedback.")
 reviewer = Agent(name="Reviewer", model=model,
                  instructions="Review the briefing. Reply APPROVED if it is accurate and clear, otherwise list fixes.")

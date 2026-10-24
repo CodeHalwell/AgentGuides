@@ -188,12 +188,13 @@ def approved(outputs: List[StepOutput]) -> bool:
 
 wf = Workflow(
     name="Refine",
-    steps=[Loop(name="refine", steps=[Step(name="draft", agent=drafter)], end_condition=approved, max_iterations=4)],
+    steps=[Loop(name="refine", steps=[Step(name="draft", agent=drafter)], end_condition=approved, max_iterations=4,
+                forward_iteration_output=True)],   # each round improves the previous draft
 )
 run = wf.run("A short product description for a kettle")
 ```
 
-`forward_iteration_output=True` feeds each iteration's output into the next iteration instead of the original input.
+`forward_iteration_output=True` feeds each iteration's output into the next iteration. It is off by default, and then every round starts again from the original input, so a refinement loop like this one would produce unrelated drafts. Only the last step's output is forwarded: when a loop has several steps (draft, then review), add a final step that bundles what the next round needs, as in the [review-loop recipe](/agno-guide/agno_recipes/#research-and-write-with-a-review-loop).
 
 ## Router
 
