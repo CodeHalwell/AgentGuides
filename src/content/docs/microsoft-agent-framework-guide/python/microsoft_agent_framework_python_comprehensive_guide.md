@@ -346,7 +346,7 @@ print(final.value.version)        # parsed on first access
 
 ## Sessions and history
 
-`AgentSession` is a `session_id` plus a `state` dict that context providers read and write. History is stored by a `HistoryProvider`. The agent adds an `InMemoryHistoryProvider` when you don't configure one, which keeps messages in `session.state` for the life of the process.
+`AgentSession` is a `session_id` plus a `state` dict that context providers read and write. Where the history goes when you configure nothing depends on the client: `OpenAIChatClient` (Responses API) and `FoundryChatClient` store the conversation on the service and keep only its id in `session.service_session_id`; every other client gets an automatic `InMemoryHistoryProvider`, which keeps the messages in `session.state`. Set `store=False` in the options to keep history local with a storing client, or configure a `HistoryProvider` yourself.
 
 | Need | Use |
 |---|---|
@@ -354,7 +354,7 @@ print(final.value.version)        # parsed on first access
 | Several processes share history | Redis (`agent-framework-redis`) or Cosmos DB (`agent-framework-azure-cosmos`) history providers |
 | Your own store (Postgres, S3, ...) | Subclass `HistoryProvider` and implement `get_messages` and `save_messages` |
 | Move a whole session between workers | `session.to_dict()` / `AgentSession.from_dict()`, or `FileSessionStore` |
-| Provider keeps the history (OpenAI Responses, Foundry) | Persist only `session_id` and `service_session_id` |
+| Provider keeps the history (OpenAI Responses, Foundry; the default for those clients) | Persist only `session_id` and `service_session_id` |
 
 All of these, plus write-only audit copies and `VectorStoreHistoryProvider`, are covered with examples on the [sessions page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/).
 

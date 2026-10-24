@@ -1,24 +1,26 @@
 ---
 title: "Quick Start"
-description: "Get started with AI agents in minutes"
+description: "Five short, runnable first agents: one tool-using agent, a two-agent crew, a handoff, retrieval over your own files and a small graph."
 ---
 
-Get up and running with AI agents in just a few minutes.
+Each path below is a complete script for one framework. They use the current release (checked %%versions-checked%%), and each was run against that release with a scripted stand-in for the model, so the code runs as written once a real model is attached. Pick the path closest to what you want to build; none depends on another.
 
----
+Most paths call a hosted model, so you need an API key in your environment first (the key each path needs is noted in it). The one exception is [path 5](#path-5-a-workflow-with-state-langgraph), which makes no model calls.
 
-## Choose Your Path
+Use a virtual environment, and pin the version as shown so that what you install matches what the guide describes.
 
-### 👤 Path 1: Simple Single Agent (5 minutes)
+## Path 1: One agent with a tool (SmolAgents)
 
-**Use SmolAgents for the fastest start**
+SmolAgents agents write and run Python rather than emitting JSON tool calls. This is the smallest setup in the collection: one package, one decorated function, one model.
 
 ```bash
-pip install smolagents
+pip install "smolagents==%%version=smolagents%%"
+export HF_TOKEN=hf_your_token
 ```
 
 ```python
 from smolagents import CodeAgent, InferenceClientModel, tool
+
 
 @tool
 def add_numbers(a: int, b: int) -> int:
@@ -30,390 +32,305 @@ def add_numbers(a: int, b: int) -> int:
     """
     return a + b
 
-model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")   # needs HF_TOKEN
+
+model = InferenceClientModel(model_id="Qwen/Qwen3.8-27B")  # served through Hugging Face providers
 agent = CodeAgent(tools=[add_numbers], model=model)
 print(agent.run("What is 15 + 27?"))
 ```
 
-**Next Steps**:
-1. Read [SmolAgents README](/smolagents-guide/)
-2. Try more [SmolAgents Recipes](/smolagents-guide/smolagents_recipes/)
-3. Reference: [SmolAgents Comprehensive Guide](/smolagents-guide/smolagents_comprehensive_guide/)
+The docstring matters: `@tool` reads the type hints and the `Args:` section to build the tool description the model sees, and raises an error if a parameter is undocumented. `CodeAgent` runs the code the model writes in a restricted local interpreter; read the [production guide](/smolagents-guide/smolagents_production_guide/) before pointing it at anything that matters.
 
----
+Next: the [SmolAgents overview](/smolagents-guide/), the [recipes](/smolagents-guide/smolagents_recipes/) and the [comprehensive guide](/smolagents-guide/smolagents_comprehensive_guide/).
 
-### 👥 Path 2: Multi-Agent Team (10 minutes)
+## Path 2: A small crew (CrewAI)
 
-**Use CrewAI for team-based agents**
+CrewAI models work as agents with roles and tasks that run in order. A task passes its output to a later one through `context`.
 
 ```bash
-pip install crewai
+pip install "crewai==%%version=crewai%%"
+export OPENAI_API_KEY=sk-your-key
 ```
 
 ```python
-from crewai import Agent, Task, Crew
+from crewai import Agent, Crew, Task
 
-# Define agents with different roles
 analyst = Agent(
     role="Data Analyst",
-    goal="Provide insights from data",
-    backstory="You are an experienced data analyst"
+    goal="Find the main drivers of quarterly sales",
+    backstory="You are an experienced analyst who explains numbers plainly.",
+    llm="openai/%%model=openai%%",
 )
-
 writer = Agent(
     role="Content Writer",
-    goal="Write clear reports",
-    backstory="You are a professional writer"
+    goal="Write clear, short reports",
+    backstory="You are a professional business writer.",
+    llm="openai/%%model=openai%%",
 )
 
-# Define tasks
 analysis_task = Task(
-    description="Analyse the Q3 sales data",
-    agent=analyst
+    description="List the factors that most affect quarterly sales for a subscription business.",
+    expected_output="A bulleted list of five factors, one line each.",
+    agent=analyst,
 )
-
 report_task = Task(
-    description="Write a summary report",
+    description="Turn the analyst's findings into a one-paragraph summary for managers.",
+    expected_output="A single paragraph of no more than 120 words.",
     agent=writer,
-    depends_on=[analysis_task]
+    context=[analysis_task],  # the writer receives the analyst's output
 )
 
-# Create and run crew
 crew = Crew(agents=[analyst, writer], tasks=[analysis_task, report_task])
 result = crew.kickoff()
 print(result)
 ```
 
-**Next Steps**:
-1. Read [CrewAI README](/crewai-guide/)
-2. Try more [CrewAI Recipes](/crewai-guide/crewai_recipes/)
-3. Full reference: [CrewAI Comprehensive Guide](/crewai-guide/crewai_comprehensive_guide/)
+`expected_output` is required on every `Task`. Without an `llm`, an agent falls back to CrewAI's default model, which also needs `OPENAI_API_KEY`.
 
----
+Next: the [CrewAI overview](/crewai-guide/), the [recipes](/crewai-guide/crewai_recipes/) and the [comprehensive guide](/crewai-guide/crewai_comprehensive_guide/).
 
-### 🔗 Path 3: Multi-Agent with Handoffs (15 minutes)
+## Path 3: Handing off between agents (OpenAI Agents SDK)
 
-**Use OpenAI Agents SDK for powerful coordination**
+In the OpenAI Agents SDK an agent can list other agents under `handoffs`. The model sees each one as a tool (here `transfer_to_technical`) and calls it to pass the conversation on.
 
 ```bash
-pip install openai-agents
+pip install "openai-agents==%%version=openai-agents%%"
 export OPENAI_API_KEY=sk-your-key
 ```
 
 ```python
 from agents import Agent, Runner
 
-# Create specialised agents
-support_agent = Agent(
-    name="Support",
-    instructions="You are a customer support specialist"
-)
-
 technical_agent = Agent(
     name="Technical",
-    instructions="You are a technical specialist"
+    instructions="You are a technical specialist. Diagnose the problem and give concrete steps.",
+)
+support_agent = Agent(
+    name="Support",
+    instructions=(
+        "You are a customer support agent. Answer simple questions yourself and "
+        "hand technical problems to the Technical agent."
+    ),
+    handoffs=[technical_agent],
 )
 
-# Agents can handoff to each other
-support_agent.instructions += "\nHandoff to technical if complex"
-
-# Run
-result = await Runner.run(support_agent, "I'm having a technical issue")
+result = Runner.run_sync(support_agent, "I'm having a technical issue: the app crashes on start.")
 print(result.final_output)
+print("Answered by:", result.last_agent.name)
 ```
 
-**Next Steps**:
-1. Read [OpenAI Agents SDK README](/openai-agents-sdk-guides/)
-2. Try more [OpenAI Recipes](/openai-agents-sdk-guides/openai_agents_sdk_recipes/)
-3. Full reference: [OpenAI Comprehensive Guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/)
+`Runner.run_sync` is for ordinary scripts. Inside async code (a web handler, a notebook cell) use `await Runner.run(...)` instead; calling `await` at the top level of a plain script is a syntax error.
 
----
+Next: the [OpenAI Agents SDK overview](/openai-agents-sdk-guides/), the [recipes](/openai-agents-sdk-guides/openai_agents_sdk_recipes/) and the [comprehensive guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/).
 
-### 📚 Path 4: Knowledge Retrieval (RAG) (15 minutes)
+## Path 4: Questions over your own files (LlamaIndex)
 
-**Use LlamaIndex for RAG systems**
+LlamaIndex loads documents, embeds them into an index and answers questions from the most relevant passages.
 
 ```bash
-pip install llama-index
+pip install "llama-index==%%version=llama-index%%"
+export OPENAI_API_KEY=sk-your-key
+mkdir data
+echo "Paris is the capital of France." > data/france.txt
 ```
 
 ```python
-from llama_index.core import VectorStoreIndex, SimpleDirectoryReader
+from llama_index.core import SimpleDirectoryReader, VectorStoreIndex
 
-# Load documents
 documents = SimpleDirectoryReader("data").load_data()
-
-# Create index
 index = VectorStoreIndex.from_documents(documents)
 
-# Query
 query_engine = index.as_query_engine()
 response = query_engine.query("What is the capital of France?")
 print(response)
 ```
 
-**Next Steps**:
-1. Read [LlamaIndex README](/llamaindex-guide/)
-2. Try more [LlamaIndex Recipes](/llamaindex-guide/python/llamaindex_recipes/)
-3. Full reference: [LlamaIndex Comprehensive Guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/)
+By default LlamaIndex uses OpenAI for both the embeddings and the answer, hence the key. The index lives in memory, so it is rebuilt (and re-embedded) each time the script runs; the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/) covers persisting it and swapping the models.
 
----
+Next: the [LlamaIndex overview](/llamaindex-guide/), the [recipes](/llamaindex-guide/python/llamaindex_recipes/) and the [comprehensive guide](/llamaindex-guide/python/llamaindex_comprehensive_guide/).
 
-### 🌊 Path 5: Complex Workflows (20 minutes)
+## Path 5: A workflow with state (LangGraph)
 
-**Use LangGraph for sophisticated control flow**
+LangGraph describes a program as a graph: nodes are functions that read the shared state and return updates, and edges say what runs next. This example makes no model calls, so it runs as is and shows the control-flow model on its own.
 
 ```bash
-pip install langgraph langchain-openai
+pip install "langgraph==%%version=langgraph%%"
 ```
 
 ```python
-from langgraph.graph import StateGraph
 from typing import TypedDict
 
+from langgraph.graph import END, START, StateGraph
+
+
 class State(TypedDict):
-    messages: list[str]
     current_step: str
 
-# Create graph
+
+def step_1(state: State) -> dict:
+    return {"current_step": "completed_step_1"}
+
+
+def step_2(state: State) -> dict:
+    return {"current_step": "completed_step_2"}
+
+
 builder = StateGraph(State)
-
-def step_1(state: State) -> State:
-    state["current_step"] = "completed_step_1"
-    return state
-
-def step_2(state: State) -> State:
-    state["current_step"] = "completed_step_2"
-    return state
-
 builder.add_node("step_1", step_1)
 builder.add_node("step_2", step_2)
+builder.add_edge(START, "step_1")
 builder.add_edge("step_1", "step_2")
-builder.set_entry_point("step_1")
+builder.add_edge("step_2", END)
 
 graph = builder.compile()
-result = graph.invoke({"messages": [], "current_step": "start"})
-print(result)
+print(graph.invoke({"current_step": "start"}))
+# {'current_step': 'completed_step_2'}
 ```
 
-**Next Steps**:
-1. Read [LangGraph README](/langgraph-guide/)
-2. Try more [LangGraph Recipes](/langgraph-guide/python/langgraph_recipes/)
-3. Full reference: [LangGraph Comprehensive Guide](/langgraph-guide/python/langgraph_comprehensive_guide/)
+Nodes return only the keys they change; LangGraph merges them into the state. To call a model, add a node that does so, or use the prebuilt agents described in the guide.
 
----
+Next: the [LangGraph (Python) overview](/langgraph-guide/python/), the [recipes](/langgraph-guide/python/langgraph_recipes/) and the [comprehensive guide](/langgraph-guide/python/langgraph_comprehensive_guide/).
 
-## Common Tasks
+## Which path should I take?
 
-### Add a Tool to Your Agent
+| You want | Start with | Guide |
+|----------|-----------|-------|
+| A single agent that calls your functions, with the least setup | SmolAgents | [SmolAgents](/smolagents-guide/) |
+| Several agents with defined roles working through tasks | CrewAI | [CrewAI](/crewai-guide/) |
+| Agents that pass a conversation to one another, with guardrails and tracing | OpenAI Agents SDK | [OpenAI Agents SDK](/openai-agents-sdk-guides/) |
+| Answers grounded in your documents | LlamaIndex | [LlamaIndex](/llamaindex-guide/) |
+| Explicit control over branching, loops, state and resuming | LangGraph | [LangGraph](/langgraph-guide/python/) |
+
+Not on the list? The [framework comparison](/frameworks/) covers the rest, including Agno, Strands Agents, PydanticAI, Haystack, AG2 and the cloud vendors' own SDKs.
+
+## Common tasks
+
+The snippets below are written for the frameworks shown and were run against the same releases as the paths above.
+
+### Remember a conversation between runs (LangGraph)
+
+Compile the graph with a checkpointer and pass a `thread_id` on each call. State is saved per thread, so a second call with the same id continues from the first. A reducer such as `operator.add` makes a list key accumulate instead of being overwritten.
 
 ```python
-@tool
-def search_web(query: str) -> str:
-    """Search the web for information."""
-    # Implementation
-    return results
+import operator
+from typing import Annotated, TypedDict
 
-agent = CodeAgent(tools=[search_web])
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, StateGraph
+
+
+class State(TypedDict):
+    history: Annotated[list[str], operator.add]
+
+
+def reply(state: State) -> dict:
+    return {"history": ["seen"]}
+
+
+builder = StateGraph(State)
+builder.add_node("reply", reply)
+builder.add_edge(START, "reply")
+builder.add_edge("reply", END)
+graph = builder.compile(checkpointer=InMemorySaver())
+
+config = {"configurable": {"thread_id": "user-1"}}
+graph.invoke({"history": ["hello"]}, config)
+print(graph.invoke({"history": ["again"]}, config))
+# {'history': ['hello', 'seen', 'again', 'seen']}
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tools-integration)
+`InMemorySaver` is lost when the process exits. For storage that survives restarts see [checkpointers](/langgraph-guide/python/reference-checkpointers/) and the [memory chapter](/langgraph-guide/python/chapter-05-memory/).
 
----
+### Run steps in parallel and merge the results (LangGraph)
 
-### Implement Memory
+Two edges leaving the same node start two branches in the same step. An edge whose source is a list waits for every listed node before running the target.
 
 ```python
-from langgraph.checkpoint.memory import MemorySaver
+import operator
+from typing import Annotated, TypedDict
 
-memory = MemorySaver()
-graph = builder.compile(checkpointer=memory)
+from langgraph.graph import END, START, StateGraph
 
-# Now the graph remembers between runs
+
+class State(TypedDict):
+    out: Annotated[list[str], operator.add]
+
+
+def make(name: str):
+    return lambda state: {"out": [name]}
+
+
+builder = StateGraph(State)
+for name in ("agent1", "agent2", "join_node"):
+    builder.add_node(name, make(name))
+builder.add_edge(START, "agent1")
+builder.add_edge(START, "agent2")
+builder.add_edge(["agent1", "agent2"], "join_node")
+builder.add_edge("join_node", END)
+
+print(builder.compile().invoke({"out": []}))
+# {'out': ['agent1', 'agent2', 'join_node']}
 ```
 
-[Learn More →](/langgraph-guide/python/chapter-05-memory/)
+### Route on a condition (LangGraph)
 
----
-
-### Add Error Handling
+`add_conditional_edges` takes a function that reads the state and returns the name of the next node.
 
 ```python
-from smolagents import tool
-import logging
+from typing import TypedDict
 
-@tool
-def risky_operation() -> str:
-    """An operation that might fail."""
-    try:
-        return do_something()
-    except Exception as e:
-        logging.error(f"Operation failed: {e}")
-        return "Operation failed, trying alternative approach"
+from langgraph.graph import END, START, StateGraph
+
+
+class State(TypedDict):
+    needs_help: bool
+    route: str
+
+
+def classify(state: State) -> dict:
+    return {}
+
+
+def route(state: State) -> str:
+    return "escalate" if state["needs_help"] else "resolve"
+
+
+def escalate(state: State) -> dict:
+    return {"route": "escalated"}
+
+
+def resolve(state: State) -> dict:
+    return {"route": "resolved"}
+
+
+builder = StateGraph(State)
+builder.add_node("classify", classify)
+builder.add_node("escalate", escalate)
+builder.add_node("resolve", resolve)
+builder.add_edge(START, "classify")
+builder.add_conditional_edges("classify", route, ["escalate", "resolve"])
+builder.add_edge("escalate", END)
+builder.add_edge("resolve", END)
+
+print(builder.compile().invoke({"needs_help": True, "route": ""}))
+# {'needs_help': True, 'route': 'escalated'}
 ```
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#bound-every-run)
+Listing the possible targets as the third argument is optional, but it lets LangGraph draw the graph correctly.
 
----
+## Common mistakes
 
-### Deploy to Production
+These are the errors people most often hit with the code above, each reproduced against the pinned release.
 
-```bash
-# Containerise your agent
-docker build -t my-agent .
-docker run -p 8000:8000 my-agent
+- **CrewAI: `depends_on` is not a `Task` argument.** Passing it raises a validation error. Use `context=[earlier_task]`.
+- **CrewAI: `expected_output` is required.** A `Task` without it fails validation.
+- **OpenAI Agents SDK: `Runner.run` is a coroutine.** Use `Runner.run_sync` in a script, or `await Runner.run` inside an `async` function.
+- **LangGraph: a checkpointer needs a `thread_id`.** Invoking a graph compiled with `checkpointer=...` and no `config={"configurable": {"thread_id": ...}}` raises `ValueError: Checkpointer requires one or more of the following 'configurable' keys`.
+- **LangGraph: parallel branches writing the same key need a reducer.** Without one (such as `Annotated[list, operator.add]`) LangGraph raises `InvalidUpdateError`.
+- **A tool the agent never uses** usually has a vague name or docstring. The model chooses tools from their descriptions, so write the description as you would for a colleague.
 
-# Deploy to cloud
-aws ecs run-task --cluster my-cluster --task-definition my-agent
-```
+## Where next
 
-[Learn More →](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/)
-
----
-
-## Comparison: Which Path for You?
-
-| Need | Recommendation | Time | Complexity |
-|------|----------------|------|-----------|
-| Simple automation | SmolAgents | 5 min | Low |
-| Team of agents | CrewAI | 10 min | Medium |
-| Flexible coordination | OpenAI Agents SDK | 15 min | Medium |
-| RAG/Search | LlamaIndex | 15 min | Medium |
-| Complex workflows | LangGraph | 20 min | High |
-
----
-
-## Next Steps
-
-After your quick start:
-
-1. **Explore Recipes** - Real-world implementations
-2. **Read Comprehensive Guide** - Full features and concepts
-3. **Study Production Guide** - Deployment and scaling
-4. **Review Diagrams** - Architecture and patterns
-
----
-
-## Common Patterns
-
-### Chain Multiple Agents
-
-```python
-# CrewAI
-task1 = Task(description="...", agent=agent1)
-task2 = Task(description="...", agent=agent2, depends_on=[task1])
-
-# LangGraph
-builder.add_edge("agent1_node", "agent2_node")
-
-# OpenAI Agents SDK
-agent1 can handoff to agent2
-```
-
----
-
-### Parallel Execution
-
-```python
-# CrewAI
-tasks = [task1, task2, task3]  # No dependencies = parallel
-
-# LangGraph
-builder.add_edge("start", ["agent1", "agent2"])  # Parallel
-builder.add_edge(["agent1", "agent2"], "join_node")  # Merge results
-
-# Python
-import asyncio
-await asyncio.gather(agent1.run(...), agent2.run(...))
-```
-
----
-
-### Conditional Routing
-
-```python
-# LangGraph (best support)
-def route(state):
-    if state["needs_help"]:
-        return "escalate"
-    else:
-        return "resolve"
-
-builder.add_conditional_edges("classify", route)
-
-# OpenAI Agents SDK
-if condition:
-    agent.handoff_to(specialist_agent)
-
-# CrewAI
-# Use task dependencies
-```
-
----
-
-## Troubleshooting
-
-### Agent Isn't Using Tools
-
-```python
-# ✅ Correct: Tools are passed
-agent = Agent(tools=[my_tool])
-
-# ❌ Wrong: Tools not passed
-agent = Agent()
-```
-
-[See Tool Guide →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tools-integration)
-
----
-
-### Memory Not Working
-
-```python
-# ✅ Correct: Checkpointer configured
-graph = builder.compile(checkpointer=MemorySaver())
-
-# ❌ Wrong: No checkpointer
-graph = builder.compile()
-```
-
-[See Memory Guide →](/langgraph-guide/python/chapter-05-memory/)
-
----
-
-### Streaming Not Working
-
-```python
-# ✅ Correct: Use streaming API
-for event in agent.stream(input):
-    print(event)
-
-# ❌ Wrong: Not streaming
-output = agent.run(input)
-```
-
-[See Streaming Guide →](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#streaming-outputs)
-
----
-
-## Resources
-
-- 📖 [All Guides](/guides/)
-- 🔄 [Framework Comparison](/frameworks/)
-- 📚 [Browse by Use Case](/#i-want-to-build)
-- 🏠 [Home](/)
-
----
-
-## Get Help
-
-1. **Check the relevant guide** - Comprehensive guides have troubleshooting sections
-2. **Search the Recipes** - Your use case is probably covered
-3. **Review Production Guide** - For deployment issues
-4. **Check official docs** - Links provided in each guide
-
----
-
-**Ready?** Pick a path above and start building! 🚀
-
-
+1. Work through the recipes for your framework to see realistic variations.
+2. Read the comprehensive guide for the full feature set.
+3. Before deploying, read the production guide: limits, timeouts, secrets, observability and testing.
+4. Browse [all guides](/guides/), or compare options on the [framework comparison](/frameworks/) page.

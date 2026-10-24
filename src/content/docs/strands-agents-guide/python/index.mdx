@@ -61,10 +61,10 @@ This uses Amazon Bedrock with your AWS credentials. To use the Anthropic or Open
 <CardGrid>
   <LinkCard title="1 · Install and first agent" href="/strands-agents-guide/python/strands_comprehensive_guide/#installation" description="Extras, AWS credentials, a first tool" />
   <LinkCard title="2 · The agent loop" href="/strands-agents-guide/python/strands_comprehensive_guide/#the-agent-loop" description="How a call runs, AgentResult, stop reasons" />
-  <LinkCard title="3 · Model providers" href="/strands-agents-guide/python/strands_comprehensive_guide/#model-providers" description="Bedrock, Anthropic, OpenAI, LiteLLM, Ollama, routing" />
+  <LinkCard title="3 · Model providers" href="/strands-agents-guide/python/strands_comprehensive_guide/#model-providers" description="Bedrock, Anthropic, OpenAI, Gemini, LiteLLM, Ollama, routing" />
   <LinkCard title="4 · Tools" href="/strands-agents-guide/python/strands_tools_and_mcp/" description="@tool, ToolContext, streaming tools, strands-agents-tools" />
   <LinkCard title="5 · Structured output and streaming" href="/strands-agents-guide/python/strands_comprehensive_guide/#structured-output" description="Pydantic output, stream_async events" />
-  <LinkCard title="6 · Memory and sessions" href="/strands-agents-guide/python/strands_comprehensive_guide/#conversation-management" description="Conversation managers, state, session managers" />
+  <LinkCard title="6 · Memory and sessions" href="/strands-agents-guide/python/strands_comprehensive_guide/#conversation-management" description="Conversation managers, state, session managers, long-term memory" />
   <LinkCard title="7 · Hooks and human approval" href="/strands-agents-guide/python/strands_hooks_and_interrupts/" description="Hooks, plugins, interventions, interrupts" />
   <LinkCard title="8 · Multi-agent and A2A" href="/strands-agents-guide/python/strands_multi_agent/" description="Agents as tools, Swarm, Graph, A2A" />
   <LinkCard title="9 · Observability and evals" href="/strands-agents-guide/python/strands_observability_and_evals/" description="OpenTelemetry, metrics, strands-agents-evals" />
@@ -76,11 +76,15 @@ This uses Amazon Bedrock with your AWS credentials. To use the Anthropic or Open
 <CardGrid>
   <LinkCard title="Bedrock model IDs and options" href="/strands-agents-guide/python/strands_comprehensive_guide/#amazon-bedrock" />
   <LinkCard title="Routing and fallback" href="/strands-agents-guide/python/strands_comprehensive_guide/#routing-and-fallback" />
+  <LinkCard title="OpenAI-compatible models on Bedrock" href="/strands-agents-guide/python/strands_comprehensive_guide/#openai-compatible-models-on-bedrock" />
+  <LinkCard title="Long-term memory" href="/strands-agents-guide/python/strands_comprehensive_guide/#long-term-memory" />
+  <LinkCard title="Real-time voice (BidiAgent)" href="/strands-agents-guide/python/strands_comprehensive_guide/#real-time-voice-and-text-with-bidiagent" />
   <LinkCard title="MCP servers" href="/strands-agents-guide/python/strands_tools_and_mcp/#mcp" />
   <LinkCard title="strands-agents-tools deprecations" href="/strands-agents-guide/python/strands_tools_and_mcp/#deprecations-in-08" />
   <LinkCard title="Sandboxes" href="/strands-agents-guide/python/strands_tools_and_mcp/#sandboxes" />
   <LinkCard title="Hook events" href="/strands-agents-guide/python/strands_hooks_and_interrupts/#hook-events" />
   <LinkCard title="Interrupts" href="/strands-agents-guide/python/strands_hooks_and_interrupts/#interrupts" />
+  <LinkCard title="Goal loops, context injection, steering" href="/strands-agents-guide/python/strands_hooks_and_interrupts/#context-injection" />
   <LinkCard title="Swarm" href="/strands-agents-guide/python/strands_multi_agent/#swarm" />
   <LinkCard title="Graph" href="/strands-agents-guide/python/strands_multi_agent/#graph" />
   <LinkCard title="Span tree" href="/strands-agents-guide/python/strands_observability_and_evals/#the-spans" />
@@ -95,7 +99,7 @@ Facts from the installed packages, not a full changelog:
 | Area | Change |
 |------|--------|
 | `strands-agents-tools` 0.8 | Most general-purpose tools (`shell`, `http_request`, `editor`, `calculator`, `current_time`, `memory`, `retrieve`, `think`, `batch`, ...) are deprecated in favour of `strands.vended_tools`, MCP servers or SDK features. They log a warning now and, per the package, an error log from 0.9.0. See the [replacement table](/strands-agents-guide/python/strands_tools_and_mcp/#deprecations-in-08). |
-| MCP | Strands depends on the `mcp` 2.x SDK, where `FastMCP` is `MCPServer` (`mcp.server.mcpserver`). Servers written for `mcp` 1.x need that import changed. |
+| MCP | Strands accepts `mcp` 1.23 up to 2.2 (exclusive), and a fresh install gets 2.x, where `FastMCP` is `MCPServer` (`mcp.server.mcpserver`). Servers written for `mcp` 1.x need that import changed. |
 | Structured output | `Agent.structured_output()` is deprecated; pass `structured_output_model=` to the call and read `result.structured_output`. |
 | Prompt caching | `cache_prompt` and `cache_tools` on `BedrockModel` are deprecated; use `cache_config=CacheConfig(...)`. |
 | Default model | Without `model=`, the default Bedrock model is `global.anthropic.claude-sonnet-4-6` in this release, and it changes between releases. Always set the model. |

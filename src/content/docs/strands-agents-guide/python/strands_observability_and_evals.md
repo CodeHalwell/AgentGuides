@@ -188,7 +188,49 @@ The task returns either the output alone or `{"output": ..., "trajectory": ...}`
 
 `run_evaluations_async(task, max_workers=10)` runs cases concurrently (the sync form runs them one at a time and rejects `async` tasks). The report has `overall_score`, per-row `scores`, `test_passes`, `reasons` and `cases`; `report.display()` prints a table and `report.to_file(path)` saves it. `Experiment.to_file()` / `from_file()` save the cases and evaluators so a suite can live in version control.
 
-The package also has `UserSimulator` and `ActorSimulator` for multi-turn tests in which a model plays the user, generators that draft cases from a description, and red-teaming and chaos modules. Those are newer and change more between releases.
+The package also has generators that draft cases from a description (`strands_evals.generators.ExperimentGenerator`), tool simulators, failure detectors, and red-teaming and chaos modules. Those are newer and change more between releases. Multi-turn tests with a simulated user are covered next.
+
+### Multi-turn conversations with a simulated user
+
+A single prompt rarely shows whether an agent can finish a task that takes several exchanges. `ActorSimulator` (also exported as `UserSimulator`) wraps an agent that plays the user. `ActorSimulator.from_case_for_user_simulator(case, max_turns=...)` asks a model to write a user profile and goal from `case.input` and `case.metadata["task_description"]`, then `act()` produces the user's reply to each agent message. `has_next()` turns false when the simulated user decides it is done or `max_turns` (10 by default) is reached:
+
+```python
+from strands import Agent
+from strands_evals import ActorSimulator, Case, Experiment
+from strands_evals.evaluators import Contains
+
+
+def run_conversation(case: Case) -> dict:
+    """Let a simulated customer talk to the agent for up to four turns."""
+    user = ActorSimulator.from_case_for_user_simulator(case=case, max_turns=4)
+    agent = Agent(
+        model="us.anthropic.%%model=anthropic%%",
+        system_prompt="You are a travel assistant. Say 'booking confirmed' once a booking is made.",
+        callback_handler=None,
+    )
+    transcript = []
+    message = case.input
+    while user.has_next():
+        reply = str(agent(message))
+        transcript.append(reply)
+        message = str(user.act(reply).structured_output.message)
+    return {"output": "\n".join(transcript)}
+
+
+cases = [
+    Case(
+        name="paris-flight",
+        input="I need to book a flight to Paris next Friday.",
+        metadata={"task_description": "The user gets a confirmed booking."},
+    )
+]
+
+experiment = Experiment(cases=cases, evaluators=[Contains("booking confirmed", case_sensitive=False)])
+report = experiment.run_evaluations(run_conversation)
+print(report.overall_score)
+```
+
+Points to know. The case input must be a string. Building the profile calls a model, and that call uses Strands' default model (Bedrock) whatever you pass as `model=`, so it needs Bedrock access. The simulator's replies are as variable as any model output, so judge the whole transcript with an LLM evaluator, or with a deterministic check as above, rather than a fixed expected string. `act(..., structured_output_model=...)` replaces the default `ActorResponse` with your own Pydantic model, which must have `message` and `stop` fields.
 
 ### Running evals in CI
 

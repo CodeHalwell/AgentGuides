@@ -213,7 +213,7 @@ print(result.results[final].result)                    # the last agent's AgentR
 | `repetitive_handoff_detection_window`, `repetitive_handoff_min_unique_agents` | 0 (off) | Stop ping-pong: for example a window of 8 handoffs must involve at least 3 agents |
 | `session_manager`, `hooks`, `plugins` | | Persistence and extensions for the swarm as a whole |
 
-`invocation_state` passed to the swarm reaches every member's tools. Members cannot have their own `session_manager` and must not already have a tool called `handoff_to_agent`. `SwarmResult` has `status`, `results` (by node ID), `node_history`, `accumulated_usage`, `execution_count` and `execution_time` (milliseconds).
+When a limit stops the swarm (`max_handoffs`, `max_iterations`, a timeout, or repetitive-handoff detection), the call returns normally with `result.status == Status.FAILED`; `node_history` shows how far it got. Check the status before trusting the last agent's output. `invocation_state` passed to the swarm reaches every member's tools. Members cannot have their own `session_manager` and must not already have a tool called `handoff_to_agent`. `SwarmResult` has `status`, `results` (by node ID), `node_history`, `accumulated_usage`, `execution_count` and `execution_time` (milliseconds).
 
 ## Graph
 
@@ -349,7 +349,7 @@ if result.status != Status.COMPLETED:
             print("failed:", node_id, node_result.result)   # the exception
 ```
 
-`failed_nodes`, `completed_nodes` and `total_nodes` are counts; per-node detail is in `results`. `Status` values are `PENDING`, `DISPATCHED`, `EXECUTING`, `COMPLETED`, `FAILED` and `INTERRUPTED`.
+A graph that reaches `set_max_node_executions` also returns `Status.FAILED` rather than raising, even though no node failed (`failed_nodes` is 0); `execution_order` shows the loop it was in. `failed_nodes`, `completed_nodes` and `total_nodes` are counts; per-node detail is in `results`. `Status` values are `PENDING`, `DISPATCHED`, `EXECUTING`, `COMPLETED`, `FAILED` and `INTERRUPTED`.
 
 ## Streaming and hooks for orchestrators
 

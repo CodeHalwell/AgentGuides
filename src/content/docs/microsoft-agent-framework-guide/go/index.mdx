@@ -98,7 +98,7 @@ Compared with the [Python guide](/microsoft-agent-framework-guide/python/), the 
 - **Functional workflows** (the Python `@workflow` / `@step` style). Graph workflows only.
 - **CodeAct, DevUI and AF Labs.**
 - **Foundry hosted-agent deployment.** You can call existing server-side Foundry agents, but not deploy one from Go.
-- There is **no evaluation package** comparable to Python's `evaluate_agent`, and no dedicated Ollama or Amazon Bedrock provider.
+- There is **no evaluation package** comparable to Python's `evaluate_agent`, and no dedicated Ollama or Amazon Bedrock provider (these two points come from the module's package list rather than the README). An OpenAI-compatible Chat Completions endpoint, such as Ollama's, can still be used through `openaiprovider.NewChatCompletionsAgent` with an `openai.NewClient(option.WithBaseURL(...))` client.
 
 What it does have, beyond the basics: Anthropic, Gemini, GitHub Copilot, A2A and AG-UI providers; agent skills; chat-history memory and text-search (RAG) context providers; compaction; an agent "harness" (Todo planning, modes, standing tool approvals, file memory); vector stores with in-memory and Azure AI Search connectors; and OpenTelemetry middleware.
 

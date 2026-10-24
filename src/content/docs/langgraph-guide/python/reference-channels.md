@@ -121,12 +121,13 @@ def node_a(state): return {"x": 1}
 def node_b(state): return {"x": 2}
 
 builder = StateGraph(Bad)
+builder.add_node("a", node_a)     # nodes must exist before edges refer to them
+builder.add_node("b", node_b)
 builder.add_edge(START, "a")
 builder.add_edge(START, "b")
 builder.add_edge(["a", "b"], END)
-builder.add_node("a", node_a)
-builder.add_node("b", node_b)
-# graph.invoke(...) → InvalidUpdateError: two concurrent writes to "x"
+graph = builder.compile()
+# graph.invoke({"x": 0}) → InvalidUpdateError: At key 'x': Can receive only one value per step.
 ```
 
 ---
@@ -399,9 +400,9 @@ graph.invoke({"msg": ""})
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 ```
 
-A synchronization channel that becomes **available** only after every string in a predefined `names` set has been written to it at least once. Until all names are seen, the channel raises `EmptyChannelError` and downstream nodes that depend on it will not run.
+A synchronization channel that becomes **available** only after every string in a predefined `names` set has been written to it at least once; until then `get()` raises `EmptyChannelError`. After it is consumed, the `seen` set resets, so it works as a reusable barrier.
 
-After the channel is consumed (its value read by a dependent step), the `seen` set resets — making it a reusable one-shot barrier per step.
+This is the channel `StateGraph` creates for you when you write `add_edge(["a", "b"], "c")`: the barrier decides when `c` is triggered. Declared as a **state key**, it does not schedule anything. Nodes still run when their edges say so, the key reads as `None`, and the only effect is that writes are checked against `names`. Use `add_edge([...], target)` for fan-in; declare the channel yourself only if you want that validation.
 
 ```python
 from typing import Annotated
@@ -422,8 +423,8 @@ Writing to a `NamedBarrierValue` channel:
 def fetch(state): return {"ready": "fetch", "data": "raw_data"}
 def validate(state): return {"ready": "validate", "valid": True}
 
-# Only after BOTH nodes run (writing "fetch" and "validate") does the barrier open.
-# A node that reads `ready` will not be scheduled until the barrier is satisfied.
+# Each writer sends its own name. A token not in `names` raises
+# InvalidUpdateError: At key 'ready': Value ... not in {...}
 ```
 
 Any write that is not in `names` raises `InvalidUpdateError` immediately.
@@ -460,7 +461,8 @@ def worker_b(state: S) -> dict:
 
 
 def combiner(state: S) -> dict:
-    # Runs only after both workers have written their "done" token
+    # The barrier edge below is what makes this wait for both workers;
+    # the "done" key only validates the tokens (it reads as None here).
     print("Both done:", state["result_a"], state["result_b"])
     return {}
 
@@ -471,7 +473,7 @@ builder.add_node("worker_b", worker_b)
 builder.add_node("combiner", combiner)
 builder.add_edge(START, "worker_a")
 builder.add_edge(START, "worker_b")
-# combiner depends on "done" — it is gated by the barrier
+# The barrier edge (an internal NamedBarrierValue) gates the combiner
 builder.add_edge(["worker_a", "worker_b"], "combiner")
 builder.add_edge("combiner", END)
 
@@ -737,9 +739,9 @@ graph = builder.compile()
 print(graph.invoke({"doc": ""}))   # {'doc': 'RAW CONTENT'}
 ```
 
-### 4. `NamedBarrierValue` — explicit N-of-N fan-in
+### 4. `NamedBarrierValue` — validating N-of-N fan-in tokens
 
-Wait for results from exactly N named nodes before proceeding:
+Three workers run in the same step, so the plain edges into `combiner` already make it run once, after all three. The `barrier` key adds a check: each worker must report a name from `WORKERS`, and any other token fails the run.
 
 ```python
 from typing import Annotated
@@ -940,7 +942,7 @@ print(snap.values.get("embedding"))   # None — not persisted
 
 | Version | Change |
 |---|---|
-| 1.2 | `UntrackedValue` added — same semantics as `LastValue` but never written to checkpoints. Use for computed or sensitive fields you don't want persisted. |
-| 1.0 | `Topic`, `EphemeralValue`, `NamedBarrierValue`, `AnyValue` moved from `langgraph.channels` to their own submodules but remain re-exported at `langgraph.channels`. Existing imports unaffected. |
-| 0.6 | `DeltaChannel` added (beta) — a write-efficient channel that stores only deltas and reconstructs state by replaying ancestor writes. See [`DeltaChannel`](#deltachannel-beta) above. |
-| 0.2 | `BinaryOperatorAggregate` introduced; `add_messages` became the canonical reducer for message lists. |
+| 1.2.0 | `DeltaChannel` added (beta): stores deltas and rebuilds the value by replaying ancestor writes. See [`DeltaChannel`](#deltachannel-beta) above. |
+| 0.5 | `dynamic_barrier_value` and the `context` channel module removed (both present in 0.4.10, gone in 0.5.4). |
+
+`UntrackedValue`, `Topic`, `EphemeralValue`, `NamedBarrierValue` and `AnyValue` all predate 0.4 and live in their own submodules, re-exported from `langgraph.channels`.

@@ -105,7 +105,7 @@ These are the values in the installed source. Several older pages and blog posts
 
 | Setting | Value |
 |---|---|
-| Default `recursion_limit` | **10007** super-steps (override with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable, or per run with `config={"recursion_limit": 25}`). Older releases used 25. Set it explicitly for agent loops: the default is not a useful guard against a runaway loop. |
+| Default `recursion_limit` | **10007** super-steps (override with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable, or per run with `config={"recursion_limit": 25}`). Releases up to 1.0.5 used 25, and 1.0.6 to 1.1.3 used 10000. Set it explicitly for agent loops: the default is not a useful guard against a runaway loop. |
 | Default `durability` | `"async"`. Passed to `invoke`/`stream`/`ainvoke`/`astream`, not to `compile()`. Options: `"sync"`, `"async"`, `"exit"`. It has no effect without a checkpointer. |
 | Stream modes | Seven typed values in `StreamMode`: `values`, `updates`, `checkpoints`, `tasks`, `debug`, `messages`, `custom`. `"tools"` is also accepted at runtime but is not in the `Literal`. |
 | Default `stream_mode` | `invoke` uses `"values"` (returns the final state); `stream` uses the graph's own default, `"updates"`. |

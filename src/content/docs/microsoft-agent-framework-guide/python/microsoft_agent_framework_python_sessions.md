@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Sessions & history"
 description: "AgentSession, HistoryProvider, InMemoryHistoryProvider, FileHistoryProvider, VectorStoreHistoryProvider, FileSessionStore, register_state_type, multi-provider audit logs, and serializing sessions across processes."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Sessions & history"
+  order: 15
 ---
 
 A **session** is one logical conversation with an agent. The framework splits responsibilities cleanly:
@@ -45,6 +48,19 @@ asyncio.run(main())
 
 The provider lives on the agent. The session is just an id + scratchpad — pass it to every `run()` to opt into persistence for that conversation.
 
+## Where history lives when you configure nothing
+
+If you pass a session but configure no history provider, what happens depends on the chat client:
+
+| Client | `STORES_BY_DEFAULT` | History lives |
+|---|---|---|
+| `OpenAIChatClient` (Responses API), `FoundryChatClient` | `True` | On the service. The response id is written to `session.service_session_id` and sent back on the next turn; nothing is kept locally. |
+| `OpenAIChatCompletionClient`, `AnthropicClient`, `OllamaChatClient`, `BedrockChatClient`, `GeminiChatClient`, `MistralChatClient`, `FoundryLocalClient` | `False` | In `session.state`: the agent adds an `InMemoryHistoryProvider` for you. |
+
+`store` in the run or agent options overrides the client's default: `default_options={"store": False}` on an `OpenAIChatClient` agent keeps history local (and the auto-added `InMemoryHistoryProvider` takes over), while `store=True` forces service-side storage. Any history provider you configure with `load_messages=True` replaces the automatic one.
+
+Service-side history is convenient, but the conversation then exists only at the provider: you cannot inspect, compact or move it, and it is subject to the provider's retention rules. Configure a history provider when you need any of that.
+
 ## `AgentSession` in one screen
 
 ```python
@@ -67,7 +83,7 @@ Two attributes you may set yourself:
 - `session_id` — your stable correlation id (defaults to a UUID when omitted).
 - `service_session_id` — a service-managed id (e.g. an OpenAI Responses thread id). Set it when the **provider** owns the conversation server-side and you only want to keep a pointer.
 
-`session.state` is the cross-provider scratchpad. The framework already registers `Message` for round-trip serialisation; for your own classes, register them once at startup.
+`session.state` is the cross-provider scratchpad. Each provider keeps its data under its own `source_id` key; for example `InMemoryHistoryProvider` stores the transcript in `session.state["in_memory"]["messages"]`. The framework already registers `Message` for round-trip serialisation; for your own classes, register them once at startup.
 
 ### Storing custom types in `state`
 
@@ -96,9 +112,12 @@ restored = AgentSession.from_dict(snapshot)
 assert isinstance(restored.state["profile"], UserProfile)
 ```
 
-If you need a different identifier than the lowercase class name, define a class method:
+If you need a different identifier than the lowercase class name, pass `type_id=` (`register_state_type(UserProfile, type_id="profile.v1")`), supply `encoder=` / `decoder=` callables for a class you can't change, or define a class method:
 
 ```python
+from agent_framework import register_state_type
+
+
 class LegacyOrder:
     @classmethod
     def _get_type_identifier(cls) -> str:
@@ -125,10 +144,10 @@ The base class wires `before_run`/`after_run` so subclasses do nothing else. The
 
 | Class | Storage | Use when |
 |---|---|---|
-| `InMemoryHistoryProvider` | `session.state["messages"]` | Single-process bots, tests, ephemeral conversations |
+| `InMemoryHistoryProvider` | `session.state["in_memory"]["messages"]` | Single-process bots, tests, conversations you serialise with the session |
 | `FileHistoryProvider` | One JSONL file per `session_id` under a directory | Single-host deployments, durable across restarts |
 
-Beta provider packages add Redis (`agent-framework-redis`), Cosmos DB (`agent-framework-azure-cosmos`), and Azure AI Search (`agent-framework-azure-ai-search`) backends — same `HistoryProvider` interface.
+Beta packages add `RedisHistoryProvider` (`agent-framework-redis`) and `CosmosHistoryProvider` (`agent-framework-azure-cosmos`) with the same interface; see [packaged backends](#packaged-backends-redis-and-cosmos-db) below. `VectorStoreHistoryProvider` (in core) works with any vector store connector.
 
 ### Configuration flags shared by every history provider
 
@@ -141,13 +160,13 @@ These come straight from the constructor signature:
 | `store_outputs` | `True` | Whether assistant responses get persisted. |
 | `store_context_messages` | `False` | Whether messages added by **other** context providers (skills, RAG, …) get persisted. |
 | `store_context_from` | `None` | When set, only persist context from these `source_id`s. |
-| `skip_excluded` | `False` | When `True`, exclude messages flagged by compaction (`additional_properties["_excluded"] == True`). |
+| `skip_excluded` | `False` | When `True`, `get_messages` leaves out messages flagged by compaction (`additional_properties["_excluded"]` truthy). `InMemoryHistoryProvider` and `FileHistoryProvider` have it. |
 
 Pair `load_messages=False` + `store_outputs=True` for an audit log, `load_messages=True` + `store_outputs=False` for read-only replay, etc.
 
 ## `InMemoryHistoryProvider`
 
-Default when you don't configure anything. Messages live in `session.state["messages"]` — so they automatically travel with `session.to_dict()` / `from_dict()`.
+Added automatically for clients that don't store history (see above). Messages live in `session.state["in_memory"]["messages"]`, so they travel with `session.to_dict()` / `from_dict()`.
 
 ```python
 import json
@@ -161,6 +180,7 @@ agent = Agent(
     client=OpenAIChatClient(),
     instructions="You are a helpful assistant.",
     context_providers=[history],
+    default_options={"store": False},   # Responses API: don't also keep the conversation server-side
 )
 
 session = AgentSession()
@@ -180,7 +200,7 @@ Because the messages live inside the session dict, you don't need a separate dat
 
 ### Skipping compacted messages on read
 
-When you pair `InMemoryHistoryProvider` with a `CompactionProvider`, the compaction provider marks older messages as excluded **in stored history**. Tell the history provider to skip them on subsequent loads to honour that exclusion:
+A `CompactionProvider`'s `after_strategy` rewrites the stored history after each turn by marking older messages as excluded (it keeps them, so the annotations survive). Tell the history provider to skip them on later loads:
 
 ```python
 from agent_framework import (
@@ -202,18 +222,17 @@ agent = Agent(
 
 Without `skip_excluded=True`, the next turn re-loads everything compaction trimmed last turn, defeating the strategy.
 
+`after_strategy` only works on history kept in `session.state` (it looks for `session.state[history_source_id]["messages"]`, default `"in_memory"`). It has **no effect** on `FileHistoryProvider`, `RedisHistoryProvider` or other external stores, which never put the transcript in `session.state`. For those, use `before_strategy`, which compacts what the model sees on each turn while the stored transcript stays complete. Details are on the [compaction page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/).
+
 ## `FileHistoryProvider`
 
-One JSONL file per `session_id` in a single directory. Append-only, single-line JSON per message — corruption of one line never destroys the whole conversation.
+One JSON Lines file per `session_id` in a single directory, one message per line, appended after each run. (`serialization_format="msgpack"` is also available.)
 
 ```python
 from agent_framework import Agent, FileHistoryProvider
 from agent_framework.openai import OpenAIChatClient
 
-history = FileHistoryProvider(
-    storage_path="./conversations",     # directory; created automatically
-    skip_excluded=True,                 # honour CompactionProvider exclusions
-)
+history = FileHistoryProvider(storage_path="./conversations")   # directory; created automatically
 
 agent = Agent(
     client=OpenAIChatClient(),
@@ -228,12 +247,9 @@ await agent.run("Hi, I need help with order #4421.", session=session)
 
 ### Path-traversal protection
 
-`session_id` flows from your application — sometimes from URL routing, sometimes from headers. `FileHistoryProvider` resolves every `session_id` against the storage root and **rejects any id that would escape**:
+`session_id` flows from your application — sometimes from URL routing, sometimes from headers. `FileHistoryProvider` uses a plain id such as `customer-9281` as the file name (`customer-9281.jsonl`). Any id that is not safe as a file name (path separators, `..`, absolute paths, Windows reserved names such as `CON`) is encoded instead, giving a name like `~session-f5qwe4zpobqxi2a.jsonl` inside the storage directory, and the resolved path is checked against the storage root.
 
-- `../`, absolute paths, and Windows reserved stems (`CON`, `PRN`, …) are rewritten or rejected.
-- The resolved path is checked against the storage root.
-
-So `agent.create_session(session_id="../etc/passwd")` is safe — it lands inside `storage_path`, not at the OS path. You still need OS-level filesystem permissions (the contents are plaintext JSONL).
+So `agent.create_session(session_id="../etc/passwd")` is safe: it lands inside `storage_path`. You still need OS-level filesystem permissions (the contents are plaintext unless you add encryption below), and authorisation is yours: anyone who can choose the `session_id` can read that conversation.
 
 ### Encrypted-at-rest sessions via `dumps`/`loads`
 
@@ -270,7 +286,7 @@ history = FileHistoryProvider(
 
 Two operational notes:
 
-- `dumps` **must** return a single-line `str` or `bytes` (no `\n` / `\r`) — the provider validates this and raises if you violate it. The output does not have to be JSON; any single-line representation that round-trips through `loads` to a mapping is accepted, which is what makes this encrypted-token pattern work.
+- `dumps` **must** return a single-line `str` or `bytes` (no `\n` / `\r`); otherwise the provider raises `ValueError: FileHistoryProvider.dumps must return single-line JSON for JSON Lines storage.` The output does not have to be JSON; any single-line representation that round-trips through `loads` to a mapping is accepted, which is what makes this encrypted-token pattern work.
 - Both callables must round-trip cleanly. Test with `loads(dumps(x)) == x` for a representative payload.
 
 ## `VectorStoreHistoryProvider` — history in a vector store
@@ -306,6 +322,9 @@ Records are scoped by `application_id` + `tenant_id` + `agent_id` + `source_id` 
 ## Agent lifecycle helpers
 
 ```python
+from agent_framework import Agent, FileHistoryProvider
+from agent_framework.openai import OpenAIChatClient
+
 agent = Agent(
     client=OpenAIChatClient(),
     context_providers=[FileHistoryProvider(storage_path="./conv")],
@@ -321,7 +340,7 @@ session = agent.create_session(session_id="user-42")
 remote = agent.get_session(service_session_id="thread_abc123")
 ```
 
-`get_session` is the right entry point when the **server side** owns the history (Foundry threads, OpenAI Responses, Anthropic conversations). The local `session_id` is just a correlation key your code uses; the actual messages stay server-side.
+`get_session(service_session_id, *, session_id=None)` is the right entry point when the **service** owns the history (an OpenAI Responses response id or conversation id, a Foundry conversation) and you stored that id. The local `session_id` is just a correlation key your code uses; the actual messages stay server-side.
 
 ## Multi-provider patterns
 
@@ -333,11 +352,9 @@ Persist everything to the primary provider; mirror only inputs to the audit log.
 
 ```python
 from agent_framework import Agent, FileHistoryProvider
+from agent_framework.openai import OpenAIChatClient
 
-primary = FileHistoryProvider(
-    storage_path="./conversations",
-    skip_excluded=True,
-)
+primary = FileHistoryProvider(storage_path="./conversations")
 
 audit = FileHistoryProvider(
     storage_path="./audit",
@@ -353,13 +370,15 @@ agent = Agent(
 )
 ```
 
-Now `./audit/` accumulates a tamper-evident record of every user prompt — separate from the primary conversation store.
+Now `./audit/` accumulates a record of every user prompt, separate from the primary conversation store. It is plain files, so it is not tamper-evident on its own; ship it to append-only storage if it has to stand up as evidence.
 
 ### Logging only specific provider sources
 
 When you have a RAG provider, a skills provider, and a history provider, you may want to keep RAG-injected context out of the persisted history (it's reconstituted each turn anyway):
 
 ```python
+from agent_framework import FileHistoryProvider
+
 audit = FileHistoryProvider(
     storage_path="./audit",
     source_id="audit",
@@ -375,7 +394,7 @@ Set `store_context_from` to whitelist source ids; leave `None` and set `store_co
 
 ## Building your own `HistoryProvider`
 
-Two coroutines, no inheritance gymnastics. Override the storage; the base class handles the load/store flags.
+Two coroutines, no inheritance gymnastics. Override the storage; the base class handles the load/store flags. (The packaged `agent-framework-redis` already has a `RedisHistoryProvider`; this sketch shows the contract with a simple Redis list.)
 
 ```python
 import json
@@ -385,8 +404,8 @@ from agent_framework import HistoryProvider, Message
 import redis.asyncio as redis
 
 
-class RedisHistoryProvider(HistoryProvider):
-    DEFAULT_SOURCE_ID = "redis_history"
+class RedisListHistoryProvider(HistoryProvider):
+    DEFAULT_SOURCE_ID = "redis_list_history"
 
     def __init__(self, url: str, *, ttl_seconds: int | None = None, **kwargs: Any) -> None:
         super().__init__(source_id=self.DEFAULT_SOURCE_ID, **kwargs)
@@ -421,7 +440,34 @@ class RedisHistoryProvider(HistoryProvider):
 
 That's it. `load_messages`, `store_inputs`, `store_outputs`, `store_context_messages` all work — the base class calls your two methods at the right moments.
 
-> The official `agent-framework-redis` package ships a more sophisticated implementation (RedisVL-backed search, semantic recall) — use it for production. The example above is to show the contract.
+### Packaged backends: Redis and Cosmos DB
+
+For several workers sharing history, use a packaged provider rather than files:
+
+```python
+from agent_framework import Agent
+from agent_framework.azure import CosmosHistoryProvider          # pip install agent-framework-azure-cosmos --pre
+from agent_framework.openai import OpenAIChatCompletionClient
+from agent_framework.redis import RedisHistoryProvider           # pip install agent-framework-redis --pre
+from azure.identity.aio import DefaultAzureCredential
+
+redis_history = RedisHistoryProvider(
+    redis_url="redis://localhost:6379",
+    application_id="support-app",     # with tenant_id / agent_id, scopes the keys
+    max_messages=200,                 # keep only the most recent 200 messages per session
+)
+
+cosmos_history = CosmosHistoryProvider(
+    endpoint="https://<account>.documents.azure.com:443/",
+    database_name="agents",
+    container_name="history",
+    credential=DefaultAzureCredential(),
+)
+
+agent = Agent(client=OpenAIChatCompletionClient(), context_providers=[redis_history])
+```
+
+Both take the same `load_messages` / `store_*` flags as the built-in providers. `RedisHistoryProvider` defaults to port 6380 with TLS when you give `host=` instead of `redis_url=`. The Redis package also has `RedisContextProvider` (RedisVL semantic recall of stored context) and `RedisStore` for the vector-store layer.
 
 ## Sessions across processes — request handlers and queues
 
@@ -468,10 +514,7 @@ Use `FileHistoryProvider` (or Redis/Cosmos) on the server; the client only sends
 ```python
 @app.post("/chat")
 async def chat(payload: dict) -> dict:
-    session = agent.get_session(
-        service_session_id=None,
-        session_id=payload["session_id"],
-    )
+    session = agent.create_session(session_id=payload["session_id"])   # history is loaded by the provider
     response = await agent.run(payload["message"], session=session)
     return {"reply": response.text}
 ```
@@ -509,7 +552,11 @@ async def chat(session_id: str, message: str) -> str:
 
 **Compaction without `skip_excluded=True` on the history provider.** Compaction marks messages as excluded; if the history provider re-loads them on the next turn, you've gained nothing.
 
-**Single-host JSONL across N replicas.** `FileHistoryProvider` uses per-process locks, not cross-process locks. Multiple replicas writing to the same NFS volume *will* race. Use Redis or Cosmos for multi-host deployments.
+**Expecting `after_strategy` to shrink a file or Redis transcript.** It only rewrites history held in `session.state`; use `before_strategy` with external stores.
+
+**Assuming the Responses API client keeps history in the session.** With `OpenAIChatClient` and `FoundryChatClient`, `session.to_dict()` holds only the service's response id unless you set `store=False` or add a history provider.
+
+**Single-host JSONL across N replicas.** `FileHistoryProvider` serialises writes with in-process thread locks, not cross-process locks. Multiple replicas writing to the same NFS volume *will* race. Use Redis or Cosmos for multi-host deployments.
 
 **`session.state` mutation outside an agent run.** Providers run in `before_run` / `after_run`. Mutating `state` while a run is in flight is undefined behaviour — do it before/after `agent.run(...)`.
 
@@ -521,7 +568,7 @@ The most useful methods when writing a custom provider:
 
 | Method | Purpose |
 |---|---|
-| `extend_messages(source, messages)` | Inject context messages (e.g. RAG results, persona snippets) under a named source key |
+| `extend_messages(source, messages)` | Inject context messages (e.g. RAG results, persona snippets) under a named source key (`source` may be the provider itself) |
 | `extend_instructions(source_id, instructions)` | Append dynamic system-prompt fragments |
 | `extend_tools(source_id, tools)` | Register extra tools for this run only |
 | `extend_middleware(source_id, middleware)` | Add per-run chat or function middleware |
@@ -687,9 +734,9 @@ async def debug_context(agent, session):
                 print(f"    [{source}] → {len(msgs)} messages")
 ```
 
-### `PerServiceCallHistoryPersistingMiddleware`
+### Persisting after every model call
 
-When `require_per_service_call_history_persistence=True` is set on an agent, the framework wraps each model call with a `PerServiceCallHistoryPersistingMiddleware` that flushes history after every model roundtrip — not just at the end of the outer `agent.run()`. This is useful for long-running agentic loops where a process crash mid-run would otherwise lose all intermediate turns:
+When `require_per_service_call_history_persistence=True` is set on an agent, the framework installs an internal chat middleware that saves history to the configured history providers after every model round trip, not just at the end of the outer `agent.run()`. This is useful for long-running agentic loops where a process crash mid-run would otherwise lose all intermediate turns. It is also required for handoff orchestrations (see the [orchestration page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/)).
 
 ```python
 from agent_framework import Agent, FileHistoryProvider
@@ -717,6 +764,12 @@ The trade-off: every model call now incurs a history write. For short, single-tu
 
 ## See also
 
-- [Compaction](./microsoft_agent_framework_python_compaction/) — pair a `CompactionStrategy` with the history provider for long-running conversations.
-- [Middleware](./microsoft_agent_framework_python_middleware/) — read/write `AgentContext.session` from agent middleware.
-- [Production guide](./microsoft_agent_framework_python_production_guide/) — deploying stateful sessions across multi-instance services.
+- [Compaction](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/) — pair a `CompactionStrategy` with the history provider for long-running conversations.
+- [Middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) — read/write `AgentContext.session` from agent middleware.
+- [Production guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/) — deploying stateful sessions across multi-instance services.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Added "where history lives by default" (Responses-API clients store server-side; others get an automatic `InMemoryHistoryProvider`), packaged Redis and Cosmos DB providers, and `register_state_type(type_id=, encoder=, decoder=)`. Corrected the in-memory storage key (`state["in_memory"]["messages"]`), the path-traversal behaviour (unsafe ids are encoded, not rejected), and the compaction advice: `after_strategy` has no effect on file or Redis history. |

@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Compaction"
 description: "Keep long agent conversations inside the context window: TruncationStrategy, SlidingWindowStrategy, SummarizationStrategy, ToolResultCompactionStrategy, TokenBudgetComposedStrategy, ContextWindowCompactionStrategy, and CompactionProvider."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Compaction"
+  order: 16
 ---
 
 Long-running agents blow through the context window. Compaction strategies decide which messages to keep, which to drop, and which to replace with shorter summaries — **per turn**, before the messages reach the model.
@@ -51,7 +54,7 @@ Good default. Deterministic, no extra LLM calls, preserves system anchors.
 
 ### What "groups" means in practice
 
-A *group* is whatever the framework's group annotator considered a single logical unit — typically a user turn, an assistant turn, or a tool-call group (a function call **plus** its tool-result message stay together). Counting groups instead of messages is what lets the strategy keep tool calls atomic: it never strands a `function_call` without its `function_result`.
+A *group* is what the framework's group annotator (`annotate_message_groups`) treats as one unit. Each user message is its own group (kind `user`), so is each plain assistant reply (`assistant_text`) and the system prompt (`system`); an assistant message with function calls forms a `tool_call` group **together with** the tool-result messages that answer it. A user message and the assistant reply to it are two groups, not one. Counting groups instead of messages is what lets the strategy keep tool calls atomic: it never strands a `function_call` without its `function_result`.
 
 ```python
 import asyncio
@@ -86,13 +89,13 @@ asyncio.run(apply_compaction(messages, strategy=strategy))
 excluded = [m for m in messages if m.additional_properties.get(EXCLUDED_KEY)]
 print(len(excluded), "messages excluded with reason",
       excluded[0].additional_properties.get(EXCLUDE_REASON_KEY))
-# 6 messages excluded with reason sliding_window
+# 7 messages excluded with reason sliding_window
 ```
 
 Two things this snippet illustrates:
 
 - **System messages survive `preserve_system=True`.** Even with `keep_last_groups=2`, the system anchor is untouched and isn't counted toward the kept-groups quota.
-- **The tool-call group counts as one group.** Both the `function_call` and the `function_result` survive together — `keep_last_groups=2` keeps the latest user/assistant turn and the tool group, not 2 messages out of 3.
+- **The tool-call group counts as one group.** Both the `function_call` and the `function_result` survive together. `keep_last_groups=2` keeps the last two groups, the final `assistant 3` reply and the tool-call group (three messages), and excludes the seven user and assistant messages before them.
 
 ### Edge cases worth knowing
 
@@ -102,7 +105,7 @@ Two things this snippet illustrates:
 
 ## Truncation — oldest-first drop
 
-`TruncationStrategy` measures the conversation by **included message count** (default) or **token count** (when a `tokenizer` is supplied). Once the metric exceeds `max_n`, it walks groups oldest-first and marks them excluded until the count falls to `compact_to`. System messages are skipped when `preserve_system=True` (the default).
+`TruncationStrategy` measures the conversation by **included message count** (default) or **token count** (when a `tokenizer` is supplied). Once the metric exceeds `max_n`, it walks groups oldest-first and marks them excluded until the count falls to `compact_to`. System messages are skipped when `preserve_system=True` (the default). `preserve_first_user_group=True` also protects the first user message, which is useful when it holds the task statement the rest of the conversation works on.
 
 ```python
 from agent_framework import TruncationStrategy
@@ -357,6 +360,8 @@ support_summariser = SummarizationStrategy(
 )
 ```
 
+`max_summary_input_tokens` (default 8000) caps how much of the old history is sent to the summariser in one call, measured with `tokenizer=` (a character estimate if you give none).
+
 The summary message keeps `group_annotation.summary_of_group_ids` and `summary_of_message_ids` metadata so you can later walk back to the original turns — useful for audit trails or "expand this summary" UI affordances.
 
 ### Tuning `target_count` and `threshold`
@@ -427,8 +432,10 @@ from agent_framework import TokenizerProtocol
 class TiktokenTokenizer:
     """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
 
-    def __init__(self, model: str = "%%model=openai-small%%") -> None:
-        self._enc = tiktoken.encoding_for_model(model)
+    def __init__(self, encoding: str = "o200k_base") -> None:
+        # o200k_base is the encoding of current OpenAI models. tiktoken.encoding_for_model()
+        # raises KeyError for model names newer than your tiktoken release.
+        self._enc = tiktoken.get_encoding(encoding)
 
     def count_tokens(self, text: str) -> int:
         return len(self._enc.encode(text))
@@ -486,7 +493,7 @@ Use `TokenBudgetComposedStrategy` instead when you want summarisation in the pip
 
 ## Wiring compaction into an agent
 
-Two options: **per-agent** (via the chat client) or **per-session** (via `CompactionProvider`). Per-session is more common — it integrates with history providers and persists the compacted state.
+Two places: on the **agent or client** (`compaction_strategy=`, applied to every model call, including each call inside a tool loop) or in the **session pipeline** (`CompactionProvider`, applied to the history loaded for a run and, optionally, to the stored history afterwards). The provider is the usual choice for conversations; the agent-level strategy is a safety net for long tool loops within one run.
 
 ### Per-session via `CompactionProvider`
 
@@ -529,19 +536,22 @@ Knowing exactly *when* each strategy fires lets you reason about token cost and 
 ```text
 agent.run(...)
    │
-   ├─ HistoryProvider.load_session(...) loads stored messages into context
-   ├─ CompactionProvider.before_run(...)   ← before_strategy mutates loaded context
-   ├─ ──── model call(s) + tool loop ────  ← uses the (now-compacted) context
-   ├─ HistoryProvider.persist(...) writes new messages into session.state
-   ├─ CompactionProvider.after_run(...)    ← after_strategy mutates stored history
-   │       (looked up by `history_source_id` in session.state)
+   ├─ HistoryProvider.before_run(...)      loads stored messages into the run's context
+   ├─ CompactionProvider.before_run(...)   ← before_strategy compacts the loaded context
+   ├─ ──── model call(s) + tool loop ────  ← uses the compacted context
+   ├─ HistoryProvider.after_run(...)       saves the new messages
+   ├─ CompactionProvider.after_run(...)    ← after_strategy compacts the stored history
+   │       (only history kept in session.state[history_source_id]["messages"])
    └─ return AgentResponse
 ```
+
+Context providers run in list order, so put the history provider before the compaction provider.
 
 Two practical consequences:
 
 - **Same strategy, different goals.** A common pattern is "summarise once it gets big" — a `SummarizationStrategy` as `after_strategy` keeps storage compact, while a cheap `SlidingWindowStrategy` as `before_strategy` is a safety net in case the next turn still loads more than expected.
-- **`history_source_id` must match the history provider.** The `after_strategy` looks up history under `session.state[history_source_id]`. If you change the history provider's `source_id` (say, you mount two providers as `"long_term"` and `"short_term"`) you must thread the matching id into `CompactionProvider(history_source_id=...)` or compaction silently no-ops on persist.
+- **`history_source_id` must match the history provider.** The `after_strategy` looks up history under `session.state[history_source_id]["messages"]` (default `"in_memory"`). If you change the history provider's `source_id` you must pass the matching id to `CompactionProvider(history_source_id=...)`, or compaction silently does nothing after the run.
+- **`after_strategy` only works with history kept in `session.state`.** `InMemoryHistoryProvider` keeps it there; `FileHistoryProvider`, `RedisHistoryProvider`, `CosmosHistoryProvider` and service-side storage do not, so `after_strategy` is a no-op with them. Use `before_strategy` instead (see below).
 
 #### Inspecting compaction in tests
 
@@ -570,21 +580,17 @@ Excluded messages remain in the original list with `EXCLUDED_KEY=True` annotatio
 
 ### Swapping in `FileHistoryProvider`
 
-For durable sessions across process restarts, replace `InMemoryHistoryProvider` with `FileHistoryProvider` (experimental — `agent_framework._sessions`). It writes one JSON-Lines file per `session_id` under a root directory:
+For durable sessions across process restarts, replace `InMemoryHistoryProvider` with `FileHistoryProvider` (experimental). It writes one JSON Lines file per `session_id` under a root directory and appends every turn, so the file always holds the full transcript. Compaction therefore has to happen on the way in, with `before_strategy`; an `after_strategy` would find nothing in `session.state` to compact:
 
 ```python
 from agent_framework import Agent, CompactionProvider, FileHistoryProvider, SlidingWindowStrategy
 from agent_framework.openai import OpenAIChatClient
 
 
-history = FileHistoryProvider(
-    storage_path="./sessions",
-    skip_excluded=True,             # don't reload compacted-out messages on the next turn
-)
+history = FileHistoryProvider(storage_path="./sessions")
 
 compaction = CompactionProvider(
-    before_strategy=SlidingWindowStrategy(keep_last_groups=20),
-    history_source_id=history.source_id,
+    before_strategy=SlidingWindowStrategy(keep_last_groups=20),   # the model sees the last 20 groups
 )
 
 agent = Agent(client=OpenAIChatClient(), context_providers=[history, compaction])
@@ -594,7 +600,7 @@ session = agent.create_session(session_id="user-42")
 await agent.run("Continue where we left off.", session=session)
 ```
 
-`FileHistoryProvider` resolves `session_id` against `storage_path` and **rejects any id that would escape the storage directory** — `../` traversal is blocked and resolved paths are validated against the storage root. Treat the storage directory as trusted application state, not a secret store; the JSONL contents are plaintext. For multi-process deployments, use the Redis or Cosmos history providers instead so concurrent writers don't race on the same file.
+The whole file is read on every turn, so for very long conversations the read cost grows even though the model sees only the window. `FileHistoryProvider` encodes any `session_id` that is not a safe file name, so ids cannot escape the storage directory (details on the [sessions page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/#path-traversal-protection)). The contents are plaintext. For multi-process deployments, use the Redis or Cosmos history providers instead so concurrent writers don't race on the same file.
 
 The `store_inputs`, `store_outputs`, `store_context_messages`, and `load_messages` flags let the same class act as an audit log (`load_messages=False`), a write-only evaluation trace, or a full primary store:
 
@@ -609,19 +615,23 @@ audit_log = FileHistoryProvider(
 )
 ```
 
-### Per-agent via chat client
+### Per agent, or per client
 
-Any chat client accepts `compaction_strategy=`. This applies to every call made through that client, regardless of session:
+`Agent(compaction_strategy=..., tokenizer=...)` compacts the messages before **every** model call the agent makes, including the repeated calls inside one tool loop, which a `CompactionProvider` does not touch. `OpenAIChatClient` and `FoundryChatClient` also accept `compaction_strategy=` and `tokenizer=` in their constructors; when both the agent and its client set one, the agent's wins. (Other clients, such as `OpenAIChatCompletionClient` and `AnthropicClient`, have no such constructor argument; use the agent-level setting with them.)
 
 ```python
-client = OpenAIChatClient(
+from agent_framework import Agent, SlidingWindowStrategy
+from agent_framework.openai import OpenAIChatClient
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="You are a research assistant.",
     compaction_strategy=SlidingWindowStrategy(keep_last_groups=30),
     tokenizer=TiktokenTokenizer(),
 )
-agent = Agent(client=client, instructions="…")
 ```
 
-Use this for stateless agents or when you want a client-wide safety net independent of session compaction.
+Use this for agents whose single runs make many tool calls, or as a safety net alongside session compaction.
 
 ### Per-run override
 
@@ -636,14 +646,21 @@ await agent.run("…", compaction_strategy=SlidingWindowStrategy(keep_last_group
 Anything callable that matches the protocol works:
 
 ```python
+from agent_framework import EXCLUDE_REASON_KEY, EXCLUDED_KEY, Message
+
+
 async def drop_old_errors(messages: list[Message]) -> bool:
+    """Exclude every tool result except the last one when it reports an error."""
     changed = False
-    for m in messages:
-        if m.role == "tool" and "error" in (m.text or "").lower():
-            from agent_framework._compaction import set_excluded
-            changed = set_excluded(m, excluded=True, reason="old_error") or changed
+    for m in messages[:-1]:
+        if m.role == "tool" and "error" in (m.text or "").lower() and not m.additional_properties.get(EXCLUDED_KEY):
+            m.additional_properties[EXCLUDED_KEY] = True
+            m.additional_properties[EXCLUDE_REASON_KEY] = "old_error"
+            changed = True
     return changed
 ```
+
+A custom strategy must keep tool calls and their results together: excluding a result while its `function_call` stays in context gives most providers an invalid request. Work at group level (read the `_group` annotation, see below) when in doubt.
 
 Compose with the built-ins via `TokenBudgetComposedStrategy` or call inline.
 
@@ -665,59 +682,9 @@ print(included_token_count(messages))   # estimated token count of kept messages
 
 Both helpers operate on the in-place-mutated list — call them after `apply_compaction()` or after the framework's own compaction pass completes.
 
-### `annotate_message_groups` — low-level group inspection
+### Group annotations
 
-`annotate_message_groups` is what the built-in strategies call internally before deciding what to exclude. It annotates each message with a `group_id`, `group_index`, and `group_type` in `additional_properties`. You can call it directly to understand the group structure without running any strategy:
-
-```python
-from agent_framework import (
-    Content,
-    Message,
-    annotate_message_groups,
-)
-
-messages = [
-    Message(role="system", contents=[Content.from_text("Be concise.")]),
-    Message(role="user",   contents=[Content.from_text("What is RAG?")]),
-    Message(role="assistant", contents=[Content.from_text("RAG stands for Retrieval-Augmented Generation.")]),
-    Message(role="assistant", contents=[
-        Content.from_function_call("c1", "search_docs", arguments={"query": "RAG"}),
-    ]),
-    Message(role="tool", contents=[
-        Content.from_function_result("c1", result="RAG: retrieve then generate."),
-    ]),
-    Message(role="user",   contents=[Content.from_text("Give an example.")]),
-    Message(role="assistant", contents=[Content.from_text("Sure! ...")]),
-]
-
-# Annotate without running any strategy — writes group metadata in place but does NOT mark exclusions
-annotate_message_groups(messages)
-
-for m in messages:
-    props = m.additional_properties
-    print(
-        f"role={m.role:9}  "
-        f"group={props.get('group_id', '?'):4}  "
-        f"type={props.get('group_type', '?')}"
-    )
-```
-
-This prints something like:
-
-```text
-role=system    group=0     type=system
-role=user      group=1     type=user
-role=assistant group=2     type=assistant
-role=assistant group=3     type=tool_call
-role=tool      group=3     type=tool_call
-role=user      group=4     type=user
-role=assistant group=5     type=assistant
-```
-
-Key observations:
-- The `function_call` and `function_result` share **the same `group_id`** (`3`). This is how strategies keep tool calls atomic — they never exclude one without the other.
-- `group_type` values are `"system"`, `"user"`, `"assistant"`, and `"tool_call"`. Strategies use this to selectively target only tool-call groups (`SelectiveToolCallCompactionStrategy`) or to skip system anchors (`preserve_system=True`).
-- `annotate_message_groups` is **idempotent** — calling it twice on the same list is safe, and existing annotations are overwritten cleanly.
+`annotate_message_groups` stamps each message with a `_group` dict (`GROUP_ANNOTATION_KEY`) holding the group `id`, `kind` (`system`, `user`, `assistant_text` or `tool_call`), `index` and `has_reasoning`; see [low-level compaction utilities](#low-level-compaction-utilities) below for an example. A `function_call` message and the tool results that answer it share one group id, which is how strategies keep tool calls atomic.
 
 ### Building a debug summary
 
@@ -775,7 +742,7 @@ Excluded messages stay in the original list — `apply_compaction` mutates in pl
 
 **Multi-tool pipelines.** Tool results often dwarf user/assistant turns. `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=2)` preserves the important reasoning while dropping the polling noise.
 
-**A/B test strategies.** Run `evaluate_agent` (see [Evaluation](./microsoft_agent_framework_python_evaluation/)) twice with different `compaction_strategy=` overrides and compare pass rates.
+**A/B test strategies.** Run `evaluate_agent` (see [Evaluation](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/)) twice with different `compaction_strategy=` overrides and compare pass rates.
 
 ## End-to-end recipes for each strategy
 
@@ -793,8 +760,10 @@ from agent_framework.openai import OpenAIChatClient
 class TiktokenTokenizer:
     """Implements the `TokenizerProtocol` — a single `count_tokens(text)` method."""
 
-    def __init__(self, model: str = "%%model=openai-small%%") -> None:
-        self._enc = tiktoken.encoding_for_model(model)
+    def __init__(self, encoding: str = "o200k_base") -> None:
+        # o200k_base is the encoding of current OpenAI models. tiktoken.encoding_for_model()
+        # raises KeyError for model names newer than your tiktoken release.
+        self._enc = tiktoken.get_encoding(encoding)
 
     def count_tokens(self, text: str) -> int:
         return len(self._enc.encode(text))
@@ -980,7 +949,7 @@ conversation = [
 ]
 
 group_ids = annotate_message_groups(conversation)
-print(f"Group IDs: {group_ids}")    # ['g0', 'g1', 'g2', 'g3', 'g4'] or similar
+print(f"Group IDs: {group_ids}")    # ['group_msg_0', 'group_msg_1', 'group_msg_2', 'group_msg_3', 'group_msg_4']
 show_groups(conversation)
 ```
 

@@ -233,6 +233,8 @@ def test_single_node():
     assert "check" in graph.nodes
 ```
 
+`GenericFakeChatModel` streams by splitting the message content, so it suits tests that call `invoke`. Under `stream(..., stream_mode="messages")` a scripted message with empty content and only `tool_calls` fails with `ValueError: No generations found in stream`; with non-empty content it runs, but the streamed chunks carry no tool calls, so the agent stops after the first turn. Test streaming of tool-calling agents with a fake that implements `_stream` and yields `AIMessageChunk`s with `tool_call_chunks`.
+
 Other useful techniques (from the [LangGraph testing docs](https://docs.langchain.com/oss/python/langgraph/test)):
 
 - `graph.nodes["name"].invoke(state)` runs one node on its own.
