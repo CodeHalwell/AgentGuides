@@ -105,16 +105,16 @@ result = agent("Name three Yorkshire towns.")
 
 print(result.stop_reason)                         # "end_turn"
 print(result.message["content"][0]["text"])       # the final assistant message
-print(result.metrics.accumulated_usage)           # {'inputTokens': ..., 'outputTokens': ..., 'totalTokens': ...}
-print(result.metrics.cycle_count)                 # number of loop cycles
-print(len(agent.messages))                        # history kept on the agent
+print(result.metrics.latest_agent_invocation.usage)   # tokens for this call
+print(result.metrics.accumulated_usage)                # tokens for every call this agent has made
+print(len(agent.messages))                             # history kept on the agent
 ```
 
 | Field | Meaning |
 |-------|---------|
 | `stop_reason` | `end_turn`, `max_tokens`, `stop_sequence`, `guardrail_intervened`, `content_filtered`, `interrupt`, `cancelled`, `limit_turns`, `limit_total_tokens`, `limit_output_tokens`, `checkpoint`, `tool_use` |
 | `message` | The last assistant message |
-| `metrics` | `EventLoopMetrics`: usage, cycle count, per-tool metrics, traces |
+| `metrics` | The agent's `EventLoopMetrics`: usage, cycle count, per-tool metrics, traces. It is shared across calls, so `accumulated_usage` and `cycle_count` are totals for the agent's lifetime; `latest_agent_invocation` holds this call's usage and cycles |
 | `structured_output` | The validated Pydantic instance when you asked for one |
 | `interrupts` | Pending interrupts when `stop_reason == "interrupt"` |
 | `state` | Final request state |
