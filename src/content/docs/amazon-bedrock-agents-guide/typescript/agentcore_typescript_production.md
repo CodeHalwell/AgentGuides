@@ -292,4 +292,5 @@ Callers need `bedrock-agentcore:InvokeAgentRuntime` on the runtime (and its endp
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | `bedrock-agentcore` 0.4.6 · AgentCore CLI 1.0.0 | CLI section rewritten for CLI 1.0: templates, `add runtime`, template defaults and dependency ranges. |
 | 2026-10-21 | `bedrock-agentcore` 0.4.6 · AgentCore CLI 0.31.1 | New page. |

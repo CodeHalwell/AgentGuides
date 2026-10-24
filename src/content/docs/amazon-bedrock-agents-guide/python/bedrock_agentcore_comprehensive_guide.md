@@ -12,7 +12,7 @@ sidebar:
 
 A technical reference for Amazon Bedrock AgentCore, AWS's platform for deploying and operating agents built with any framework and any model. AgentCore is a set of modular services — Runtime, Memory, Gateway, Identity, Code Interpreter, Browser, Observability, and the newer managed Harness — that you can use together or on their own.
 
-> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore%% and `boto3` %%version=boto3%% (checked %%versions-checked%%). Every class, function and boto3 operation shown here was checked against those installed packages.
+> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore%%, `boto3` %%version=boto3%% and the AgentCore CLI (`@aws/agentcore`) %%version=@aws/agentcore%% (checked %%versions-checked%%). Every class, function and boto3 operation shown here was checked against those installed packages, boto3 requests were validated against the botocore service models, and the CLI commands and the `harness.yaml` example were run against a generated project (`create`, `add`, `build`, `export`). Calls that need a live AWS account (deploying, invoking, model output) were not run.
 
 **History:** AgentCore was announced in preview at AWS Summit New York in July 2025 and became generally available in October 2025. Preview-period pricing (free until 16 September 2025) no longer applies; see the [AgentCore pricing page](https://aws.amazon.com/bedrock/agentcore/pricing/).
 

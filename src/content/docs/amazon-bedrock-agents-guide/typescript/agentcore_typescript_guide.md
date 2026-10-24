@@ -49,6 +49,7 @@ Node.js 20 or later is required by `bedrock-agentcore`; Strands needs Node.js 22
 | `bedrock-agentcore/browser`, `bedrock-agentcore/browser/playwright` | `Browser` session client, `PlaywrightBrowser` |
 | `bedrock-agentcore/experimental/browser/strands` | `BrowserTools` (Strands tools) |
 | `bedrock-agentcore/identity` | `withApiKey`, `withAccessToken` |
+| `bedrock-agentcore/code-interpreter/vercel-ai`, `bedrock-agentcore/browser/vercel-ai` | The same Code Interpreter and Browser tools for the Vercel AI SDK (`ai`) |
 | `bedrock-agentcore/web-search` | `WebSearchClient` for a Gateway web-search connector target |
 
 `@strands-agents/sdk`, `playwright`, `ai` (Vercel AI SDK), `express` and `@a2a-js/sdk` are optional peer dependencies; install the ones the modules you import need.
@@ -444,4 +445,5 @@ Compared with the Python `bedrock-agentcore` SDK at the time of writing:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | `bedrock-agentcore` 0.4.6 | Added the Vercel AI SDK import paths; CLI references updated for CLI 1.0. |
 | 2026-10-21 | `bedrock-agentcore` 0.4.6 | New page. Examples compiled with `tsc --strict`; Runtime server run locally against a stub model. |

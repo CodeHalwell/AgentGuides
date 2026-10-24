@@ -34,7 +34,7 @@ RUN pip install aws-opentelemetry-distro
 CMD ["opentelemetry-instrument", "python", "main.py"]
 ```
 
-Strands emits spans for each agent invocation, event-loop cycle, model call and tool call, with token usage as span attributes. To add your own attributes to Strands spans:
+Projects created by the AgentCore CLI already depend on `aws-opentelemetry-distro`, and `agentcore deploy` enables CloudWatch Transaction Search for you. To look at a deployed runtime or harness from a terminal, use `agentcore logs runtime --name NAME --since 1h --level error` and `agentcore traces runtime list --name NAME` (and the `harness` variants). Strands emits spans for each agent invocation, event-loop cycle, model call and tool call, with token usage as span attributes. To add your own attributes to Strands spans:
 
 ```python
 from strands import Agent
