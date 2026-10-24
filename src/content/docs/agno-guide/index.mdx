@@ -3,6 +3,146 @@ title: "Agno"
 description: "Agno: agents, teams and workflows in Python, served with AgentOS."
 framework: "agno"
 language: "python"
+sidebar:
+  label: "Overview"
+  order: 0
 ---
 
-This guide is being written.
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**Agno** is a Python framework for building agents, teams of agents and step-based workflows, together with **AgentOS**, a FastAPI runtime that serves them over REST, SSE and MCP with storage, authentication and per-user isolation. Agents, teams and workflows share one run interface and one storage layer, so moving from a script to a service is mostly a matter of handing them to `AgentOS`.
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    pip install -U agno openai
+    # serving: pip install -U "agno[os]"
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    **agno %%version=agno%%** · Python 3.9+ (package metadata)
+    _Pages are checked against this release (%%versions-checked%%)._
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Python services that need agents with sessions, memory and knowledge, multi-agent teams, and an HTTP API you run yourself.
+  </Card>
+</CardGrid>
+
+<Aside type="tip" title="Where to start">
+  New to Agno? Follow Zero → Hero in order. Already have agents and want to serve them? Go straight to **AgentOS**. Upgrading from Agno 2? Read **Upgrading from v2** first: storage moved and several parameters were removed.
+</Aside>
+
+## Zero → Hero
+
+<CardGrid>
+  <LinkCard title="1 · Core concepts" href="/agno-guide/agno_comprehensive_guide/#core-concepts" description="Agent, Team, Workflow, AgentOS and db: what each is for" />
+  <LinkCard title="2 · Your first agent" href="/agno-guide/agno_comprehensive_guide/#your-first-agent" description="Install, run, read the RunOutput" />
+  <LinkCard title="3 · Models and providers" href="/agno-guide/agno_comprehensive_guide/#models-and-providers" description="Model classes, provider strings, fallbacks" />
+  <LinkCard title="4 · Tools" href="/agno-guide/agno_comprehensive_guide/#tools" description="Functions, @tool, toolkits, tool hooks, MCP servers" />
+  <LinkCard title="5 · Structured output" href="/agno-guide/agno_comprehensive_guide/#structured-output" description="output_schema, input_schema, parser and output models" />
+  <LinkCard title="6 · Instructions and context" href="/agno-guide/agno_comprehensive_guide/#instructions-and-context" description="System message settings, dependencies, media" />
+  <LinkCard title="7 · Sessions and storage" href="/agno-guide/agno_comprehensive_guide/#sessions-and-storage" description="db, history, session state" />
+  <LinkCard title="8 · Memory" href="/agno-guide/agno_comprehensive_guide/#memory" description="MemoryManager, agentic and automatic memories" />
+  <LinkCard title="9 · Knowledge and RAG" href="/agno-guide/agno_comprehensive_guide/#knowledge-and-rag" description="Knowledge, vector stores, agentic and injected retrieval" />
+  <LinkCard title="10 · Streaming" href="/agno-guide/agno_comprehensive_guide/#streaming" description="Events, async streaming" />
+  <LinkCard title="11 · Hooks and guardrails" href="/agno-guide/agno_comprehensive_guide/#hooks-and-guardrails" description="pre/post hooks, built-in guardrails, what a blocked run looks like" />
+  <LinkCard title="12 · Human-in-the-loop" href="/agno-guide/agno_comprehensive_guide/#human-in-the-loop" description="Confirmation, user input, external execution, continue_run" />
+  <LinkCard title="13 · Teams" href="/agno-guide/agno_teams/" description="coordinate, route, broadcast and tasks modes" />
+  <LinkCard title="14 · Workflows" href="/agno-guide/agno_workflows/" description="Steps, parallel, conditions, loops, routers, human review" />
+  <LinkCard title="15 · AgentOS" href="/agno-guide/agno_agentos/" description="Serving, the API, MCP, interfaces, auth, control plane" />
+  <LinkCard title="16 · Production" href="/agno-guide/agno_production_guide/" description="Deployment, databases, tracing, evals, offline testing" />
+</CardGrid>
+
+## Jump to a topic
+
+<CardGrid>
+  <LinkCard title="Agent reference" href="/agno-guide/agno_comprehensive_guide/#agent-reference" />
+  <LinkCard title="MCP tools" href="/agno-guide/agno_comprehensive_guide/#mcp-servers" />
+  <LinkCard title="Reasoning" href="/agno-guide/agno_comprehensive_guide/#reasoning" />
+  <LinkCard title="Team modes" href="/agno-guide/agno_teams/#modes" />
+  <LinkCard title="Workflow human review" href="/agno-guide/agno_workflows/#human-review" />
+  <LinkCard title="AgentOS API" href="/agno-guide/agno_agentos/#calling-the-api" />
+  <LinkCard title="Serving over MCP" href="/agno-guide/agno_agentos/#serving-over-mcp" />
+  <LinkCard title="Authentication" href="/agno-guide/agno_agentos/#authentication-and-isolation" />
+  <LinkCard title="Tracing" href="/agno-guide/agno_production_guide/#observability" />
+  <LinkCard title="Evals" href="/agno-guide/agno_production_guide/#evals" />
+  <LinkCard title="Testing without a provider" href="/agno-guide/agno_production_guide/#testing-without-a-provider" />
+  <LinkCard title="Upgrading from v2" href="/agno-guide/agno_comprehensive_guide/#upgrading-from-v2" />
+</CardGrid>
+
+## Reference
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="/agno-guide/agno_comprehensive_guide/" description="Agents end to end, the Agent reference and an API map." />
+  <LinkCard title="Recipes" href="/agno-guide/agno_recipes/" description="Support assistant, handbook Q&A, research workflow, triage, streaming endpoint, batch extraction, scheduled digest." />
+  <LinkCard title="Diagrams" href="/agno-guide/agno_diagrams/" description="Run loop, pauses, team modes, workflow primitives, AgentOS, storage." />
+</CardGrid>
+
+## When to choose Agno
+
+Agno fits when you want one Python library to cover the agent, its storage and the service around it. It has built-in sessions, user memory, knowledge bases, guardrails, human-in-the-loop pauses, multi-agent teams and deterministic workflows, and AgentOS adds a ready-made API, MCP server and chat interfaces on infrastructure you control.
+
+Consider something else when:
+
+- you need TypeScript, .NET or Go: Agno is Python only;
+- you want to model an application as an explicit state graph with checkpoints at every node (LangGraph is built around that; Agno workflows are step lists with branches and loops);
+- you want a minimal, typed agent core and will build storage and serving yourself (PydanticAI is closer to that).
+
+Agno's surface is large and changes quickly (ten patch releases in the three weeks before this check), so pin the version and read the release notes before upgrading.
+
+## Install, minimal example
+
+```python
+from agno.agent import Agent
+from agno.models.openai import OpenAIResponses
+
+
+def get_weather(city: str) -> str:
+    """Return the current weather for a city."""
+    return f"Sunny in {city}"
+
+
+agent = Agent(
+    model=OpenAIResponses(id="%%model=openai%%"),
+    tools=[get_weather],
+    instructions="Answer in one sentence.",
+)
+run = agent.run("What's the weather in Leeds?")
+print(run.content)
+```
+
+Serve the same agent as an API:
+
+```python
+from agno.agent import Agent
+from agno.db.sqlite import SqliteDb
+from agno.models.openai import OpenAIResponses
+from agno.os import AgentOS
+
+agent = Agent(id="assistant", model=OpenAIResponses(id="%%model=openai%%"))
+agent_os = AgentOS(agents=[agent], db=SqliteDb(db_file="agno.db"))
+app = agent_os.get_app()   # uvicorn app:app, then POST /agents/assistant/runs
+```
+
+Ready? **[Start Zero → Hero step 1 →](/agno-guide/agno_comprehensive_guide/#core-concepts)**
+
+## What's new
+
+Condensed release history; dates are first PyPI uploads. Agno was previously published as `phidata`. The upstream [v3 changelog](https://docs.agno.com/other/v3-changelog) and [v2 changelog](https://docs.agno.com/other/v2-changelog) have the detail.
+
+| Version | Date | Highlights |
+|---------|------|-----------|
+| 1.0.0 | Jan 2025 | First release under the Agno name. |
+| 1.1–1.8 | Feb–Aug 2025 | Minor releases in the 1.x line. |
+| **2.0.0** | **Sep 2025** | **Major version.** `agno.storage` classes became `agno.db` classes, one instance shared by agents, teams and workflows; Playground replaced by AgentOS; Apps renamed Interfaces; Workflows rebuilt around steps; Memory, Knowledge, Teams and metrics reworked. |
+| 2.1–2.9 | Oct 2025 – Aug 2026 | Minor releases in the 2.x line (2.9.0 on 13 Aug 2026). |
+| **3.0.0** | **Aug 2026** | **Major version.** Runs stored one row per run (`agno_runs`) with `MigrationManager`; `user_id` isolation across memories, knowledge, evals, metrics and schedules; durable background queue (`QueueConfig`); workflow HITL moved to `HumanReview`; `reasoning=True`, `MultiMCPTools`, culture and several deprecated parameters removed. See [Upgrading from v2](/agno-guide/agno_comprehensive_guide/#upgrading-from-v2). |
+| 3.1.0 | Oct 2026 | Minor release, followed by patch releases up to 3.1.10 (23 Oct 2026). |
+
+---
+
+## Revision history
+
+| Date | Summary |
+|------|---------|
+| 2026-10-24 | Guide written for agno %%version=agno%%: overview, comprehensive guide, teams, workflows, AgentOS, recipes, production and diagrams. Examples run offline with a scripted model. |

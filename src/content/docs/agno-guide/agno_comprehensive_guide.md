@@ -8,7 +8,7 @@ sidebar:
   order: 10
 ---
 
-Checked against **agno %%version=agno%%** (checked %%versions-checked%%). Every example on this page was run against that release with a scripted stand-in model in place of the provider (the model class is shown in [Testing without a provider](/agno-guide/agno_production_guide/#testing-without-a-provider)). No provider API was called, so the model's wording in the comments is illustrative; the behaviour of Agno around the model (tool execution, storage, state, pausing) is what was checked.
+Checked against **agno %%version=agno%%** (checked %%versions-checked%%). Every example on this page except the remote MCP connection was run against that release with a scripted stand-in model in place of the provider (the model class is shown in [Testing without a provider](/agno-guide/agno_production_guide/#testing-without-a-provider)). No provider API was called, so the model's wording in the comments is illustrative; the behaviour of Agno around the model (tool execution, storage, state, pausing) is what was checked.
 
 ## Core concepts
 

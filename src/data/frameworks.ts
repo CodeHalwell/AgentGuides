@@ -60,7 +60,7 @@ export const frameworks: Framework[] = [
     id: 'agno',
     symbol: 'An',
     name: 'Agno',
-    tagline: 'Fast agents, teams and workflows, served by AgentOS.',
+    tagline: 'Agents, teams and workflows, served by AgentOS.',
     href: '/agno-guide/',
     languages: ['Python'],
     category: 'Lightweight',
