@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Middleware"
 description: "Agent, chat, and function middleware in agent-framework — real signatures, short-circuit patterns, telemetry, retries, redaction, message injection, middleware bundles and AGENT-HOOKS enforcement."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Middleware"
+  order: 14
 ---
 
 Middleware is how you intercept agent runs without subclassing `Agent`. Three levels wrap three different call sites:
@@ -30,7 +33,7 @@ Three ways to end execution:
 
 1. **Normal flow** — `await call_next()`, then optionally mutate `context.result`.
 2. **Short-circuit** — set `context.result = ...` and **return without calling `call_next`**. Downstream middleware and the actual model / tool call are skipped.
-3. **Hard termination** — `raise MiddlewareTermination("reason")`. Unwinds the pipeline. In **agent** middleware, set `context.result` first: the pipeline returns `context.result` and ignores the exception's `result=` argument, so without it `agent.run()` returns `None`. In **function** middleware, `MiddlewareTermination(result=...)` supplies the tool result and ends the tool loop. To signal an error to the caller, raise your own exception type instead.
+3. **Hard termination** — `raise MiddlewareTermination("reason")`. Unwinds the pipeline. In **agent** middleware, set `context.result` first: the pipeline returns `context.result` and ignores the exception's `result=` argument, so without it `agent.run()` returns `None`. In **function** middleware, `MiddlewareTermination(result=...)` records `result` as the tool's result and then **ends the tool loop**: the model is not called again, so the run returns with no final answer. To give the model a substitute result and let it carry on, use the short-circuit form instead. To signal an error to the caller, raise your own exception type in agent middleware, or `MiddlewareFailure` in function middleware (an ordinary exception from function middleware becomes a tool error result).
 
 ## Decorator form
 
@@ -84,7 +87,8 @@ Order inside `middleware=[...]` is outer-to-inner. `log_run` wraps everything; `
 Pick the class form when the middleware holds state (retry counts, budgets, token totals) or needs configuration.
 
 ```python
-from agent_framework import AgentMiddleware, AgentContext
+from agent_framework import Agent, AgentContext, AgentMiddleware
+from agent_framework.openai import OpenAIChatClient
 
 
 class BudgetExhausted(Exception):
@@ -129,7 +133,7 @@ Run-level middleware runs **inside** agent-level middleware (outer-to-inner: cto
 Skip the model entirely when the input fails a policy check:
 
 ```python
-from agent_framework import AgentMiddleware, AgentResponse, Content, Message
+from agent_framework import AgentContext, AgentMiddleware, AgentResponse, Content, Message
 
 
 class ProfanityBlock(AgentMiddleware):
@@ -210,7 +214,9 @@ except QuotaExceeded as exc:
 
 ## Caching tool results — `FunctionMiddleware`
 
-Pure or read-mostly tools shouldn't re-run when the model asks the same question twice in a row. Function middleware sees every tool call and can short-circuit on a cache hit — either by setting `context.result` and returning, or by raising `MiddlewareTermination(result=...)` when you want to unwind the whole pipeline. The example below uses the `MiddlewareTermination` form so the result is delivered all the way back to the agent without further middleware running:
+Pure or read-mostly tools shouldn't re-run when the model asks the same question twice. Function middleware sees every tool call and can short-circuit on a cache hit by setting `context.result` and returning without calling `call_next()`. The tool is skipped, the cached value goes back to the model as the tool result, and the tool loop carries on as normal. (Raising `MiddlewareTermination(result=...)` here would be wrong: it ends the loop, so the model would never answer.)
+
+After `call_next()`, `context.result` holds the tool's result already converted to `list[Content]`, so that is what gets cached:
 
 ```python
 import json
@@ -219,7 +225,6 @@ from agent_framework import (
     Agent,
     FunctionMiddleware,
     FunctionInvocationContext,
-    MiddlewareTermination,
 )
 from agent_framework.openai import OpenAIChatClient
 
@@ -245,13 +250,11 @@ class FunctionCallCache(FunctionMiddleware):
             await call_next()
             return
 
-        key = self._key(context.function.name, context.arguments or {})
+        args = context.arguments
+        key = self._key(context.function.name, args.model_dump() if hasattr(args, "model_dump") else dict(args or {}))
         if key in self._cache:
-            # Short-circuit: skip the wrapped call entirely.
-            raise MiddlewareTermination(
-                "cache hit",
-                result=self._cache[key],
-            )
+            context.result = self._cache[key]   # short-circuit: the tool is not called
+            return
 
         await call_next()
         if context.result is not None:
@@ -277,11 +280,7 @@ A flaky downstream API can burn through the agent's iteration budget retrying th
 ```python
 import time
 from collections import defaultdict
-from agent_framework import (
-    FunctionMiddleware,
-    FunctionInvocationContext,
-    MiddlewareTermination,
-)
+from agent_framework import FunctionMiddleware, FunctionInvocationContext
 
 
 class CircuitBreaker(FunctionMiddleware):
@@ -307,10 +306,9 @@ class CircuitBreaker(FunctionMiddleware):
     async def process(self, context: FunctionInvocationContext, call_next) -> None:
         tool = context.function.name
         if self._is_open(tool):
-            raise MiddlewareTermination(
-                f"{tool} circuit open — refusing call",
-                result=f"[{tool} unavailable; try again later]",
-            )
+            # Short-circuit with a synthetic result the model can read and act on.
+            context.result = f"[{tool} is unavailable; try another approach or tell the user]"
+            return
 
         try:
             await call_next()
@@ -323,11 +321,11 @@ class CircuitBreaker(FunctionMiddleware):
             self._failures[tool] = 0          # reset on success
 ```
 
-`MiddlewareTermination(result=...)` lets you hand the model a synthetic answer when the circuit is open — much friendlier than letting the exception propagate. The model can either retry a different tool or apologise to the user; either way, you stop hammering the broken backend.
+Setting `context.result` hands the model a synthetic answer when the circuit is open, and the tool loop continues, so the model can try a different tool or explain the outage to the user. The exception re-raised on failure is turned into an `Error: Function failed.` result by the loop (see [tools → errors](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#errors)); after `max_consecutive_errors_per_request` failures in a row the loop stops calling tools anyway.
 
 ## Retrying a failed tool call
 
-Function middleware is the natural place for per-tool retries:
+Function middleware is the natural place for per-tool retries. The tool's exception propagates out of `call_next()` into the middleware, and calling `call_next()` again runs the tool again:
 
 ```python
 import asyncio
@@ -356,19 +354,18 @@ class RetryOnError(FunctionMiddleware):
 
 ## Rewriting tool results — `FunctionInvocationContext.result`
 
-`FunctionInvocationContext.result` is `None` until you `await call_next()`; afterwards it holds whatever the tool returned. You can both **observe** it (for logging) and **override** it before it lands back in the chat loop. This is the cleanest way to redact, truncate, or normalise tool output without touching the tool itself.
+`FunctionInvocationContext.result` is `None` until you `await call_next()`; afterwards it holds the tool's result **as a `list[Content]`** (the tool's return value after result parsing, so a dict has already become JSON text). You can observe it and replace it with a string or a new list before it goes back to the model. This is the cleanest way to redact, truncate, or normalise tool output without touching the tool itself.
 
 ```python
-import json
-from agent_framework import FunctionMiddleware, FunctionInvocationContext
+from agent_framework import Content, FunctionMiddleware, FunctionInvocationContext
 
 
 class TruncateLargeJSON(FunctionMiddleware):
-    """Cap a tool's JSON return value at N characters so an oversized DB row
-    or web-scrape doesn't blow the model's context window.
+    """Cap a tool's text output at N characters so an oversized DB row
+    or web scrape doesn't fill the model's context window.
 
-    `context.result` is whatever the tool returned — could be a string, dict,
-    Pydantic model, dataclass, or `None`. Cast carefully before mutating.
+    After call_next(), context.result is a list[Content]; non-text items
+    (images, files) are kept as they are.
     """
 
     def __init__(self, max_chars: int = 4_000) -> None:
@@ -376,18 +373,15 @@ class TruncateLargeJSON(FunctionMiddleware):
 
     async def process(self, context: FunctionInvocationContext, call_next) -> None:
         await call_next()
-
-        # Serialise dict / list / model into JSON for length checks; pass strings through.
-        as_text = (
-            context.result
-            if isinstance(context.result, str)
-            else json.dumps(context.result, default=str)
-        )
-        if len(as_text) > self.max_chars:
-            context.result = (
-                as_text[: self.max_chars]
-                + f"\n…[truncated {len(as_text) - self.max_chars} chars]"
-            )
+        if not isinstance(context.result, list):
+            return
+        new_result = []
+        for item in context.result:
+            text = getattr(item, "text", None)
+            if item.type == "text" and text and len(text) > self.max_chars:
+                item = Content.from_text(text[: self.max_chars] + f"\n…[truncated {len(text) - self.max_chars} chars]")
+            new_result.append(item)
+        context.result = new_result
 ```
 
 `FunctionInvocationContext` also exposes a `metadata` dict that's shared across **every middleware in the same invocation**. Use it to forward a request-id, a tenant marker, or a timing measurement from one middleware to another without touching the tool's signature:
@@ -435,7 +429,7 @@ agent = Agent(
 )
 ```
 
-The `arguments` field on `FunctionInvocationContext` is **already validated** — it's either a Pydantic model instance (when the tool's schema produced one) or a `Mapping[str, Any]`. You can mutate it before `call_next()` to inject defaults, or use it to short-circuit when the args fail an external policy check by raising `MiddlewareTermination(result=...)`.
+The `arguments` field on `FunctionInvocationContext` is either a Pydantic model instance (when the tool's schema produced one) or a `Mapping[str, Any]`. You can replace it before `call_next()` to inject defaults; the framework validates the arguments again just before the tool runs. To refuse a call whose arguments fail a policy check, short-circuit with an explanatory `context.result`, or raise `MiddlewareFailure` to stop the run.
 
 ## Redacting sensitive outputs
 
@@ -468,6 +462,9 @@ class Redactor(ChatMiddleware):
 `ChatContext.result` is a `ChatResponse` for non-streaming calls and a `ResponseStream[ChatResponseUpdate, ChatResponse]` for streaming. For streaming, append to `context.stream_transform_hooks` to rewrite each `ChatResponseUpdate` as it arrives:
 
 ```python
+from agent_framework import ChatContext, ChatMiddleware
+
+
 def redact_update(update):
     for content in update.contents or []:
         if getattr(content, "text", None):
@@ -639,25 +636,38 @@ Key difference from `ChatContext` hooks: if the agent makes 3 tool calls and 4 L
 
 ## Passing per-run data through the pipeline
 
-All three context classes expose a mutable `metadata` dict. Use it to hand data down the chain or up to the caller:
+Each layer gets its **own** context object, and each has its own `metadata` dict: `AgentContext.metadata` is shared by the agent middleware of one run, `ChatContext.metadata` by the chat middleware of one model call, and `FunctionInvocationContext.metadata` by the function middleware of one tool call. A value written in agent middleware's `metadata` does not appear in function middleware.
+
+To get request-scoped values (tenant IDs, tokens, trace IDs) to every layer, pass them as `function_invocation_kwargs` on `run()`. Agent middleware sees them as `context.function_invocation_kwargs`, and function middleware and tools see them as `context.kwargs`:
 
 ```python
+from agent_framework import Agent, agent_middleware, function_middleware, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def lookup_account(account_id: str) -> str:
+    """Look up an account."""
+    return f"{account_id}: active"
+
+
 @agent_middleware
-async def tag_tenant(context, call_next):
-    context.metadata["tenant_id"] = context.kwargs.get("tenant_id", "default")
+async def check_tenant(context, call_next):
+    tenant = context.function_invocation_kwargs.get("tenant_id")
+    if tenant is None:
+        raise PermissionError("tenant_id is required")
     await call_next()
 
 
 @function_middleware
 async def log_tenant(context, call_next):
-    print(f"tool invoked for tenant={context.metadata.get('tenant_id')}")
+    print(f"tool {context.function.name} invoked for tenant={context.kwargs.get('tenant_id')}")
     await call_next()
 
 
-await agent.run("...", function_invocation_kwargs={"tenant_id": "acme"})
+agent = Agent(client=OpenAIChatClient(), tools=[lookup_account], middleware=[check_tenant, log_tenant])
+await agent.run("Is account 42 active?", function_invocation_kwargs={"tenant_id": "acme"})
 ```
-
-`function_invocation_kwargs` in the outer `agent.run(...)` call surfaces as `context.kwargs` inside function middleware, so any runtime secrets, tenant IDs, or request-scoped state flow through cleanly.
 
 ## `ChatMiddleware` — caching the model call
 
@@ -717,7 +727,7 @@ class MemoryChatCache(ChatMiddleware):
 
 Two things this pattern leans on that aren't immediately obvious:
 
-- **Setting `context.result` before `call_next()` skips the model.** No tool loop iteration is consumed. This is different from agent middleware, which short-circuits the entire run (but the model would still see the cached response on the next agent call).
+- **Setting `context.result` without calling `call_next()` skips the model call.** The tool loop carries on with the cached response as if the model had produced it, so a cached response that contains function calls still runs the tools.
 - **Stream caching is opt-in.** The pattern above bypasses cache lookups when `context.stream is True`. For streaming caches, accumulate chunks in a `stream_transform_hooks` callback and replay them via a synthetic `ResponseStream` — the [streaming hooks section](#streaming-hooks-on-chatcontext) shows the hook-based shape.
 
 ## `agent_middleware` decorator with stateful closures
@@ -726,6 +736,7 @@ The `@agent_middleware` decorator marks a plain function for the agent pipeline,
 
 ```python
 from agent_framework import Agent, AgentContext, agent_middleware
+from agent_framework.openai import OpenAIChatClient
 
 
 def make_concurrency_limiter(max_inflight: int):
@@ -757,7 +768,7 @@ def make_run_counter():
 limiter = make_concurrency_limiter(max_inflight=4)
 counter = make_run_counter()
 
-agent = Agent(client=client, name="research", middleware=[limiter, counter])
+agent = Agent(client=OpenAIChatClient(), name="research", middleware=[limiter, counter])
 # After running:
 print(counter.counts)
 ```
@@ -766,7 +777,7 @@ print(counter.counts)
 
 ## Emitting OpenTelemetry spans
 
-Agent-framework auto-emits `agent_framework.*` spans without any middleware. Use middleware only when you want a business-level span around it:
+The framework already emits OpenTelemetry spans that follow the GenAI semantic conventions (`invoke_agent <name>`, `chat <model>`, `execute_tool <name>`) once a tracer provider is configured (see [observability](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_observability/)). Use middleware only when you want a business-level span around them:
 
 ```python
 from opentelemetry import trace
@@ -821,17 +832,23 @@ class CacheLookup(ChatMiddleware):
 When you need to assemble a `ChatResponse` from a stream (e.g. you're proxying a streaming provider and want to give non-streaming consumers the joined result), `ChatResponse.from_updates(updates)` and `ChatResponse.from_update_generator(async_iter)` consolidate `ChatResponseUpdate` chunks into a single response, including structured-output parsing when you pass `output_format_type=`.
 
 ```python
-from agent_framework import ChatResponse
+from agent_framework import ChatResponse, Message
 
 # Sync path: list of updates already collected
 final = ChatResponse.from_updates(updates)
 
-# Async path: forward an async iterator straight from a streaming client
-final = await ChatResponse.from_update_generator(client.get_streaming_response("hi"))
+# Async path: forward a stream straight from a chat client
+final = await ChatResponse.from_update_generator(
+    client.get_response([Message(role="user", contents=["hi"])], stream=True)
+)
 
 # Structured output: pass a Pydantic model and read `final.value`
 final = await ChatResponse.from_update_generator(
-    client.get_streaming_response("Extract", response_format=Address),
+    client.get_response(
+        [Message(role="user", contents=["Extract the address"])],
+        stream=True,
+        options={"response_format": Address},
+    ),
     output_format_type=Address,
 )
 print(final.text)   # raw text
@@ -967,7 +984,7 @@ Put the bundle **first** (outermost) and install exactly one per agent; stacked 
 | Field | Notes |
 |---|---|
 | `client` | `SupportsChatGetResponse` — the underlying chat client. |
-| `messages`, `options`, `stream`, `metadata`, `result`, `kwargs` | As above. |
+| `messages`, `options`, `stream`, `session`, `metadata`, `result`, `kwargs` | As above. |
 | `function_invocation_kwargs` | Only to tool invocation. |
 | `stream_transform_hooks` / `stream_result_hooks` / `stream_cleanup_hooks` | Hook sequences for streaming pipelines. |
 
@@ -977,12 +994,17 @@ Put the bundle **first** (outermost) and install exactly one per agent; stacked 
 |---|---|
 | `function` | `FunctionTool` being invoked. |
 | `arguments` | Parsed args (Pydantic model or dict). |
-| `session`, `metadata`, `result`, `kwargs` | As above. |
+| `session`, `metadata`, `result`, `kwargs` | As above. `result` is a `list[Content]` after `call_next()`. |
+| `tools` | The tools available in this run. |
 
-## Breaking changes (2026 line)
+## Changes from the previews
 
-- `middleware=` now **requires a list**. A single instance raises `TypeError`.
-- `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
-- `AggregateContextProvider` removed — compose providers directly.
+- `middleware=` **requires a sequence**. A single instance raises `TypeError: middleware must be a non-string sequence of middleware.`
+- The continuation parameter is `call_next` (renamed from `next` in 1.0.0b260210), and it takes no arguments.
+- `AgentRunContext` was renamed `AgentContext`; `AgentRunResponse` / `AgentRunResponseUpdate` became `AgentResponse` / `AgentResponseUpdate`.
 
-The `context_providers` parameter on `Agent` is plural.
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Cache and circuit-breaker examples switched from `MiddlewareTermination(result=...)` (which ends the tool loop, so the model never answers) to short-circuiting with `context.result`. Corrected the type of `FunctionInvocationContext.result` after `call_next()` (`list[Content]`), the per-run data example (each layer has its own `metadata`; use `function_invocation_kwargs`), the streaming `ChatResponse.from_update_generator` example (`get_response(..., stream=True)`), and the span names the framework emits. |

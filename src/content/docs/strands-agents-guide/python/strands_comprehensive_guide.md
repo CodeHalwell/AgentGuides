@@ -30,7 +30,8 @@ Python 3.10 or later. Model providers other than Bedrock, and some features, are
 | `mistral`, `llamaapi`, `writer`, `sagemaker` | `MistralModel`, `LlamaAPIModel`, `WriterModel`, `SageMakerAIModel` |
 | `a2a` | `A2AServer`, `A2AAgent` |
 | `otel` | OTLP trace exporter |
-| `bidi`, `bidi-openai`, `bidi-google` | `BidiAgent` for real-time voice |
+| `bidi`, `bidi-openai`, `bidi-google`, `bidi-io`, `bidi-pyaudio`, `bidi-aec` | `BidiAgent` for real-time voice and its models and audio devices (see [Real-time voice](#real-time-voice-and-text-with-bidiagent)) |
+| `cedar` | the Cedar policy intervention handler |
 | `web-fetch` | the vended `web_fetch` tool |
 
 ```bash
@@ -305,6 +306,58 @@ agent = Agent(model=claude, callback_handler=None)
 
 The Anthropic and OpenAI model IDs are the provider's own (`%%model=anthropic%%`, `%%model=openai%%`), not Bedrock IDs.
 
+The remaining providers follow the same pattern. `GeminiModel` takes `client_args` for `google.genai.Client` and a `params` dict; `MistralModel` takes the key directly and flat settings; `LlamaCppModel` talks to a running llama.cpp server (started with `llama-server -m model.gguf --port 8080`) and has no `model_id` of its own; `OpenAIResponsesModel` uses the Responses API, where `stateful=True` keeps the conversation state on OpenAI's side rather than resending the history:
+
+```python
+import os
+
+from strands import Agent
+from strands.models.gemini import GeminiModel
+from strands.models.llamacpp import LlamaCppModel
+from strands.models.mistral import MistralModel
+from strands.models.openai_responses import OpenAIResponsesModel
+
+gemini = GeminiModel(
+    client_args={"api_key": os.environ.get("GEMINI_API_KEY", "key")},
+    model_id="%%model=gemini%%",
+    params={"temperature": 0.3, "max_output_tokens": 2048},
+)
+
+mistral = MistralModel(
+    api_key=os.environ.get("MISTRAL_API_KEY", "key"),
+    model_id="%%model=mistral%%",
+    max_tokens=1024,
+    temperature=0.3,
+)
+
+local = LlamaCppModel(base_url="http://localhost:8080")
+
+responses = OpenAIResponsesModel(
+    client_args={"api_key": os.environ.get("OPENAI_API_KEY", "sk-...")},
+    model_id="%%model=openai%%",
+    stateful=True,
+)
+
+agent = Agent(model=gemini, callback_handler=None)
+```
+
+### OpenAI-compatible models on Bedrock
+
+Bedrock serves some models (including OpenAI's open-weight `openai.gpt-oss-*` models) through OpenAI-compatible endpoints. `OpenAIModel` and `OpenAIResponsesModel` can use them with `bedrock_mantle_config`, which sets the client's `base_url` and mints a short-lived bearer token from your normal AWS credentials on every request, so you need no OpenAI key and long-running agents do not outlive a token:
+
+```python
+from strands import Agent
+from strands.models.openai import OpenAIModel
+
+model = OpenAIModel(
+    model_id="openai.gpt-oss-120b",
+    bedrock_mantle_config={"region": "us-west-2"},
+)
+agent = Agent(model=model, callback_handler=None)
+```
+
+The config accepts `endpoint`, `region`, `boto_session`, `credentials_provider` and `expiry`. `endpoint` is `"bedrock-mantle"` by default; `"bedrock-runtime"` is the other endpoint family and the only one that accepts cross-Region inference profile IDs such as `us.openai.*`. Available models and Regions differ between the two, so check the [Bedrock OpenAI-compatible APIs page](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-openai.html). `bedrock_mantle_config` cannot be combined with a prebuilt `client`, and `client_args` must not contain `api_key` or `base_url`. It needs the `openai` extra, which installs the token generator.
+
 ### Routing and fallback
 
 `ModelRouter` wraps several models. The default `FallbackStrategy` uses the first, and moves to the next when a call fails (after that model's retries):
@@ -321,7 +374,35 @@ router = ModelRouter([
 agent = Agent(model=router, callback_handler=None)
 ```
 
-`ClassifierStrategy` picks a model per call instead (for example a small model for easy requests). `aux_model=` on the agent is the simpler tool for cost: it moves Strands' own side calls (context summarisation, memory extraction, judges) to a cheaper model while the main loop keeps `model`.
+Fallback is not strictly "first, then second": a model that keeps failing sinks below healthier ones on later calls, and a success clears that model's failure count.
+
+`ClassifierStrategy` picks a model per call instead. It asks a classifier model (one that supports structured output) which candidate suits the latest request, so describe each candidate with `RoutingCandidate`. The names, descriptions and metadata are sent to the classifier, so keep secrets out of them:
+
+```python
+from strands import Agent
+from strands.models import BedrockModel, ModelRouter
+from strands.models.routing import ClassifierStrategy, RoutingCandidate
+
+router = ModelRouter(
+    [
+        RoutingCandidate(
+            BedrockModel(model_id="us.anthropic.%%model=anthropic-small%%"),
+            name="fast",
+            description="Cheap and quick; short factual answers and simple extraction.",
+        ),
+        RoutingCandidate(
+            BedrockModel(model_id="us.anthropic.%%model=anthropic%%"),
+            name="deep",
+            description="Slower; multi-step reasoning, long documents and code changes.",
+            metadata={"context": "large"},
+        ),
+    ],
+    strategy=ClassifierStrategy(BedrockModel(model_id="us.anthropic.%%model=anthropic-small%%", temperature=0)),
+)
+agent = Agent(model=router, callback_handler=None)
+```
+
+The classifier adds one model call per request. If it fails or times out (`timeout=30.0` seconds by default), the router serves the first candidate; if the chosen candidate then fails, this strategy does not switch to another. A router has one strategy: use `FallbackStrategy` (the default) for failover and `ClassifierStrategy` for cost control. `aux_model=` on the agent is the simpler tool for cost: it moves Strands' own side calls (context summarisation, memory extraction, judges) to a cheaper model while the main loop keeps `model`.
 
 ### Writing a provider
 
@@ -614,6 +695,54 @@ agent = Agent(
 ```
 
 Turns are written to AgentCore Memory as events; long-term records extracted by the memory's strategies are retrieved and added to the context on each turn. Creating the memory resource itself is covered in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/).
+
+## Long-term memory
+
+A session replays one conversation. A `MemoryManager` gives an agent memory that outlives conversations: a preference mentioned last week can be found today, in a different session. It is a plugin passed as `memory_manager=`, and it works with one or more *stores*.
+
+What the manager adds to the agent:
+
+- **Injection** (on by default). Before the model call for each new user message, the manager searches its stores with the message and appends the matches to the model input as a `<memory>` block. The block is not written to `agent.messages`, so it never accumulates in the history or the session. `injection=False` turns it off, and a `MemoryInjectionConfig` customises the query, the formatting, the number of entries and the trigger (`"userTurn"` by default, or `"everyTurn"` for agents that should consult memory mid-task).
+- **A `search_memory` tool** (on by default), so the model can search when injection did not find what it needs.
+- **An `add_memory` tool** (off by default; `add_tool_config=True`), so the model can save facts as the user shares them.
+- **Automatic extraction**, configured on a store with `extraction=`. A model reads recent turns and writes durable facts to the store, by default every five invocations (`IntervalTrigger(turns=...)` and `InvocationTrigger()` change that; the extractor costs a model call, and `aux_model=` can make it a cheaper one).
+
+Stores are small objects with a `name`, a `search()` method and, if writable, an `add()` method:
+
+| Store | Backing | Search |
+|-------|---------|--------|
+| `FileMemoryStore` (`strands.vended_memory_stores.file_memory_store`) | Markdown files, one per topic, under `./.strands/memory/<name>/` (any `strands.storage` backend, such as `S3Storage`, can replace the local disk) | Keyword overlap |
+| `BedrockKnowledgeBaseStore` (`strands.vended_memory_stores.bedrock_knowledge_base`) | An Amazon Bedrock Knowledge Base, optionally scoped per user | Semantic |
+| `TestMemoryStore` (`strands.vended_memory_stores.test_memory_store`) | A local JSON file, or in memory | Keyword overlap; for prototypes and tests |
+| Your own | Anything implementing the `MemoryStore` protocol (`strands.memory`) | Yours |
+
+Mem0 is available through the `mem0-strands` package, which provides a `Mem0MemoryStore` for the same manager.
+
+```python
+from strands import Agent
+from strands.memory import MemoryManager
+from strands.vended_memory_stores.file_memory_store import FileMemoryStore
+
+store = FileMemoryStore(name="assistant-memory")
+memory = MemoryManager(stores=[store], add_tool_config=True)
+
+# Conversation 1: the model saves a fact with add_memory
+first = Agent(model="us.anthropic.%%model=anthropic%%", memory_manager=memory, callback_handler=None)
+print(first.tool_names)       # ['search_memory', 'add_memory']
+first("Remember that I prefer metric units.")
+
+# Conversation 2, in a new agent (or a new process): the fact is injected before the model call
+second = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    memory_manager=MemoryManager(stores=[FileMemoryStore(name="assistant-memory")]),
+    callback_handler=None,
+)
+print(second("Which units do I prefer?"))
+```
+
+`add_memory` writes `# User preferences` style entries: the first line becomes the file name, and later facts under the same heading are appended to the same file. `await memory.search("units")` and `await memory.add("...")` use the same stores directly from your own code, for example to seed a store or to show a user what is remembered.
+
+Memory is shared by everyone who uses the store, so give each user their own store name (or, for the Knowledge Base store, their own `scope`) and keep personal data out of stores you do not control. Retrieved text reaches the model verbatim; treat what the store holds as untrusted input if users can write to it.
 
 ## Limits, cancellation and concurrency
 
