@@ -632,6 +632,8 @@ await codeReviewAgent(sampleCode);
 
 ### Recipe 15: Webhook Handler with Agent
 
+Install `express` and `@types/express` alongside the SDK. A real webhook must verify the sender (a shared-secret header or a signature) before it passes any payload text to an agent, because the body becomes part of the prompt.
+
 ```typescript
 import { Agent, run } from '@openai/agents';
 import express from 'express';
@@ -666,6 +668,8 @@ app.listen(3000, () => console.log('Webhook server ready'));
 ```
 
 ### Recipe 16: Scheduled Agent Tasks
+
+Install `node-cron` and `@types/node-cron`. The schedule lives in the process, so with several replicas every replica runs the job; use one scheduler instance or an external scheduler for production.
 
 ```typescript
 import { Agent, run } from '@openai/agents';

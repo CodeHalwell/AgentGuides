@@ -512,8 +512,8 @@ Runner.run(starting_agent, input)
    ├─ input guardrails ............ starting agent only (+ RunConfig.input_guardrails)
    │
    ├─ for each function tool call:
+   │     needs_approval ........... pause the run for a person (checked first by default)
    │     tool input guardrails .... before the tool (allow / reject_content / raise)
-   │     needs_approval ........... pause the run for a person
    │     tool executes
    │     tool output guardrails ... before the model sees the result
    │
@@ -552,7 +552,7 @@ Several guardrails at the same level run concurrently; the first tripwire stops 
         │                  │               │
         ├─ List files      ├─ Git log      ├─ Search
         ├─ Read file       ├─ Git diff     ├─ Fetch URL
-        └─ Write file      └─ Git blame    └─ Parse HTML
+        └─ Write file      └─ Git show    └─ Parse HTML
 ```
 
 ### Stdio vs HTTP MCP

@@ -223,7 +223,7 @@ try {
 }
 ```
 
-More on guardrails, including blocking mode and model-based checks, in [Guardrails](#guardrails).
+More on guardrails, including blocking mode and model-based checks, in [Guardrails](#guardrails). Tool guardrails behave differently: a thrown tool tripwire arrives wrapped in a `ToolCallError` ([details](/openai-agents-sdk-typescript-guide/openai_agents_sdk_middleware_typescript/#tool-guardrails)).
 
 #### Session
 
@@ -1102,7 +1102,7 @@ const result = await run(agent, 'Summarise what the repository README says the p
 console.log(result.finalOutput);
 ```
 
-`UnixLocalSandboxClient` (macOS and Linux) runs commands as your own user with no isolation, so keep it for trusted local work. `DockerSandboxClient` (also in `@openai/agents/sandbox/local`) isolates the workspace in a container, and `@openai/agents-extensions` provides hosted providers (E2B, Modal, Daytona, Vercel, Cloudflare, Blaxel). `scriptedSandboxSession` in `@openai/agents/testing` scripts sandbox calls for tests.
+The `./data` directory must exist, because `localDir` copies it from the host. `UnixLocalSandboxClient` (macOS and Linux) runs commands as your own user with no isolation, so keep it for trusted local work. `DockerSandboxClient` (also in `@openai/agents/sandbox/local`) isolates the workspace in a container, and `@openai/agents-extensions` provides hosted providers (E2B, Modal, Daytona, Vercel, Cloudflare, Blaxel). `scriptedSandboxSession` in `@openai/agents/testing` scripts sandbox calls for tests.
 
 ---
 
@@ -1157,6 +1157,7 @@ The release table, with breaking changes, is on the [overview page](/openai-agen
 
 | Version | Date | Changes |
 |---------|------|---------|
+| %%version=@openai/agents%% | 2026-10-24 | Audit: all blocks re-run; noted the `ToolCallError` wrapping of tool guardrail tripwires and the sandbox example's `./data` prerequisite. |
 | %%version=@openai/agents%% | %%versions-checked%% | Rewritten. Every block now compiles under `tsc --strict` with its own imports and runs against `ScriptedModel`. Added `agent.asTool()`, hosted tools (the old section showed hand-written look-alikes), programmatic tool calling, MCP (moved from the features page, with the correct Git server), guardrails, sessions with a custom `Session`, tracing processors, realtime and sandbox agents. Fixed a tool schema that threw at definition time (dates, root unions) and typed-output examples that ignored `outputType`. Removed generic router, factory and retry classes. Moved the breaking-changes table to the overview. |
 | %%version=@openai/agents%% | 2026-10-21 | Earlier pass: rewrote the core primitives against the real API; fixed install commands; replaced non-existent APIs; Zod 4 fixes. |
 | 0.11.6 | 2026-05-29 | Version bump; key symbols re-checked. |

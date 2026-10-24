@@ -246,17 +246,21 @@ asyncio.run(main())
 from agents import Agent, Runner
 
 agent = Agent(name="Assistant", instructions="Answer concisely")
-result = await Runner.run(agent, "message")
 
-# Access results
-print(result.final_output)               # Final output (str or your output_type)
-print(result.final_output_as(str))       # Typed cast of the final output
-print(result.new_items)                  # Items generated during this run
-print(result.to_input_list())            # Input for the next turn (manual history)
-print(result.last_agent)                 # Agent that produced the final output
-print(result.raw_responses)              # Raw model responses
-print(result.context_wrapper.usage)      # Token usage for the run
-print(result.last_response_id)           # For previous_response_id chaining
+async def main():
+    result = await Runner.run(agent, "message")
+
+    # Access results
+    print(result.final_output)               # Final output (str or your output_type)
+    print(result.final_output_as(str))       # Typed cast of the final output
+    print(result.new_items)                  # Items generated during this run
+    print(result.to_input_list())            # Input for the next turn (manual history)
+    print(result.last_agent)                 # Agent that produced the final output
+    print(result.raw_responses)              # Raw model responses
+    print(result.context_wrapper.usage)      # Token usage for the run
+    print(result.last_response_id)           # For previous_response_id chaining
+
+asyncio.run(main())
 ```
 
 ### Handoff
@@ -3031,7 +3035,7 @@ Route simple work to a small model and keep the larger model for queries that ne
 from agents import Agent, Runner, ModelSettings
 import asyncio
 
-# Small, cheap model for simple queries (also the SDK default)
+# Small, cheap model for simple queries
 fast_agent = Agent(
     name="Budget Agent",
     instructions="Answer quickly",
@@ -3107,7 +3111,7 @@ async def main():
 asyncio.run(main())
 ```
 
-`UnixLocalSandboxClient` runs commands with your own user's permissions (on Linux it adds no OS-level confinement), so use it only for trusted local development. For untrusted input use `DockerSandboxClient` (`pip install 'openai-agents[docker]'`) or a hosted backend (E2B, Modal, Daytona, Vercel, Cloudflare, Blaxel). Later runs can reconnect to prior work through `SandboxRunConfig(session=..., session_state=..., snapshot=...)` or a saved `RunState`.
+The `data/` directory must exist next to the script (here with `sales.csv` in it), because `LocalDir` copies it from the host. `UnixLocalSandboxClient` runs commands with your own user's permissions (on Linux it adds no OS-level confinement), so use it only for trusted local development. For untrusted input use `DockerSandboxClient` (`pip install 'openai-agents[docker]'`) or a hosted backend (E2B, Modal, Daytona, Vercel, Cloudflare, Blaxel). Later runs can reconnect to prior work through `SandboxRunConfig(session=..., session_state=..., snapshot=...)` or a saved `RunState`.
 
 ### WebSocket Transport for the Responses API
 
@@ -3163,6 +3167,7 @@ To switch transport globally instead, call `set_default_openai_responses_transpo
 
 | Version | Date | Changes |
 |---------|------|---------|
+| %%version=openai-agents%% | 2026-10-24 | Audit: wrapped the run-result snippet in an async function; removed an incorrect claim that the cheap-model example used the SDK default model; noted the sandbox example's `data/` prerequisite. |
 | %%version=openai-agents%% | %%versions-checked%% | Fixed hosted-tool examples (`tool_config` is required for code interpreter and image generation), non-strict output types (`AgentOutputSchema`), the MCP Git server and GitHub MCP URL, and a session example that indexed a coroutine. Replaced the abstract custom-MCP-server class with a real MCP server, the placeholder voice and CLI examples with `RealtimeAgent` and `VoicePipeline`, and the hand-rolled retry and live-API tests with `ModelSettings.retry` and `ScriptedModel`. Added handoff input filters, hosted MCP, programmatic tool calling and Chat Completions. Moved the release table to the overview. Earlier in the same revision: re-verified against the current release (first written for 0.6.x, last revised for 0.17.4). Replaced APIs that never existed or were removed (`InMemorySession`, `ComputerControlTool`, `get_trace_context`, `result.output_reasoning`/`.messages`/`.agent`/`.usage`, `temperature`/`max_tokens` on `Agent`, `response_format` on `ModelSettings`, `agents.transports`); rewrote the Sandbox Agents and WebSocket sections against the real API; replaced the breaking-changes table with the upstream changelog (0.4–0.22); updated model names and install extras. |
 | 0.17.4 | May 27, 2026 | Version bump; key symbols re-checked. |
 | 0.14.0 | April 2026 | Sandbox Agents section added. |
