@@ -10,7 +10,7 @@ sidebar:
 
 > **Verified against:** AgentCore CLI (`@aws/agentcore`) %%version=@aws/agentcore%%, `bedrock-agentcore` %%version=bedrock-agentcore%% and `boto3` %%version=boto3%% (checked %%versions-checked%%). CLI commands were run against a generated project (`create`, `add`, `validate`, `export`) or checked against `--help` (`deploy`, `invoke`, `logs`, `traces`, `run eval`). boto3 calls were validated against the service models.
 
-This page is about **AgentCore**: code-defined agents on Runtime and managed harnesses. Writing the agent is covered in the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/) and the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/). Existing Agents Classic deployments are covered briefly [at the end](#agents-classic-in-production).
+This page is about **AgentCore**: code-defined agents on Runtime and managed harnesses. Writing the agent is covered in the [Strands Agents guide](/strands-agents-guide/python/) and the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/). Existing Agents Classic deployments are covered briefly [at the end](#agents-classic-in-production).
 
 ## Deployment options
 
@@ -195,7 +195,7 @@ agentcore add memory --name SalesMemory --strategies SEMANTIC,SUMMARIZATION --ex
 - Scope every read and write by **actor ID** (the end user) and **session ID**, both taken from the verified identity. Namespace templates such as `/users/{actorId}/facts` keep users' long-term records apart.
 - Each long-term strategy runs extraction on new events, which costs model tokens. Enable only the strategies you query.
 - Set the event expiry to your retention policy, and use a customer-managed KMS key (`encryptionKeyArn`) where your data classification requires it.
-- With Strands, `AgentCoreMemorySessionManager` writes and reads memory for you (see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#agentcore-memory)).
+- With Strands, `AgentCoreMemorySessionManager` writes and reads memory for you (see the [Strands guide](/strands-agents-guide/python/strands_comprehensive_guide/#agentcore-memory)).
 
 ## Observability
 

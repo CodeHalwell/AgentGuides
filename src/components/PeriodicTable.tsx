@@ -97,7 +97,7 @@ export default function PeriodicTable({ pages }: { pages: Record<string, number>
           <span className="pt-eyebrow">The periodic table of agent frameworks</span>
           <h1 id="_top" className="pt-title">Pick an element.</h1>
           <p className="pt-lead">
-            Nineteen frameworks across Python, TypeScript, .NET and Go. Every example is checked against the current
+            {frameworks.length} guides across Python, TypeScript, .NET and Go. Every example is checked against the current
             release. Select tiles to combine them like a formula.
           </p>
           <div className="pt-formula" aria-live="polite">
@@ -106,7 +106,7 @@ export default function PeriodicTable({ pages }: { pages: Record<string, number>
             <span className="pt-formula-note">
               {formula.length
                 ? `${results.length} guide${results.length === 1 ? '' : 's'}`
-                : 'Nothing selected: showing all nineteen guides'}
+                : `Nothing selected: showing all ${frameworks.length} guides`}
             </span>
           </div>
         </div>

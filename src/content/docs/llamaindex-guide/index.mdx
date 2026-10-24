@@ -11,7 +11,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 **The data framework for LLM apps.** LlamaIndex turns documents into indexes that query engines and agents can use: loaders, parsers, vector and graph indexes, query engines, tools, workflows and multi-agent orchestration.
 
-Current release: **`llama-index` %%version=llama-index%%** (Python) · `llamaindex` %%version=llamaindex%% (TypeScript, final release — the TypeScript project is deprecated upstream) · checked %%versions-checked%%.
+Current release: **`llama-index` %%version=llama-index%%** (Python) with `llama-index-workflows` %%version=llama-index-workflows%% · `llamaindex` %%version=llamaindex%% and `@llamaindex/workflow-core` %%version=@llamaindex/workflow-core%% (TypeScript, final releases — the TypeScript project is deprecated upstream) · checked %%versions-checked%%.
 
 ## Choose your language
 
@@ -34,10 +34,10 @@ The two guides do not cover the same ground. The Python guide covers the whole f
 
 <CardGrid>
   <Card title="Python" icon="document">
-    Readers, LlamaParse and ingestion pipelines; vector, summary, property-graph and multimodal indexes; query and chat engines (router, sub-question, hybrid retrieval); `FunctionAgent`, `ReActAgent`, `CodeActAgent` and `AgentWorkflow`; custom workflows; memory; evaluation; serving with `WorkflowServer` and `llamactl`; observability and production deployment.
+    Readers, LlamaParse and ingestion pipelines; vector, summary, property-graph and multimodal indexes; query and chat engines (router, sub-question, hybrid retrieval); `FunctionAgent`, `ReActAgent`, `CodeActAgent` and `AgentWorkflow`; [Workflows](/llamaindex-guide/python/llamaindex_workflows/) as a framework in its own right (typed state, fan-out, streaming, human-in-the-loop, retries, checkpointing); memory; evaluation; serving with `WorkflowServer` and `llamactl`; observability and production deployment.
   </Card>
   <Card title="TypeScript" icon="random">
-    The functional workflow API (`createWorkflow`, `workflowEvent`, `run`), stateful middleware, `agent(...)` / `multiAgent(...)` with tools, streaming, one vector-index RAG example from the `llamaindex` package, and a production guide for existing deployments.
+    The functional workflow API (`createWorkflow`, `workflowEvent`, `run`), the [`@llamaindex/workflow-core` engine](/llamaindex-guide/typescript/llamaindex_workflow_core/) (stateful middleware, snapshots, validation, retries), `agent(...)` / `multiAgent(...)` with tools, streaming, one vector-index RAG example from the `llamaindex` package, and a production guide for existing deployments.
   </Card>
 </CardGrid>
 
@@ -47,6 +47,7 @@ The two guides do not cover the same ground. The Python guide covers the whole f
 
 | Date | Version | Changes |
 |------|---------|----------|
+| 2026-10-24 | Py 0.14.25 / workflows 2.26.1 / TS workflow-core 1.3.4 | Added dedicated Workflows pages for Python (`llama-index-workflows`) and TypeScript (`@llamaindex/workflow-core`). |
 | 2026-10-21 | Py 0.14.25 / TS 0.12.1 | Coverage section rewritten: it claimed both guides covered the same ground, which was not true of the TypeScript guide. |
 | 2026-10-21 | Py 0.14.25 / TS 0.12.1 | Versions now read from the site's version registry. Python agent examples moved to the workflow-based agents (the legacy `ReActAgent.from_tools` API and `llama-agents` were removed upstream); TypeScript marked as deprecated upstream. |
 | 2026-09-08 | llama-index-core 0.14.22 | Consistency sweep. Python card corrected 0.14.21 → 0.14.22; observability and streaming pages moved off a stale 0.14.20; the production requirements block no longer pins an impossible `llama-index-core==0.2.1`. No package installation or symbol verification performed. |

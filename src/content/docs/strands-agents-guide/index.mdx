@@ -1,0 +1,122 @@
+---
+title: "Strands Agents"
+description: "Strands Agents, the open-source, model-driven agent SDK from AWS, in Python and TypeScript: what it is, how the two SDKs compare, when to choose it, and how it relates to Amazon Bedrock and AgentCore."
+framework: "strands"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+Strands Agents is an open-source (Apache 2.0) SDK from AWS for building agents. It is **model-driven**: you give an agent a model, a system prompt and tools, and the model plans the steps and decides when it is done. The SDK supplies the loop around that: tool execution, conversation management, sessions, hooks and policies, multi-agent orchestration, MCP and A2A, and OpenTelemetry tracing. It uses Amazon Bedrock by default and works with Anthropic, OpenAI, Google and other providers.
+
+**Current versions:** Python `strands-agents` %%version=strands-agents%% with `strands-agents-tools` %%version=strands-agents-tools%% · TypeScript `@strands-agents/sdk` %%version=@strands-agents/sdk%% (checked %%versions-checked%%).
+
+## Choose your language
+
+<CardGrid>
+  <LinkCard
+    title="Python"
+    href="/strands-agents-guide/python/"
+    description="The reference SDK: the widest provider support, strands-agents-tools, evals, swarms, graphs, the workflow tool, A2A and real-time voice."
+  />
+  <LinkCard
+    title="TypeScript"
+    href="/strands-agents-guide/typescript/"
+    description="The same loop for Node.js 22+, with Zod-typed tools, graphs, swarms, MCP, A2A and sessions. Smaller tool set and provider list."
+  />
+</CardGrid>
+
+<CardGrid>
+  <Card title="Python install" icon="rocket">
+    ```bash
+    pip install "strands-agents==%%version=strands-agents%%" "strands-agents-tools==%%version=strands-agents-tools%%"
+    ```
+  </Card>
+  <Card title="TypeScript install" icon="rocket">
+    ```bash
+    npm install @strands-agents/sdk@%%version=@strands-agents/sdk%% zod
+    ```
+  </Card>
+</CardGrid>
+
+## The idea in one example
+
+```python
+from strands import Agent, tool
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get today's forecast for a city.
+
+    Args:
+        city: City name.
+    """
+    return f"Light rain in {city}, 14°C"
+
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[get_weather])
+agent("Do I need an umbrella in Leeds today?")
+```
+
+There is no graph to draw and no prompt template to fill: the model sees the tool's schema, decides to call it, reads the result and answers. Everything else in the SDK is about controlling that loop: bounding it, observing it, persisting it, pausing it for a human, and combining several agents.
+
+## Python or TypeScript
+
+| | Python | TypeScript |
+|---|--------|------------|
+| Package | `strands-agents` (+ `strands-agents-tools`, `strands-agents-evals`) | `@strands-agents/sdk` |
+| Runtime | Python 3.10+ | Node.js 22+, ESM only |
+| Tools | `@tool` functions (schema from type hints and docstrings) | `tool()` with Zod schemas, fully typed |
+| Providers | Bedrock, Anthropic, OpenAI, Gemini, LiteLLM, Ollama, Mistral, llama.cpp, Llama API, SageMaker, Writer | Bedrock, Anthropic, OpenAI, Google, Vercel AI SDK |
+| Multi-agent | Agents as tools, `Swarm`, `GraphBuilder`, `workflow` tool, A2A | Agents as tools, `Swarm`, `Graph`, A2A |
+| Extras | Evals package, real-time voice (`BidiAgent`), the larger tool library | Vended tools only |
+
+Both SDKs share the concepts and most names, so moving between them is mostly syntax. Choose by the language of the service the agent lives in; choose Python if you need evals, the wider tool set or a provider only Python supports.
+
+## When to choose Strands
+
+**Good fit:**
+
+- Tool-using agents where the model should plan the steps, rather than a fixed workflow you would draw as a graph.
+- Agents on AWS: Bedrock models, IAM credentials, AgentCore Runtime hosting, AgentCore Memory and Gateway all fit without glue.
+- Teams that want one SDK across providers, with the option of Python or TypeScript.
+- Multi-agent systems that start simple (a supervisor with specialists as tools) and grow into swarms or graphs.
+
+**Consider something else when:**
+
+- You need explicit, checkpointed state machines with time travel and branching as the core design: [LangGraph](/langgraph-guide/) is built around that.
+- You are committed to OpenAI's platform features (hosted tools, Realtime, tracing dashboard): the [OpenAI Agents SDK](/openai-agents-sdk-guides/) fits more naturally.
+- You want a fully managed agent with no code at all: AgentCore's managed harness or Bedrock Agents (see the [Amazon Bedrock guide](/amazon-bedrock-agents-guide/)).
+
+## Strands, Bedrock and AgentCore
+
+These are three different things that work well together:
+
+| Piece | What it is | Where it is covered |
+|-------|-----------|---------------------|
+| **Strands Agents** | An SDK: the agent loop runs in your process | This guide |
+| **Amazon Bedrock** | The model service; Strands' default provider (`BedrockModel`), plus Guardrails and Knowledge Bases | [Model providers](/strands-agents-guide/python/strands_comprehensive_guide/#amazon-bedrock) |
+| **Amazon Bedrock AgentCore** | Managed infrastructure for agents written with any framework: Runtime (hosting), Memory, Gateway (tools as MCP), Identity, Code Interpreter, Browser, Observability | The [Amazon Bedrock guide](/amazon-bedrock-agents-guide/) |
+
+A typical AWS deployment is a Strands agent inside a `BedrockAgentCoreApp` on AgentCore Runtime, calling Bedrock models, keeping conversations in AgentCore Memory and reaching internal APIs through AgentCore Gateway. Strands does not require AgentCore, or even AWS: the same agent runs in Lambda, a container, or on your laptop against the Anthropic or OpenAI API. Hosting is covered on the production pages ([Python](/strands-agents-guide/python/strands_production_guide/), [TypeScript](/strands-agents-guide/typescript/strands_typescript_production/)).
+
+<Aside type="note" title="Moved from the Amazon Bedrock guide">
+  The Strands pages that used to sit inside the Amazon Bedrock guide now live here. The Bedrock guide keeps AgentCore and Bedrock Agents, with links back to this guide for the SDK itself.
+</Aside>
+
+## Shared pages
+
+<CardGrid>
+  <LinkCard title="Diagrams" href="/strands-agents-guide/strands_diagrams/" description="The agent loop and hook points, tools, structured output, sessions, interrupts, multi-agent patterns, AWS deployment" />
+</CardGrid>
+
+---
+
+## Revision history
+
+| Date | Version | Changes |
+|------|---------|---------|
+| 2026-10-24 | Py %%version=strands-agents%% / TS %%version=@strands-agents/sdk%% | New standalone guide. Python and TypeScript sections with comprehensive, tools and MCP, hooks and interrupts, multi-agent and A2A, observability and evals (Python), recipes and production pages, plus shared diagrams. Replaces the Strands page in the Amazon Bedrock guide; all examples run against the installed packages with an offline Bedrock stub. |

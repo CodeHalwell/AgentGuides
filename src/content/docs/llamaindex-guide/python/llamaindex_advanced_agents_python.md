@@ -275,4 +275,4 @@ For production tracing (OpenTelemetry, Phoenix, Langfuse and others), use the in
 - **Transient tool failures** — retry inside the tool (`tenacity`), and return a clear error string on final failure so the model can choose another path.
 - **Model provider errors** — the OpenAI and Anthropic LLM classes take `max_retries` and `timeout`; set them explicitly.
 - **Runaway loops** — pass `max_iterations=` to `run()` and set a workflow `timeout=`; use `early_stopping_method="generate"` to get a best-effort answer instead of an exception.
-- **Whole-step retries in custom workflows** — `@step(retry_policy=ConstantDelayRetryPolicy(...))`; see [advanced implementations](/llamaindex-guide/python/llamaindex_advanced_implementations/).
+- **Whole-step retries in custom workflows** — `@step(retry_policy=retry_policy(...))` from `workflows.retry_policy`, with `@catch_error` for a fallback; see [Workflows](/llamaindex-guide/python/llamaindex_workflows/#8-errors-retries-and-timeouts).

@@ -40,7 +40,7 @@ AWS's current agent stack has two layers. **Amazon Bedrock AgentCore** is where 
 |----------|-----|------------|
 | A managed agent declared as configuration (model, prompt, tools, memory) | **AgentCore Harness** | [Managed harness](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#managed-harness) |
 | Your own agent code (Strands, LangGraph, CrewAI, OpenAI Agents SDK…) hosted by AWS | **AgentCore Runtime** | [Getting started](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#getting-started) |
-| An agent loop in your own process, on Bedrock or another provider | **Strands Agents** | [Strands SDK guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/) |
+| An agent loop in your own process, on Bedrock or another provider | **Strands Agents** | [Strands Agents guide](/strands-agents-guide/) |
 | To keep running an existing Bedrock Agents agent | **Agents Classic** | [Classic reference](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/) |
 
 The harness and code-defined agents both run on AgentCore Runtime, and the CLI can export a harness to Strands code when you outgrow configuration.

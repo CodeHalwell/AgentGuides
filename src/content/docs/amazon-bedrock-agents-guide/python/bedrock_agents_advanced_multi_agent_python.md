@@ -388,4 +388,4 @@ def monitor_agent_alias(agent_alias_arn: str, hours: int = 1) -> dict:
 
 For per-collaborator detail, enable traces (as above) or model-invocation logging; for code-defined agents on AgentCore, use AgentCore Observability's OpenTelemetry traces.
 
-See also: the [comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/), the [Strands SDK guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/) and the [Recipes](/amazon-bedrock-agents-guide/python/bedrock_agents_recipes/#multi-agent-customer-service-system).
+See also: the [comprehensive guide](/amazon-bedrock-agents-guide/python/bedrock_agents_comprehensive_guide/), the [Strands multi-agent guide](/strands-agents-guide/python/strands_multi_agent/) and the [Recipes](/amazon-bedrock-agents-guide/python/bedrock_agents_recipes/#multi-agent-customer-service-system).

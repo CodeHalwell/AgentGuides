@@ -426,7 +426,7 @@ Runtime does not need framework-specific adapters: any code that can be called f
 
 ### 1. Strands Agents SDK
 
-Covered in detail in the [Strands SDK guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/). Streaming is supported by making the entrypoint an async generator:
+**Strands on AgentCore.** The SDK itself (tools, model providers, sessions, hooks, multi-agent) is covered in the standalone [Strands Agents guide](/strands-agents-guide/python/); its [production page](/strands-agents-guide/python/strands_production_guide/#agentcore-runtime) covers one agent per session, limits, retries and tracing on Runtime. Here is the shape of a Strands entrypoint. Streaming is supported by making the entrypoint an async generator:
 
 ```python
 from bedrock_agentcore import BedrockAgentCoreApp
@@ -579,7 +579,7 @@ ci.stop()
 
 ### Workflows and Memory
 
-AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#collaboration-pattern-3-agent-graphs)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
+AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph — see the [Strands guide](/strands-agents-guide/python/strands_multi_agent/#graph)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).
 
 **Remembering context across sessions with Memory:**
 
@@ -616,7 +616,7 @@ records = memory.retrieve_memories(
 )
 ```
 
-With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#memory-and-state-management)).
+With Strands, pass `AgentCoreMemorySessionManager` as the agent's `session_manager` so turns are written and retrieved automatically (see the [Strands guide](/strands-agents-guide/python/strands_comprehensive_guide/#agentcore-memory)).
 
 ---
 

@@ -1015,12 +1015,11 @@ orchestrator = FunctionAgent(
 
 ## 13. Custom workflows
 
-A `Workflow` is a class whose `@step` methods consume and emit typed events. The runtime wires steps together by the event types in their signatures and validates the graph before running.
+When the control flow is yours rather than the model's — a fixed pipeline, fan-out and fan-in, strict ordering, approval gates — write a `Workflow`. A workflow is a class whose `@step` methods consume and emit typed events; the runtime routes events by the types in the step signatures and validates the graph before running. The agent classes above are themselves workflows.
 
 ```python
-import asyncio
-from llama_index.core.workflow import Workflow, step, Context, StartEvent, StopEvent, Event
 from llama_index.core import VectorStoreIndex
+from llama_index.core.workflow import Event, StartEvent, StopEvent, Workflow, step
 from llama_index.llms.openai import OpenAI
 
 class RetrievedEvent(Event):
@@ -1030,98 +1029,25 @@ class RetrievedEvent(Event):
 class RAGWorkflow(Workflow):
     def __init__(self, index: VectorStoreIndex, **kwargs):
         super().__init__(**kwargs)
-        self.index = index
+        self.retriever = index.as_retriever(similarity_top_k=3)
         self.llm = OpenAI(model="%%model=openai-small%%")
 
     @step
-    async def retrieve(self, ctx: Context, ev: StartEvent) -> RetrievedEvent:
-        await ctx.store.set("query", ev.query)
-        nodes = await self.index.as_retriever(similarity_top_k=3).aretrieve(ev.query)
+    async def retrieve(self, ev: StartEvent) -> RetrievedEvent:
+        nodes = await self.retriever.aretrieve(ev.query)
         return RetrievedEvent(query=ev.query, context="\n\n".join(n.get_content() for n in nodes))
 
     @step
-    async def synthesise(self, ctx: Context, ev: RetrievedEvent) -> StopEvent:
+    async def synthesise(self, ev: RetrievedEvent) -> StopEvent:
         prompt = f"Answer using only this context.\n\n{ev.context}\n\nQuestion: {ev.query}"
-        answer = await self.llm.acomplete(prompt)
-        return StopEvent(result=str(answer))
+        return StopEvent(result=str(await self.llm.acomplete(prompt)))
 
 async def main():
-    wf = RAGWorkflow(index=vector_index, timeout=60, verbose=False)
+    wf = RAGWorkflow(index=vector_index, timeout=60)
     print(await wf.run(query="What is LlamaIndex?"))
-
-asyncio.run(main())
 ```
 
-### 13.1 Fan-out and fan-in
-
-```python
-class SubQuery(Event):
-    question: str
-
-class SubAnswer(Event):
-    answer: str
-
-class FanOut(Workflow):
-    @step
-    async def split(self, ctx: Context, ev: StartEvent) -> SubQuery:
-        questions = ev.questions
-        await ctx.store.set("n", len(questions))
-        for q in questions:
-            ctx.send_event(SubQuery(question=q))
-        return None
-
-    @step(num_workers=4)
-    async def answer(self, ev: SubQuery) -> SubAnswer:
-        return SubAnswer(answer=f"answer to {ev.question}")
-
-    @step
-    async def join(self, ctx: Context, ev: SubAnswer) -> StopEvent | None:
-        n = await ctx.store.get("n")
-        results = ctx.collect_events(ev, [SubAnswer] * n)
-        if results is None:
-            return None          # still waiting for the rest
-        return StopEvent(result=[r.answer for r in results])
-```
-
-### 13.2 Streaming custom events
-
-```python
-class Progress(Event):
-    msg: str
-
-class ProgressFlow(Workflow):
-    @step
-    async def work(self, ctx: Context, ev: StartEvent) -> StopEvent:
-        ctx.write_event_to_stream(Progress(msg="halfway"))
-        return StopEvent(result="done")
-
-async def main():
-    handler = ProgressFlow().run()
-    async for ev in handler.stream_events():
-        if isinstance(ev, Progress):
-            print(ev.msg)
-    print(await handler)
-```
-
-### 13.3 Retries
-
-```python
-from llama_index.core.workflow.retry_policy import ConstantDelayRetryPolicy
-
-class Flaky(Workflow):
-    @step(retry_policy=ConstantDelayRetryPolicy(delay=2, maximum_attempts=3))
-    async def call_api(self, ev: StartEvent) -> StopEvent:
-        ...
-```
-
-### 13.4 Visualising
-
-```python
-# pip install llama-index-utils-workflow
-from llama_index.utils.workflow import draw_all_possible_flows
-
-draw_all_possible_flows(RAGWorkflow, filename="rag_workflow.html")
-```
+Workflows come from the separate `llama-index-workflows` package (imported as `workflows`), which `llama_index.core.workflow` re-exports. The **[Workflows page](/llamaindex-guide/python/llamaindex_workflows/)** covers it in full: events and typed start/stop events, `Context` and typed state, `send_event` / `collect_events` and list fan-out, streaming, human-in-the-loop, retry policies and `@catch_error`, timeouts, resources, checkpointing and resuming, nested workflows, drawing and testing. [Workflow patterns](/llamaindex-guide/python/llamaindex_advanced_implementations/) has longer worked examples.
 
 ---
 
@@ -1639,6 +1565,7 @@ Notes:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 0.14.25 / workflows 2.26.1 | Section 13 cut to an introduction; Workflows now have their own [page](/llamaindex-guide/python/llamaindex_workflows/). Its retry example used the deprecated `ConstantDelayRetryPolicy`. |
 | 2026-10-21 | 0.14.25 | Added property graphs (3.9), multimodal (3.10), `WorkflowServer`/`WorkflowClient`/`llamactl` serving (14), LlamaParse via the `llama-cloud` SDK (18.2) and evaluation datasets (21.2). `SubQuestionQueryEngine` example now passes `question_gen` (the default needs a package that cannot be installed with current releases). |
 | 2026-10-21 | 0.14.25 | Rewritten. Previous edition used APIs that do not exist (`AgentWorkflow.from_tools`, `from llama_index.core.workflow import AgentWorkflow`, `llama_index.core.tools.Tool`, `BM25Retriever` in core, `llama_agents`) and wrongly stated that `ReActAgent` raises `ImportError`. All examples now use the workflow-based agents and were checked against an installed `llama-index-core`. Version banner now tracks the site's version registry. |
 | 2026-05-19 | 0.14.22 | Patch-version bump. |

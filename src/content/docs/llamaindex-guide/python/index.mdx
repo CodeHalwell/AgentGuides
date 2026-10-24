@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **llama-index %%version=llama-index%%** (core and bundle share a version) · Python 3.10+ · checked %%versions-checked%%
+    **llama-index %%version=llama-index%%** (core and bundle share a version) · `llama-index-workflows` %%version=llama-index-workflows%% · Python 3.10+ · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
     RAG systems, document Q&A, enterprise knowledge agents.
@@ -32,7 +32,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## Zero → Hero
 
-Numbers are the comprehensive guide's section numbers; the last two steps are separate pages.
+Numbers are the comprehensive guide's section numbers; unnumbered steps are separate pages.
 
 <CardGrid>
   <LinkCard title="§1 · Installation & setup" href="./llamaindex_comprehensive_guide/#1-installation-and-setup" description="Install, configure LLM + embedding · 15 min" />
@@ -47,7 +47,7 @@ Numbers are the comprehensive guide's section numbers; the last two steps are se
   <LinkCard title="§10 · Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" description="Pydantic output from agents and LLMs · 10 min" />
   <LinkCard title="§11 · Streaming" href="./llamaindex_comprehensive_guide/#11-streaming-responses" description="Token and event streaming · 10 min" />
   <LinkCard title="§12 · Multi-agent" href="./llamaindex_comprehensive_guide/#12-multi-agent-systems-with-agentworkflow" description="AgentWorkflow hand-off, orchestrators · 25 min" />
-  <LinkCard title="§13 · Custom workflows" href="./llamaindex_comprehensive_guide/#13-custom-workflows" description="Steps, events, fan-out · 25 min" />
+  <LinkCard title="Workflows" href="./llamaindex_workflows/" description="Steps, events, typed state, fan-out, streaming, HITL, retries, checkpointing · 45 min" />
   <LinkCard title="§14 · Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" description="WorkflowServer, WorkflowClient, llamactl · 15 min" />
   <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" description="Human-in-the-loop, persistence, routing · 30 min" />
   <LinkCard title="Production" href="./llamaindex_production_guide/" description="Ingestion jobs, serving, evaluation, testing · 30 min" />
@@ -66,6 +66,8 @@ Numbers are the comprehensive guide's section numbers; the last two steps are se
   <LinkCard title="LlamaHub tools & MCP" href="./llamaindex_comprehensive_guide/#17-llamahub-tools-and-mcp" />
   <LinkCard title="Structured output" href="./llamaindex_comprehensive_guide/#10-structured-output" />
   <LinkCard title="Advanced retrieval" href="./llamaindex_comprehensive_guide/#19-advanced-retrieval" />
+  <LinkCard title="Workflows" href="./llamaindex_workflows/" />
+  <LinkCard title="Workflow checkpointing" href="./llamaindex_workflows/#11-checkpointing-and-resuming" />
   <LinkCard title="Serving workflows" href="./llamaindex_comprehensive_guide/#14-serving-and-deploying-workflows-llamaagents" />
   <LinkCard title="Evaluation datasets" href="./llamaindex_comprehensive_guide/#212-evaluation-datasets" />
   <LinkCard title="Observability" href="./llamaindex_observability_python/" />
@@ -76,6 +78,7 @@ Numbers are the comprehensive guide's section numbers; the last two steps are se
 
 <CardGrid>
   <LinkCard title="Comprehensive guide" href="./llamaindex_comprehensive_guide/" description="Single-page technical reference." />
+  <LinkCard title="Workflows" href="./llamaindex_workflows/" description="The event-driven Workflows framework, with or without the rest of LlamaIndex." />
   <LinkCard title="Advanced agents" href="./llamaindex_advanced_agents_python/" description="HITL, persistence, routing, orchestration." />
   <LinkCard title="Advanced implementations" href="./llamaindex_advanced_implementations/" description="Workflow patterns: fan-out, retries, resilient tools." />
   <LinkCard title="Observability" href="./llamaindex_observability_python/" />
@@ -131,6 +134,7 @@ Ready? **[Start Zero → Hero Step 1 →](/llamaindex-guide/python/llamaindex_co
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 0.14.25 / workflows 2.26.1 | Added the [Workflows](/llamaindex-guide/python/llamaindex_workflows/) page; the Zero → Hero step for custom workflows now points to it. |
 | 2026-10-21 | 0.14.25 | Zero → Hero cards now carry the comprehensive guide's section numbers; links added for the new property graph, multimodal, LlamaParse, serving and evaluation-dataset sections; production guide rewritten. |
 | 2026-10-21 | 0.14.25 | Version now read from the site's version registry. Minimal example rewritten for `FunctionAgent` (the previous one used the removed `ReActAgent.from_tools` / `.chat()` API). `llama-agents` references replaced with `AgentWorkflow` and LlamaAgents/`llamactl`. Comprehensive guide, advanced pages and recipes re-verified against an installed copy. |
 | 2026-05-19 | 0.14.22 | Version bump. |

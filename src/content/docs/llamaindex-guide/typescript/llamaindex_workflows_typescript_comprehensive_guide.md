@@ -746,7 +746,7 @@ console.log(report?.data);
 
 ### 6.4 Snapshots
 
-Stateful workflows also expose `ctx.snapshot()` and `workflow.resume(snapshot)` for pausing a run (for example while waiting for a human) and continuing it later. A snapshot closes the context to further events, so take it only when you intend to stop the run. Given that the package is no longer maintained, test this carefully before relying on it for durable execution; Python Workflows (`llama-index-workflows`) have the better-supported equivalent.
+Stateful workflows also expose `ctx.snapshot()` and `workflow.resume(snapshot)` for pausing a run (for example while waiting for a human) and continuing it later. A snapshot closes the context to further events, so take it only when you intend to stop the run. A worked, tested example — and what a snapshot does and does not capture — is on the [workflows engine page](/llamaindex-guide/typescript/llamaindex_workflow_core/#5-human-in-the-loop). Given that the package is no longer maintained, test this carefully before relying on it for durable execution; Python Workflows (`llama-index-workflows`) have the better-supported equivalent.
 
 ---
 
@@ -780,6 +780,7 @@ Stateful workflows also expose `ctx.snapshot()` and `workflow.resume(snapshot)` 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | workflow-core 1.3.4 | Snapshots section links to the new [workflows engine](/llamaindex-guide/typescript/llamaindex_workflow_core/) page, which has a working snapshot/resume example. |
 | 2026-10-21 | final releases | Versions now listed once on the overview; corrected the claim that `llamaindex` re-exports the workflow API; Node 22+; the orchestrator example no longer sends the research event twice. |
 | 2026-10-21 | @llamaindex/workflow 1.1.25 | Added the upstream deprecation notice. Fixed examples that failed type-checking: tool schemas now use Zod, `multiAgent(...).run()` / `agent(...).run()` corrected (they return a Promise; streaming is `runStream()`), RAG example no longer relies on a two-event join that never fires, fan-out example now actually fans out, broken snapshot example replaced with a note. |
 | 2026-05-24 | @llamaindex/workflow 1.1.25 | **Full rewrite** — previous guide documented a fictional `llama-index-workflows` class-based API (`extends Workflow`, `@step()`, `new StartEvent`, etc.) that does not exist in the published package. Rewritten entirely against the functional API: `createWorkflow`, `workflowEvent`, `handle`, `run`, `or`, `createStatefulMiddleware`. All six code examples executed against installed `@llamaindex/workflow@1.1.25` in `.routine-envs/check-0524-node` — PASS. API surface verified from `node_modules/@llamaindex/workflow-core/dist/index.d.ts` (retrieved 2026-05-24). |

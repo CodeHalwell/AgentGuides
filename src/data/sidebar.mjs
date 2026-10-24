@@ -156,6 +156,7 @@ export const sections = [
       ['amazon-bedrock-agents-guide', 'Amazon Bedrock Agents'],
       ['microsoft-agent-framework-guide', 'Microsoft Agent Framework'],
       ['google-adk-guide', 'Google ADK'],
+      ['strands-agents-guide', 'Strands Agents'],
     ],
   },
   {
@@ -171,6 +172,7 @@ export const sections = [
     guides: [
       ['semantic-kernel-guide', 'Semantic Kernel'],
       ['smolagents-guide', 'SmolAgents'],
+      ['agno-guide', 'Agno'],
     ],
   },
 ];

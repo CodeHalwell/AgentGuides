@@ -80,7 +80,7 @@ Short-term memory is the raw event log. Long-term records are extracted from it 
    └──────────── agent context for next turn ◄───────────────────┘
 ```
 
-With Strands, `AgentCoreMemorySessionManager` makes these calls for you ([Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#agentcore-memory)).
+With Strands, `AgentCoreMemorySessionManager` makes these calls for you ([Strands guide](/strands-agents-guide/python/strands_comprehensive_guide/#agentcore-memory)).
 
 ### Gateway and Identity
 
@@ -137,7 +137,7 @@ See the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_pr
   which to call           shared context, handoff tool  nodes run in parallel
 ```
 
-See the [Strands guide](/amazon-bedrock-agents-guide/python/bedrock_strands_sdk_guide/#collaboration-pattern-1-agents-as-tools) and [multi-agent patterns](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/).
+See the [Strands guide](/strands-agents-guide/python/strands_multi_agent/#agents-as-tools) and [multi-agent patterns](/amazon-bedrock-agents-guide/python/bedrock_agents_advanced_multi_agent_python/).
 
 ## Bedrock Agents Classic
 
