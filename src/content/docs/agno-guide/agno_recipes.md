@@ -134,7 +134,7 @@ for ref in run.references or []:
 
 ## Research and write, with a review loop
 
-A workflow that searches two sources in parallel, drafts, and loops on review until the reviewer approves or three rounds pass. Short inputs skip research.
+A workflow that searches two sources in parallel, drafts, and loops on review until the reviewer approves or three rounds pass. Short inputs skip research. Each round after the first gives the writer the notes, its previous draft and the reviewer's feedback, so it revises rather than starting again.
 
 ```python
 from typing import List
@@ -161,8 +161,24 @@ def gather_notes(si: StepInput) -> StepOutput:
     return StepOutput(content=f"Topic: {si.input}\n\nNotes:\n{notes}")
 
 
+def review(si: StepInput) -> StepOutput:
+    # Pass the draft explicitly: inside a loop, an agent step is handed the most
+    # recently *inserted* step output, which from round two is the stale revision brief.
+    draft = si.get_step_content("write")
+    return StepOutput(content=reviewer.run(f"Review this briefing:\n\n{draft}").content)
+
+
+def revision_brief(si: StepInput) -> StepOutput:
+    # Becomes the writer's input for the next round (forward_iteration_output=True)
+    return StepOutput(content=(
+        f"{si.get_step_content('notes')}\n\n"
+        f"Previous draft:\n{si.get_step_content('write')}\n\n"
+        f"Reviewer feedback:\n{si.previous_step_content}"
+    ))
+
+
 def approved(outputs: List[StepOutput]) -> bool:
-    return any("APPROVED" in str(o.content) for o in outputs)
+    return any(o.step_name == "review" and "APPROVED" in str(o.content) for o in outputs)
 
 
 briefing = Workflow(
@@ -176,16 +192,21 @@ briefing = Workflow(
         Step(name="notes", executor=gather_notes),
         Loop(
             name="draft_and_review",
-            steps=[Step(name="write", agent=writer), Step(name="review", agent=reviewer)],
+            steps=[
+                Step(name="write", agent=writer),
+                Step(name="review", executor=review),
+                Step(name="revision_brief", executor=revision_brief),
+            ],
             end_condition=approved,
             max_iterations=3,
+            forward_iteration_output=True,   # off by default: each round would restart from the notes
         ),
     ],
 )
 
 run = briefing.run("UK heat pump grants in 2026")
 print(run.status)
-print(run.content)   # the last step's output, i.e. the reviewer's final verdict
+print(run.content)   # the last step's output: the final revision brief, ending with the verdict
 
 # The loop's StepOutput holds every iteration's steps in order
 loop = run.step_results[-1]
@@ -333,17 +354,44 @@ One agent object can serve concurrent `arun()` calls; give each call its own `se
 Serve an agent with the scheduler on and store a cron schedule that calls it every weekday at 08:00 London time:
 
 ```python
+from datetime import datetime, timedelta, timezone
+
 from agno.agent import Agent
+from agno.db.base import SessionType
 from agno.db.sqlite import SqliteDb
 from agno.models.openai import OpenAIResponses
 from agno.os import AgentOS
 from agno.scheduler import ScheduleManager
+from agno.tools import tool
 
 db = SqliteDb(db_file="digest.db")
-digest = Agent(id="digest", name="Digest", model=OpenAIResponses(id="%%model=openai%%"), db=db,
-               instructions="Write a five-bullet digest of yesterday's support sessions.")
 
-agent_os = AgentOS(db=db, agents=[digest], scheduler=True)
+
+@tool
+def support_sessions(days_ago: int = 1) -> str:
+    """Return the conversations the support agent started on one UTC day (1 = yesterday)."""
+    day_end = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1 - days_ago)
+    day_start = day_end - timedelta(days=1)
+    sessions = db.get_sessions(
+        session_type=SessionType.AGENT,
+        component_id="support",           # the support agent's id
+        start_timestamp=int(day_start.timestamp()),
+        end_timestamp=int(day_end.timestamp()),
+    )
+    lines = []
+    for s in sessions:
+        for run in s.runs or []:
+            question = run.input.input_content if run.input else ""
+            lines.append(f"[{s.session_id}] Q: {question}\nA: {run.content}")
+    return "\n\n".join(lines) or "No support sessions that day."
+
+
+support = Agent(id="support", name="Support", model=OpenAIResponses(id="%%model=openai%%"), db=db)
+digest = Agent(id="digest", name="Digest", model=OpenAIResponses(id="%%model=openai%%"), db=db,
+               tools=[support_sessions],
+               instructions="Call support_sessions, then write a five-bullet digest of those conversations.")
+
+agent_os = AgentOS(db=db, agents=[support, digest], scheduler=True)
 app = agent_os.get_app()
 
 ScheduleManager(db).create(
@@ -359,4 +407,4 @@ if __name__ == "__main__":
     agent_os.serve(app="digest_app:app")
 ```
 
-The schedule row is created and listed in `/schedules`; the poller firing it at 08:00 was not observed for this guide. Results land in the agent's sessions like any other run.
+Sharing a `db` stores every run, but an agent only sees its own session's history; the digest agent reads the support agent's sessions through the `support_sessions` tool. `get_sessions` filters on when a session was created, so a conversation started earlier and continued yesterday is not included. The schedule row is created and listed in `/schedules`; the poller firing it at 08:00 was not observed for this guide. Results land in the digest agent's sessions like any other run.
