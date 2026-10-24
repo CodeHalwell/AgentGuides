@@ -42,6 +42,7 @@ Node.js 22 or later. The package is ESM-only, so use `"type": "module"` in `pack
 | OpenAI | `@strands-agents/sdk/models/openai` | `openai` |
 | Google Gemini | `@strands-agents/sdk/models/google` | `@google/genai` |
 | Vercel AI SDK providers | `@strands-agents/sdk/models/vercel` | `@ai-sdk/provider` and a provider package |
+| OpenAI-compatible endpoints on Bedrock | `OpenAIModel` with `bedrockMantleConfig` | `openai` and `@aws/bedrock-token-generator` |
 | MCP | `@strands-agents/sdk` (`McpClient`) | `@modelcontextprotocol/client` |
 | S3 storage | `@strands-agents/sdk/storage` | `@aws-sdk/client-s3` |
 | A2A | `@strands-agents/sdk/a2a`, `.../a2a/express` | `@a2a-js/sdk` (0.3.x), `express` |
@@ -100,7 +101,7 @@ console.log(agent.messages.length) // history is kept on the agent
 
 | Field | Meaning |
 |-------|---------|
-| `stopReason` | `endTurn`, `maxTokens`, `stopSequence`, `guardrailIntervened`, `contentFiltered`, `interrupt`, `cancelled`, `limitTurns`, `limitTotalTokens`, `limitOutputTokens`, `toolUse`, ... (camelCase, unlike Python's snake_case) |
+| `stopReason` | `endTurn`, `maxTokens`, `stopSequence`, `guardrailIntervened`, `contentFiltered`, `interrupt`, `cancelled`, `limitTurns`, `limitTotalTokens`, `limitOutputTokens`, `toolUse`, `pauseTurn`, `refusal`, `modelContextWindowExceeded`, `checkpoint` (camelCase, unlike Python's snake_case) |
 | `lastMessage` | The final assistant `Message` |
 | `structuredOutput` | The validated value when you passed a schema |
 | `interrupts` | Pending interrupts when `stopReason === 'interrupt'` |
@@ -232,6 +233,41 @@ const agent = new Agent({ model: claude, printer: false })
 | `VercelModel` | `@strands-agents/sdk/models/vercel` | Wraps any Vercel AI SDK language model (Ollama, Mistral, Groq and others through their AI SDK providers) |
 
 There are no TypeScript equivalents of Python's `LiteLLMModel`, `OllamaModel`, `MistralModel`, `LlamaCppModel`, `SageMakerAIModel` or `WriterModel`; use an OpenAI-compatible endpoint or the Vercel AI SDK provider for those services.
+
+`VercelModel` takes any AI SDK language model as `provider`, which is how you reach services that have no Strands class. The adapter is built on `@ai-sdk/provider` 3 (`LanguageModelV3`), so install the 3.x release of the provider package; the 4.x releases depend on a newer provider interface:
+
+```bash
+npm install @ai-sdk/provider@3 @ai-sdk/mistral@3
+```
+
+```typescript
+import { Agent } from '@strands-agents/sdk'
+import { VercelModel } from '@strands-agents/sdk/models/vercel'
+import { createMistral } from '@ai-sdk/mistral'
+
+const mistral = createMistral({ apiKey: process.env.MISTRAL_API_KEY ?? 'key' })
+
+const model = new VercelModel({ provider: mistral('%%model=mistral%%') })
+const agent = new Agent({ model, printer: false })
+```
+
+### OpenAI-compatible models on Bedrock
+
+Bedrock serves some models, such as OpenAI's open-weight `openai.gpt-oss-*`, through OpenAI-compatible endpoints. `OpenAIModel` reaches them with `bedrockMantleConfig`, which derives the client's `baseURL` and mints a short-lived bearer token from your AWS credentials on every request, so no OpenAI key is involved:
+
+```typescript
+import { Agent } from '@strands-agents/sdk'
+import { OpenAIModel } from '@strands-agents/sdk/models/openai'
+
+const model = new OpenAIModel({
+  api: 'chat',
+  modelId: 'openai.gpt-oss-120b',
+  bedrockMantleConfig: { region: 'us-west-2' },
+})
+const agent = new Agent({ model, printer: false })
+```
+
+The config takes `region` (otherwise `AWS_REGION` or `AWS_DEFAULT_REGION`), `credentials` (a static identity or a provider function) and `expiresInSeconds` (capped at 12 hours by AWS). It cannot be combined with `client`, a top-level `apiKey`, or `clientConfig.baseURL` / `apiKey`. Install `@aws/bedrock-token-generator`; it is loaded on first use. Python's version also offers a `bedrock-runtime` endpoint for cross-Region inference profile IDs; the TypeScript config has no `endpoint` option. Which of the Chat Completions and Responses APIs a model supports on the endpoint is a property of the model, so check the [Bedrock OpenAI-compatible APIs page](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-openai.html).
 
 ### Routing and fallback
 
@@ -383,7 +419,7 @@ const support = new Agent({
 const raw = new Agent({ model: 'us.anthropic.%%model=anthropic%%', conversationManager: new NullConversationManager(), printer: false })
 ```
 
-The sliding window (the default, 40 messages) keeps recent messages without splitting tool calls from results; the summarising manager replaces old messages with a summary when the context overflows; the null manager never trims.
+The sliding window (the default, 40 messages) keeps recent messages without splitting tool calls from results; the summarising manager replaces old messages with a summary when the context overflows; the null manager never trims. The first two also take `pinFirst` (keep the first N messages, such as a pasted document) and `proactiveCompression` (compress before the model call once the context is mostly full, instead of waiting for the provider to report an overflow). The experimental `contextManager` option replaces the conversation manager with a strategy pipeline: `'auto'` compresses proactively and offloads large tool results, `'agentic'` gives the model tools to manage its own context, a config object defines your own pipeline, and `false` turns context management off. Set `contextWindowLimit` on the model when you use it, because utilisation is measured against that limit.
 
 ## State
 
@@ -448,7 +484,42 @@ console.log(later.messages.length) // 2
 const inS3 = new SessionManager({ sessionId: 'user-42', storage: new S3Storage('agent-sessions', { prefix: 'prod/' }) })
 ```
 
-Session IDs may contain only lowercase letters, digits, hyphens and underscores; anything else throws when the `SessionManager` is created (agent `id`s are checked the same way when a snapshot is saved), so normalise user or tenant IDs first. This is stricter than Python, which only rejects path separators. `saveLatestOn` controls when the latest snapshot is written (`'invocation'` by default), and `snapshotTrigger` writes immutable checkpoints you can restore later. Graphs and swarms accept a `sessionManager` too. For long-term memory that is extracted and searched rather than replayed, the SDK has a `MemoryManager` with pluggable stores, and AgentCore Memory is available through `bedrock-agentcore` (see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/)).
+Session IDs may contain only lowercase letters, digits, hyphens and underscores; anything else throws when the `SessionManager` is created (agent `id`s are checked the same way when a snapshot is saved), so normalise user or tenant IDs first. This is stricter than Python, which only rejects path separators. `saveLatestOn` controls when the latest snapshot is written (`'invocation'` by default), and `snapshotTrigger` writes immutable checkpoints you can restore later. Graphs and swarms accept a `sessionManager` too. For long-term memory that is extracted and searched rather than replayed, see [long-term memory](#long-term-memory) below; AgentCore Memory is available through `bedrock-agentcore` (see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/)).
+
+## Long-term memory
+
+A session replays one conversation. A `MemoryManager` gives an agent memory that outlives conversations: a preference mentioned last week can be found today, in a different session. It is passed as `memoryManager` and works with one or more stores:
+
+- **Injection** (on by default). Before the model call for each new user message, the manager searches its stores with the message and adds the matches to the model input in a `<memory>` block. The block is not written to `agent.messages` or the session. `injection: false` turns it off, and `trigger` (`'userTurn'` by default, or `'everyTurn'`) controls when it runs.
+- **A `search_memory` tool** (on by default) and an **`add_memory` tool** (off by default; `addToolConfig: true`).
+- **Automatic extraction**, configured on a store with `extraction`: a model reads recent turns and writes durable facts to the store (every five invocations unless you choose `IntervalTrigger` or `InvocationTrigger`).
+
+The SDK ships `FileMemoryStore` (Markdown files under `./.strands/memory/<name>/`, or any `@strands-agents/sdk/storage` backend), `BedrockKnowledgeBaseStore` (semantic search over an Amazon Bedrock Knowledge Base; needs `@aws-sdk/client-bedrock-agent` and `@aws-sdk/client-bedrock-agent-runtime`) and a `TestMemoryStore` for prototypes, from `@strands-agents/sdk/vended-memory-stores/*`. Any object with `name`, `writable` and `search()` (and `add()` if writable) is a store.
+
+```typescript
+import { Agent, MemoryManager } from '@strands-agents/sdk'
+import { FileMemoryStore } from '@strands-agents/sdk/vended-memory-stores/file-memory-store'
+
+const store = new FileMemoryStore({ name: 'assistant-memory' })
+const memory = new MemoryManager({ stores: [store], addToolConfig: true })
+
+// Conversation 1: the model saves a fact with add_memory
+const first = new Agent({ model: 'us.anthropic.%%model=anthropic%%', memoryManager: memory, printer: false })
+await first.initialize() // the manager adds its tools when the agent initialises
+console.log(first.tools.map((t) => t.name)) // [ 'search_memory', 'add_memory' ]
+await first.invoke('Remember that I prefer metric units.')
+await memory.flush() // wait for any background writes
+
+// Conversation 2, in a new agent (or a new process): the fact is injected before the model call
+const second = new Agent({
+  model: 'us.anthropic.%%model=anthropic%%',
+  memoryManager: new MemoryManager({ stores: [new FileMemoryStore({ name: 'assistant-memory' })] }),
+  printer: false,
+})
+console.log((await second.invoke('Which units do I prefer?')).toString())
+```
+
+With `FileMemoryStore`, the first line of an entry (a heading such as `# User preferences`) becomes the file name, and later facts under the same heading are appended. `memory.search()` and `memory.add()` use the stores directly from your own code. Memory is shared by everyone who uses a store, so give each user their own store name; and treat what a store returns as untrusted input, because it reaches the model verbatim.
 
 ## Limits, cancellation and errors
 
@@ -468,8 +539,20 @@ if (result.stopReason.startsWith('limit') || result.stopReason === 'cancelled') 
 
 `agent.cancel()` stops the current call from elsewhere. Errors exported from the package root include `ModelThrottledError`, `ContextWindowOverflowError`, `MaxTokensError`, `StructuredOutputError`, `ConcurrentInvocationError`, `ToolValidationError`, `ToolNotFoundError` and `ModelError`.
 
+## Other features
+
+These exist in this release and are newer than the core; the details are in the type definitions:
+
+- **Agent Skills, context injection, goal loops and context offloading**: plugins under `@strands-agents/sdk/vended-plugins/*`. See [hooks](/strands-agents-guide/typescript/strands_typescript_hooks_and_interrupts/#plugins).
+- **Sandboxes** (`sandbox` option, `DockerSandbox`, an SSH sandbox): see [tools](/strands-agents-guide/typescript/strands_typescript_tools_and_mcp/#vended-tools).
+- **Background tasks** (`backgroundTasks: true` or a config): lets the model run tools in the background and collect their results later.
+- **Checkpointing** (`checkpointing: true`, experimental): the loop pauses at cycle boundaries with `stopReason === 'checkpoint'`, for durable execution engines.
+- **Auxiliary model** (`auxModel`): a cheaper model for the SDK's own side calls such as summaries and judges.
+- **No real-time voice**: the TypeScript SDK has no `BidiAgent`. For voice, use the [Python SDK](/strands-agents-guide/python/strands_comprehensive_guide/#real-time-voice-and-text-with-bidiagent) or a provider's own real-time client.
+
 ## Revision history
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=@strands-agents/sdk%% | Audit against the installed packages. Added long-term memory (`MemoryManager`, `FileMemoryStore`), `bedrockMantleConfig` for OpenAI-compatible Bedrock endpoints, a `VercelModel` example with the AI SDK 3.x provider requirement, `pinFirst`, `proactiveCompression` and `contextManager`, and an other-features list. |
 | 2026-10-24 | 1.22.0 | New page in the standalone Strands guide, expanding the TypeScript Strands page from the Amazon Bedrock guide: project set-up, `AgentResult`, provider table (OpenAI defaults to Responses), routing, stream events, conversation managers, state, sessions with storage backends, limits and errors. Examples type-check under `strict` and run against an offline Bedrock stub. |

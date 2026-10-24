@@ -1072,4 +1072,5 @@ These exist in this release and are worth knowing about, but are newer and chang
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added real-time voice (`BidiAgent`, models, I/O, events, hooks, limits), long-term memory (`MemoryManager`), OpenAI-compatible Bedrock endpoints (`bedrock_mantle_config`), `ClassifierStrategy` routing, Gemini, Mistral, llama.cpp and Responses API examples, and background tasks, checkpointing and concurrent-invocation options. Corrected the extras table (voice extras, Python 3.12 for Nova Sonic). |
 | 2026-10-24 | 1.62.0 | New page in the standalone Strands guide, replacing the Strands page in the Amazon Bedrock guide. Adds the agent loop, `AgentResult`, provider table, routing, streaming events, conversation and context managers, snapshot sessions, limits and cancellation. All examples run against an offline Bedrock stub. |

@@ -514,4 +514,5 @@ If a server cannot start, the agent constructor raises a `ValueError` (wrapping 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Corrected the `mcp` dependency range (1.23 up to 2.2, not 2.x only), the `shell` replacement note and the `diagram`/`rss` guidance. Added `MCPClient.load_servers()` for `mcpServers` config files. |
 | 2026-10-24 | 1.62.0 | New page. Documents schema generation limits (`Annotated` with `Field` unsupported; Pydantic parameters arrive as dicts), return-value handling, streaming tools, direct calls, module and class tools, executors, the `strands-agents-tools` 0.8 deprecations, vended tools, sandboxes and MCP with `mcp` 2.x. |

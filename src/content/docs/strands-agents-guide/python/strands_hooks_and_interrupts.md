@@ -611,4 +611,5 @@ Prefer hooks for observing and simple edits; reach for middleware when you need 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added `MessageUpdatedEvent` and examples for `ContextInjector`, `GoalLoop`, `ContextOffloader` and steering handlers. |
 | 2026-10-24 | 1.62.0 | New page. Hook events with writable fields, hook providers, blocking, redaction, retries and resume patterns, plugins and Agent Skills, intervention handlers, interrupts from tools and hooks, and middleware. |

@@ -381,4 +381,5 @@ console.log(`${timings.length} model call(s)`)
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=@strands-agents/sdk%% | Audit against the installed packages. Added examples for `ContextInjector`, `GoalLoop` and `ContextOffloader`. |
 | 2026-10-24 | 1.22.0 | New page, from the hooks section of the TypeScript Strands page in the Amazon Bedrock guide. Adds the event table with writable fields, tool retries, plugins with tools, intervention handlers, interrupts from tools and hooks, retry strategy defaults and middleware. |

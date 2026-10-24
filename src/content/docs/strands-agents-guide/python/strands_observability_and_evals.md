@@ -240,4 +240,5 @@ LLM judges cost money and vary between runs, so a common split is: deterministic
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added a multi-turn evaluation example with `ActorSimulator` and listed the generator, tool simulator, detector, red-team and chaos modules. |
 | 2026-10-24 | 1.62.0 | New page. Result metrics (per call and lifetime), `StrandsTelemetry`, the span tree and attributes captured from a real run, trace attributes, and `strands-agents-evals` experiments with deterministic and LLM-judge evaluators. |

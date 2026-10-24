@@ -533,4 +533,5 @@ Hosting A2A servers on AgentCore Runtime is covered in the [Bedrock A2A guide](/
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Documented that swarm limits and the graph node-execution limit return `Status.FAILED` rather than raising. |
 | 2026-10-24 | 1.62.0 | New page, from the multi-agent sections of the former Bedrock Strands page. Adds `as_tool` options (`delegate`), state propagation rules, swarm options and result fields, context-aware graph conditions, nested orchestrators, orchestrator streaming and hooks, and A2A server and client usage. |
