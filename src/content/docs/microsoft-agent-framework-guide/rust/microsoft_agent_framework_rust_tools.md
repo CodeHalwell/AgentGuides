@@ -26,7 +26,7 @@ An agent never holds a `FunctionTool` or an MCP client directly. Everything it c
 
 The combination of `kind` and `executor` decides what happens to a call. A `Function` tool with an executor runs in your process; `is_executable()` is true only for these. A `Function` tool without an executor is *declaration-only*: its calls are handed back to the caller (see [per-run tools](#per-run-tools-and-declaration-only-tools)). A hosted kind never has an executor and is run by the provider.
 
-`AgentBuilder::tool` and `tools` add definitions to the agent's default options, `AgentRunOptions::with_tool` adds them for one run, and `AgentBuilder::tool_source` adds a source that is asked for its tools on every run. Names must be unique: when two definitions share a name, the first one assembled wins and the later one is dropped. `ToolDefinition::to_openai_spec()` shows the OpenAI `{"type": "function", ...}` form of a function tool, which is handy when debugging a schema.
+`AgentBuilder::tool` and `tools` add definitions to the agent's default options, `AgentRunOptions::with_tool` adds them for one run, and `AgentBuilder::tool_source` adds a source that is asked for its tools on every run. Names must be unique. A tool from a context provider, a per-run option or a tool source is dropped when its name is already taken, but two tools with the same name given to the builder are both sent, which most providers reject. `ToolDefinition::to_openai_spec()` shows the OpenAI `{"type": "function", ...}` form of a function tool, which is handy when debugging a schema.
 
 ## Function tools
 
@@ -35,7 +35,66 @@ The combination of `kind` and `executor` decides what happens to a call. A `Func
 `FunctionTool::new(name, description, schema, closure)` takes the schema as a `serde_json::Value` and gives the closure the arguments as a `Value`. The closure must be `Fn` (it may run many times, and concurrently), `Send + Sync + 'static`, and return a future of `Result<Value>`. State is shared the usual way: clone an `Arc` into the closure, and clone it again inside for each call's future.
 
 ```rust
-@@tool_00@@
+use std::sync::{Arc, Mutex};
+
+use agent_framework::prelude::*;
+use serde_json::{json, Value};
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // State the tool writes to. The closure owns one clone of the Arc and
+    // hands a fresh clone to each call's future.
+    let orders: Arc<Mutex<Vec<String>>> = Arc::default();
+    let book = orders.clone();
+
+    let place_order = FunctionTool::new(
+        "place_order",
+        "Place an order for a product and return its order number.",
+        json!({
+            "type": "object",
+            "properties": {
+                "product": { "type": "string", "description": "The product name" },
+                "quantity": { "type": "integer", "minimum": 1 }
+            },
+            "required": ["product", "quantity"],
+            "additionalProperties": false
+        }),
+        move |args: Value| {
+            let book = book.clone();
+            async move {
+                let product = args["product"]
+                    .as_str()
+                    .ok_or_else(|| Error::tool("product must be a string"))?;
+                let quantity = args["quantity"].as_u64().unwrap_or(1);
+                let mut orders = book.lock().unwrap();
+                orders.push(format!("{quantity} x {product}"));
+                Ok(json!({ "order_number": orders.len(), "status": "placed" }))
+            }
+        },
+    )
+    .into_definition();
+
+    let agent = Agent::builder(OpenAIChatCompletionClient::from_env("%%model=openai-small%%")?)
+        .instructions("You take orders. Use place_order for every order.")
+        .tool(place_order)
+        .build();
+
+    let response = agent.run_once("Two boxes of tea, please.").await?;
+
+    // The response holds the whole exchange: the call, its result, the answer.
+    for message in &response.messages {
+        for content in &message.contents {
+            match content {
+                Content::FunctionCall(call) => println!("call   {} {:?}", call.name, call.arguments),
+                Content::FunctionResult(result) => println!("result {:?}", result.result),
+                Content::Text(text) => println!("text   {}", text.text),
+                _ => {}
+            }
+        }
+    }
+    println!("orders: {:?}", orders.lock().unwrap());
+    Ok(())
+}
 ```
 
 Run against the stand-in, this prints:
@@ -54,7 +113,94 @@ Three details are worth knowing. `response.messages` contains the whole exchange
 `FunctionTool::typed(name, description, closure)` derives the schema from the closure's argument type, which must implement `serde::Deserialize` and `schemars::JsonSchema` (schemars **0.8**, the version the crate uses). The closure receives the deserialised value and may return any `Serialize` type. This is the closest equivalent of Python's `@tool` decorator, with the schema coming from a struct instead of a function signature.
 
 ```rust
-@@tool_01@@
+use agent_framework::prelude::*;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use serde_json::json;
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+enum Priority {
+    Low,
+    Normal,
+    High,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct Site {
+    building: String,
+    floor: Option<u8>,
+}
+
+/// Arguments for create_ticket.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct TicketArgs {
+    /// A one-line summary of the problem.
+    title: String,
+    /// How urgent the ticket is.
+    priority: Priority,
+    /// Estimated effort in hours.
+    #[schemars(range(min = 1, max = 40))]
+    hours: u32,
+    /// Free-form labels.
+    #[serde(default)]
+    labels: Vec<String>,
+    /// Where the problem is, if it is somewhere physical.
+    site: Option<Site>,
+}
+
+/// Any `Serialize` type can be the result.
+#[derive(Serialize)]
+struct Ticket {
+    id: u32,
+    title: String,
+    priority: String,
+    hours: u32,
+    labels: Vec<String>,
+    location: Option<String>,
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let create_ticket = FunctionTool::typed(
+        "create_ticket",
+        "Open a support ticket.",
+        |args: TicketArgs| async move {
+            Ok(Ticket {
+                id: 101,
+                title: args.title,
+                priority: format!("{:?}", args.priority),
+                hours: args.hours,
+                labels: args.labels,
+                location: args.site.map(|s| format!("{}, floor {:?}", s.building, s.floor)),
+            })
+        },
+    );
+
+    // The schema the model is given.
+    println!("{}", serde_json::to_string_pretty(&create_ticket.parameters_schema())?);
+
+    // Tool::invoke is what the tool loop calls: JSON in, JSON out.
+    let ok = create_ticket
+        .invoke(json!({ "title": "Printer jam", "priority": "high", "hours": 2 }))
+        .await?;
+    println!("ok:  {ok}");
+
+    // Arguments that do not deserialise are an Error::Tool, not a panic.
+    let bad = create_ticket
+        .invoke(json!({ "title": "Printer jam", "priority": "urgent", "hours": 2 }))
+        .await
+        .unwrap_err();
+    println!("bad: {bad}");
+
+    // The range is advice to the model, not validation: 0 deserialises fine.
+    let out_of_range = create_ticket
+        .invoke(json!({ "title": "Printer jam", "priority": "low", "hours": 0 }))
+        .await?;
+    println!("0 hours accepted: {out_of_range}");
+    Ok(())
+}
 ```
 
 The schema it prints shows the rules:
@@ -78,7 +224,119 @@ When the derived schema is not what you want (a provider that rejects `$ref`, a 
 A struct that implements the `Tool` trait is a tool too, and `Arc::new(tool).into()` (or `ToolDefinition::from_tool`) turns it into a definition. The trait has four required methods (`name`, `description`, `parameters_schema`, `invoke`) and one provided one, `invoke_in_context`, which the tool loop calls with the `FunctionInvocationContext` of the call. Its default forwards to `invoke`; override it to read the run's session, the middleware metadata (the loop puts the model's `call_id` there) or, with the progressive-tools feature, the live tool list. This is the Rust counterpart of a Python tool function that declares a `ctx: FunctionInvocationContext` parameter.
 
 ```rust
-@@tool_02@@
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::{json, Value};
+
+/// A tool written as a struct: it has its own configuration and reads the
+/// session of the run that called it.
+struct SaveNote {
+    max_len: usize,
+}
+
+#[async_trait]
+impl Tool for SaveNote {
+    fn name(&self) -> &str {
+        "save_note"
+    }
+    fn description(&self) -> &str {
+        "Save a short note for the current user."
+    }
+    fn parameters_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": { "text": { "type": "string" } },
+            "required": ["text"]
+        })
+    }
+
+    // Called when the tool is invoked outside an agent run.
+    async fn invoke(&self, _arguments: Value) -> Result<Value> {
+        Err(Error::tool("save_note needs an agent session"))
+    }
+
+    // The tool loop calls this one; the default forwards to `invoke`.
+    async fn invoke_in_context(
+        &self,
+        arguments: Value,
+        ctx: &FunctionInvocationContext,
+    ) -> Result<Value> {
+        let Some(session) = &ctx.session else {
+            return self.invoke(arguments).await;
+        };
+        let text: String = arguments["text"].as_str().unwrap_or_default().chars().take(self.max_len).collect();
+        let user = session
+            .state
+            .get("user")
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_else(|| "anonymous".into());
+        let mut notes = session.state.get("notes").unwrap_or_else(|| json!([]));
+        notes.as_array_mut().unwrap().push(json!(text));
+        session.state.insert("notes", notes);
+        Ok(json!({ "saved_for": user, "call_id": ctx.metadata["call_id"] }))
+    }
+}
+
+/// A canned model: asks for one tool call, then answers.
+#[derive(Clone)]
+struct Scripted(Arc<Mutex<VecDeque<ChatResponse>>>);
+
+#[async_trait]
+impl ChatClient for Scripted {
+    async fn get_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        Ok(self.0.lock().unwrap().pop_front().unwrap_or_else(|| ChatResponse::from_text("done")))
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+fn tool_call(id: &str, name: &str, args: Value) -> ChatResponse {
+    ChatResponse {
+        messages: vec![Message::with_contents(
+            Role::assistant(),
+            vec![Content::FunctionCall(FunctionCallContent::new(
+                id,
+                name,
+                Some(FunctionArguments::Raw(args.to_string())),
+            ))],
+        )],
+        finish_reason: Some(FinishReason::tool_calls()),
+        ..Default::default()
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let model = Scripted(Arc::new(Mutex::new(VecDeque::from([
+        tool_call("call_1", "save_note", json!({ "text": "Buy oat milk on the way home" })),
+        ChatResponse::from_text("Saved."),
+    ]))));
+
+    // From<Arc<T: Tool>> builds the ToolDefinition.
+    let agent = Agent::builder(model)
+        .tool(Arc::new(SaveNote { max_len: 12 }).into())
+        .build();
+
+    let mut session = agent.create_session();
+    session.state.insert("user", json!("ada"));
+    let response = agent.run(vec![Message::user("Note: buy oat milk")], Some(&mut session)).await?;
+
+    for content in response.messages.iter().flat_map(|m| &m.contents) {
+        if let Content::FunctionResult(result) = content {
+            println!("tool result: {:?}", result.result);
+        }
+    }
+    println!("notes in session: {:?}", session.state.get("notes"));
+
+    // Outside a run there is no context, so `invoke` is what runs.
+    println!("direct call: {:?}", SaveNote { max_len: 12 }.invoke(json!({ "text": "x" })).await);
+    Ok(())
+}
 ```
 
 ```text
@@ -94,7 +352,140 @@ direct call: Err(Tool("save_note needs an agent session"))
 A tool error does not fail the run. The loop turns it into a `FunctionResultContent` with `result: None` and an `exception` string, sends that to the model, and lets the model try again, try something else or explain. What the string says depends on the error and on `FunctionInvocationConfig`:
 
 ```rust
-@@tool_03@@
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde::Deserialize;
+use serde_json::{json, Value};
+
+/// A model that asks for every call in `batch` at once, then reports what
+/// came back for each call.
+#[derive(Clone)]
+struct Reporter {
+    batch: Vec<(&'static str, Value)>,
+}
+
+#[async_trait]
+impl ChatClient for Reporter {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let results: Vec<String> = messages
+            .iter()
+            .flat_map(|m| &m.contents)
+            .filter_map(|c| match c {
+                Content::FunctionResult(r) => Some(format!(
+                    "  {} -> result={:?} exception={:?}",
+                    r.call_id, r.result, r.exception
+                )),
+                _ => None,
+            })
+            .collect();
+        if !results.is_empty() {
+            return Ok(ChatResponse::from_text(results.join("\n")));
+        }
+        let calls = self
+            .batch
+            .iter()
+            .enumerate()
+            .map(|(i, (name, args))| {
+                Content::FunctionCall(FunctionCallContent::new(
+                    format!("{name}#{i}"),
+                    *name,
+                    Some(FunctionArguments::Raw(args.to_string())),
+                ))
+            })
+            .collect();
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), calls)],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+struct LookupArgs {
+    id: u32,
+}
+
+fn tools() -> Vec<ToolDefinition> {
+    let empty = json!({ "type": "object", "properties": {} });
+    vec![
+        FunctionTool::new("flaky", "Fails with internal detail.", empty.clone(), |_| async {
+            Err::<Value, _>(Error::tool("db timeout on host pg-07 (10.0.3.7)"))
+        })
+        .into_definition(),
+        FunctionTool::new("refuse", "Refuses with a message for the model.", empty.clone(), |_| async {
+            Err::<Value, _>(Error::tool_rejected("Refunds over 100 EUR need a manager."))
+        })
+        .into_definition(),
+        FunctionTool::typed("lookup", "Look a record up by id.", |args: LookupArgs| async move {
+            Ok(json!({ "id": args.id }))
+        })
+        .into_definition(),
+    ]
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let batch = vec![
+        ("flaky", json!({})),
+        ("refuse", json!({})),
+        ("lookup", json!({ "id": "seven" })), // wrong type
+        ("missing", json!({})),               // no such tool
+    ];
+
+    for detailed in [false, true] {
+        let agent = Agent::builder(Reporter { batch: batch.clone() })
+            .tools(tools())
+            .function_invocation_config(FunctionInvocationConfig {
+                include_detailed_errors: detailed,
+                ..Default::default()
+            })
+            .build();
+        println!("include_detailed_errors = {detailed}");
+        println!("{}", agent.run_once("go").await?.text());
+    }
+
+    // An unknown tool can also end the run instead.
+    let strict = Agent::builder(Reporter { batch: vec![("missing", json!({}))] })
+        .tools(tools())
+        .function_invocation_config(FunctionInvocationConfig {
+            terminate_on_unknown_calls: true,
+            ..Default::default()
+        })
+        .build();
+    println!("terminate_on_unknown_calls: {:?}", strict.run_once("go").await.map(|r| r.text()));
+
+    // So does Error::MiddlewareFailure, from a tool or from function middleware.
+    let fail_closed = FunctionTool::new("halt", "Stops the run.", json!({ "type": "object" }), |_| async {
+        Err::<Value, _>(Error::middleware_failure("policy: tool disabled for this tenant"))
+    })
+    .into_definition();
+    let agent = Agent::builder(Reporter { batch: vec![("halt", json!({}))] })
+        .tool(fail_closed)
+        .build();
+    println!("MiddlewareFailure: {:?}", agent.run_once("go").await.map(|r| r.text()));
+
+    // Per-tool caps: the third call is refused before the closure runs.
+    let once = FunctionTool::new("once", "Can run twice.", json!({ "type": "object" }), |_| async {
+        Ok(json!("ran"))
+    })
+    .max_invocations(2);
+    let counter = once.clone(); // clones share the counters
+    let agent = Agent::builder(Reporter { batch: vec![("once", json!({})), ("once", json!({})), ("once", json!({}))] })
+        .function_invocation_config(FunctionInvocationConfig {
+            include_detailed_errors: true,
+            ..Default::default()
+        })
+        .tool(once.into_definition())
+        .build();
+    println!("max_invocations(2):\n{}", agent.run_once("go").await?.text());
+    println!("invocation_count = {}", counter.invocation_count());
+    Ok(())
+}
 ```
 
 ```text
@@ -156,7 +547,61 @@ The values are checked when a run starts, not when the agent is built: `max_iter
 `ToolMode` is the wire-level `tool_choice`. Set it per run with `ChatOptions::with_tool_choice`, or as an agent default through the builder's `chat_options`:
 
 ```rust
-@@tool_04@@
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// Reports the tool choice and tool list each request carries.
+#[derive(Clone)]
+struct Echo;
+
+#[async_trait]
+impl ChatClient for Echo {
+    async fn get_response(&self, _m: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        let tools: Vec<&str> = options.tools.iter().map(|t| t.name.as_str()).collect();
+        Ok(ChatResponse::from_text(format!(
+            "tool_choice={:?} tools={tools:?}",
+            options.tool_choice
+        )))
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+fn tool(name: &str) -> ToolDefinition {
+    FunctionTool::new(name, "A tool.", json!({ "type": "object", "properties": {} }), |_| async {
+        Ok(json!("ok"))
+    })
+    .into_definition()
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(Echo).tool(tool("search")).tool(tool("extract")).build();
+
+    // Unset: the loop fills in Auto whenever tools are present.
+    println!("{}", agent.run_once("hi").await?.text());
+
+    for mode in [
+        ToolMode::none(),
+        ToolMode::required_any(),
+        ToolMode::required_function("extract"),
+    ] {
+        let options = AgentRunOptions::new()
+            .with_chat_options(ChatOptions::new().with_tool_choice(mode));
+        let response = agent.run_with_options(vec![Message::user("hi")], None, options).await?;
+        println!("{}", response.text());
+    }
+
+    // The choice can also be an agent default, through the builder's chat options.
+    let forced = Agent::builder(Echo)
+        .tool(tool("extract"))
+        .chat_options(ChatOptions::new().with_tool_choice(ToolMode::required_function("extract")))
+        .build();
+    println!("{}", forced.run_once("hi").await?.text());
+    Ok(())
+}
 ```
 
 ```text
@@ -176,7 +621,114 @@ The loop does not relax a required choice after the first call. With `required_a
 The limits bound different shapes of runaway run: `max_iterations` a model that calls one tool per turn for ever, `max_function_calls` one that asks for many parallel calls per turn, and `max_duration_seconds` slow tools or approvals nobody answers. None of them fails the run. When one is reached, the loop makes one last request with the tool choice set to `none` and returns whatever the model answers.
 
 ```rust
-@@tool_05@@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// A model that asks for three `work` calls on every turn it is allowed to,
+/// and records the tool choice of each request.
+#[derive(Clone, Default)]
+struct Greedy {
+    choices: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait]
+impl ChatClient for Greedy {
+    async fn get_response(&self, _m: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        let choice = options.tool_choice.as_ref().map(ToolMode::as_str).unwrap_or("unset");
+        self.choices.lock().unwrap().push(choice.to_string());
+        if choice == "none" {
+            return Ok(ChatResponse::from_text("final answer without tools"));
+        }
+        let n = self.choices.lock().unwrap().len();
+        let calls = (0..3)
+            .map(|i| {
+                Content::FunctionCall(FunctionCallContent::new(
+                    format!("c{n}-{i}"),
+                    "work",
+                    Some(FunctionArguments::Raw("{}".into())),
+                ))
+            })
+            .collect();
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), calls)],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+async fn run(label: &str, config: FunctionInvocationConfig, delay: Duration) -> Result<()> {
+    let executed = Arc::new(AtomicUsize::new(0));
+    let count = executed.clone();
+    let work = FunctionTool::new("work", "Do a unit of work.", json!({ "type": "object" }), move |_| {
+        let count = count.clone();
+        async move {
+            tokio::time::sleep(delay).await;
+            count.fetch_add(1, Ordering::SeqCst);
+            Ok(json!("done"))
+        }
+    })
+    .into_definition();
+
+    let model = Greedy::default();
+    let choices = model.choices.clone();
+    let agent = Agent::builder(model)
+        .tool(work)
+        .function_invocation_config(config)
+        .build();
+    let response = agent.run_once("start").await?;
+    let choices = choices.lock().unwrap().clone();
+    println!(
+        "{label}: {} model calls {choices:?}, {} tool runs, answer: {:?}",
+        choices.len(),
+        executed.load(Ordering::SeqCst),
+        response.text()
+    );
+    Ok(())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let fast = Duration::from_millis(0);
+    run(
+        "max_iterations=2",
+        FunctionInvocationConfig { max_iterations: 2, ..Default::default() },
+        fast,
+    )
+    .await?;
+    run(
+        "max_function_calls=4",
+        FunctionInvocationConfig { max_function_calls: Some(4), ..Default::default() },
+        fast,
+    )
+    .await?;
+    run(
+        "max_duration_seconds=0.25",
+        FunctionInvocationConfig { max_duration_seconds: Some(0.25), ..Default::default() },
+        Duration::from_millis(100),
+    )
+    .await?;
+
+    // Invalid values are rejected when the run starts, not at build time.
+    let agent = Agent::builder(Greedy::default())
+        .function_invocation_config(FunctionInvocationConfig {
+            max_function_calls: Some(0),
+            ..Default::default()
+        })
+        .tool(FunctionTool::new("work", "", json!({}), |_| async { Ok(json!(1)) }).into_definition())
+        .build();
+    println!("max_function_calls=0: {:?}", agent.run_once("start").await.map(|r| r.text()));
+    Ok(())
+}
 ```
 
 ```text
@@ -213,7 +765,69 @@ Streaming and local tools do not combine as you might expect. When the request h
 A tool marked `ApprovalMode::AlwaysRequire` (with `with_approval_mode`, or `require_approval()` on a `ToolDefinition`) is never run without a human's answer. When the model calls it, the loop stops and returns a response whose last assistant message carries the original calls plus one `FunctionApprovalRequestContent` per call. `user_input_requests()` (on `AgentResponse`, `ChatResponse` and stream updates) collects them. Each request has an `id` and the `function_call` it is about; `create_response(true)` approves it and `create_response(false)` rejects it. Send the answers back as a user message on the same session and the loop carries on:
 
 ```rust
-@@tool_06@@
+use agent_framework::prelude::*;
+use serde_json::json;
+
+fn delete_file() -> ToolDefinition {
+    FunctionTool::new(
+        "delete_file",
+        "Permanently delete a file.",
+        json!({
+            "type": "object",
+            "properties": { "path": { "type": "string" } },
+            "required": ["path"]
+        }),
+        |args| async move { Ok(json!({ "deleted": args["path"] })) },
+    )
+    .into_definition()
+    .require_approval() // same as .with_approval_mode(ApprovalMode::AlwaysRequire)
+}
+
+/// Run until the agent stops asking, answering every request with `decide`.
+async fn drive(
+    agent: &Agent,
+    prompt: &str,
+    decide: impl Fn(&FunctionApprovalRequestContent) -> bool,
+) -> Result<String> {
+    let mut session = agent.create_session();
+    let mut input = vec![Message::user(prompt)];
+    for _ in 0..5 {
+        let response = agent.run(input, Some(&mut session)).await?;
+        let requests = response.user_input_requests();
+        if requests.is_empty() {
+            return Ok(response.text());
+        }
+        let mut answers = Vec::new();
+        for request in requests {
+            let approved = decide(request);
+            println!(
+                "  {} {}({:?}) [request id {}]",
+                if approved { "approve" } else { "reject " },
+                request.function_call.name,
+                request.function_call.arguments,
+                request.id
+            );
+            answers.push(Content::FunctionApprovalResponse(request.create_response(approved)));
+        }
+        input = vec![Message::with_contents(Role::user(), answers)];
+    }
+    Err(Error::other("still asking for approval after 5 rounds"))
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(OpenAIChatCompletionClient::from_env("%%model=openai-small%%")?)
+        .instructions("You manage files. Use the tools for file actions.")
+        .tool(delete_file())
+        .build();
+
+    println!("approved:");
+    println!("  -> {}", drive(&agent, "Delete scratch.txt", |_| true).await?);
+
+    println!("rejected:");
+    println!("  -> {}", drive(&agent, "Delete scratch.txt", |_| false).await?);
+    Ok(())
+}
 ```
 
 ```text
@@ -242,7 +856,87 @@ Approval also exists at other levels: `AsToolOptions::approval_mode` gates calls
 Asking a human about every call gets tedious. `ToolApprovalAgent`, in `agent_framework::harness` behind the `experimental-harness` feature, wraps any agent and keeps approval state in the session. It approves calls that match an auto-approval rule without asking, records "always approve" answers as standing rules, and queues the remaining requests so that the caller is asked about one call at a time.
 
 ```rust
-@@tool_07@@
+// Needs the `experimental-harness` feature.
+use std::sync::Arc;
+
+use agent_framework::harness::ToolApprovalAgent;
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// A model that calls `deploy` for each user message and answers once it
+/// sees the result.
+#[derive(Clone)]
+struct Deployer;
+
+#[async_trait]
+impl ChatClient for Deployer {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let last = messages.last().unwrap();
+        if let Some(Content::FunctionResult(r)) = last.contents.first() {
+            return Ok(ChatResponse::from_text(format!("deploy result: {:?}", r.result)));
+        }
+        let env = if last.text().contains("prod") { "production" } else { "staging" };
+        let call = FunctionCallContent::new(
+            format!("call-{}", messages.len()),
+            "deploy",
+            Some(FunctionArguments::Raw(json!({ "env": env }).to_string())),
+        );
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let deploy = FunctionTool::new(
+        "deploy",
+        "Deploy the service.",
+        json!({ "type": "object", "properties": { "env": { "type": "string" } } }),
+        |args| async move { Ok(json!({ "deployed": args["env"] })) },
+    )
+    .into_definition()
+    .require_approval();
+
+    let inner = Agent::builder(Deployer).tool(deploy).build();
+    let agent = ToolApprovalAgent::new(Arc::new(inner))
+        // Heuristic rules approve without asking; this one trusts staging.
+        .with_auto_approval_rule(|call: &FunctionCallContent| {
+            call.parse_arguments().is_ok_and(|a| a.get("env") == Some(&json!("staging")))
+        });
+
+    let mut session = agent.create_session(); // required: the state lives here
+
+    // 1. Staging: auto-approved, the caller never sees a request.
+    let r = agent.run(vec![Message::user("deploy to staging")], Some(&mut session)).await?;
+    println!("staging: {} (requests: {})", r.text(), r.user_input_requests().len());
+
+    // 2. Production: the caller is asked. Answer "always approve this tool".
+    let r = agent.run(vec![Message::user("deploy to prod")], Some(&mut session)).await?;
+    let request = r.user_input_requests()[0].clone();
+    println!("prod asks: {}({:?})", request.function_call.name, request.function_call.arguments);
+    let answer = agent.always_approve_tool_response(&session, &request, Some("on-call said yes"))?;
+    let r = agent
+        .run(
+            vec![Message::with_contents(Role::user(), vec![Content::FunctionApprovalResponse(answer)])],
+            Some(&mut session),
+        )
+        .await?;
+    println!("prod: {}", r.text());
+
+    // 3. Production again: the standing rule approves it.
+    let r = agent.run(vec![Message::user("deploy to prod again")], Some(&mut session)).await?;
+    println!("prod again: {} (requests: {})", r.text(), r.user_input_requests().len());
+    println!("rules: {:?}", agent.state(&session)?.rules);
+    Ok(())
+}
 ```
 
 ```text
@@ -262,7 +956,128 @@ A rule that matches by name approves any tool with that name, including one adde
 `agent.as_tool(options)` returns a `ToolDefinition` that runs the agent as a function tool taking a single string. The coordinating agent calls it like any other tool; the sub-agent's text is the result.
 
 ```rust
-@@tool_08@@
+use std::sync::{Arc, Mutex};
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// The coordinator's model: delegates the user's question to the first
+/// tool it is offered, then relays the answer.
+#[derive(Clone)]
+struct Coordinator;
+
+#[async_trait]
+impl ChatClient for Coordinator {
+    async fn get_response(&self, messages: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        if let Some(Content::FunctionResult(r)) = messages.last().and_then(|m| m.contents.first()) {
+            return Ok(ChatResponse::from_text(format!(
+                "relayed: {}",
+                r.result.clone().or(r.exception.clone().map(Into::into)).unwrap_or_default()
+            )));
+        }
+        let tool = &options.tools[0];
+        println!("  coordinator sees tool {} with schema {}", tool.name, tool.parameters);
+        let arg = tool.parameters["required"][0].as_str().unwrap().to_string();
+        let call = FunctionCallContent::new(
+            "call-1",
+            tool.name.clone(),
+            Some(FunctionArguments::Raw(json!({ arg: messages.last().unwrap().text() }).to_string())),
+        );
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+/// The specialist's model: repeats its system prompt and task, in two chunks
+/// when streamed.
+#[derive(Clone)]
+struct Specialist;
+
+impl Specialist {
+    fn answer(messages: &[Message]) -> String {
+        let system = messages.iter().find(|m| m.role == Role::system()).map(Message::text);
+        format!("[system: {system:?}] answer to {:?}", messages.last().unwrap().text())
+    }
+}
+
+#[async_trait]
+impl ChatClient for Specialist {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        Ok(ChatResponse::from_text(Self::answer(&messages)))
+    }
+    async fn get_streaming_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        let text = Self::answer(&messages);
+        let (a, b) = text.split_at(text.len() / 2);
+        let updates = [a, b].map(|part| {
+            Ok(ChatResponseUpdate {
+                contents: vec![Content::text(part)],
+                role: Some(Role::assistant()),
+                ..Default::default()
+            })
+        });
+        Ok(Box::pin(futures::stream::iter(updates)))
+    }
+}
+
+/// Adds the session's user to the instructions, so we can see which
+/// session the specialist ran on.
+struct WhoIsAsking;
+
+#[async_trait]
+impl ContextProvider for WhoIsAsking {
+    async fn before_run(&self, ctx: &mut SessionContext) -> Result<()> {
+        let user = ctx.session.as_ref().and_then(|s| s.state.get("user"));
+        ctx.add_instructions(format!("user={user:?}"));
+        Ok(())
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let specialist = Agent::builder(Specialist)
+        .name("Tax Expert") // derived tool names are sanitised
+        .description("Answers tax questions.")
+        .context_provider(Arc::new(WhoIsAsking))
+        .build();
+
+    // Defaults: name from the agent, argument "task", a fresh session per call.
+    let chunks = Arc::new(Mutex::new(0usize));
+    let seen = chunks.clone();
+    let plain = specialist.as_tool(
+        AsToolOptions::new().stream_callback(Arc::new(move |_update: &AgentResponseUpdate| {
+            *seen.lock().unwrap() += 1;
+        })),
+    );
+    // Everything set: own name and argument, the caller's session.
+    let shared = specialist.as_tool(
+        AsToolOptions::new()
+            .name("ask_tax")
+            .description("Ask the tax specialist.")
+            .arg_name("question")
+            .arg_description("The question, in full.")
+            .propagate_session(true),
+    );
+
+    for (label, tool) in [("defaults", plain), ("propagate_session", shared)] {
+        let coordinator = Agent::builder(Coordinator).tool(tool).build();
+        let mut session = coordinator.create_session();
+        session.state.insert("user", json!("ada"));
+        let response = coordinator
+            .run(vec![Message::user("Is a bicycle deductible?")], Some(&mut session))
+            .await?;
+        println!("{label}: {}", response.text());
+    }
+    println!("streamed updates seen by the callback: {}", chunks.lock().unwrap());
+    Ok(())
+}
 ```
 
 ```text
@@ -283,7 +1098,7 @@ streamed updates seen by the callback: 2
 | `stream_callback` | none | Run the sub-agent with `run_stream` and call this with every update |
 | `propagate_session` | `false` | Run the sub-agent on a child of the caller's session |
 
-By default each call runs the sub-agent on a fresh session, so it remembers nothing between calls and sees nothing of the caller. With `propagate_session(true)` it runs on `AgentSession::child` of the caller's session: the same session id and a shared state bag (the example's context provider reads the caller's `user`), but its own service-side conversation id, so a parent's server-held conversation with a pending tool call does not leak into the sub-agent's requests. History is a separate matter: the child starts with the parent's history providers, so check what you want the specialist to see.
+By default each call runs the sub-agent on a fresh session, so it remembers nothing between calls and sees nothing of the caller. With `propagate_session(true)` it runs on `AgentSession::child` of the caller's session: the same session id and a shared state bag (the example's context provider reads the caller's `user`), but its own service-side conversation id, so a parent's server-held conversation with a pending tool call does not leak into the sub-agent's requests. History is not shared: the child has no context providers of its own, so it gets a fresh in-memory history on each call and sees neither the caller's conversation nor its own earlier calls. Pass what the specialist needs in the task string.
 
 Only the sub-agent's final text is returned; its own tool calls stay inside it. If the sub-agent ends its run with approval requests of its own, they cannot be answered from inside a tool call, and the tool fails with `"agent tool '<name>' ended its run with pending user-input requests, which cannot be satisfied from within a tool call"` (upstream raises `UserInputRequiredException`). Give a delegated agent tools that need no approval, or put the approval on the delegation itself with `approval_mode`. An error from the sub-agent is an ordinary tool error, so the coordinator's model sees `"tool execution failed"` and can carry on; for multi-agent designs where control should move rather than return, see the handoff orchestration on the [orchestrations page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_orchestrations/).
 
@@ -302,7 +1117,93 @@ A function tool with no executor is declaration-only. When the model calls it, t
 A `ToolSource` is asked for its tools at the start of every run (`run`, `run_with_options` and `run_stream`), so the agent sees the current catalogue rather than the one it was built with. The MCP tool wrappers implement it, which is how an agent follows a server's `tools/list_changed` notifications (see the [MCP page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/)). The trait has two methods: `resolve_tools()` and `source_name()`, used in log messages.
 
 ```rust
-@@tool_09@@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// Calls the tool named in the user's message, then answers.
+#[derive(Clone)]
+struct CallsNamedTool;
+
+#[async_trait]
+impl ChatClient for CallsNamedTool {
+    async fn get_response(&self, messages: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        let names: Vec<&str> = options.tools.iter().map(|t| t.name.as_str()).collect();
+        let last = messages.last().unwrap();
+        if last.role == Role::tool() {
+            return Ok(ChatResponse::from_text(format!("tools {names:?}; got {:?}", last.contents)));
+        }
+        let wanted = last.text();
+        let call = FunctionCallContent::new("call-1", wanted, Some(FunctionArguments::Raw("{}".into())));
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+fn local(name: &str) -> ToolDefinition {
+    let label = name.to_string();
+    FunctionTool::new(name, "A local tool.", json!({ "type": "object" }), move |_| {
+        let label = label.clone();
+        async move { Ok(json!(format!("{label} ran"))) }
+    })
+    .into_definition()
+}
+
+/// A catalogue that changes between runs, as an MCP server's might.
+struct Catalogue {
+    version: AtomicUsize,
+}
+
+#[async_trait]
+impl ToolSource for Catalogue {
+    async fn resolve_tools(&self) -> Result<Vec<ToolDefinition>> {
+        let v = self.version.fetch_add(1, Ordering::SeqCst);
+        // `clock` collides with the agent's own tool and is skipped (with a warning).
+        Ok(vec![local(&format!("report_v{v}")), local("clock")])
+    }
+    fn source_name(&self) -> &str {
+        "catalogue"
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(CallsNamedTool)
+        .tool(local("clock"))
+        .tool_source(Arc::new(Catalogue { version: AtomicUsize::new(1) }))
+        .build();
+
+    // A ToolSource is resolved again on every run.
+    println!("{}", agent.run_once("report_v1").await?.text());
+    println!("{}", agent.run_once("report_v2").await?.text());
+
+    // A tool for one run only.
+    let options = AgentRunOptions::new().with_tool(local("export"));
+    let r = agent.run_with_options(vec![Message::user("export")], None, options).await?;
+    println!("{}", r.text());
+
+    // A declaration-only tool: no executor, so its call comes back to the caller.
+    let mut confirm = local("confirm_in_ui");
+    confirm.executor = None;
+    let options = AgentRunOptions::new().with_tool(confirm);
+    let r = agent.run_with_options(vec![Message::user("confirm_in_ui")], None, options).await?;
+    for content in r.messages.iter().flat_map(|m| &m.contents) {
+        if let Content::FunctionCall(call) = content {
+            println!("returned to caller: {} (call id {})", call.name, call.call_id);
+        }
+    }
+    Ok(())
+}
 ```
 
 ```text
@@ -319,7 +1220,86 @@ Source tools come last, after the agent's, the context providers' and the per-ru
 With the `experimental-progressive-tools` feature, a run's tool list can change while the run is in progress. `FunctionInvocationContext::tools` is the run's `LiveToolList`, and `add_tools` and `remove_tools` on the context (or on the list) change it. The loop takes a snapshot of the list at the start of each model iteration, so a change applies from the next request on and never affects calls already requested.
 
 ```rust
-@@tool_10@@
+// Needs the `experimental-progressive-tools` feature.
+use std::sync::Arc;
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// Prints the tools it can see, then calls each name in its script once,
+/// skipping any it cannot see.
+#[derive(Clone)]
+struct Model {
+    script: Vec<&'static str>,
+}
+
+#[async_trait]
+impl ChatClient for Model {
+    async fn get_response(&self, messages: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        let visible: Vec<&str> = options.tools.iter().map(|t| t.name.as_str()).collect();
+        let turn = messages.iter().filter(|m| m.role == Role::assistant()).count();
+        println!("  turn {turn}: sees {visible:?}");
+        match self.script.get(turn) {
+            Some(name) if visible.contains(name) => {
+                let call = FunctionCallContent::new(format!("c{turn}"), *name, Some(FunctionArguments::Raw("{}".into())));
+                Ok(ChatResponse {
+                    messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+                    finish_reason: Some(FinishReason::tool_calls()),
+                    ..Default::default()
+                })
+            }
+            _ => Ok(ChatResponse::from_text("done")),
+        }
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+fn tool(name: &str) -> ToolDefinition {
+    FunctionTool::new(name, "", json!({ "type": "object" }), |_| async { Ok(json!("ok")) }).into_definition()
+}
+
+/// After a successful `login`, add the account tools and drop `login`.
+struct UnlockAfterLogin;
+
+#[async_trait]
+impl Middleware<FunctionInvocationContext> for UnlockAfterLogin {
+    async fn process(
+        &self,
+        ctx: FunctionInvocationContext,
+        next: Next<FunctionInvocationContext>,
+    ) -> Result<FunctionInvocationContext> {
+        let is_login = ctx.function_name == "login";
+        let ctx = next.run(ctx).await?;
+        if is_login && ctx.result.is_some() {
+            ctx.add_tools([tool("balance"), tool("transfer")])?;
+            ctx.remove_tools(["login"])?;
+        }
+        Ok(ctx)
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(Model { script: vec!["login", "balance", "login"] })
+        .tool(tool("login"))
+        .function_middleware(Arc::new(UnlockAfterLogin))
+        .build();
+    agent.run_once("check my balance").await?;
+
+    // Outside a run there is no live list to change.
+    let detached = FunctionInvocationContext::new("login", json!({}));
+    println!("{:?}", detached.add_tools([tool("x")]));
+
+    // A duplicate name is refused and nothing is added.
+    let live = LiveToolList::new(vec![tool("a")]);
+    println!("{:?}", live.add_tools([tool("b"), tool("a")]));
+    println!("{:?}", live.snapshot().iter().map(|t| t.name.clone()).collect::<Vec<_>>());
+    Ok(())
+}
 ```
 
 ```text
@@ -371,7 +1351,51 @@ Provider-specific settings are builder methods on `ToolDefinition` that write ke
 The converters are public, so the wire form can be checked without a network call:
 
 ```rust
-@@tool_11@@
+use std::collections::HashMap;
+
+use agent_framework::anthropic::convert::tools_to_anthropic;
+use agent_framework::openai::convert::apply_options;
+use agent_framework::openai::responses::tool_to_responses_spec;
+use agent_framework::prelude::*;
+use serde_json::{json, Map};
+
+fn main() {
+    let tools = vec![
+        hosted_web_search()
+            .user_location(json!({ "city": "Leeds", "country": "GB" }))
+            .max_uses(3),
+        hosted_code_interpreter().file_ids(vec!["file-abc".into()]),
+        hosted_file_search(Some(5)).vector_store_ids(vec!["vs_123".into()]),
+        hosted_image_generation(),
+        hosted_mcp("docs", "https://mcp.example.com/mcp", Some(vec!["search_docs".into()]))
+            .description("Product documentation")
+            .headers(HashMap::from([("authorization".into(), "Bearer t0ken".into())]))
+            .mcp_approval_mode(McpApprovalMode::PerTool {
+                always: vec![],
+                never: vec!["search_docs".into()],
+            }),
+    ];
+
+    for tool in &tools {
+        println!("{:<17} kind={:?} executable={}", tool.name, tool.kind, tool.is_executable());
+    }
+
+    println!("\nOpenAI Responses (also Azure OpenAI Responses and Foundry):");
+    for tool in &tools {
+        println!("  {}", tool_to_responses_spec(tool));
+    }
+
+    let (anthropic_tools, mcp_servers) = tools_to_anthropic(&tools);
+    println!("\nAnthropic tools:       {}", json!(anthropic_tools));
+    println!("Anthropic mcp_servers: {}", json!(mcp_servers));
+
+    // Chat Completions: only web search survives, as a top-level field.
+    let mut options = ChatOptions::new();
+    options.tools = tools.clone();
+    let mut body = Map::new();
+    apply_options(&mut body, &options);
+    println!("\nChat Completions body: {}", json!(body));
+}
 ```
 
 ```text
@@ -415,7 +1439,51 @@ Because a hosted MCP call happens on the service, its approval gate is the servi
 A tool's result is a `serde_json::Value`, which providers send to the model as text. A tool cannot return an image, audio or a file for the model to look at; Python's richer tool results have no counterpart here. Images go in through message content instead: `Content::Data` with `DataContent::from_bytes(bytes, media_type)` for inline bytes (sent as a base64 `data:` URI) or `Content::Uri` for a URL, as shown in the [comprehensive guide](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_comprehensive_guide/#messages-and-content). When a tool produces an image, return a reference and have the application send the bytes on the next turn:
 
 ```rust
-@@tool_12@@
+use agent_framework::prelude::*;
+use agent_framework::types::DataContent;
+use serde_json::json;
+
+/// The smallest valid PNG (1x1 grey), standing in for a rendered chart.
+const PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00, 0x00, 0x3a, 0x7e, 0x9b,
+    0x55, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0xda, 0x63, 0xf8, 0x0f, 0x00, 0x01,
+    0x01, 0x01, 0x00, 0x1c, 0xb0, 0x8c, 0x99, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+    0x42, 0x60, 0x82,
+];
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // A tool's result is JSON. It can name an image, not carry one.
+    let render_chart = FunctionTool::new(
+        "render_chart",
+        "Render the sales chart and return its file name.",
+        json!({ "type": "object", "properties": { "quarter": { "type": "string" } } }),
+        |_args| async move { Ok(json!({ "file": "chart-q3.png", "bytes": PNG.len() })) },
+    )
+    .into_definition();
+
+    let agent = Agent::builder(OpenAIChatCompletionClient::from_env("%%model=openai%%")?)
+        .instructions("Use render_chart for charts.")
+        .tool(render_chart)
+        .build();
+    let mut session = agent.create_session();
+
+    let first = agent.run(vec![Message::user("Chart Q3 sales.")], Some(&mut session)).await?;
+    println!("{}", first.text());
+
+    // The application loads the file and sends the pixels as message content.
+    let look = Message::with_contents(
+        Role::user(),
+        vec![
+            Content::text("Here is the chart. What does it show?"),
+            Content::Data(DataContent::from_bytes(PNG, "image/png")),
+        ],
+    );
+    let second = agent.run(vec![look], Some(&mut session)).await?;
+    println!("{}", second.text());
+    Ok(())
+}
 ```
 
 The second request reaches the provider as a user message with a text part and an `image_url` part holding the PNG as a data URI. A vision-capable model is needed for it to mean anything, and the session keeps the image in its history, so it is sent again on every later turn of that session.
@@ -429,7 +1497,104 @@ The defences, from strongest to weakest, are the sandbox (`DockerShellTool`; the
 ### `LocalShellTool`
 
 ```rust
-@@tool_13@@
+// Needs the `tools` feature.
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use agent_framework::builtin_tools::shell::{LocalShellTool, ShellExecutor, ShellPolicy};
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// A model that runs each command in `commands` through `run_shell`, one per
+/// turn, then summarises the last result.
+#[derive(Clone)]
+struct Operator {
+    commands: Vec<&'static str>,
+}
+
+#[async_trait]
+impl ChatClient for Operator {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let turn = messages.iter().filter(|m| m.role == Role::assistant()).count();
+        let Some(command) = self.commands.get(turn) else {
+            let last = messages.last().map(|m| format!("{:?}", m.contents)).unwrap_or_default();
+            return Ok(ChatResponse::from_text(format!("last tool message: {last}")));
+        };
+        let call = FunctionCallContent::new(
+            format!("sh-{turn}"),
+            "run_shell",
+            Some(FunctionArguments::Raw(json!({ "command": command }).to_string())),
+        );
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+#[tokio::main]
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let audit = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log = audit.clone();
+    let workdir = std::env::temp_dir();
+
+    let shell = LocalShellTool::builder()
+        .workdir(&workdir)
+        .clean_env(true) // commands see only the variables given here
+        .env("PATH", "/usr/bin:/bin")
+        .env("GREETING", "hello")
+        .policy(ShellPolicy::new().with_denylist([r"\bsudo\b", r"\bcurl\b"])?)
+        .timeout(Some(Duration::from_secs(5)))
+        .max_output_bytes(4 * 1024)
+        .on_command(move |command| log.lock().unwrap().push(command.to_string()))
+        .build()?;
+    println!("argv {:?}, approval {:?}", shell.argv(), shell.approval_mode());
+
+    // ShellExecutor::run is the tool without the agent: no approval step.
+    let r = shell.run("cd /; export SEEN=yes; echo $GREETING from $(pwd)", None).await?;
+    println!("1. {:?}", r.format_for_model());
+    let r = shell.run("echo SEEN=$SEEN in $(pwd)", None).await?;
+    println!("2. {:?} (persistent: the variable survives, the cd does not)", r.format_for_model());
+    let r = shell.run("sleep 3", Some(Duration::from_millis(200))).await?;
+    println!("3. timed_out={} exit_code={}", r.timed_out, r.exit_code);
+    println!("4. {:?}", shell.run("sudo ls", None).await.unwrap_err().to_string());
+    shell.close().await?;
+
+    // Through an agent: every call is an approval request first.
+    let agent = Agent::builder(Operator { commands: vec!["sudo reboot", "uname -s"] })
+        .tool(shell.as_function())
+        .build();
+    let mut session = agent.create_session();
+    let mut input = vec![Message::user("check the OS")];
+    loop {
+        let response = agent.run(input, Some(&mut session)).await?;
+        let requests = response.user_input_requests();
+        if requests.is_empty() {
+            println!("answer: {}", response.text());
+            break;
+        }
+        let answers = requests
+            .iter()
+            .map(|r| {
+                println!("approve? {:?}", r.function_call.arguments);
+                Content::FunctionApprovalResponse(r.create_response(true))
+            })
+            .collect();
+        input = vec![Message::with_contents(Role::user(), answers)];
+    }
+    println!("audit log: {:?}", audit.lock().unwrap());
+
+    // Turning approval off needs an explicit acknowledgement.
+    let refused = LocalShellTool::builder().approval_mode(ApprovalMode::NeverRequire).build();
+    println!("NeverRequire alone: {}", refused.unwrap_err());
+    Ok(())
+}
 ```
 
 ```text
@@ -476,7 +1641,90 @@ The policy is checked when the command is about to run, which for the agent's fu
 `ShellEnvironmentProvider` is a context provider that probes the shell once (family and version, working directory, which command-line tools answer `--version`) and adds a block of instructions to every run, so the model writes PowerShell in a PowerShell session and bash in a bash one. It registers no tools and works with any `ShellExecutor`:
 
 ```rust
-@@tool_14@@
+// Needs the `tools` feature.
+use std::sync::Arc;
+use std::time::Duration;
+
+use agent_framework::builtin_tools::shell::{
+    default_instructions_formatter, truncate_text_head_tail, ShellEnvironmentProvider,
+    ShellEnvironmentProviderOptions, ShellError, ShellExecutor, ShellFamily, ShellResult,
+};
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+
+/// A stand-in for a remote or sandboxed backend: answers a few commands.
+struct FakeSandbox;
+
+#[async_trait]
+impl ShellExecutor for FakeSandbox {
+    async fn start(&self) -> std::result::Result<(), ShellError> {
+        Ok(())
+    }
+    async fn close(&self) -> std::result::Result<(), ShellError> {
+        Ok(())
+    }
+    async fn run(
+        &self,
+        command: &str,
+        _timeout: Option<Duration>,
+    ) -> std::result::Result<ShellResult, ShellError> {
+        let (stdout, exit_code) = match command {
+            c if c.starts_with("echo \"VERSION=") => ("VERSION=5.2.21\nCWD=/sandbox".to_string(), 0),
+            "git --version" => ("git version 2.47.0".to_string(), 0),
+            _ => (String::new(), 127),
+        };
+        Ok(ShellResult { stdout, exit_code, ..Default::default() })
+    }
+    fn shell_family(&self) -> Option<ShellFamily> {
+        Some(ShellFamily::Posix)
+    }
+    fn os_description(&self) -> Option<String> {
+        Some("a Linux microVM".into())
+    }
+}
+
+/// Repeats the system prompt it receives.
+#[derive(Clone)]
+struct ShowSystem;
+
+#[async_trait]
+impl ChatClient for ShowSystem {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let system = messages.iter().find(|m| m.role == Role::system()).map(Message::text);
+        Ok(ChatResponse::from_text(system.unwrap_or_default()))
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let options = ShellEnvironmentProviderOptions {
+        probe_tools: vec!["git".into(), "cargo".into()],
+        ..Default::default()
+    }
+    .with_instructions_formatter(|snapshot| {
+        format!("{}\nNever run destructive commands.", default_instructions_formatter(snapshot))
+    });
+    let provider = Arc::new(ShellEnvironmentProvider::new(Arc::new(FakeSandbox), Some(options)));
+
+    let agent = Agent::builder(ShowSystem)
+        .instructions("You are an operator.")
+        .context_provider(provider.clone())
+        .build();
+    println!("{}", agent.run_once("hi").await?.text());
+    println!("\nsnapshot: {:?}", provider.current_snapshot().map(|s| s.tool_versions));
+
+    // Results convert to the hosted-shell content types.
+    let result = ShellResult { stdout: "ok".into(), ..Default::default() };
+    println!("\n{:?}", result.to_tool_result("call-1", Some(65536)));
+
+    // The head/tail truncation every executor applies.
+    let (text, cut) = truncate_text_head_tail(&"x".repeat(100), 20);
+    println!("{text:?} truncated={cut}");
+    Ok(())
+}
 ```
 
 ```text
@@ -507,7 +1755,47 @@ The probe runs on the first agent run and is cached; `refresh()` probes again an
 `DockerShellTool` drives the `docker` CLI (or `podman`, through `docker_binary`). In persistent mode it starts one container (`sleep infinity`) and runs a shell in it with `docker exec`; in stateless mode each command gets a fresh `docker run --rm`. Building the tool starts nothing; the container starts on the first command or `start()`, and `close()` removes it.
 
 ```rust
-@@tool_15@@
+// Needs the `tools` feature. Building the tool does not need Docker.
+use agent_framework::builtin_tools::shell::{is_docker_available, DockerShellTool, ShellMode};
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let docker = DockerShellTool::builder()
+        .image("alpine:3.20")
+        .shell("sh") // alpine has no bash
+        .host_workdir(std::env::current_dir()?) // mounted read-only at /workspace
+        .build()?;
+    println!("persistent container: {}", docker.run_argv().join(" "));
+    println!("exec: {}", docker.exec_argv(true).join(" "));
+
+    let stateless = DockerShellTool::builder().mode(ShellMode::Stateless).build()?;
+    println!("stateless: {}", stateless.stateless_argv("af-shell-demo", "ls").join(" "));
+
+    // With the isolation defaults kept, approval can be switched off...
+    let unattended = DockerShellTool::builder().approval_mode(ApprovalMode::NeverRequire).build();
+    println!("NeverRequire, defaults kept: ok={}", unattended.is_ok());
+
+    // ...but not once they are weakened, unless acknowledged.
+    let weakened = DockerShellTool::builder()
+        .approval_mode(ApprovalMode::NeverRequire)
+        .network("bridge")
+        .user("0:0")
+        .build();
+    println!("NeverRequire, weakened: {}", weakened.unwrap_err());
+
+    // Flags that would undo the defaults are refused outright.
+    let sneaky = DockerShellTool::builder().extra_run_args(["--label=team", "-itv/:/host"]).build();
+    println!("extra_run_args: {}", sneaky.unwrap_err());
+
+    println!("docker available: {}", is_docker_available("docker").await);
+    if is_docker_available("docker").await {
+        use agent_framework::builtin_tools::shell::ShellExecutor;
+        println!("{}", docker.run("uname -a", None).await?.format_for_model());
+        docker.close().await?; // removes the container
+    }
+    Ok(())
+}
 ```
 
 ```text
