@@ -82,12 +82,13 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Streaming server (Express)" href="/langgraph-guide/typescript/langgraph_streaming_server_express/" />
 </CardGrid>
 
-## What's new since 1.3
+## Recent releases
 
 - **1.5.x** — parallel writes are ordered by task path (as in Python), plus fixes to `DeltaChannel`, exit durability, interrupt resumption and node-cache persistence. No API removals.
-- **1.4.x** — node-level `timeout` (`NodeTimeoutError`) and `errorHandler`; `StateGraph.setNodeDefaults()` for graph-wide `retryPolicy`/`cachePolicy`; cooperative draining with `RunControl`/`GraphDrained`; `DeltaChannel` (beta); per-node `tracePolicy`; `GraphCallbackHandler`; `RemoteGraph` v3 streaming.
-- **1.3.0** — `MessagesZodState`/`MessagesZodMeta`; `STREAM_EVENTS_V3_MODES`; `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream`; stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`); schema utilities (`isSerializableSchema`, `isStandardSchema`, `getJsonSchemaFromSchema`, `getSchemaDefaultGetter`); `pushMessage`.
-- **1.2.x** — Standard JSON Schema state (Zod 4, Valibot, ArkType), `StateSchema`, `ReducedValue`, `UntrackedValue`.
+- **1.4.x** — node-level `timeout` (`NodeTimeoutError`) and `errorHandler`; `StateGraph.setNodeDefaults()` for graph-wide `retryPolicy`/`cachePolicy`; cooperative draining with `RunControl`/`GraphDrained`; `DeltaChannel` (beta); `RemoteGraph` v3 streaming (1.4.0); `GraphCallbackHandler` for interrupt and resume events (1.4.17).
+- **1.3.0** — `STREAM_EVENTS_V3_MODES`; `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream`; stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`).
+- **1.2.0** — `Overwrite` for bypassing a reducer.
+- **1.1.0** — `StateSchema`, `ReducedValue` and `UntrackedValue`, with Standard Schema support (Zod 4, Valibot, ArkType) and the schema utilities `isSerializableSchema`, `isStandardSchema`, `getJsonSchemaFromSchema`, `getSchemaDefaultGetter`.
 
 See the [comprehensive guide](/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#node-policies-draining-and-other-recent-features) for details.
 

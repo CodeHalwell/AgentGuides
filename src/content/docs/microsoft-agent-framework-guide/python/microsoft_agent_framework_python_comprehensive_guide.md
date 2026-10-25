@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Comprehensive guide"
+  order: 2
 ---
 
 **Version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep), checked %%versions-checked%%. Python 3.10+.

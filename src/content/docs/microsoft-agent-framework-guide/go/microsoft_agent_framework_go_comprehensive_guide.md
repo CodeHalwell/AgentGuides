@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Go) — Comprehensive guide"
 description: "Agents, runs and streaming, sessions, structured output, function tools and approvals, middleware, context providers, OpenAI / Azure OpenAI / Foundry / Anthropic / Gemini providers, MCP, A2A and OpenTelemetry in the Go SDK."
 framework: "microsoft-agent-framework"
 language: "go"
+sidebar:
+  label: "Comprehensive guide"
+  order: 2
 ---
 
 This page covers the single-agent surface of `github.com/microsoft/agent-framework-go`: building and running agents, sessions, structured output, tools, middleware, providers, MCP, A2A and tracing. Workflows have [their own page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_workflows/), as does [testing](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_testing/).

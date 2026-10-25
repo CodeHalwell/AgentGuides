@@ -4,6 +4,7 @@ description: "Enterprise patterns for the Microsoft Agent Framework — OpenTele
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Enterprise patterns"
+  order: 30
 ---
 
 **Target audience:** enterprise architects, security teams, compliance officers

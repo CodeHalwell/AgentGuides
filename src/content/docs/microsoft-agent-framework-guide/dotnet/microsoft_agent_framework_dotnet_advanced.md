@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Advanced patterns"
+  order: 40
 ---
 
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%; every C# block compiles against that release. Deployment, resilience and security are on the [production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/).

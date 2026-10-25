@@ -128,7 +128,14 @@ factory = WorkflowFactory(
         "Writer": client.as_agent(name="Writer", instructions="Write content."),
         "Reviewer": client.as_agent(name="Reviewer", instructions="Review content."),
     },
-    checkpoint_storage=FileCheckpointStorage("./checkpoints"),
+    # Declarative actions put their own types into checkpoints; without this
+    # allow-list every checkpoint fails to save (the run continues, logging errors).
+    checkpoint_storage=FileCheckpointStorage(
+        "./checkpoints",
+        allowed_checkpoint_types=[
+            "agent_framework_declarative._workflows._declarative_base:ActionComplete",
+        ],
+    ),
     max_iterations=200,           # raise the default 100 for GotoAction loops
 )
 
@@ -138,6 +145,8 @@ async for event in workflow.run({"input": "draft the agent-framework launch post
     if event.type == "output":
         print(event.data)
 ```
+
+Power Fx expressions (anything starting with `=`, such as `=System.ConversationId`) are evaluated by the .NET Power Fx engine through `pythonnet`, so the machine needs a .NET runtime; without one the workflow fails with `RuntimeError: PowerFx is not available (dotnet runtime not installed)`.
 
 Pre-registering agents (`agents={...}`) is the common pattern when the same agent definition is reused across many workflows. For one-off agents, embed the `Prompt` definition inline in the YAML and let the inner `AgentFactory` build them.
 
@@ -444,4 +453,4 @@ The `with_text` helper on `AgentExecutorResponse` matters when you transform age
 
 | Date | Version | Changes |
 |---|---|---|
-| 2026-10-25 | 1.22.0 | Middleware examples now use `call_next()` (the `next(context)` form no longer works, and naming the parameter `next` broke the built-in `next()` in the content-safety example). Replaced an incorrect breaking-changes list (`context_providers` was never made singular) with a link to the current list. Corrected the Mem0 filter check (it runs per run, not at construction), DevUI auth (on by default; non-loopback without a token raises) and CLI flags, span names, and checkpoint storage methods. History-provider examples on `OpenAIChatClient` now set `store=False`. |
+| 2026-10-25 | 1.22.0 | Middleware examples now use `call_next()` (the `next(context)` form no longer works, and naming the parameter `next` broke the built-in `next()` in the content-safety example). Replaced an incorrect breaking-changes list (`context_providers` was never made singular) with a link to the current list. Corrected the Mem0 filter check (it runs per run, not at construction), DevUI auth (on by default; non-loopback without a token raises) and CLI flags, span names, and checkpoint storage methods. The `WorkflowFactory` example now allow-lists the declarative checkpoint type (without it no checkpoint saved) and notes the .NET runtime needed for Power Fx. History-provider examples on `OpenAIChatClient` now set `store=False`. |

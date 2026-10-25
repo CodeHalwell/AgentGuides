@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Go) — Testing with a fake provider"
 description: "Unit-test Go agents without a model: script provider turns through agent.ProviderConfig, then assert on tool calls, approvals, sessions, agent-as-tool and workflows with go test."
 framework: "microsoft-agent-framework"
 language: "go"
+sidebar:
+  label: "Testing"
+  order: 30
 ---
 
 The Go SDK ships no public mock model. Its own test helper, `internal/agenttest`, is internal, so other modules cannot import it. You do not need one, though. Every provider is just an `agent.ProviderConfig` passed to `agent.New`, and its only required field is a `Run` function that returns a stream of `*agent.ResponseUpdate`. Write your own `Run` that replays scripted turns, and you get a real `*agent.Agent`, with real middleware, sessions, history and tool calling, that never touches the network.

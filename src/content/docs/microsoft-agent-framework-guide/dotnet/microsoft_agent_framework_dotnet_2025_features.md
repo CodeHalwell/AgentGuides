@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Feature tour"
+  order: 41
 ---
 
 **First written:** November 2025, for the October 2025 public preview

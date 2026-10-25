@@ -4,6 +4,7 @@ description: "Graph workflows with WorkflowBuilder and WorkflowContext, workflow
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Workflows & declarative agents"
+  order: 10
 ---
 
 This page covers two related capabilities:

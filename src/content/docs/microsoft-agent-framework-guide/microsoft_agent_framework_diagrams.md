@@ -4,6 +4,7 @@ description: "Architecture and flow diagrams for the Microsoft Agent Framework â
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Diagrams"
+  order: 95
 ---
 
 **Purpose:** Visual representation of Agent Framework architecture and system design

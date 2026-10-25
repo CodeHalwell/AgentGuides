@@ -4,6 +4,7 @@ description: "Language-neutral overview of the Microsoft Agent Framework — arc
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Concepts"
+  order: 1
 ---
 
 **Current releases:** `agent-framework` %%version=agent-framework%% (Python) · `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET) — the two version independently. Reviewed %%versions-checked%%: every Python example was import- and signature-checked (and the agent logic run against a stub chat client), and every C# example compiled, against those releases.

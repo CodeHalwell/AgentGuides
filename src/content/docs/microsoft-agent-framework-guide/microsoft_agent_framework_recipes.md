@@ -4,6 +4,7 @@ description: "Language-neutral recipes for common Microsoft Agent Framework scen
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Recipes"
+  order: 80
 ---
 
 **First written:** October 2025 (preview) · **Reviewed:** %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET)  
