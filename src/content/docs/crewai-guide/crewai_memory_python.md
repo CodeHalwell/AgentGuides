@@ -173,7 +173,8 @@ from datetime import datetime, timedelta
 
 cutoff = datetime.utcnow() - timedelta(days=365)
 old_ids = [r.id for r in mem.list_records(scope="/users/ada", limit=1000) if r.created_at < cutoff]
-deleted = mem.forget(record_ids=old_ids)
+# Never call forget(record_ids=[]): an empty list is ignored and the call deletes everything (see below).
+deleted = mem.forget(record_ids=old_ids) if old_ids else 0
 
 # Edit one record (re-embeds the new content)
 mem.update(record_id, content="Ada now prefers DuckDB for analytics.", importance=0.9)
@@ -181,7 +182,9 @@ mem.update(record_id, content="Ada now prefers DuckDB for analytics.", importanc
 
 `forget()` takes `scope`, `categories`, `older_than`, `metadata_filter` and `record_ids` and returns the number of records deleted. `update()` also accepts `scope`, `categories` and `metadata`, returns the updated record, and raises `ValueError` if the id does not exist.
 
-> **`older_than` with only a scope is unsafe in 1.15.28.** On the default LanceDB backend, `mem.forget(scope="/users/ada", older_than=cutoff)` deleted records created seconds earlier in our test, because the scope and date conditions are combined without parentheses (`scope LIKE ... OR scope = '/' AND created_at < ...`) and the scope clause alone matches. `forget(older_than=cutoff)` with no scope, `forget(scope=..., categories=[...], older_than=cutoff)` and `forget(record_ids=[...])` behaved correctly. The example above selects ids in Python for that reason. Try your own call against a scratch store before relying on it.
+> **`older_than` with only a scope is unsafe in 1.15.28.** On the default LanceDB backend, `mem.forget(scope="/users/ada", older_than=cutoff)` deleted records created seconds earlier in our test, because the scope and date conditions are combined without parentheses (`scope LIKE ... OR scope = '/' AND created_at < ...`) and the scope clause alone matches. `forget(older_than=cutoff)` with no scope, `forget(scope=..., categories=[...], older_than=cutoff)` and `forget(record_ids=[...])` behaved correctly. The example above selects ids in Python for that reason.
+>
+> **An empty `record_ids` list deletes everything.** The storage layer only filters by id when the list is non-empty; `forget(record_ids=[])` with no other criteria falls through to `delete("id != ''")` and removes every record (or, with `root_scope` set, everything under it). Always check the list first, as the example does. Try your own call against a scratch store before relying on it.
 
 ## Scope and slice views
 
