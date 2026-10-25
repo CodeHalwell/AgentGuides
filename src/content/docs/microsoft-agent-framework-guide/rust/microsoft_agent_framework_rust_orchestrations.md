@@ -211,7 +211,7 @@ If one participant fails, the whole run fails; there is no partial result. The f
 | `participant(name, agent)` | Register a participant; its description defaults to its name |
 | `participant_described(name, description, agent)` | Register with a description, which an LLM manager chooses by |
 | `participants(iter of (String, agent))` | Register several; adds to any already registered |
-| `round_robin()` | Take turns in registration order (the default) |
+| `round_robin()` | Take turns in registration order (the default; the same as `manager(Arc::new(RoundRobinManager::new()))`) |
 | `manager_fn(\|state\| directive)` | A synchronous closure |
 | `manager(Arc<dyn GroupChatManager>)` | Your own manager type, which may be async |
 | `manager_agent(agent)` | An LLM agent chooses, with prompts ported from Python |
@@ -400,7 +400,7 @@ When an LLM manager finishes with a `final_message`, that text is the last messa
 | --- | --- |
 | `participant(name, agent)`, `participants(iter)` | Register participants |
 | `initial_agent(name)` / `coordinator(name)` | Who receives user input; the first participant if unset |
-| `add_handoff(source).to([targets])` | Restrict who may hand off to whom (see below) |
+| `add_handoff(source).to([targets])` | Restrict who may hand off to whom (see below); `add_handoff` returns a `HandoffEdgeBuilder` whose `to` hands the builder back |
 | `with_user_input_request()` / `interaction_mode(HandoffInteractionMode::HumanInLoop)` | Pause for the user after each answer (the default) |
 | `autonomous()` / `interaction_mode(HandoffInteractionMode::Autonomous)` | Finish on the first answer that is not a handoff |
 | `max_iterations(n)` | Cap on agent turns per user message, default 50; `0` becomes `1` |

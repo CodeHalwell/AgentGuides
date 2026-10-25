@@ -671,7 +671,7 @@ Give each target at most one fan-in group: the barrier is looked up by target, s
 
 ### Building edge groups by hand
 
-The builder methods create `EdgeGroup` values, and the enum is public: `EdgeGroup::Single { source, target, condition }`, `EdgeGroup::FanOut { source, targets, selection, case_labels }` and `EdgeGroup::FanIn { sources, target }`. Each has `sources()`, `targets()` and `has_condition()`. `Condition` and `Selection` are the boxed async-closure types the variants hold; `wrap_sync_condition`, `wrap_async_condition`, `wrap_selection` and `wrap_async_selection` build them. You need these only to call [`validate_workflow_graph`](#validation) on a graph assembled outside the builder; `WorkflowBuilder` has no method that accepts an `EdgeGroup`.
+The builder methods create `EdgeGroup` values, and the enum is public: `EdgeGroup::Single { source, target, condition }`, `EdgeGroup::FanOut { source, targets, selection, case_labels }` and `EdgeGroup::FanIn { sources, target }`. (Selections may return `Vec<String>` or `Result<Vec<String>>` through the `IntoSelectionResult` trait, the counterpart of `IntoConditionResult`.) Each has `sources()`, `targets()` and `has_condition()`. `Condition` and `Selection` are the boxed async-closure types the variants hold; `wrap_sync_condition`, `wrap_async_condition`, `wrap_selection` and `wrap_async_selection` build them. You need these only to call [`validate_workflow_graph`](#validation) on a graph assembled outside the builder; `WorkflowBuilder` has no method that accepts an `EdgeGroup`.
 
 ## Loops and the superstep limit
 
@@ -1039,6 +1039,8 @@ after run: count = Some(Number(1))
 second run count: Some(Number(1))
 ```
 
+`new`, `commit`, `discard`, `export` and `import` are public as well, but they are the runner's hooks for superstep boundaries and checkpoints; calling them from an executor defeats the staging.
+
 Each run starts with an empty store, and `run.shared_state()` stays readable after the run. Keys beginning with `_` are reserved: the handoff and Magentic orchestrations keep their paused state under `_handoff_state`, `_magentic_plan_review_state` and `_magentic_stall_state`. A sub-workflow has its own store, separate from its parent's.
 
 Shared state is the right place for large payloads that several executors need (pass the key along the edge, not the document) and for state that must survive a checkpoint when the executor is a `FunctionExecutor`.
@@ -1282,7 +1284,7 @@ A paused `WorkflowRun` lives in memory, and there is no way to rebuild one from 
 | --- | --- |
 | `checkpoint_id`, `workflow_id`, `workflow_name` | A fresh UUID; the id and name of the workflow that wrote it |
 | `timestamp_millis`, `iteration_count` | When it was written, and how many supersteps had run |
-| `messages` | The queue for the next superstep |
+| `messages` | The queue for the next superstep, as `WorkflowMessage { data, source_id, target_id }` |
 | `fanin_state` | Partially filled fan-in barriers, by target and source |
 | `shared_state` | Committed shared state |
 | `executor_states` | Whatever each executor returned from `snapshot_state` |
