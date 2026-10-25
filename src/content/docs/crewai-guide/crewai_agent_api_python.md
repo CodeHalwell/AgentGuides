@@ -46,7 +46,7 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `role` | `str` | required | Role name; also used as knowledge collection name. |
 | `goal` | `str` | required | Objective. `{placeholders}` are interpolated from crew inputs. |
 | `backstory` | `str` | required | Persona text. `{placeholders}` also interpolated. |
-| `llm` | `str \| BaseLLM \| None` | `None` | Model name (`"openai/%%model=openai%%"`) or `LLM(...)` / `BaseLLM` instance. `None` reads the `MODEL` environment variable, then falls back to CrewAI's default (`gpt-4.1-mini`). |
+| `llm` | `str \| BaseLLM \| None` | `None` | Model name (`"openai/%%model=openai%%"`) or `LLM(...)` / `BaseLLM` instance. `None` reads the `MODEL`, `MODEL_NAME` or `OPENAI_MODEL_NAME` environment variable (in that order), then falls back to CrewAI's default (`gpt-4.1-mini`). |
 | `function_calling_llm` | `str \| BaseLLM \| None` | `None` | Deprecated in the 1.15 line (marked for removal). Overrides the tool-calling LLM only. |
 | `tools` | `list[BaseTool] \| None` | `[]` | Tools the agent may call. See the tools page. |
 | `skills` | `list[Path \| Skill \| str] \| None` | `None` | Agent Skills: directories to discover, inline `SKILL.md` text, `Skill` objects, or `"@org/name"` registry refs. |

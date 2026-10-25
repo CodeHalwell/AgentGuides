@@ -204,7 +204,7 @@ class RetryFlow(Flow[DraftState]):
 print(RetryFlow().kickoff())   # accepted after 3 attempts
 ```
 
-Always keep a counter in state and an exit label; nothing stops an unbounded loop for you.
+Always keep a counter in state and an exit label. As a backstop, `Flow.max_method_calls` (default `100`) makes a run fail with `RecursionError: Method 'check' has been called 100 times in this flow execution, which indicates an infinite loop` when one method is invoked that often; a subclass can lower it with `max_method_calls: int = 10`. Treat it as a safety net, not as your loop condition.
 
 ## Calling crews and agents
 

@@ -56,7 +56,7 @@ gemini = LLM(model="gemini/%%model=gemini%%")                   # needs crewai[g
 local = LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434")
 ```
 
-API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
+API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` (or `MODEL_NAME`, `OPENAI_MODEL_NAME`) environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
 
 ## Simple agents
 

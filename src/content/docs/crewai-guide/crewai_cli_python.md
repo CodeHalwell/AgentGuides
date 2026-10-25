@@ -138,12 +138,14 @@ class MyCrew:
 
     @task
     def reporting_task(self) -> Task:
-        return Task(config=self.tasks_config["reporting_task"])
+        return Task(config=self.tasks_config["reporting_task"], output_file="report.md")
 
     @crew
     def crew(self) -> Crew:
         return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
 ```
+
+`@CrewBase` loads `config/agents.yaml` and `config/tasks.yaml` into `self.agents_config` and `self.tasks_config`, collects the `@agent` and `@task` methods into `self.agents` and `self.tasks` in definition order, and `@crew` returns the `Crew`. We ran the scaffold from `crewai create crew --classic` against a scripted model: both tasks ran in order, the second saw the first's output as context, and `report.md` was written by the `output_file` on `reporting_task`. The agents in the scaffold set no `llm`, so they use the default model unless you add `llm=` or set `MODEL`.
 
 ### `main.py`
 

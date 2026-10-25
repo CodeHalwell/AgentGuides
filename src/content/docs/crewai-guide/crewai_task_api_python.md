@@ -147,7 +147,7 @@ print(Crew(agents=[writer], tasks=[task]).kickoff().raw)
 
 How it behaves (each point checked by running it):
 
-- **Attempts.** `guardrail_max_retries=2` allows three attempts in total: the first, then two retries. If the last attempt still fails, the task raises `Exception("Task failed guardrail validation after 2 retries. Last error: ...")`.
+- **Attempts.** `guardrail_max_retries=2` allows three attempts in total: the first, then two retries. If the last attempt still fails, the task raises `Exception("Task failed guardrail validation after 2 retries. Last error: ...")`; with a `guardrails=[...]` list the message names the failing guardrail by index (`guardrail 0`).
 - **What the agent sees on a retry.** The task prompt gains a block reading "Previous attempt failed validation: <your reason>" followed by the previous result, so make the reason specific.
 - **Chaining.** With `guardrails=[a, b]`, `b` receives the output `a` returned. What a guardrail returns on success becomes the task output, so return `output.raw` unless you mean to rewrite it. Returning `(True, "ok")` replaces the real answer with `"ok"`.
 - **String guardrails.** `guardrail="Output must not mention competitors by name."` makes a separate "Guardrail Agent" call on the agent's LLM for every attempt. That is an extra model call per check; use a function when a code check will do.
