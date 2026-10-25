@@ -4,6 +4,7 @@ description: "Graph workflows with WorkflowBuilder and WorkflowContext, workflow
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Workflows & declarative agents"
+  order: 10
 ---
 
 This page covers two related capabilities:
@@ -226,16 +227,24 @@ A workflow that uses the HTTP-request or MCP-tool actions needs `http_request_ha
 
 ### YAML actions
 
-Declarative workflows use Power Fx expressions and a fixed set of `kind:` actions. The full reference is in [Microsoft's documentation](https://learn.microsoft.com/agent-framework/workflows/declarative/).
+Declarative workflows use Power Fx expressions and a fixed set of `kind:` actions. The full reference is in [Microsoft's documentation](https://learn.microsoft.com/agent-framework/workflows/declarative/), which also covers the .NET loader.
+
+The Python loader (`agent-framework-declarative` 1.3.0) builds these kinds:
 
 | Category | Actions |
 |---|---|
-| Variables | `SetVariable`, `SetMultipleVariables`, `AppendValue`, `ResetVariable`, `SetValue` |
-| Control flow | `If`, `ConditionGroup`, `Foreach`, `RepeatUntil`, `BreakLoop`, `ContinueLoop`, `GotoAction` |
-| Output | `SendActivity`, `EmitEvent` |
-| Agents and tools | `InvokeAzureAgent`, `InvokeFunctionTool` |
-| Human in the loop | `Question`, `Confirmation`, `RequestExternalInput`, `WaitForInput` |
-| Workflow control | `EndWorkflow`, `EndConversation`, `CreateConversation` |
+| Variables | `SetVariable`, `SetMultipleVariables`, `SetTextVariable`, `SetValue`, `ResetVariable`, `ClearAllVariables`, `ParseValue`, `EditTable`, `EditTableV2` |
+| Control flow | `If`, `ConditionGroup`, `Foreach`, `BreakLoop`, `ContinueLoop`, `GotoAction` |
+| Output | `SendActivity` |
+| Agents and tools | `InvokeAzureAgent`, `InvokeFunctionTool`, `HttpRequestAction`, `InvokeMcpTool` |
+| Human in the loop | `Question`, `RequestExternalInput` |
+| Workflow control | `EndWorkflow`, `EndConversation`, `EndDialog`, `CancelDialog`, `CancelAllDialogs`, `CreateConversation` |
+
+Any other `kind:` (for example `RepeatUntil`, `Confirmation` or `EmitEvent`, which appear in other Copilot Studio dialects) is skipped with a logged warning rather than rejected, so check the log when a step seems to do nothing. `ALL_ACTION_EXECUTORS` in `agent_framework_declarative._workflows` lists the supported kinds for your installed version.
+
+Power Fx expressions (values starting with `=`) are evaluated by the .NET Power Fx engine through `pythonnet`, so a .NET runtime must be installed; without one the run fails with `RuntimeError: PowerFx is not available`. A workflow that writes checkpoints also needs `agent_framework_declarative._workflows._declarative_base:ActionComplete` in the storage's `allowed_checkpoint_types`, otherwise every checkpoint save fails (the run itself continues).
+
+The YAML below runs as shown and outputs `['Hello, Ada!']` for `workflow.run({"name": "Ada"})`:
 
 ```yaml
 kind: AdaptiveDialog
@@ -259,3 +268,9 @@ actions:
 - [Functional workflows](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/)
 - [Agents as tools (`as_tool()`)](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#wrapping-an-agent-as-a-tool--as_tool)
 - [Declarative workflows on Microsoft Learn](https://learn.microsoft.com/agent-framework/workflows/declarative/)
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-25 | 1.22.0 | Replaced the YAML action table with the kinds the Python loader actually builds (`AppendValue`, `RepeatUntil`, `EmitEvent`, `Confirmation` and `WaitForInput` are not among them and are skipped with a warning). Added the .NET runtime requirement for Power Fx and the checkpoint allow-list entry declarative workflows need. |

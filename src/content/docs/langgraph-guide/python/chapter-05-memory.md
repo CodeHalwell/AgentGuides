@@ -328,7 +328,7 @@ print(result["response"])   # [theme=dark] Echo: Hello!
 
 ### Using `InjectedStore` in tools
 
-When a tool needs store access, annotate the parameter with `InjectedStore` (requires `langchain-core >= 0.3.8`):
+When a tool run by `ToolNode` (or `create_agent`) needs store access, annotate the parameter with `InjectedStore()`:
 
 ```python
 from typing import Annotated, Any
@@ -396,7 +396,7 @@ def load_memories(state: AppState, runtime: Runtime[AppContext]) -> dict:
     uid = runtime.context.user_id
     mem_item = runtime.store.get(("users", uid), "memories")
     memories = mem_item.value.get("text", "") if mem_item else ""
-    # Inject a synthetic "system" message with the user's memories
+    # Add the user's memories to the conversation as an extra message
     if memories:
         return {
             "messages": [HumanMessage(content=f"[Your memories about me: {memories}]")]
@@ -517,9 +517,50 @@ async def async_memory_node(state: AppState, runtime: Runtime[AppContext]) -> di
 
 ---
 
+## Durable stores
+
+`InMemoryStore` loses everything when the process exits. Two durable implementations ship as separate packages, with the same `BaseStore` interface (`get`, `put`, `search`, `delete`, `list_namespaces` and their `a`-prefixed async versions):
+
+| Store | Package | Async class | Vector search |
+|---|---|---|---|
+| `SqliteStore` (`langgraph.store.sqlite`) | `langgraph-checkpoint-sqlite` | `AsyncSqliteStore` (`langgraph.store.sqlite.aio`) | Yes, via `sqlite-vec` (installed with the package) |
+| `PostgresStore` (`langgraph.store.postgres`) | `langgraph-checkpoint-postgres` | `AsyncPostgresStore` (`langgraph.store.postgres.aio`) | Yes, via the `pgvector` extension |
+
+Both need `setup()` once to create their tables, and both have a `from_conn_string(...)` context manager. A SQLite store is a good fit for a single-process app or a local tool; use Postgres when several processes or machines share the memory.
+
+```python
+from langgraph.store.sqlite import SqliteStore
+
+with SqliteStore.from_conn_string("memory.db") as store:
+    store.setup()
+    store.put(("users", "alice"), "prefs", {"theme": "dark"})
+    print(store.get(("users", "alice"), "prefs").value)   # {'theme': 'dark'}
+```
+
+Pass `store=` to `compile()` exactly as with `InMemoryStore`; nodes and tools see the same interface.
+
 ## Store TTL (Time to Live)
 
-`InMemoryStore` does not support TTL: `store.supports_ttl` is `False`, and `put(..., ttl=...)` raises `NotImplementedError`. Use `PostgresStore` (or `AsyncPostgresStore`) from `langgraph-checkpoint-postgres`, configure a default TTL in **minutes**, and start the background sweeper that deletes expired items:
+`InMemoryStore` does not support TTL: `store.supports_ttl` is `False`, and `put(..., ttl=...)` raises `NotImplementedError`. `SqliteStore` and `PostgresStore` do. Configure a default TTL in **minutes** with `ttl=`; `put(..., ttl=...)` overrides it per item. Expired rows are deleted by `sweep_ttl()` (one pass, returns the number removed) or by a background sweeper started with `start_ttl_sweeper()`; until a sweep runs, `get` can still return an expired item. `PostgresStore` also accepts `"omit_expired": True` in the TTL config to hide expired items from reads before they are swept; `SqliteStore` does not implement that option in %%version=langgraph-checkpoint-sqlite%%.
+
+```python
+import time
+from langgraph.store.sqlite import SqliteStore
+
+with SqliteStore.from_conn_string(
+    "memory.db",
+    ttl={"default_ttl": 60 * 24 * 30, "refresh_on_read": True},  # 30 days
+) as store:
+    store.setup()
+    store.put(("users", "alice"), "prefs", {"theme": "dark"})          # default TTL
+    store.put(("sessions",), "otp", {"code": "481516"}, ttl=0.01)     # 0.6 seconds
+    time.sleep(2)
+    print("swept:", store.sweep_ttl())                    # swept: 1
+    print(store.get(("sessions",), "otp"))                # None
+    print(store.get(("users", "alice"), "prefs").value)   # {'theme': 'dark'}
+```
+
+The same configuration on Postgres, with the background sweeper:
 
 ```python
 from langgraph.store.postgres import PostgresStore
@@ -538,7 +579,7 @@ with PostgresStore.from_conn_string(
     store.stop_ttl_sweeper()
 ```
 
-With `refresh_on_read=True`, reading an item restarts its clock. On the LangGraph Agent Server, set `store.ttl` in `langgraph.json` instead; the server runs the sweeper ([production guide](/langgraph-guide/python/langgraph_production_guide/#project-layout-and-langgraphjson)).
+With `refresh_on_read=True` (the default), reading an item restarts its clock; pass `refresh_ttl=False` to `get`/`search` to read without refreshing. On the LangGraph Agent Server, set `store.ttl` in `langgraph.json` instead; the server runs the sweeper ([production guide](/langgraph-guide/python/langgraph_production_guide/#project-layout-and-langgraphjson)).
 
 ---
 

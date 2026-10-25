@@ -90,31 +90,24 @@ class AgentState(TypedDict):
 
 
 # --- Specialist agent nodes -------------------------------------------------
-# Each specialist has its own LLM bound to its tools and its own ToolNode.
-# In a real app swap the stub LLM below for ChatOpenAI(...).bind_tools(tools).
+# Each specialist has its own model bound to its tools and its own ToolNode.
 
-try:
-    from langchain_openai import ChatOpenAI
-    research_llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(research_tools)
-    math_llm     = ChatOpenAI(model="%%model=openai-small%%").bind_tools(math_tools)
-    _have_llm = True
-except Exception:
-    _have_llm = False  # running without API key — demo only
+from langchain_openai import ChatOpenAI
+
+research_llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(research_tools)
+math_llm = ChatOpenAI(model="%%model=openai-small%%").bind_tools(math_tools)
 
 
 def research_agent(state: AgentState) -> dict:
-    if _have_llm:
-        response = research_llm.invoke(state["messages"])
-    else:
-        response = AIMessage(content="[research stub] results found")
+    response = research_llm.invoke(state["messages"])
+    # Tag the reply so the supervisor can tell which specialist produced it.
+    response.name = "research_agent"
     return {"messages": [response], "active_specialist": "research"}
 
 
 def math_agent(state: AgentState) -> dict:
-    if _have_llm:
-        response = math_llm.invoke(state["messages"])
-    else:
-        response = AIMessage(content="[math stub] 42")
+    response = math_llm.invoke(state["messages"])
+    response.name = "math_agent"
     return {"messages": [response], "active_specialist": "math"}
 
 
@@ -185,6 +178,7 @@ print("Last message:", result["messages"][-1].content)
 Key design decisions:
 
 - `supervisor` returns `Command(goto=...)` — no `add_edge` from `supervisor` to the workers needed.
+- Each specialist sets `name` on its reply. The supervisor uses that to stop once a specialist has answered; without it, a reply that happens to contain "what" or "-" would be routed straight back to a specialist, and the graph would loop until it hit the recursion limit.
 - Specialists loop back through their `ToolNode` when they emit tool calls, then return to `supervisor`.
 - Annotating the supervisor's return type as `Command[Literal["research_agent", "math_agent", "__end__"]]` (or passing `destinations=` to `add_node`) makes the Mermaid diagram show those edges. LangGraph checks at compile time that the targets exist.
 
@@ -221,7 +215,7 @@ class WorkerPayload(TypedDict):
 def dispatch(state: WorkflowState) -> list[Send]:
     """Fan-out: one Send per task launches that many parallel worker copies."""
     return [
-        Send("worker", {"task_id": t["id"], "task_data": t["data"], "results": []})
+        Send("worker", {"task_id": t["id"], "task_data": t["data"]})
         for t in state["tasks"]
     ]
 
@@ -270,8 +264,8 @@ for r in result["results"]:
 Notes:
 
 - `Annotated[list[dict], operator.add]` is a `BinaryOperatorAggregate` channel — each worker appends its list, and `operator.add` concatenates them all.
-- `Send("worker", {...})` delivers a custom snapshot to the worker node; workers never see `WorkflowState` directly — only their payload.
-- The barrier edge `add_edge(["worker"], "aggregate")` (implicit when every Send targets the same downstream node) ensures `aggregate` runs **once** after all workers finish.
+- `Send("worker", {...})` delivers a custom payload to the worker node; workers never see `WorkflowState` directly — only their payload. Because `worker_node` is annotated with `WorkerPayload`, that is its input schema.
+- All the `Send` tasks run in the same super-step. Each one writes to the `aggregate` edge, and `aggregate` runs **once**, in the next super-step, after every worker in that step has finished. If workers take different numbers of steps (for example, some go through an extra node), use `add_edge(["worker_a", "worker_b"], "aggregate")` to wait for named nodes, or a `defer=True` node.
 
 ---
 
@@ -468,7 +462,7 @@ print("Last message:", result["messages"][-1].content)
 Key subgraph rules:
 
 - `checkpointer=True` tells the subgraph to inherit the parent's checkpointer instead of running unchecked. Use `checkpointer=False` to disable checkpointing for a subgraph even when the parent has one.
-- The subgraph's state schema (`ResearchState`) is separate from the parent's (`OrchestratorState`). State is **not** shared between levels automatically — the parent passes its input to the subgraph node and receives its output.
+- The subgraph's state schema (`ResearchState`) is separate from the parent's (`OrchestratorState`). When a compiled graph is added directly as a node, the two communicate through the keys they **share** (`messages` here): the subgraph receives the parent's values for those keys, and its output for those keys is applied to the parent with the parent's reducers. Keys only the subgraph has (`findings`) stay inside it. If the schemas share no keys, call the subgraph from a normal node function and map the state yourself.
 - Streaming with `subgraphs=True` on the parent graph exposes events emitted inside the subgraph with their namespace path.
 
 ---
@@ -594,9 +588,9 @@ print(result["messages"][-1].content)
 Key points about `as_tool()`:
 
 - The graph's **input schema** is inferred from its state `TypedDict` if you don't pass `args_schema`. Pass an explicit Pydantic model to control exactly which fields the LLM sees.
-- The tool returns the **final state** as a dict. Wrap the result if you want a string output for the `ToolMessage`.
-- `as_tool()` is marked **beta** — the API surface may change in future LangGraph versions.
-- For nested graphs that need human-in-the-loop, use a subgraph node (Example 4) instead, since tool calls don't support mid-execution interrupts.
+- The tool returns the **final state** as a dict, which `ToolNode` turns into the `ToolMessage` content with `str()`. Wrap the graph in your own `@tool` function if you want to return only `summary`.
+- `as_tool()` comes from LangChain's `Runnable` interface and is marked **beta** — the API surface may change.
+- The inner graph runs as an ordinary nested call inside the tool, not as a subgraph node, so its state does not appear in the parent's `get_state(..., subgraphs=True)` and it is not resumed from its own checkpoints. Use a subgraph node (Example 4) when you need to inspect, interrupt or resume the inner graph.
 
 ---
 
@@ -702,7 +696,8 @@ print(r2["final_answer"])   # "Escalated task handled at supervisor level."
 
 Rules for `Command.PARENT`:
 
-- The state keys in `Command(update=...)` must exist in the **parent's** state schema. Writing to a key the parent doesn't have raises `InvalidUpdateError`.
+- The state keys in `Command(update=...)` must exist in the **parent's** state schema. A key the parent doesn't have is silently dropped (checked against %%version=langgraph%%), so a typo here fails quietly.
+- If the parent key has no reducer and other nodes in the same step also write it, the parent raises `InvalidUpdateError`; give shared keys a reducer.
 - `Command.PARENT` navigates the **closest** parent — if graphs are nested 3 levels deep, it targets level 2, not level 1.
 - Do not list the parent's nodes in the child's `destinations=`: the child graph is validated on its own, so `child_builder.compile()` would fail with `Found edge ending at unknown node`.
 

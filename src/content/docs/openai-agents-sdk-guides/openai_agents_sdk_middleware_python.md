@@ -271,6 +271,7 @@ Points to know:
 - `state.approve(item, always_approve=True)` approves that tool for the rest of the run; `always_reject=True` does the reverse.
 - The serialised state contains pending tool calls and approval decisions. Store it server-side and only reload snapshots you wrote; do not accept a state string from a client.
 - With streaming, read `result.interruptions` after the stream finishes, then resume with `Runner.run_streamed(agent, state)`.
+- Tool input guardrails and approvals interact. By default the approval check comes first: a call that needs approval pauses the run before its input guardrails run, and the guardrails run only after a person approves. To reject a bad call (an amount over a limit, say) without bothering anyone, run the input guardrails before the pause with `RunConfig(tool_execution=ToolExecutionConfig(pre_approval_tool_input_guardrails=True))`. The guardrails still run again just before execution after approval.
 - Hosted MCP tools use the same mechanism when `require_approval` is set (see [Hosted MCP tools](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#hosted-mcp-tools)).
 
 ## Filtering model input

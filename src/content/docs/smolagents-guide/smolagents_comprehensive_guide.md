@@ -8,7 +8,7 @@ sidebar:
   order: 1
 ---
 
-> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Examples that need no external service were executed with a stub model; the Hub, MCP, Docker, Gradio and image examples were checked for imports and signatures.
+> Verified against `smolagents` %%version=smolagents%% (checked %%versions-checked%%). Examples that need no external service were run with a scripted model (a `Model` subclass that returns prepared replies, shown in the [production guide](/smolagents-guide/smolagents_production_guide/#unit-testing-tools)); the MCP and telemetry examples were run against a local MCP server and an in-memory span exporter; the Hub, Space, Docker, E2B, Modal, Blaxel and browser examples were checked against the installed source for names, signatures and defaults.
 
 smolagents is Hugging Face's small agent library. Its distinctive idea is the **CodeAgent**: instead of emitting one JSON tool call per step, the model writes a short Python snippet that can call several tools, loop, branch and keep intermediate results in variables. A conventional **ToolCallingAgent** is included for cases where JSON tool calls suit better. The library is deliberately compact; the agent logic lives in a single `agents.py` you can read in an afternoon.
 
@@ -199,9 +199,11 @@ model = InferenceClientModel(
     temperature=0.2,               # passed through to the provider
 )
 
-# A dedicated Inference Endpoint or any TGI/OpenAI-compatible URL
-endpoint_model = InferenceClientModel(base_url="https://my-endpoint.endpoints.huggingface.cloud")
+# A dedicated Inference Endpoint: pass its URL as the model ID
+endpoint_model = InferenceClientModel(model_id="https://my-endpoint.endpoints.huggingface.cloud")
 ```
+
+`model_id` may be a Hub model ID or the URL of a deployed Inference Endpoint. `InferenceClientModel` also accepts `base_url=`, but only if you do not also give a `model_id`: the constructor's default `model_id` is always passed on, so `InferenceClientModel(base_url=...)` raises `ValueError: Received both model and base_url arguments`. For a self-hosted OpenAI-compatible server (vLLM, LM Studio, a gateway) use `OpenAIModel(api_base=...)` instead. `provider` is ignored when a URL is used. Besides `token`, the constructor takes `api_key` (an alias for the same thing), `bill_to` (bill an organisation you belong to) and `client_kwargs` for the underlying `huggingface_hub.InferenceClient`.
 
 Always pass a `model_id`. The default, `Qwen/Qwen3-Next-80B-A3B-Thinking`, had no live provider when this page was checked on 2026-10-21, so `InferenceClientModel()` with no arguments is likely to fail. A model's "Inference Providers" panel on the Hub, or `https://router.huggingface.co/v1/models`, shows which providers serve it now and whether they support tool calling; providers come and go, so check before you pin one.
 
@@ -300,7 +302,7 @@ In practice `LiteLLMModel(model_id="ollama_chat/...")` or `OpenAIModel(api_base=
 
 ### Model Selection Decision Tree
 
-- **Exploring, free tier**: `InferenceClientModel(model_id=...)` with an `HF_TOKEN` (Hugging Face accounts include a small monthly inference credit).
+- **Exploring, free tier**: `InferenceClientModel(model_id=...)` with an `HF_TOKEN` (Hugging Face accounts include some Inference Providers usage; check the current allowance on the Hub).
 - **Hosted frontier models**: `LiteLLMModel` or `OpenAIModel`.
 - **Your own GPU**: `VLLMModel` (throughput) or `TransformersModel` (simplicity).
 - **Offline laptop**: `LiteLLMModel(model_id="ollama_chat/...")` or `MLXModel`.
@@ -403,7 +405,7 @@ print(result.output)                  # 180
 print(result.state)                   # "success" or "max_steps_error"
 print(result.token_usage)             # TokenUsage(input_tokens=..., output_tokens=..., total_tokens=...)
 print(result.timing.duration)         # seconds
-print(len(result.steps))              # steps as dicts
+print(len(result.steps))              # every memory step as a dict, including the task and any plan
 
 # After any run, the full memory is on the agent
 for step in agent.memory.steps:
@@ -411,9 +413,79 @@ for step in agent.memory.steps:
 agent.replay()                        # pretty-print the last run
 ```
 
+### Memory and steps
+
+An agent's memory is `agent.memory`, an `AgentMemory` holding the system prompt and a list of steps. Each `run()` appends to it (after clearing it, unless you pass `reset=False`). The step types are:
+
+| Step | Added when | Useful fields |
+|------|-----------|---------------|
+| `TaskStep` | `run()` starts | `task`, `task_images` |
+| `PlanningStep` | A plan is written (see [Planning](#planning)) | `plan`, `token_usage`, `timing` |
+| `ActionStep` | Each pass of the loop | `step_number`, `model_output`, `code_action` (CodeAgent), `tool_calls`, `observations`, `observations_images`, `error`, `action_output`, `token_usage`, `timing`, `is_final_answer` |
+
+`FinalAnswerStep` is yielded by `run(..., stream=True)` and passed to step callbacks, but it is not stored in `memory.steps`. On every model call the steps are turned back into chat messages: the task as a user message, the model's output as an assistant message, tool calls and `Observation:` text as tool messages, and errors with a "now let's retry" instruction. That is all the model knows about earlier steps, so whatever you change in memory changes what it sees next.
+
+```python
+from smolagents import ActionStep, CodeAgent, PlanningStep, TaskStep
+
+agent = CodeAgent(tools=[], model=model, planning_interval=3)
+agent.run("What is the sum of the squares of 1 to 10?")
+
+for step in agent.memory.steps:
+    if isinstance(step, TaskStep):
+        print("task:", step.task)
+    elif isinstance(step, PlanningStep):
+        print("plan:", step.plan[:80])
+    elif isinstance(step, ActionStep):
+        print(step.step_number, "code:", step.code_action, "| error:", step.error)
+
+print(agent.memory.return_full_code())        # every code action joined into one script
+rows = agent.memory.get_succinct_steps()      # list of dicts, without the prompt messages
+full = agent.memory.get_full_steps()          # the same with model_input_messages (large)
+agent.write_memory_to_messages()              # the chat messages the next model call would receive
+```
+
+Three practical uses:
+
+- **Continuing a conversation.** `run(task, reset=False)` keeps the steps, so a follow-up question can refer to earlier answers. Memory is in the process only; to survive a restart, store `get_full_steps()` (or just the tasks and answers) yourself and rebuild the context in a new task.
+- **Keeping memory small.** Memory grows with every step and is sent in full each time. A step callback can edit old steps, for example setting `observations_images = None` on screenshots (see [Advanced CodeAgent patterns](#advanced-codeagent-patterns)). Do not remove the `TaskStep`.
+- **Debugging.** `agent.replay()` pretty-prints the run; `agent.replay(detailed=True)` also prints the messages sent at each step, which is long.
+
+`RunResult.steps` (from `return_full_result=True`) is the same information as dicts, so it contains the task and any plan as well as the action steps. To count only the action steps use `sum("step_number" in s for s in result.steps)`.
+
+### Planning
+
+By default an agent starts acting straight away. Set `planning_interval=N` (on either agent class) and it first writes a plan, then revises it every N steps: with `planning_interval=3` the plan is written before steps 1, 4, 7 and so on. Planning is a separate model call that costs tokens each time, so it pays off on long, multi-part tasks and is wasted on short ones.
+
+How it works, as implemented in `MultiStepAgent`:
+
+- The first plan comes from a single prompt (`prompt_templates["planning"]["initial_plan"]`) that contains the task, the tool descriptions and any managed agents, and nothing else: not the system prompt. The model is asked to stop at `<end_plan>`.
+- Later plans are updates. The model receives the memory so far (without the system prompt or earlier plans, so as not to anchor on them), framed by `update_plan_pre_messages` and `update_plan_post_messages`; the latter can use `remaining_steps`.
+- The result is stored as a `PlanningStep`. On later model calls it appears in the conversation as an assistant message, followed by a user message "Now proceed and carry out this plan.".
+- `PlanningStep` is yielded when streaming and passed to step callbacks registered for it, which is how you [review or edit a plan before it is used](/smolagents-guide/smolagents_recipes/#recipe-21-human-in-the-loop-plan-review).
+
+The planning prompts are Jinja templates in `agent.prompt_templates["planning"]`, so you can change them after construction. The variables available are `task`, `tools` (a dict of tool name to tool) and `managed_agents` for the initial plan, and the same plus `remaining_steps` for the update.
+
+```python
+from smolagents import CodeAgent, PlanningStep
+
+agent = CodeAgent(tools=[], model=model, planning_interval=3, max_steps=9)
+
+agent.prompt_templates["planning"]["initial_plan"] = (
+    "Write a numbered plan of at most five steps for this task: {{ task }}\n"
+    "Available tools: {% for t in tools.values() %}{{ t.name }} {% endfor %}\n"
+    "Finish with <end_plan>."
+)
+
+agent.run("Work out how many days there are between 3 March and 19 October in a non-leap year.")
+plans = [s.plan for s in agent.memory.steps if isinstance(s, PlanningStep)]
+```
+
+The stored `plan` text is the model's output wrapped in a fixed sentence ("Here are the facts I know and the plan of action that I will follow to solve the task:") and a code fence. A `ToolCallingAgent` plans in exactly the same way.
+
 ### Streaming Outputs for Real-Time Visibility
 
-`run(..., stream=True)` yields steps and events as they happen: `PlanningStep`, `ActionStep` and `FinalAnswerStep`, plus `ToolCall` and `ActionOutput` events within a step (a `ToolCallingAgent` also yields `ToolOutput`). With `stream_outputs=True` on the agent you also receive `ChatMessageStreamDelta` token chunks. Events you do not handle can be ignored, as below.
+`run(..., stream=True)` yields steps and events as they happen: `PlanningStep`, `ActionStep` and `FinalAnswerStep`, plus `ToolCall` and `ActionOutput` events within a step (a `ToolCallingAgent` also yields `ToolOutput`). With `stream_outputs=True` on the agent you also receive `ChatMessageStreamDelta` token chunks. Events you do not handle can be ignored, as below. `stream_outputs=True` needs a model that implements `generate_stream`; the built-in models do, and a custom `Model` subclass that does not makes the agent raise `ValueError` at construction.
 
 ```python
 from smolagents import ActionStep, ChatMessageStreamDelta, FinalAnswerStep, PlanningStep
@@ -594,23 +666,59 @@ collection = ToolCollection.from_hub("your-username/your-tool-collection-slug", 
 get_hotel_price.push_to_hub("your-username/hotel-price-tool")
 ```
 
-MCP servers (`pip install "smolagents[mcp]"`):
+A tool written with `@tool` or as a `Tool` subclass can be written to a folder with `tool.save("./my_tool")` (which produces `tool.py`, `app.py` and `requirements.txt`) and shared with `tool.push_to_hub(repo_id)`. Saving copies the function's source and nothing else, so the tool must be self-contained:
+
+- Module-level variables and helper functions are not carried along, and `save()` fails with a validation error naming them (`Name 'RATES' is undefined`).
+- Module-level imports are also not copied, and `save()` does not always notice: a tool that calls `math.sqrt` but imports `math` at the top of your script saves without error and fails when loaded. Put imports inside `forward` (or inside the decorated function).
+- `Tool.from_code(source)` rebuilds a tool from the saved `tool.py` text.
+
+The same rule applies when a tool runs in a [remote sandbox](#sandboxes-hub-sharing-and-multimodal-input), where the tool is rebuilt from its source.
+
+A tool does not need to be on the Hub to be reused: a plain Python module that defines it is usually the better place for tools your own team shares.
+
+#### MCP servers
+
+`MCPClient` connects to one or more [Model Context Protocol](https://modelcontextprotocol.io/) servers and turns each of their tools into a smolagents `Tool` (`pip install "smolagents[mcp]"`). It connects when constructed and, used as a context manager, returns the list of tools and disconnects on exit. The server below is a complete local example, written with the MCP Python SDK's `FastMCP` helper (`mcp<2`, see the note after the example):
 
 ```python
+# demo_server.py
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("demo")
+
+
+@mcp.tool()
+def add(a: int, b: int) -> int:
+    """Add two numbers."""
+    return a + b
+
+
+if __name__ == "__main__":
+    mcp.run()          # stdio transport
+```
+
+```python
+import sys
+
 from mcp import StdioServerParameters
 from smolagents import CodeAgent, MCPClient
 
-server = StdioServerParameters(command="uvx", args=["mcp-server-fetch"])
+server = StdioServerParameters(command=sys.executable, args=["demo_server.py"])
 
-# also accepts {"url": ".../mcp", "transport": "streamable-http"}
 with MCPClient(server, structured_output=True) as tools:
     agent = CodeAgent(tools=tools, model=model)
-    agent.run("Fetch https://huggingface.co/blog and list the three newest post titles.")
+    print(agent.run("What is 2 + 3? Use the add tool."))
 ```
 
-Pass `structured_output=` explicitly: `True` exposes MCP tools' output schemas to the agent, and leaving it unset triggers a `FutureWarning` about a future change of default. `ToolCollection.from_mcp(server, trust_remote_code=True, structured_output=True)` is the older context manager for the same job; it yields a collection whose `.tools` you pass to the agent.
+Notes on behaviour, all checked against this server:
 
-> **Compatibility note (checked %%versions-checked%%):** the `mcpadapt` 0.1.20 dependency imports `streamablehttp_client`, which the `mcp` 2.x SDK renamed. If `MCPClient` fails with `ImportError: cannot import name 'streamablehttp_client'`, install `"mcp<2"` alongside `smolagents[mcp]` until `mcpadapt` catches up.
+- **Transports.** A `StdioServerParameters` starts the server as a subprocess and talks over stdin/stdout (`uvx mcp-server-fetch` and `npx` servers work this way). A dict `{"url": "http://localhost:8000/mcp", "transport": "streamable-http"}` connects to a running server; `"streamable-http"` is the default when `transport` is omitted, and `"sse"` is also accepted. Pass a **list** of either kind to connect several servers at once and get all their tools in one list.
+- **Structured output.** With `structured_output=True` the tool's declared output schema is shown to the model, and results arrive as dicts (the `add` tool above returns `{'result': 5}`, and its `output_type` is `"object"`). With `False` you get the server's text content. Leaving it unset behaves as `False` but emits a `FutureWarning` announcing that the default will become `True`; the 1.26.0 code still defaults to `False`, so set it explicitly.
+- **Lifecycle without `with`.** `client = MCPClient(server, structured_output=True)`, then `client.get_tools()`, and always `client.disconnect()` in a `finally` block. The tool list is fixed at connection time.
+- **Trust.** A stdio server runs with your user's permissions, and a remote server's tool names and descriptions go straight into the agent's prompt. Connect only to servers you trust, and prefer a [sandboxed executor](#sandboxes-hub-sharing-and-multimodal-input) when the generated code will call them.
+- **Older form.** `ToolCollection.from_mcp(server, trust_remote_code=True, structured_output=True)` is a context manager that yields a collection; pass its `.tools` to the agent. It requires `trust_remote_code=True` for the same reason as above.
+
+> **Compatibility note (checked %%versions-checked%%):** the `mcpadapt` 0.1.20 dependency imports `streamablehttp_client`, which the `mcp` 2.x SDK renamed. With `mcp` 2.3.0 installed, `MCPClient(...)` fails with `ImportError: cannot import name 'streamablehttp_client'`. Install `"mcp<2"` alongside `smolagents[mcp]` until `mcpadapt` catches up; the example above was run with `mcp` 1.30.0.
 
 ### Tool Attributes & Schema
 
@@ -656,9 +764,16 @@ agent = CodeAgent(
 )
 ```
 
+What the local executor does and does not do, as implemented in `LocalPythonExecutor`:
+
+- **Imports.** Generated code may import only `collections`, `datetime`, `itertools`, `math`, `queue`, `random`, `re`, `stat`, `statistics`, `time` and `unicodedata`, plus whatever you add in `additional_authorized_imports`. Anything else fails with an `InterpreterError` that the model sees, so it can choose another approach. An authorised module is trusted with everything it can do: with only `pandas` authorised, generated code cannot call `open`, but `df.to_csv("/some/path")` still writes a file. Authorising `"*"`, or modules such as `os` and `subprocess`, removes the guard altogether.
+- **Limits.** Execution stops after 30 seconds by default (`timeout_seconds`; `None` disables it), after 10,000,000 interpreted operations, and after 1,000,000 iterations of one `while` loop. The timeout runs the code in a worker thread and gives up waiting; Python cannot kill a thread, so a runaway computation keeps using CPU in the background after the agent has moved on.
+- **State.** Variables, functions and imports persist between steps in the same run, and tools are callable as functions. `additional_args` are placed in the same namespace.
+- **Custom executor.** `CodeAgent(executor=my_executor)` takes any `PythonExecutor` instance in place of `executor_type`; most readers will not need it.
+
 ### Advanced CodeAgent Patterns
 
-**Planning.** `planning_interval=N` makes the agent write a plan before the first step and revise it every N steps. Useful for long tasks; costs an extra model call each time.
+**Planning.** `planning_interval=N` makes the agent write a plan before the first step and revise it every N steps; see [Planning](#planning). It costs an extra model call each time.
 
 **Final answer checks.** Each check receives the proposed answer and the agent's memory; return `True` to accept or raise/return `False` to send the agent back to work with the error message.
 
@@ -670,7 +785,7 @@ def must_be_number(final_answer, memory, agent=None) -> bool:
 agent = CodeAgent(tools=[], model=model, final_answer_checks=[must_be_number])
 ```
 
-**Step callbacks.** Called after each step with `(memory_step, agent=...)`. Pass a list (all step types) or a dict keyed by step class.
+**Step callbacks.** Called after each step with `(memory_step, agent=...)`; a callback that takes only one parameter receives just the step. Pass a **list**, which registers the callbacks for `ActionStep` only, or a **dict** keyed by step class to choose the step types. Matching follows the class hierarchy, so a callback registered for `MemoryStep` (the base class, importable from `smolagents.memory`) runs for every step the agent reports: each `PlanningStep` and `ActionStep`, and the closing `FinalAnswerStep`. (`TaskStep` is not passed to callbacks.)
 
 ```python
 from smolagents import ActionStep, PlanningStep
@@ -702,7 +817,7 @@ agent = CodeAgent(
 
 ### When CodeAgent saves steps
 
-Code actions help most when a task needs many tool calls whose results feed each other (aggregation, loops over items, arithmetic). For single-tool lookups the difference is negligible. Measure with `result.token_usage` and `len(result.steps)` on your own tasks before choosing.
+Code actions help most when a task needs many tool calls whose results feed each other (aggregation, loops over items, arithmetic). For single-tool lookups the difference is negligible. Measure with `result.token_usage` and the number of action steps (see [Memory and steps](#memory-and-steps)) on your own tasks before choosing.
 
 ---
 
@@ -785,7 +900,40 @@ manager = CodeAgent(
 print(manager.run("Find the populations of the five largest EU cities and compute their mean."))
 ```
 
-Names must be valid Python identifiers (no spaces); a `CodeAgent` manager calls `web_researcher(task="...")` in its code.
+Names must be valid Python identifiers (no spaces) and both `name` and `description` are required, otherwise the manager's constructor raises. A `CodeAgent` manager calls `web_researcher(task="...")` in its code; a `ToolCallingAgent` manager issues a tool call named `web_researcher` with a `task` argument. Managed agents do not appear in the manager's `tools`; they are listed in `manager.managed_agents`.
+
+What to know about delegation:
+
+- **The manager sees a string.** The sub-agent's `final_answer` is wrapped in a report ("Here is the final answer from your managed agent 'web_researcher': ..."). Anything the sub-agent computed but did not return is lost, so write the brief and the `description` to say what the answer must contain. With `provide_run_summary=True` the report also carries a truncated summary of the sub-agent's steps, which costs manager context.
+- **Each call starts fresh.** A delegation runs the sub-agent with `reset=True`, so it does not remember earlier delegations. The manager can pass data along with `web_researcher(task="...", additional_args={"urls": urls})`.
+- **Each agent has its own budget.** `max_steps`, `planning_interval`, tools and model are per agent, and the tokens of every sub-agent run count toward your bill but not toward the manager's `RunResult.token_usage`.
+
+A `ToolCallingAgent` can manage a `CodeAgent` just as well. This suits a coordinator that never executes code itself but delegates to an analyst that does. The constructor's remote-executor restriction (see [Remote executors](#remote-executors)) applies to the agent that *has* managed agents, so the analyst here could be given `executor_type="docker"` while the coordinator, which has none of its own code to run, stays as it is:
+
+```python
+from smolagents import CodeAgent, ToolCallingAgent, tool
+
+
+@tool
+def lookup_population(city: str) -> int:
+    """Look up a city's population (demo data).
+
+    Args:
+        city: City name, e.g. "Lyon".
+    """
+    return {"Lyon": 522_000, "Paris": 2_100_000}[city]
+
+
+analyst = CodeAgent(
+    tools=[lookup_population],
+    model=model,
+    name="analyst",
+    description="Looks up and compares city populations. Give it a list of city names.",
+    max_steps=4,
+)
+coordinator = ToolCallingAgent(tools=[], model=model, managed_agents=[analyst])
+print(coordinator.run("Which is larger, Lyon or Paris, and by how much?"))
+```
 
 ### Agent Collaboration Patterns
 
@@ -892,10 +1040,10 @@ class StatsTool(Tool):
 | `executor_type` | Install | Isolation | Notes |
 |-----------------|---------|-----------|-------|
 | `"local"` (default) | — | None (AST-restricted interpreter in your process) | Development and trusted input only |
-| `"docker"` | `smolagents[docker]` | Container running a Jupyter kernel | Builds a `jupyter-kernel` image on first use; customise via `executor_kwargs` (`image_name`, `dockerfile_content`, `container_run_kwargs`) |
+| `"docker"` | `smolagents[docker]` | Container running a Jupyter kernel gateway, bound to `127.0.0.1:8888` with a random auth token | Builds the `jupyter-kernel` image (from `python:3.12-bullseye`) every time the executor starts unless you pass `build_new_image=False`; other `executor_kwargs`: `image_name`, `dockerfile_content`, `container_run_kwargs`, `host`, `port` |
 | `"e2b"` | `smolagents[e2b]` + `E2B_API_KEY` | Managed cloud sandbox | Pay per use |
-| `"modal"` | `smolagents[modal]` | Modal sandbox | Needs a Modal account |
-| `"blaxel"` | `smolagents[blaxel]` | Blaxel sandbox | Needs a Blaxel account |
+| `"modal"` | `smolagents[modal]` | Modal sandbox | Needs a Modal account; `executor_kwargs`: `app_name`, `port`, `create_kwargs` |
+| `"blaxel"` | `smolagents[blaxel]` | Blaxel sandbox | Needs a Blaxel account; `executor_kwargs`: `sandbox_name`, `image`, `memory`, `ttl`, `region` |
 
 ```python
 agent = CodeAgent(tools=[], model=model, executor_type="docker")
@@ -905,7 +1053,7 @@ finally:
     agent.cleanup()      # stops the remote kernel/container
 ```
 
-Remote executors cannot be combined with `managed_agents` (the agent raises an error); run multi-agent systems with the local executor inside a sandboxed container instead. Tools are rebuilt from their source inside the sandbox and run there, so they must be self-contained: imports inside `forward`, and any credentials they need available in the sandbox. The [diagram](/smolagents-guide/smolagents_diagrams/#where-code-and-tools-run) shows what runs where. Since 1.25.0, pickle-based serialisation between agent and sandbox is off by default. The experimental `"wasm"` executor was removed in 1.26.0.
+The authorised imports are `pip install`ed inside the sandbox when it starts, so list only what the task needs. `timeout_seconds` belongs to the local executor and is not an option for the remote ones. Remote executors cannot be combined with `managed_agents` (the constructor raises "Managed agents are not yet supported with remote code execution"); run multi-agent systems with the local executor inside a sandboxed container instead. Tools are rebuilt from their source inside the sandbox and run there, so they must be self-contained: imports inside `forward`, and any credentials they need available in the sandbox. The [diagram](/smolagents-guide/smolagents_diagrams/#where-code-and-tools-run) shows what runs where. Since 1.25.0, pickle-based serialisation between agent and sandbox is off by default. The experimental `"wasm"` executor was removed in 1.26.0.
 
 ### Hub sharing
 
@@ -916,6 +1064,8 @@ agent2 = CodeAgent.from_hub("your-org/research-agent", trust_remote_code=True)
 agent.save("./research_agent")                                     # to a local folder
 agent3 = CodeAgent.from_folder("./research_agent")
 ```
+
+`save()` writes `agent.json`, `prompts.yaml`, `requirements.txt`, an `app.py` that launches the agent in a Gradio UI, and one file per tool under `tools/`. It stores the model's class and constructor arguments (never the token or API key), prompt templates, `max_steps`, `planning_interval`, name and description, authorised imports and executor settings. It does not store `instructions`, `final_answer_checks` or `step_callbacks`, so pass those again after loading. `from_folder` takes no `trust_remote_code` argument; `from_hub` does.
 
 Loading an agent or tool runs code from the repository; read it first and only set `trust_remote_code=True` for sources you trust.
 
@@ -938,8 +1088,10 @@ Tools can return images (`output_type = "image"`) or audio (`"audio"`). Results 
 ```python
 from smolagents import GradioUI
 
-GradioUI(agent, file_upload_folder="./uploads").launch()   # needs smolagents[gradio]
+GradioUI(agent, file_upload_folder="./uploads").launch(share=False)   # needs smolagents[gradio]
 ```
+
+Pass `share=False`. `GradioUI.launch()` defaults to `share=True`, which asks Gradio for a public `gradio.live` URL, and anyone with that link can make your agent run code and use your tools and API keys. Other keyword arguments (`server_name`, `server_port`, `auth`) go to Gradio's own `launch`. The UI keeps the agent's memory across messages unless you construct it with `reset_agent_memory=True`.
 
 ---
 
@@ -962,6 +1114,7 @@ Historical changes that affect code you may find elsewhere:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 1.26.0 | Audited against the installed package. Corrected: the `InferenceClientModel` endpoint example (`base_url` alone raises), step callbacks given as a list (they run for `ActionStep` only), `GradioUI.launch()` (defaults to a public share link), Docker image rebuilds, and step counting from `RunResult.steps`. Added: memory and steps, planning, MCP details, local-executor limits, saving agents and tools, delegation behaviour and a `ToolCallingAgent` manager example. |
 | 2026-10-21 | 1.26.0 | Corrected where tools run under remote executors, the `LogLevel` values and the quantisation example; current, served model IDs; added the CLI, `from_mcp`, `visualize()`, `AgentImage`/`AgentAudio` and `PromptTemplates`. |
 | 2026-10-21 | 1.26.0 | Rewritten against the installed package. Removed fabricated APIs (`push_to_hub()` function, `load_agent`, `run(image=/audio=/video=)`, `VideoTranscriptionTool`, `TranscriptionTool`, `memory_size`, `timeout`, `AgentRunResult.success/errors/execution_time`, `Model.generate_text`), the `"wasm"` executor, invented efficiency figures and placeholder text. Corrected `HfApiModel` history (removed in 1.19.0, not 1.24.0) and the default-model change (1.23.0). Added `RunResult`, streaming events, final-answer checks, step callbacks, MCP, executors and version notes. |
 | November 2025 | 1.23.0 | First documented version. |

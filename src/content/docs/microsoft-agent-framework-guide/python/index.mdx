@@ -67,11 +67,18 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 - **Experimental APIs inside stable packages** emit an `ExperimentalWarning` on first use: FIDES security, evaluation, functional workflows, vector stores, `FileHistoryProvider`, and parts of the harness (`MemoryContextProvider`, `FileAccessProvider`, `BackgroundAgentsProvider`, `AgentLoopMiddleware`, `TodoFileStore`).
 - **A2A:** `agent_framework.a2a` provides `A2AAgent` (client), `A2AExecutor` (server), `A2AAgentSession` and `A2AServiceSessionId`.
 
-## Breaking changes since GA
+## Breaking changes worth knowing
 
-- `display_name` removed from agents; `middleware=` takes a list.
-- `AgentRunResponse` / `AgentRunResponseUpdate` renamed `AgentResponse` / `AgentResponseUpdate`; `AggregateContextProvider` removed (pass several context providers instead).
-- `WorkflowBuilder(output_executors=...)` deprecated in 1.5.0 in favour of `output_from=`.
+Before GA (code written against the 2025 previews):
+
+- `ChatAgent` → `Agent`, `ChatMessage` → `Message`, `AgentRunContext` → `AgentContext`, `AgentProtocol` → `SupportsAgentRun`; middleware's `next` parameter became `call_next` (1.0.0b260210).
+- `@ai_function` → `@tool`, `AIFunction` → `FunctionTool` (1.0.0b260128); `create_agent` → `as_agent` (1.0.0b260116).
+- `display_name` removed from agents; `middleware=` takes a list; `AggregateContextProvider` removed (pass several context providers instead) (1.0.0b260114).
+- `AgentRunResponse` / `AgentRunResponseUpdate` renamed `AgentResponse` / `AgentResponseUpdate`.
+
+Since GA:
+
+- `WorkflowBuilder(output_executors=...)` is a deprecated alias for `output_from=`.
 - Harness tool names changed in 1.7.0 (`add_todos` → `todos_add`, `set_mode` → `mode_set`, ...).
 - Skills (1.11.0): `require_script_approval=` replaced by `disable_load_skill_approval` / `disable_read_skill_resource_approval` / `disable_run_skill_script_approval`; every skill tool needs approval unless you opt out.
 - Functional workflows (1.14.0): `@workflow` returns a definition; call `.build()` before `.run()`.
@@ -102,6 +109,7 @@ Next: the [installation and quick start](/microsoft-agent-framework-guide/python
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.22.0 | Audit of every Python page: each block run against 1.22.0 with a fake chat client. Fixed wrong APIs and behaviour on the tools, middleware, sessions, compaction, MCP, skills, checkpointing, HITL, harness, evaluation, observability, advanced, feature-tour and recipes pages (details in each page's revision history); added sidebar order to every page. |
 | 2026-10-21 | 1.22.0 | Comprehensive guide rewritten (class reference replaced by an API map; duplicated sections removed); A2A serving documented; broken HITL, streaming, routing, A2A, provider and evaluation examples fixed; status labels corrected. |
 | 2026-10-21 | 1.22.0 | Per-class pages merged into the topic pages; examples re-checked against 1.22.0. |
 | 2026-08-21 | 1.14.0 | Per-class reference pages consolidated. |

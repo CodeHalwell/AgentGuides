@@ -144,7 +144,7 @@ Visual representations of PydanticAI patterns, architectures, and workflows. The
       │              (with error details)
       │
       ▼
-  ✅ Type-safe, validated data
+  Type-safe, validated data
   Ready for application logic
 ```
 
@@ -483,6 +483,8 @@ CLIENT (Browser/App)
         RETURN RESULT
 ```
 
+The upper loop (back-off on retryable errors) is the provider SDK's own retrying, or a tenacity transport if you add one; the agent itself does not retry failed HTTP requests, and a `FallbackModel` moves on to the next model instead. The lower loop is the agent's: a validation failure or `ModelRetry` sends a retry prompt to the model, up to the output retry budget (`retries`, default 1), after which the run raises `UnexpectedModelBehavior`.
+
 ---
 
 ## 9. Context Engineering Flow
@@ -498,7 +500,7 @@ CLIENT (Browser/App)
         │  Dynamic System Prompt Fn        │
         │  @agent.system_prompt            │
         │  async def get_prompt(ctx):      │
-        │    return f"Time: {time.now()}"  │
+        │    return f"Now: {datetime.now()}"│
         └──────────────┬───────────────────┘
                        │
                        ▼
@@ -556,7 +558,7 @@ CLIENT (Browser/App)
 │  "What is my favourite language?"               │
 │                                                 │
 │  Agent: Checks memory store...                  │
-│  ❌ Not found. Asks: "I don't know yet"         │
+│  ✗ Not found. Asks: "I don't know yet"         │
 │                                                 │
 │  User: "My favourite is Python"                │
 │  Agent: Stores in memory cache                  │
@@ -614,5 +616,5 @@ UNIT TEST            INTEGRATION TEST
 │  independently        │  end-to-end
 │                       │
 └─ Fast (~100ms)       └─ Slow (~5s+)
-  ✅ Unit tests         ✅ Integration tests
+  Unit tests         Integration tests
 ```

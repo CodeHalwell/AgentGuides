@@ -51,7 +51,7 @@ Each task already sees every earlier task's output by default; `context=[...]` m
 
 ## Delegation
 
-With `allow_delegation=True` an agent gets two extra tools, **Delegate work to coworker** and **Ask question to coworker**, whose targets are the other agents in the crew:
+With `allow_delegation=True` an agent gets two extra tools, **Delegate work to coworker** and **Ask question to coworker** (the model sees them as `delegate_work_to_coworker` and `ask_question_to_coworker`), whose targets are the other agents in the crew:
 
 ```python
 from crewai import Agent, Crew, Task, LLM
@@ -91,6 +91,7 @@ print(crew.kickoff(inputs={"company": "ACME Robotics"}).raw)
 - Delegation is off by default. Turn it on only for the agent that coordinates; specialists that can also delegate tend to bounce work between each other.
 - The coworker list is every other agent in the crew, so the `role` and `goal` strings are what the delegating agent reads when choosing whom to ask. Make them distinct.
 - Each delegation is a full agent run and costs tokens; cap it with `max_iter` on the lead.
+- The coworker sees only what the delegating agent writes into the tool call: a task and a context string, answered against the criterion "Your best answer to your coworker asking you this, accounting for the context shared". It does not see the lead's task, the crew inputs or earlier task outputs, which is why the tool description tells the delegating model to share everything. We traced a delegation with scripted models: the accountant's prompt contained exactly the `task` and `context` the lead passed.
 
 ## Manager-led crews
 
@@ -105,7 +106,7 @@ writer = Agent(role="Writer", goal="Write clear reports", backstory="Former news
 
 manager = Agent(
     role="Editor-in-Chief",
-    goal="Ship an accurate, readable report on {topic}",
+    goal="Ship an accurate, readable report on the topic in the tasks",
     backstory="Runs a small research desk; assigns work and checks it before it goes out.",
     allow_delegation=True,
     llm=LLM(model="openai/%%model=openai%%"),
@@ -123,8 +124,10 @@ crew = Crew(
 print(crew.kickoff(inputs={"topic": "grid-scale storage"}).raw)
 ```
 
-- Set exactly one of `manager_llm` (CrewAI builds a generic manager) or `manager_agent` (your own role, goal and backstory). Neither raises a `ValidationError`; listing the `manager_agent` in `agents` also does.
-- Tasks may leave `agent` unset; the manager assigns them. Tasks that do name an agent can still be delegated elsewhere.
+- Set one of `manager_llm` (CrewAI builds a generic "Crew Manager") or `manager_agent` (your own role, goal and backstory). Neither raises a `ValidationError`, and so does listing the `manager_agent` in `agents`. If you set both, `manager_agent` is used.
+- **The manager runs every task.** Each task's prompt goes to the manager, which calls the delegation tools to hand work to your agents, so `TaskOutput.agent` is the manager's role even for tasks that name an agent. Tasks may leave `agent` unset; the manager decides who does what.
+- Task outputs flow forward as context in the same way as in a sequential crew.
+- `{placeholders}` are interpolated into the worker agents and the tasks but **not** into a `manager_agent`'s own role, goal or backstory. The manager above therefore refers to "the topic in the tasks" rather than using `{topic}`; if it needs the value in its own text, build the string with an f-string before constructing the agent. A `manager_agent` may not have tools.
 - Give the manager the strongest model in the crew: its decisions shape every other call.
 
 ## Planning
@@ -188,7 +191,7 @@ coordinator = Agent(
 
 ## Resilience
 
-- Retries on transient failures: `Agent(max_retry_limit=...)`; `guardrail` + `guardrail_max_retries` on tasks re-run output that fails validation.
+- Retries: `Agent(max_retry_limit=...)` re-runs a task after any exception raised while executing it (we saw `max_retry_limit=2` make three model calls before the error surfaced); `Task.guardrail` + `guardrail_max_retries` re-runs output that fails validation.
 - Timeouts: `Agent(max_execution_time=...)` caps wall-clock seconds per task; `LLM(timeout=...)` caps each model call.
 - Tool failures: `tool_failure_policy="raise"` on an agent, task or crew aborts instead of carrying on with a failed tool result.
 - Side effects: keep compensating actions in your own tool code, and use checkpoints (`Crew(checkpoint=...)`) to resume rather than re-run completed tasks.

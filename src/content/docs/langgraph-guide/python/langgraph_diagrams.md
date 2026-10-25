@@ -4,6 +4,7 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Diagrams"
+  order: 56
 ---
 
 ## Basic State Machine
@@ -347,7 +348,7 @@ graph LR
 graph TD
     Graph["Running Graph<br/>Node A → Node B → Node C"]
     
-    Graph -->|After each node| Checkpoint["Checkpoint Saver<br/>Save state"]
+    Graph -->|After each super-step| Checkpoint["Checkpoint Saver<br/>Save state"]
     
     Checkpoint --> Memory["In-Memory<br/>(Dev)"]
     Checkpoint --> SQLite["SQLite<br/>(Local)"]
@@ -502,6 +503,10 @@ graph TD
 ### Pattern 1: Simple Reducer
 
 ```python
+from operator import add
+from typing import Annotated
+from typing_extensions import TypedDict
+
 # Visual representation:
 # Step 1: State = {count: 5}
 # Step 2: Node returns {count: +3}
@@ -514,6 +519,10 @@ class State(TypedDict):
 ### Pattern 2: Message Accumulation
 
 ```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langgraph.graph.message import add_messages
+
 # Visual representation:
 # Initial: messages=[]
 # Step 1: append [User: "Hello"]     → [User: "Hello"]
@@ -527,6 +536,9 @@ class State(TypedDict):
 ### Pattern 3: Dictionary Merge
 
 ```python
+from typing import Annotated
+from typing_extensions import TypedDict
+
 # Visual representation:
 # Initial: updates={}
 # Step 1: {node_a: result_a}          → {node_a: result_a}
@@ -571,77 +583,42 @@ Checkpoint 3 [ID: chk-003]
 
 ## Error Handling Flow
 
+What LangGraph does when a node raises, with `retry_policy=` and `error_handler=` set on `add_node` (or through `set_node_defaults`). See [Error handling and recovery](/langgraph-guide/python/langgraph_advanced_error_recovery/).
+
 ```mermaid
 graph TD
-    Execute["Execute Node"]
-    
-    Execute --> Try{"Try to<br/>Execute"}
-    
-    Try -->|Success| Next["Continue to next node"]
-    Try -->|Exception| Catch["Catch Exception"]
-    
-    Catch --> Decide{"Recovery<br/>Strategy"}
-    
-    Decide -->|Retry| Retry["Retry Node<br/>(with backoff)"]
-    Decide -->|Fallback| Fallback["Execute fallback node"]
-    Decide -->|Escalate| Escalate["Escalate to human"]
-    
-    Retry -->|Success| Next
-    Retry -->|Fail| Escalate
-    
-    Fallback --> Next
-    Escalate --> END([END with error])
-    Next --> Done["Continue workflow"]
-    
-    style Try fill:#fff9c4
-    style Catch fill:#ffcccc
-    style Decide fill:#ffccbc
+    Execute["Node attempt"] -->|returns| Next["Writes applied; next super-step"]
+    Execute -->|raises| Match{"retry_policy<br/>retry_on matches?"}
+
+    Match -->|yes, attempts left| Backoff["Wait (backoff + jitter)"] --> Execute
+    Match -->|no, or attempts exhausted| Handler{"error_handler set<br/>(and node not in a parallel step)?"}
+
+    Handler -->|yes| Run["Handler runs with NodeError"]
+    Run -->|returns Command goto| Route["Continue at that node"]
+    Run -->|returns dict| Stop["Update applied; branch ends"]
+
+    Handler -->|no| Fail["Exception propagates from invoke()"]
+    Fail --> Resume["Last checkpoint kept:<br/>fix, then invoke(None, config)"]
+
+    style Match fill:#fff9c4
+    style Handler fill:#ffccbc
+    style Fail fill:#ffcccc
 ```
 
 ---
 
-## Performance Considerations
+## Where time goes
 
-```
-Graph Execution Performance:
+Steps in one super-step run concurrently, so a fan-out of three independent calls takes about as long as the slowest one plus the fan-in node, rather than the sum of all three. Streaming does not shorten a run, but the client sees output earlier. A node cache hit skips the node entirely. Measure real numbers with LangSmith traces; see [Performance](/langgraph-guide/python/langgraph_performance_optimization/).
 
-Sequential Execution:
-Task A (1s) → Task B (1s) → Task C (1s) = 3s total
-
-Parallel Execution (Fan-out/Fan-in):
-Task A (1s) ──┐
-Task B (1s) ──┼──> Collect (0.1s) = 1.1s total
-Task C (1s) ──┘
-
-Streaming:
-Receive data incrementally instead of waiting for all results
-Real-time updates to client as processing happens
-
-Caching:
-First call: 1s
-Cached calls: 0.01s
+```text
+Sequential:   A ──▶ B ──▶ C                 total ≈ A + B + C
+Fan-out:      A ─┐
+              B ─┼──▶ Collect               total ≈ max(A, B, C) + Collect
+              C ─┘
 ```
 
 ---
-
-## Configuration Hierarchy
-
-```mermaid
-graph TD
-    Default["LangGraph Defaults"]
-    ProjectConfig["Project Config<br/>langgraph.json"]
-    RuntimeConfig["Runtime Config<br/>env vars"]
-    RequestConfig["Request Config<br/>graph.invoke(config=...)"]
-    
-    Default --> ProjectConfig
-    ProjectConfig --> RuntimeConfig
-    RuntimeConfig --> RequestConfig
-    
-    RequestConfig --> Final["Final Configuration<br/>Used by Graph"]
-    
-    style RequestConfig fill:#fff176
-    style Final fill:#c8e6c9
-```
 
 ## Debugging Workflow
 
@@ -653,7 +630,7 @@ graph TD
     
     Symptoms -->|State not persisting| Check1["Check thread_id<br/>Check checkpointer"]
     Symptoms -->|Tools not calling| Check2["Check bind_tools()<br/>Check tool_calls exist"]
-    Symptoms -->|Loop forever| Check3["Check exit condition<br/>Check MAX_ITERATIONS"]
+    Symptoms -->|Loop forever| Check3["Check exit condition<br/>Set recursion_limit"]
     Symptoms -->|Interrupt fails| Check4["Check checkpointer exists<br/>Check Command.resume"]
     
     Check1 --> Stream["Use stream_mode='debug'"]

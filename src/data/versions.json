@@ -72,6 +72,11 @@
       "version": "0.4.8",
       "guide": "langgraph-guide"
     },
+    "langgraph-cli": {
+      "registry": "pypi",
+      "version": "0.4.38",
+      "guide": "langgraph-guide"
+    },
     "langchain": {
       "registry": "pypi",
       "version": "1.4.6",
@@ -210,12 +215,12 @@
     },
     "boto3": {
       "registry": "pypi",
-      "version": "1.43.117",
+      "version": "1.43.118",
       "guide": "amazon-bedrock-agents-guide"
     },
     "bedrock-agentcore": {
       "registry": "pypi",
-      "version": "1.24.2",
+      "version": "1.25.0",
       "guide": "amazon-bedrock-agents-guide"
     },
     "strands-agents": {
@@ -246,7 +251,7 @@
     },
     "@aws/agentcore": {
       "registry": "npm",
-      "version": "0.31.1",
+      "version": "1.0.0",
       "guide": "amazon-bedrock-agents-guide"
     }
   },

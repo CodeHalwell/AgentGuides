@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Agent harness"
+  order: 17
 ---
 
 > **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider` and `AgentLoopMiddleware` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.
@@ -160,7 +161,7 @@ from agent_framework import Agent, AgentSession, TodoFileStore, TodoProvider
 from agent_framework.openai import OpenAIChatClient
 
 
-# Todos written to ./todos/<session_id>/todos.json
+# Todos written to ./todos/<session_id>/todos.todo.json ("todo" is the provider's source_id)
 store = TodoFileStore(base_path="./todos")
 
 agent = Agent(
@@ -194,7 +195,7 @@ from agent_framework import Agent, AgentSession, TodoFileStore, TodoProvider
 from agent_framework.openai import OpenAIChatClient
 
 
-# Todos written to ./todos/<user_id>/<session_id>/todos.json
+# Todos written to ./todos/<user_id>/todos/<session_id>/todos.todo.json
 store = TodoFileStore(base_path="./todos", owner_state_key="user_id")
 
 agent = Agent(
@@ -718,7 +719,7 @@ Every distinct `owner_state_key` value gets its own subtree under `base_path`. T
 ```python
 async def handle_request(user_id: str, message: str) -> str:
     session = agent.create_session()
-    session.state["user_id"] = user_id    # → ./memory/<user_id>/memory/MEMORY.md
+    session.state["user_id"] = user_id    # → ./memory/memory/<user_id>/memory/MEMORY.md
     return (await agent.run(message, session=session)).text
 ```
 
@@ -745,21 +746,22 @@ agent = Agent(client=main_client, context_providers=[memory])
 Pass a `history_message_filter` callback to redact or drop messages before they are written to the transcript store. The callback receives each `Message` and returns either a modified copy or `None` to drop the message entirely:
 
 ```python
-from agent_framework import Message, MemoryContextProvider, MemoryFileStore
 import re
+
+from agent_framework import Content, Message, MemoryContextProvider, MemoryFileStore
 
 PII_PATTERN = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")   # crude SSN pattern
 
+
 def redact_pii(message: Message) -> Message | None:
-    """Return message with SSNs redacted, or None to drop the message."""
-    new_contents = []
-    for content in message.contents:
-        if isinstance(content, str):
-            new_contents.append(PII_PATTERN.sub("[REDACTED]", content))
-        else:
-            new_contents.append(content)
-    from dataclasses import replace
-    return replace(message, contents=new_contents)
+    """Return a copy with SSNs redacted, or None to drop the message."""
+    if message.role == "tool":
+        return None                                       # don't keep raw tool output in transcripts
+    new_contents = [
+        Content.from_text(PII_PATTERN.sub("[REDACTED]", c.text)) if c.type == "text" and c.text else c
+        for c in message.contents
+    ]
+    return Message(role=message.role, contents=new_contents, author_name=message.author_name)
 
 memory = MemoryContextProvider(
     store=MemoryFileStore(base_path="./memory", owner_state_key="user_id"),
@@ -798,7 +800,7 @@ topics = store.list_topics(session, source_id="memory")
 for t in topics:
     print(t.topic, "—", t.summary[:60])
 
-# Fetch a specific topic
+# Fetch a specific topic (raises FileNotFoundError if this owner has no such topic)
 record = store.get_topic(session, source_id="memory", topic="preferences")
 print(record.to_markdown())
 
@@ -849,7 +851,7 @@ class InMemoryMemoryStore(MemoryStore):
     def get_topic(self, session: AgentSession, *, source_id: str, topic: str) -> MemoryTopicRecord:
         owner_topics = self._topics.get(self._owner(session), {})
         if topic not in owner_topics:
-            raise KeyError(f"Topic {topic!r} not found")
+            raise FileNotFoundError(f"No memory topic named {topic!r}")   # same contract as MemoryFileStore
         return owner_topics[topic]
 
     def write_topic(self, session: AgentSession, record: MemoryTopicRecord, *, source_id: str) -> None:
@@ -926,8 +928,8 @@ MemoryContextProvider(
     consolidation_prompt: str | None = None,     # override LLM consolidation prompt
     consolidation_client: SupportsChatGetResponse | None = None,  # cheaper model for consolidation
     history_message_filter: Callable[[Message], Message | None] | None = None,
-    history_dumps: Callable | None = None,   # custom JSON serialiser for transcripts
-    history_loads: Callable | None = None,   # custom JSON deserialiser
+    history_dumps: Callable | None = None,   # deprecated: custom transcript serialiser
+    history_loads: Callable | None = None,   # deprecated: custom transcript deserialiser
 )
 ```
 
@@ -935,15 +937,16 @@ MemoryContextProvider(
 
 ```
 base_path/
-  <owner_id>/
-    memory/
-      MEMORY.md           ← keyword-indexed topic pointer list
-      topics/
-        preferences.md    ← one file per extracted topic
-        coding-style.md
-      transcripts/
-        <session_id>.jsonl  ← conversation transcript per session
-      state.json          ← maintenance state (last extraction, consolidation timestamps)
+  <source_id>/              ← "memory" by default (the provider's source_id)
+    <owner_id>/             ← session.state[owner_state_key]
+      memory/               ← kind=
+        MEMORY.md           ← keyword-indexed topic pointer list
+        topics/
+          preferences.md    ← one file per extracted topic
+          coding-style.md
+        transcripts/
+          <session_id>.jsonl  ← conversation transcript per session
+        state.json          ← maintenance state (last extraction, consolidation timestamps)
 ```
 
 Customise directory names at construction time:
@@ -952,7 +955,7 @@ Customise directory names at construction time:
 store = MemoryFileStore(
     base_path="./data",
     owner_state_key="tenant_id",
-    kind="agent-memory",                # → ./data/<tenant_id>/agent-memory/
+    kind="agent-memory",                # → ./data/memory/<tenant_id>/agent-memory/
     index_file_name="index.md",
     topics_directory_name="knowledge",
     transcripts_directory_name="logs",
@@ -1287,3 +1290,9 @@ The function itself is stable, but some features it can switch on are experiment
 | `create_always_approve_tool_response` / `..._with_arguments_response` | `agent_framework` | Answer an approval request with a standing rule |
 | `AgentLoopMiddleware` | `agent_framework` | Loop until `should_continue` is false; `.with_judge()` for an LLM judge |
 | `todos_remaining` / `background_tasks_running` | `agent_framework` | Ready-made `should_continue` predicates for the loop |
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected the `TodoFileStore` and `MemoryFileStore` directory layouts (the provider's `source_id` is part of the path and file name) and the `history_message_filter` example (`Message` is not a dataclass and its contents are `Content` objects); marked `history_dumps` / `history_loads` deprecated. |

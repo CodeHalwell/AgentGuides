@@ -23,11 +23,11 @@ gpt = LLM(model="openai/%%model=openai-small%%", temperature=0.2)
 # Provider prefix omitted — LLM infers from model name
 gpt = LLM(model="%%model=openai-small%%")
 
-# Non-native → LiteLLM fallback (requires litellm installed)
+# Non-native → LiteLLM fallback (needs `pip install "crewai[litellm]"`)
 mistral = LLM(model="mistral/%%model=mistral-flagship%%")
 ```
 
-The first argument **must** include a recognised provider prefix if the model name is ambiguous; otherwise `LLM._infer_provider_from_model` tries to guess.
+`LLM(...)` returns an instance of the matching provider class (`OpenAICompletion` for the first two lines), not an `LLM` object. A bare model name is matched against known prefixes and name patterns (`gpt-*`, `o3-*`, `claude-*`, `gemini-*`); anything ambiguous should carry a provider prefix. Without LiteLLM installed, a model that is not served natively raises `ImportError` listing the native providers.
 
 ## How routing works
 
@@ -82,11 +82,11 @@ Anything else (`mistral/`, `groq/`, `cohere/`, custom prefixes) falls through to
 LLM(model="openai/%%model=openai-small%%", is_litellm=True)
 ```
 
-Handy when you want LiteLLM's uniform interface even for natively supported models (e.g. to reuse a LiteLLM router config).
+Handy when you want LiteLLM's uniform interface even for natively supported models (e.g. to reuse a LiteLLM router config). It requires the `litellm` package; without it the call raises the same `ImportError` as an unsupported prefix.
 
-## Constructor fields (litellm-backed `LLM`)
+## Constructor fields
 
-The default `LLM` class extends `BaseLLM` with LiteLLM-specific knobs:
+What you can pass depends on which class `LLM(...)` returns. The common base is `BaseLLM`, whose fields are `model`, `temperature`, `top_p`, `max_tokens`, `stream`, `seed`, `frequency_penalty`, `presence_penalty`, `n`, `api_key`, `base_url`, `provider`, `stop` and `additional_params`. The native OpenAI class (`OpenAICompletion`) adds, among others, `timeout`, `max_retries` (default 2), `organization`, `project`, `default_headers`, `client_params`, `max_completion_tokens`, `response_format`, `logprobs`, `top_logprobs`, `reasoning_effort` and `api` (`"completions"` or `"responses"`, selecting the Responses API). The table below is the LiteLLM-backed `LLM` class, used for providers without a native integration or when `is_litellm=True`:
 
 | Field | Type | Notes |
 |---|---|---|
@@ -122,7 +122,7 @@ claude = LLM(
 
 - `reasoning_effort` maps onto OpenAI's `reasoning.effort`.
 - `thinking` is passed through to Anthropic — the reasoning tokens show up in `CrewOutput.token_usage.reasoning_tokens` when enabled.
-- GPT-5 and the o-series intentionally ignore `stop=` in 1.14+; the router strips it so you don't have to.
+- For GPT-5 and the o-series, `supports_stop_words()` returns `False`, so stop sequences are not sent; you can still pass `stop=` without an error.
 
 ## Connecting to self-hosted / Ollama / vLLM
 
@@ -147,7 +147,7 @@ writer = Agent(
 )
 ```
 
-`function_calling_llm` is used **only** to format tool-call JSON arguments. It is marked deprecated in the 1.15 line (on `Agent` and `Crew`); current models handle tool calls themselves, so leave it unset in new code.
+`function_calling_llm` is used **only** to format tool-call JSON arguments. It is marked deprecated in the 1.15 line (on `Agent` and `Crew`); current models handle tool calls themselves, so leave it unset in new code. Each agent in a crew has its own `llm`, so "per-task LLM" means giving the task an agent with the model you want.
 
 ## Chat / manager / planner LLMs
 
@@ -157,7 +157,7 @@ writer = Agent(
 |---|---|
 | `manager_llm` | Hierarchical process — spins up a default manager agent. |
 | `planning_llm` | Crew-level `planning=True` planner. |
-| `chat_llm` | `crewai chat` CLI against this crew. |
+| `chat_llm` | `crewai chat` CLI against this crew. Also the analysis model for `Crew(memory=True)` when set (otherwise the first agent's LLM). |
 
 ```python
 from crewai import Crew, Process, LLM
@@ -174,17 +174,25 @@ Crew(
 
 ## Custom LLM — subclass `BaseLLM`
 
-When you need a provider CrewAI doesn't support (or you want to proxy through your own gateway), subclass `BaseLLM`:
+When you need a provider CrewAI doesn't support (or you want to proxy through your own gateway), subclass `BaseLLM`. `call()` is the only abstract method:
 
 ```python
-from crewai.llms.base_llm import BaseLLM
 from typing import Any
+
+from crewai import Agent
+from crewai.llms.base_llm import BaseLLM
+
 
 class MyGatewayLLM(BaseLLM):
     llm_type: str = "my_gateway"
 
-    def call(self, messages: list[dict], **kwargs: Any) -> str:
+    def call(self, messages: str | list[dict], tools=None, callbacks=None,
+             available_functions=None, from_task=None, from_agent=None,
+             response_model=None, **kwargs: Any) -> str:
         import httpx
+
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
         r = httpx.post(
             "https://gateway.internal/chat",
             headers={"Authorization": f"Bearer {self.api_key}"},
@@ -194,11 +202,23 @@ class MyGatewayLLM(BaseLLM):
         r.raise_for_status()
         return r.json()["text"]
 
+    def get_context_window_size(self) -> int:
+        return 128_000          # the default for an unknown model is 4096
+
+
 agent = Agent(role="...", goal="...", backstory="...",
               llm=MyGatewayLLM(model="gw/llama-70b", api_key="..."))
 ```
 
-Minimum surface: a `call()` method. Streaming and tool-use are opt-in — see the existing native providers under `crewai/llms/providers/` for reference implementations.
+What we checked by running a subclass like this with a patched HTTP client, in a crew and with `Agent.kickoff()`:
+
+- The agent works with only `call()` implemented. The model must answer in CrewAI's text format (`Thought: ... Final Answer: ...`), because a subclass does not report native function calling by default: the agent takes the text (ReAct) path, and tools are described in the prompt.
+- `messages` may be a plain string as well as a list of `{"role", "content"}` dicts; handle both, or accept `**kwargs` as above.
+- `BaseLLM` fields are available as attributes (`self.model`, `self.api_key`, `self.temperature`, `self.stop`). A model name with a prefix (`gw/...`) sets `provider` to the prefix.
+- The default context window for an unrecognised model is **4096 tokens**. With `respect_context_window=True` (the agent default) CrewAI summarises long conversations to fit, so override `get_context_window_size()` as above.
+- Any subclass that defines `call()` or `acall()` is wrapped in CrewAI's rate-limit retry policy automatically.
+- A subclass that only returns text emits no `LLMCall*` events and `CrewOutput.token_usage` stays at 0; the built-in providers emit the events and count tokens internally. Log usage yourself if you need it.
+- For native tool calls, add `def supports_function_calling(self) -> bool: return True` and, when `tools` are passed, return a list of tool-call dicts such as `[{"id": "call_1", "function": {"name": "lookup_order", "arguments": "{\"order_id\": \"7\"}"}}]`; CrewAI executes them and calls the model again with the results. We ran this shape with a scripted model. The built-in providers under `crewai/llms/providers/` show how each vendor's response is converted.
 
 ## Patterns
 
@@ -230,19 +250,36 @@ Agent(
 
 Only the tool-calling round uses the expensive model. `function_calling_llm` is deprecated in 1.15, so treat this as a pattern for existing code rather than new designs.
 
-### 3. Observed latency/cost with callbacks
+### 3. Per-call latency and token usage
+
+Native providers ignore `LLM(callbacks=[...])` (the source says "not used in native implementation"; they apply to the LiteLLM path only). For the built-in providers, listen for the LLM events instead:
 
 ```python
-class Timing:
-    def log_pre_api_call(self, model, messages, kwargs):
-        self.t0 = time.perf_counter()
-    def log_post_api_call(self, *a, **k):
-        print("call took", time.perf_counter() - self.t0, "s")
+import time
 
-llm = LLM(model="openai/%%model=openai%%", callbacks=[Timing()])
+from crewai.events import BaseEventListener, LLMCallCompletedEvent, LLMCallStartedEvent
+
+
+class Timing(BaseEventListener):
+    def __init__(self):
+        self._started: dict[str, float] = {}
+        super().__init__()
+
+    def setup_listeners(self, crewai_event_bus):
+        @crewai_event_bus.on(LLMCallStartedEvent)
+        def started(source, event):
+            self._started[event.call_id] = time.perf_counter()
+
+        @crewai_event_bus.on(LLMCallCompletedEvent)
+        def completed(source, event):
+            took = time.perf_counter() - self._started.pop(event.call_id)
+            print(f"{event.model}: {took:.2f}s, usage={event.usage}")
+
+
+timing = Timing()       # create it once, before any kickoff
 ```
 
-Callbacks are passed through to LiteLLM — the standard LiteLLM callback API applies.
+We ran this against the native OpenAI provider pointed at a local stub server (`LLM(model="openai/...", base_url=...)`): it printed one line per call with the model name and a usage dict (`prompt_tokens`, `completion_tokens`, `total_tokens`).
 
 ### 4. Structured output via provider-native mode
 
@@ -254,7 +291,7 @@ class Plan(BaseModel):
 llm = LLM(model="openai/%%model=openai%%", response_format=Plan)
 ```
 
-Works for OpenAI, Gemini, and Claude's structured-tool mode. For other providers set `Task.output_pydantic` instead.
+Works where the provider integration supports structured output; for providers that do not, set `Task.output_pydantic`, which also parses the answer into `.pydantic`.
 
 ### 5. LiteLLM routing config
 
@@ -269,9 +306,9 @@ Forces LiteLLM so you benefit from its router, rate-limiting, and fallbacks.
 
 ## Gotchas
 
-- **Provider prefix is checked against a whitelist.** Typos (`openaii/...`) fall through to LiteLLM, which then fails with a confusing error. Stick to the table above.
-- **`is_anthropic` and `stop`** — the router strips `stop` for GPT-5 / o-series models in 1.14; passing it elsewhere works as expected.
+- **Provider prefix is checked against a list.** A typo such as `openaii/...` is not native, so CrewAI tries LiteLLM; without it installed you get an `ImportError` that lists the native providers. With LiteLLM installed the typo goes to LiteLLM and fails there. Stick to the table above.
+- **`stop` and reasoning models.** GPT-5 and o-series models report `supports_stop_words() == False`; other OpenAI chat models apply `stop` normally.
 - **LiteLLM is optional.** Without it installed, any non-native model raises `ImportError`. Install with `pip install litellm` or `uv add 'crewai[litellm]'`.
 - **`max_tokens` vs `max_completion_tokens`.** OpenAI o-series wants the latter; LiteLLM maps both. If you set both, the native provider path picks `max_completion_tokens`.
-- **Custom `BaseLLM` subclasses don't inherit streaming** — implement `call_with_streaming` / the streaming protocol yourself.
+- **Custom `BaseLLM` subclasses return whole responses.** There is no `call_with_streaming` hook to implement; `BaseLLM.stream_events()` wraps `call()` for streamed output, but chunk events come from the built-in providers.
 - **`reasoning=True` on Agent was renamed** — use `planning=True`. The LLM's `reasoning_effort` is separate and still valid.

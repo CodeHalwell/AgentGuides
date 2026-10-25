@@ -32,7 +32,7 @@ This page covers what CrewAI itself gives you for running crews and flows in pro
 - Keep provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) in the environment. CrewAI and the provider SDKs read them from there; `LLM(api_key=...)` is only needed for non-standard setups.
 - The project scaffold puts a `.env` in the project root and lists it in `.gitignore`. It is for local runs. Never `COPY` it into an image or commit it; inject secrets at runtime (`docker run --env-file`, Kubernetes Secrets, your platform's secret store).
 - `crewai deploy create` **reads your local `.env` and sends its variables to CrewAI AMP** as deployment environment variables, after showing you the list to confirm. Check that file before you deploy, or keep production values out of it and set them on the platform.
-- Pin the model per agent (`llm=LLM(model="openai/%%model=openai-small%%")`) rather than relying on the default. An agent without `llm` reads the `MODEL` environment variable, then falls back to CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), which can change between releases. Provider SDKs other than OpenAI are extras: `pip install "crewai[anthropic]"`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`.
+- Pin the model per agent (`llm=LLM(model="openai/%%model=openai-small%%")`) rather than relying on the default. An agent without `llm` reads the `MODEL`, `MODEL_NAME` or `OPENAI_MODEL_NAME` environment variable, then falls back to CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), which can change between releases. Provider SDKs other than OpenAI are extras: `pip install "crewai[anthropic]"`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`.
 - CrewAI sends anonymous usage telemetry by default. Turn it off with `CREWAI_DISABLE_TELEMETRY=true` (or `CREWAI_DISABLE_TRACKING=true`). `OTEL_SDK_DISABLED=true` also works but disables **every** OpenTelemetry SDK in the process, including your own tracing. Leave `Crew(share_crew=False)` (the default) unless you intend to share crew data with CrewAI.
 
 ## Limits, guardrails and failure policy
@@ -74,9 +74,9 @@ crew = Crew(agents=[writer], tasks=[summary], max_rpm=30)   # requests per minut
 print(crew.kickoff(inputs={"product": "a USB-C dock"}).raw)
 ```
 
-- **Guardrails** run after the task; a failure sends the reason back to the agent for another attempt. On success, return the output (`output.raw`) as the second value; that value becomes the task output. See [Task API → Guardrails](/crewai-guide/crewai_task_api_python/#guardrails) for the structured-output caveats.
-- **`tool_failure_policy`** (`"ignore"`, `"warn"`, `"raise"`) applies when a tool runs but reports failure. Set it on the crew, agent or task; the most specific wins, and the default is `"warn"`.
-- **Tool caps**: `@tool("search", max_usage_count=5)` stops a tool after five calls per task.
+- **Guardrails** run after the task; a failure sends the reason back to the agent for another attempt, and `guardrail_max_retries=2` allows three attempts in all before the task raises. On success, return the output (`output.raw`) as the second value; that value becomes the task output. `Agent(guardrail=...)` is not a substitute: it only applies to `Agent.kickoff()`, not to tasks in a crew. See [Task API → Guardrails](/crewai-guide/crewai_task_api_python/#guardrails).
+- **`tool_failure_policy`** (`"ignore"`, `"warn"`, `"raise"`) decides what happens when a tool call fails: the tool returned a `ToolFailure`, raised, exceeded its usage cap and so on. Set it on the tool, task, agent or crew (most specific wins); the default is `"warn"`. A tool that merely returns an error string is not treated as failed. See [Tools → Reporting tool failures](/crewai-guide/crewai_tools_python/#reporting-tool-failures).
+- **Tool caps**: `@tool("search", max_usage_count=5)` stops a tool after five calls. The count lives on the tool object, so it accumulates across tasks until you call `reset_usage_count()`.
 - `LLM(timeout=...)` bounds each model call; `max_execution_time` bounds the whole task.
 
 ## Event listeners
@@ -93,7 +93,7 @@ from crewai.events import (
     CrewKickoffFailedEvent,
     LLMCallFailedEvent,
     TaskFailedEvent,
-    ToolUsageErrorEvent,
+    ToolFailureDetectedEvent,
 )
 
 log = logging.getLogger("crew.ops")
@@ -115,11 +115,13 @@ class OpsListener(BaseEventListener):
 
         @crewai_event_bus.on(TaskFailedEvent)
         def on_task_failed(source, event):
-            emit("task_failed", task=event.task_name, agent=event.agent_role, error=event.error)
+            agent = event.task.agent.role if event.task and event.task.agent else None
+            emit("task_failed", task=event.task_name, agent=agent, error=event.error)
 
-        @crewai_event_bus.on(ToolUsageErrorEvent)
-        def on_tool_error(source, event):
-            emit("tool_error", tool=event.tool_name, agent=event.agent_role, error=event.error)
+        @crewai_event_bus.on(ToolFailureDetectedEvent)
+        def on_tool_failure(source, event):
+            emit("tool_failure", tool=event.tool_name, agent=event.agent_role,
+                 code=event.failure.code, error=event.failure.message, policy=event.policy.value)
 
         @crewai_event_bus.on(LLMCallFailedEvent)
         def on_llm_failed(source, event):
@@ -129,6 +131,8 @@ class OpsListener(BaseEventListener):
 ops_listener = OpsListener()   # instantiate once, at import time, before any kickoff
 ```
 
+- Task events do not fill in `agent_role` (it is `None` on `TaskStartedEvent`, `TaskCompletedEvent` and `TaskFailedEvent` in 1.15.28), which is why the task handler above reads the agent from `event.task`. Tool events do carry it.
+- A tool that raises, or returns a `ToolFailure`, produces a `ToolFailureDetectedEvent` (unless the policy is `"ignore"`); in our runs it was this event, not `ToolUsageErrorEvent`, that fired for a tool exception on the function-calling path.
 - Handlers take `(source, event)`. Sync handlers run on a thread pool, so they don't block the agents; call `crewai_event_bus.flush()` when you need them finished (in tests, or before a short-lived process exits).
 - Event families include `Crew*`, `Task*`, `Agent*`, `LLMCall*`, `LLMStreamChunkEvent`, `ToolUsage*`, `ToolFailureDetectedEvent`, `MCP*`, `Memory*`, `Knowledge*`, `Flow*`, `MethodExecution*`, `HumanFeedback*`, `Conversation*` and `Checkpoint*`; all are importable from `crewai.events`.
 - `crewai_event_bus.scoped_handlers()` is a context manager that removes handlers registered inside it, which keeps tests independent.
@@ -232,6 +236,42 @@ def redact_emails(context: LLMCallHookContext) -> str | None:
 - `before_llm_call` and `before_tool_call` hooks return `False` to block the call; they may edit `context.messages` / `context.tool_input` in place (never replace the list or dict).
 - `after_llm_call` and `after_tool_call` hooks return a replacement string, or `None` to keep the original.
 - `tools=[...]` and `agents=[...]` filter which calls a hook sees. `crewai.hooks.clear_all_global_hooks()` removes them all (useful between tests).
+
+### Run-level hooks: `@on(InterceptionPoint...)`
+
+The four decorators above are adapters over a more general mechanism in `crewai.hooks`. `@on(point)` registers a function for any interception point, and a hook can stop the operation by raising `HookAborted(reason)`:
+
+| Point | Fires | Context highlights |
+|---|---|---|
+| `INPUT` / `EXECUTION_START` | Before a crew (or flow) runs | `payload` is the inputs dict |
+| `OUTPUT` | After the final result is built | `payload` is the `CrewOutput` |
+| `EXECUTION_END` | After success **or** failure | `status` is `"completed"` or `"failed"`; `error` on failure |
+| `PRE_STEP` / `POST_STEP` | Around each task (or flow method) | `kind`, `step_name`, `payload` |
+| `PRE_MODEL_CALL` / `POST_MODEL_CALL`, `PRE_TOOL_CALL` / `POST_TOOL_CALL` | Around model and tool calls | The same contexts as the four decorators |
+
+```python
+import re
+
+from crewai.hooks import HookAborted, InterceptionPoint, on
+
+
+@on(InterceptionPoint.INPUT)
+def reject_banned_topics(ctx):
+    if "forbidden" in str(ctx.payload.get("topic", "")):
+        raise HookAborted("topic not allowed")        # kickoff() raises HookAborted
+
+
+@on(InterceptionPoint.OUTPUT)
+def redact_ssn(ctx):
+    ctx.payload.raw = re.sub(r"\d{3}-\d{2}-\d{4}", "[ssn]", ctx.payload.raw)   # mutate in place
+
+
+@on(InterceptionPoint.EXECUTION_END)
+def audit(ctx):
+    print("run finished:", ctx.status)
+```
+
+We ran these around a one-task crew: the redaction was visible in both `result.raw` and `result.tasks_output[0].raw`, a banned topic made `kickoff()` raise `HookAborted: topic not allowed`, and `EXECUTION_END` reported `"failed"` for that run. A hook may mutate its context in place, or return a replacement for `ctx.payload`. Any exception other than `HookAborted` raised inside a hook is swallowed, so a buggy hook cannot crash a run; it also cannot be relied on to block one. Use `clear_all_hooks()` between tests.
 
 ## Token usage
 
@@ -429,6 +469,6 @@ CMD ["uv", "run", "run_crew"]
 ```
 
 - `run_crew` is the console script the classic scaffold defines in `pyproject.toml`; flow projects define their own.
-- Memory (LanceDB), knowledge (ChromaDB), flow persistence (SQLite) and checkpoints write under the working directory or CrewAI's per-user data directory by default. Point them at a mounted volume (`CREWAI_STORAGE_DIR`, `CheckpointConfig(location=...)`, `SQLiteFlowPersistence(path)`) or they vanish with the container. Two processes must not write the same LanceDB path.
+- Memory (LanceDB, under `memory/`), knowledge (ChromaDB), flow persistence (`flow_states.db`) and the latest-kickoff task outputs used by `crewai replay` (`latest_kickoff_task_outputs.db`) are written to CrewAI's per-user data directory, whose name comes from the project folder. Setting `CREWAI_STORAGE_DIR` moves them (we confirmed this for memory, flow persistence and the task-output store). Checkpoints are written to `./.checkpoints` unless `CheckpointConfig(location=...)` says otherwise, and `SQLiteFlowPersistence(path)` takes an explicit file. Point all of these at a mounted volume or they vanish with the container. Writes to these stores take a lock: a file lock in the system temp directory by default, or a Redis lock when `REDIS_URL` is set and `redis` is installed (`crewai_core.lock_store.set_lock_backend` swaps in your own). A temp-directory lock only coordinates processes on one machine, so containers that share a network volume should use `REDIS_URL` or a store built for concurrent writers.
 - Behind a web API, run kickoffs as background jobs (a run takes seconds to minutes) and build a fresh crew per request instead of sharing one instance between concurrent requests. In async servers use `await crew.akickoff(...)` or `await flow.kickoff_async(...)`; `kickoff()` blocks the calling thread.
 - Stream partial output with `Crew(stream=True)` / `Flow(stream=True)`, or listen for `LLMStreamChunkEvent`.

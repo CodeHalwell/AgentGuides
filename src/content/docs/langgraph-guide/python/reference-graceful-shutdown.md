@@ -444,6 +444,5 @@ assert control.drain_reason == REASON_SIGTERM
 
 | Version | Change |
 |---|---|
-| 1.2.11 | `RunControl`, `GraphDrained`, `Runtime.control` production-stable |
-| 1.2.0 | `Runtime.drain_requested` shortcut added |
-| 0.6.0 | `Runtime` dataclass and cooperative drain first introduced |
+| 1.2.0 | `RunControl`, `GraphDrained`, `Runtime.control` and the `drain_requested` / `drain_reason` shortcuts added; `invoke`/`stream` accept `control=` |
+| 0.6.0 | `Runtime` dataclass introduced (without drain support) |

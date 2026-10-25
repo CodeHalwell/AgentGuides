@@ -1,8 +1,11 @@
 ---
 title: "Microsoft Agent Framework (Python) — Model Providers"
-description: "Real imports and constructors for every first-party chat client in agent-framework: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Ollama, Bedrock, GitHub Copilot, Copilot Studio."
+description: "Imports, constructors and environment variables for every first-party chat client in agent-framework: OpenAI, Azure OpenAI, Microsoft Foundry, Foundry Local, Anthropic, Gemini, Mistral, Ollama, Bedrock, plus the Claude, GitHub Copilot and Copilot Studio agents."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Model providers"
+  order: 10
 ---
 
 Every chat client in `agent-framework` implements the same `SupportsChatGetResponse` protocol, so `Agent(client=...)` accepts them interchangeably. The import is always `agent_framework.<provider>.<ClassName>` — **no Azure SDK import is required for any of these**. The Azure SDK only becomes relevant for authentication (`azure-identity`) or for Azure-specific storage providers.
@@ -20,21 +23,24 @@ This page was verified against `agent-framework` %%version=agent-framework%% and
 | Anthropic | `agent-framework-anthropic` | `agent_framework.anthropic` | Beta |
 | Anthropic on Bedrock | `agent-framework-anthropic` | `agent_framework.anthropic` | Beta |
 | Anthropic on Vertex | `agent-framework-anthropic` | `agent_framework.anthropic` | Beta |
-| Claude Code SDK | `agent-framework-claude` | `agent_framework.anthropic` | Beta |
+| Anthropic on Foundry | `agent-framework-anthropic` | `agent_framework.anthropic` (also `agent_framework.foundry`) | Beta |
+| Claude Agent SDK (`ClaudeAgent`) | `agent-framework-claude` | `agent_framework.anthropic` | Beta |
+| Google Gemini / Vertex AI | `agent-framework-gemini` | `agent_framework.gemini` | Beta |
+| Mistral | `agent-framework-mistral` | `agent_framework.mistral` | Beta |
 | Ollama | `agent-framework-ollama` | `agent_framework.ollama` | Beta |
 | Amazon Bedrock (native) | `agent-framework-bedrock` | `agent_framework.amazon` | Beta |
-| GitHub Copilot | `agent-framework-github-copilot` | `agent_framework.github` | Beta |
+| GitHub Copilot (`GitHubCopilotAgent`) | `agent-framework-github-copilot` | `agent_framework.github` | Stable (2.x, Python 3.11+) |
 | Copilot Studio | `agent-framework-copilotstudio` | `agent_framework.microsoft` | Beta |
 
 ## OpenAI (and Azure OpenAI)
 
-A single class — `OpenAIChatClient` — drives both OpenAI and Azure OpenAI. The routing is determined by which arguments you pass: `credential=` or `azure_endpoint=` select Azure; otherwise it stays on OpenAI.
+A single class — `OpenAIChatClient` — drives both OpenAI and Azure OpenAI. Passing `azure_endpoint=` or `credential=` (or an `AsyncAzureOpenAI` as `async_client=`) selects Azure. Otherwise the client uses OpenAI when an OpenAI key is available (`api_key=` or `OPENAI_API_KEY`), and falls back to the `AZURE_OPENAI_*` variables when it is not.
 
 ```python
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
-# OpenAI — reads OPENAI_API_KEY and OPENAI_CHAT_MODEL from env
+# OpenAI — reads OPENAI_API_KEY and OPENAI_CHAT_MODEL (or OPENAI_MODEL) from env
 agent = Agent(
     client=OpenAIChatClient(),
     instructions="You are a helpful assistant.",
@@ -100,7 +106,7 @@ Environment-variable cascade resolved inside the constructor:
 
 ## Microsoft Foundry
 
-Microsoft Foundry (formerly Azure AI Foundry) provides project-scoped model deployments plus first-party evaluation and agent hosting. The client talks to the OpenAI-compatible endpoint surfaced by the Foundry project.
+Microsoft Foundry (formerly Azure AI Foundry) provides project-scoped model deployments plus first-party evaluation and agent hosting. `FoundryChatClient` talks to the project's OpenAI-compatible Responses endpoint. The project endpoint has the form `https://<resource>.services.ai.azure.com/api/projects/<project>` (copy it from the project's overview page). An Entra ID credential is required; Foundry projects do not take API keys here.
 
 ```python
 from agent_framework import Agent
@@ -110,7 +116,7 @@ from azure.identity.aio import AzureCliCredential
 async with AzureCliCredential() as credential:
     agent = Agent(
         client=FoundryChatClient(
-            project_endpoint="https://<project>.services.ai.azure.com",
+            project_endpoint="https://<resource>.services.ai.azure.com/api/projects/<project>",
             model="%%model=openai-small%%",
             credential=credential,
         ),
@@ -136,7 +142,7 @@ client = FoundryChatClient(project_client=project, model="%%model=openai-small%%
 from agent_framework.foundry import FoundryAgent
 
 foundry_agent = FoundryAgent(
-    project_endpoint="https://<project>.services.ai.azure.com",
+    project_endpoint="https://<resource>.services.ai.azure.com/api/projects/<project>",
     agent_name="contract-reviewer",
     agent_version="1.0",
     credential=credential,
@@ -146,7 +152,7 @@ response = await foundry_agent.run("Review contract.pdf")
 
 ## Foundry Local
 
-`FoundryLocalClient` targets the local Foundry inference runtime (GGUF/ONNX models served by `foundry-local`). Useful for offline development and compliance scenarios.
+`FoundryLocalClient` targets [Foundry Local](https://learn.microsoft.com/azure/ai-foundry/foundry-local/), Microsoft's on-device inference runtime. The `foundry` CLI must be installed: with the default `bootstrap=True` the client starts the local service and, with `prepare_model=True`, downloads and loads the model on first use (which can take minutes). The model can also come from `FOUNDRY_LOCAL_MODEL`. Useful for offline development and data that must not leave the machine.
 
 ```python
 from agent_framework.foundry import FoundryLocalClient
@@ -160,14 +166,15 @@ agent = Agent(
 
 ## Anthropic
 
-Three transports — direct Anthropic API, Anthropic on AWS Bedrock, Anthropic on Google Vertex. All three implement the same chat-client protocol, so only the construction differs.
+Four transports — the Anthropic API, Anthropic on AWS Bedrock, Anthropic on Google Vertex AI and Anthropic models deployed in Microsoft Foundry. All implement the same chat-client protocol, so only the construction differs. `AnthropicClient` reads `ANTHROPIC_API_KEY` and `ANTHROPIC_CHAT_MODEL`.
 
 ```python
 from agent_framework import Agent
 from agent_framework.anthropic import (
     AnthropicClient,          # api.anthropic.com; reads ANTHROPIC_API_KEY
     AnthropicBedrockClient,   # Anthropic via AWS Bedrock
-    AnthropicVertexClient,    # Anthropic via Google Vertex AI
+    AnthropicVertexClient,    # Anthropic via Google Vertex AI (region=, project_id=)
+    AnthropicFoundryClient,   # Anthropic models in Microsoft Foundry (resource=, api_key= or azure_ad_token_provider=)
 )
 
 agent = Agent(
@@ -190,7 +197,7 @@ async with ClaudeAgent(
 
 ## Ollama
 
-Local models via the Ollama daemon.
+Local models via the Ollama daemon. Reads `OLLAMA_HOST` and `OLLAMA_MODEL`.
 
 ```python
 from agent_framework import Agent
@@ -208,9 +215,39 @@ Custom base URL (non-default daemon):
 OllamaChatClient(model="llama3.1", host="http://gpu-host:11434")
 ```
 
+## Google Gemini
+
+`GeminiChatClient` uses the `google-genai` SDK, so one class covers the Gemini Developer API (`api_key=` or `GOOGLE_API_KEY`) and Vertex AI (`enterprise=True` with `project=` and `location=`, or `GOOGLE_GENAI_USE_ENTERPRISE`, `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`). The model comes from `model=` or `GOOGLE_MODEL`.
+
+```python
+from agent_framework import Agent
+from agent_framework.gemini import GeminiChatClient
+
+agent = Agent(
+    client=GeminiChatClient(model="%%model=gemini%%"),
+    instructions="You are a helpful assistant.",
+)
+```
+
+`GeminiChatOptions` adds Gemini settings such as `thinking_config` (a `ThinkingConfig`).
+
+## Mistral
+
+```python
+from agent_framework import Agent
+from agent_framework.mistral import MistralChatClient
+
+agent = Agent(
+    client=MistralChatClient(model="%%model=mistral%%"),   # or MISTRAL_CHAT_MODEL; key from MISTRAL_API_KEY
+    instructions="You are a helpful assistant.",
+)
+```
+
+`server_url=` (or `MISTRAL_SERVER_URL`) points the client at a self-hosted or regional endpoint.
+
 ## Amazon Bedrock (native)
 
-The `agent_framework.amazon` namespace exposes the native Bedrock Converse API (for Titan, Nova, Mistral, Cohere, DeepSeek, etc. on Bedrock). For Claude on Bedrock, use `AnthropicBedrockClient` from the Anthropic provider instead — it unlocks Anthropic-specific features like extended thinking.
+The `agent_framework.amazon` namespace exposes the native Bedrock Converse API (for Nova, Titan, Mistral, Cohere, DeepSeek and other models on Bedrock). Credentials come from the usual boto3 chain unless you pass `access_key=` / `secret_key=` / `session_token=` or a `boto3_session=`; region and model can come from `BEDROCK_REGION` and `BEDROCK_CHAT_MODEL`. For Claude on Bedrock you can also use `AnthropicBedrockClient` from the Anthropic provider, which exposes Anthropic-specific options such as extended thinking.
 
 ```python
 from agent_framework import Agent
@@ -243,7 +280,7 @@ agent = Agent(
 
 ## GitHub Copilot
 
-`agent-framework-github-copilot` wraps the GitHub Copilot SDK as an agent in its own right — `GitHubCopilotAgent` — rather than as a chat client for `Agent`:
+`agent-framework-github-copilot` wraps the GitHub Copilot SDK as an agent in its own right — `GitHubCopilotAgent` — rather than as a chat client for `Agent`. It drives the Copilot CLI, which needs a GitHub account with Copilot access. `GitHubCopilotOptions` covers `model`, `system_message`, `mcp_servers`, `skill_directories`, permission callbacks and more:
 
 ```python
 from agent_framework.github import GitHubCopilotAgent  # agent_framework_github_copilot
@@ -364,7 +401,7 @@ async def index(client: SupportsGetEmbeddings, docs: list[str]) -> list[list[flo
 
 ### Custom embedding client
 
-Subclass `BaseEmbeddingClient` when you need to wrap a provider that isn't first-party or want to add batching/caching/shadowing on top of an existing one. The full pattern lives in the [Advanced page](./microsoft_agent_framework_python_advanced/#custom-embedding-client--baseembeddingclient); the short version:
+Subclass `BaseEmbeddingClient` when you need to wrap a provider that isn't first-party or want to add batching/caching/shadowing on top of an existing one. The full pattern lives in the [Advanced page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#custom-embedding-client--baseembeddingclient); the short version:
 
 ```python
 from agent_framework import BaseEmbeddingClient, Embedding, GeneratedEmbeddings
@@ -647,11 +684,11 @@ response = await agent.run(
 print(response.value.sentiment, response.value.score)
 ```
 
-Providers that don't support structured output natively fall back to JSON-mode + client-side validation — same surface either way.
+`response.value` is parsed from the response text on first access, so a provider that ignores the schema produces a validation error there rather than at the call. Check the provider's own documentation for which models honour structured output.
 
 ### Merging with client-level defaults
 
-Defaults live in the agent's `default_options=` (the same TypedDict). The call-level `options=` is a shallow merge on top: keys you set win, keys you omit inherit from the client.
+Defaults live in the agent's `default_options=` (the same TypedDict). The call-level `options=` is a shallow merge on top: keys you set win, keys you omit keep the agent's default.
 
 ```python
 from agent_framework import Agent
@@ -671,6 +708,7 @@ await agent.run("Draft a tweet.", options={"max_tokens": 280})
 Every client accepts `model=` at construction and remembers it. But you can also override the model for a single call without building a new client — use `options=` on the agent run:
 
 ```python
+from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient, OpenAIChatOptions
 
 default_client = OpenAIChatClient(model="%%model=openai-small%%")
@@ -690,20 +728,26 @@ response = await agent.run(
 
 Use the generic `ChatOptions` whenever the knobs you need are common across providers — that keeps the call site interoperable. Drop to the provider-specific dict only when you need a feature the base can't describe:
 
-- **OpenAI-only** (via `OpenAIChatOptions`): `reasoning`, `prompt_cache_key`, `prompt_cache_retention`, `service_tier`, `top_logprobs`, `truncation`, `background`, `include`, `max_tool_calls`, `continuation_token`.
-- **Anthropic-only**: extended-thinking parameters, cache-control directives.
-- **Bedrock-only**: `guardrail` references, `additional_model_request_fields`.
+- **OpenAI** (`OpenAIChatOptions`): `reasoning`, `verbosity`, `prompt_cache_key`, `prompt_cache_retention`, `prompt_cache_options`, `service_tier`, `safety_identifier`, `top_logprobs`, `truncation`, `background`, `continuation_token`, `include`, `max_tool_calls`, `prompt`, `stream_options`.
+- **Anthropic** (`AnthropicChatOptions`): `thinking`, `top_k`, `container`, `service_tier`, `additional_beta_flags`.
+- **Bedrock** (`BedrockChatOptions`, Converse API camelCase): `guardrailConfig`, `additionalModelRequestFields`, `performanceConfig`, `promptVariables`, `requestMetadata`.
 
 Mixing them is fine — a provider-specific dict is a superset of `ChatOptions`, so code typed against the base still accepts it.
 
 ## Building your own chat client
 
-For a provider that isn't in the first-party list, or to wrap an existing client with caching / shadow traffic / logging, subclass `BaseChatClient`. Implement one method — `_inner_get_response` — and inherit middleware, telemetry, and the function calling loop for free. See the full recipe in [Advanced → Custom chat client](./microsoft_agent_framework_python_advanced/#custom-chat-client--basechatclient).
+For a provider that isn't in the first-party list, or to wrap an existing client with caching / shadow traffic / logging, subclass `BaseChatClient`. Implement one method — `_inner_get_response` — and inherit middleware, telemetry, and the function calling loop for free. See the full recipe in [Advanced → Custom chat client](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/#custom-chat-client--basechatclient).
 
 ## Picking a provider
 
 - **Prototyping** — `OpenAIChatClient()` or `OllamaChatClient(model="llama3.1")`. Neither requires Azure tooling.
 - **Azure-native deployments** — `OpenAIChatClient` with `azure_endpoint` + `credential`, or `FoundryChatClient` if you're already on a Foundry project (evaluation, service-managed agents, private networking).
-- **Cross-cloud Claude** — `AnthropicClient` for Anthropic direct; `AnthropicBedrockClient` or `AnthropicVertexClient` to keep data in AWS/GCP.
+- **Cross-cloud Claude** — `AnthropicClient` for Anthropic direct; `AnthropicBedrockClient`, `AnthropicVertexClient` or `AnthropicFoundryClient` to keep traffic in AWS, Google Cloud or Azure.
 - **Offline / compliance** — `OllamaChatClient` or `FoundryLocalClient`.
 - **Multi-provider fallback** — build a thin factory (example above) and let an env var pick at startup; the rest of your agent code stays unchanged.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Added Gemini, Mistral and `AnthropicFoundryClient`; corrected the Foundry project-endpoint format, the GitHub Copilot status (stable 2.x), Azure/OpenAI routing, and the provider-specific option names (Bedrock options are camelCase; Anthropic has no cache-control option); removed an unsupported claim about structured-output fallback. |

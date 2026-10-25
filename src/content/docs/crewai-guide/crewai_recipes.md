@@ -14,9 +14,11 @@ Each recipe is a complete script. They all set the model explicitly; swap in any
 
 ## 1. Research, write, edit
 
-Three agents in sequence, a typed final result and a Markdown file on disk.
+Three agents in sequence, a typed final result and a Markdown file written from it.
 
 ```python
+from pathlib import Path
+
 from pydantic import BaseModel
 from crewai import Agent, Crew, Process, Task, LLM
 
@@ -63,7 +65,6 @@ final = Task(
     expected_output="The edited article with a title and a one-sentence summary.",
     agent=editor,
     output_pydantic=Article,
-    output_file="output/{topic}.md",
 )
 
 crew = Crew(agents=[researcher, writer, editor], tasks=[research, draft, final], process=Process.sequential)
@@ -72,9 +73,13 @@ result = crew.kickoff(inputs={"topic": "heat pumps", "audience": "homeowners"})
 article: Article = result.pydantic
 print(article.title)
 print(result.token_usage.total_tokens, "tokens")
+
+out = Path("output") / "heat-pumps.md"
+out.parent.mkdir(exist_ok=True)
+out.write_text(f"# {article.title}\n\n_{article.summary}_\n\n{article.body_markdown}\n")
 ```
 
-`output_file` accepts the same `{placeholders}` as descriptions, and its folder is created if missing.
+The Markdown file is written from the typed result on purpose. A task's `output_file` saves the task's *raw* output, so with `output_pydantic=Article` it would contain the JSON, not the article. Use `output_file` on a task whose raw output is the document you want (here, give the editor task no `output_pydantic` and add `output_file="output/{topic}.md"`), and use a separate structured task, or a field such as `body_markdown`, when you need both. `output_file` accepts the same `{placeholders}` as descriptions, and its folder is created if missing.
 
 ## 2. A report from CSV data
 

@@ -30,7 +30,8 @@ Python 3.10 or later. Model providers other than Bedrock, and some features, are
 | `mistral`, `llamaapi`, `writer`, `sagemaker` | `MistralModel`, `LlamaAPIModel`, `WriterModel`, `SageMakerAIModel` |
 | `a2a` | `A2AServer`, `A2AAgent` |
 | `otel` | OTLP trace exporter |
-| `bidi`, `bidi-openai`, `bidi-google` | `BidiAgent` for real-time voice |
+| `bidi`, `bidi-openai`, `bidi-google`, `bidi-io`, `bidi-pyaudio`, `bidi-aec` | `BidiAgent` for real-time voice and its models and audio devices (see [Real-time voice](#real-time-voice-and-text-with-bidiagent)) |
+| `cedar` | the Cedar policy intervention handler |
 | `web-fetch` | the vended `web_fetch` tool |
 
 ```bash
@@ -305,6 +306,58 @@ agent = Agent(model=claude, callback_handler=None)
 
 The Anthropic and OpenAI model IDs are the provider's own (`%%model=anthropic%%`, `%%model=openai%%`), not Bedrock IDs.
 
+The remaining providers follow the same pattern. `GeminiModel` takes `client_args` for `google.genai.Client` and a `params` dict; `MistralModel` takes the key directly and flat settings; `LlamaCppModel` talks to a running llama.cpp server (started with `llama-server -m model.gguf --port 8080`) and has no `model_id` of its own; `OpenAIResponsesModel` uses the Responses API, where `stateful=True` keeps the conversation state on OpenAI's side rather than resending the history:
+
+```python
+import os
+
+from strands import Agent
+from strands.models.gemini import GeminiModel
+from strands.models.llamacpp import LlamaCppModel
+from strands.models.mistral import MistralModel
+from strands.models.openai_responses import OpenAIResponsesModel
+
+gemini = GeminiModel(
+    client_args={"api_key": os.environ.get("GEMINI_API_KEY", "key")},
+    model_id="%%model=gemini%%",
+    params={"temperature": 0.3, "max_output_tokens": 2048},
+)
+
+mistral = MistralModel(
+    api_key=os.environ.get("MISTRAL_API_KEY", "key"),
+    model_id="%%model=mistral%%",
+    max_tokens=1024,
+    temperature=0.3,
+)
+
+local = LlamaCppModel(base_url="http://localhost:8080")
+
+responses = OpenAIResponsesModel(
+    client_args={"api_key": os.environ.get("OPENAI_API_KEY", "sk-...")},
+    model_id="%%model=openai%%",
+    stateful=True,
+)
+
+agent = Agent(model=gemini, callback_handler=None)
+```
+
+### OpenAI-compatible models on Bedrock
+
+Bedrock serves some models (including OpenAI's open-weight `openai.gpt-oss-*` models) through OpenAI-compatible endpoints. `OpenAIModel` and `OpenAIResponsesModel` can use them with `bedrock_mantle_config`, which sets the client's `base_url` and mints a short-lived bearer token from your normal AWS credentials on every request, so you need no OpenAI key and long-running agents do not outlive a token:
+
+```python
+from strands import Agent
+from strands.models.openai import OpenAIModel
+
+model = OpenAIModel(
+    model_id="openai.gpt-oss-120b",
+    bedrock_mantle_config={"region": "us-west-2"},
+)
+agent = Agent(model=model, callback_handler=None)
+```
+
+The config accepts `endpoint`, `region`, `boto_session`, `credentials_provider` and `expiry`. `endpoint` is `"bedrock-mantle"` by default; `"bedrock-runtime"` is the other endpoint family and the only one that accepts cross-Region inference profile IDs such as `us.openai.*`. Available models and Regions differ between the two, so check the [Bedrock OpenAI-compatible APIs page](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-openai.html). `bedrock_mantle_config` cannot be combined with a prebuilt `client`, and `client_args` must not contain `api_key` or `base_url`. It needs the `openai` extra, which installs the token generator.
+
 ### Routing and fallback
 
 `ModelRouter` wraps several models. The default `FallbackStrategy` uses the first, and moves to the next when a call fails (after that model's retries):
@@ -321,7 +374,35 @@ router = ModelRouter([
 agent = Agent(model=router, callback_handler=None)
 ```
 
-`ClassifierStrategy` picks a model per call instead (for example a small model for easy requests). `aux_model=` on the agent is the simpler tool for cost: it moves Strands' own side calls (context summarisation, memory extraction, judges) to a cheaper model while the main loop keeps `model`.
+Fallback is not strictly "first, then second": a model that keeps failing sinks below healthier ones on later calls, and a success clears that model's failure count.
+
+`ClassifierStrategy` picks a model per call instead. It asks a classifier model (one that supports structured output) which candidate suits the latest request, so describe each candidate with `RoutingCandidate`. The names, descriptions and metadata are sent to the classifier, so keep secrets out of them:
+
+```python
+from strands import Agent
+from strands.models import BedrockModel, ModelRouter
+from strands.models.routing import ClassifierStrategy, RoutingCandidate
+
+router = ModelRouter(
+    [
+        RoutingCandidate(
+            BedrockModel(model_id="us.anthropic.%%model=anthropic-small%%"),
+            name="fast",
+            description="Cheap and quick; short factual answers and simple extraction.",
+        ),
+        RoutingCandidate(
+            BedrockModel(model_id="us.anthropic.%%model=anthropic%%"),
+            name="deep",
+            description="Slower; multi-step reasoning, long documents and code changes.",
+            metadata={"context": "large"},
+        ),
+    ],
+    strategy=ClassifierStrategy(BedrockModel(model_id="us.anthropic.%%model=anthropic-small%%", temperature=0)),
+)
+agent = Agent(model=router, callback_handler=None)
+```
+
+The classifier adds one model call per request. If it fails or times out (`timeout=30.0` seconds by default), the router serves the first candidate; if the chosen candidate then fails, this strategy does not switch to another. A router has one strategy: use `FallbackStrategy` (the default) for failover and `ClassifierStrategy` for cost control. `aux_model=` on the agent is the simpler tool for cost: it moves Strands' own side calls (context summarisation, memory extraction, judges) to a cheaper model while the main loop keeps `model`.
 
 ### Writing a provider
 
@@ -615,6 +696,54 @@ agent = Agent(
 
 Turns are written to AgentCore Memory as events; long-term records extracted by the memory's strategies are retrieved and added to the context on each turn. Creating the memory resource itself is covered in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/).
 
+## Long-term memory
+
+A session replays one conversation. A `MemoryManager` gives an agent memory that outlives conversations: a preference mentioned last week can be found today, in a different session. It is a plugin passed as `memory_manager=`, and it works with one or more *stores*.
+
+What the manager adds to the agent:
+
+- **Injection** (on by default). Before the model call for each new user message, the manager searches its stores with the message and appends the matches to the model input as a `<memory>` block. The block is not written to `agent.messages`, so it never accumulates in the history or the session. `injection=False` turns it off, and a `MemoryInjectionConfig` customises the query, the formatting, the number of entries and the trigger (`"userTurn"` by default, or `"everyTurn"` for agents that should consult memory mid-task).
+- **A `search_memory` tool** (on by default), so the model can search when injection did not find what it needs.
+- **An `add_memory` tool** (off by default; `add_tool_config=True`), so the model can save facts as the user shares them.
+- **Automatic extraction**, configured on a store with `extraction=`. A model reads recent turns and writes durable facts to the store, by default every five invocations (`IntervalTrigger(turns=...)` and `InvocationTrigger()` change that; the extractor costs a model call, and `aux_model=` can make it a cheaper one).
+
+Stores are small objects with a `name`, a `search()` method and, if writable, an `add()` method:
+
+| Store | Backing | Search |
+|-------|---------|--------|
+| `FileMemoryStore` (`strands.vended_memory_stores.file_memory_store`) | Markdown files, one per topic, under `./.strands/memory/<name>/` (any `strands.storage` backend, such as `S3Storage`, can replace the local disk) | Keyword overlap |
+| `BedrockKnowledgeBaseStore` (`strands.vended_memory_stores.bedrock_knowledge_base`) | An Amazon Bedrock Knowledge Base, optionally scoped per user | Semantic |
+| `TestMemoryStore` (`strands.vended_memory_stores.test_memory_store`) | A local JSON file, or in memory | Keyword overlap; for prototypes and tests |
+| Your own | Anything implementing the `MemoryStore` protocol (`strands.memory`) | Yours |
+
+Mem0 is available through the `mem0-strands` package, which provides a `Mem0MemoryStore` for the same manager.
+
+```python
+from strands import Agent
+from strands.memory import MemoryManager
+from strands.vended_memory_stores.file_memory_store import FileMemoryStore
+
+store = FileMemoryStore(name="assistant-memory")
+memory = MemoryManager(stores=[store], add_tool_config=True)
+
+# Conversation 1: the model saves a fact with add_memory
+first = Agent(model="us.anthropic.%%model=anthropic%%", memory_manager=memory, callback_handler=None)
+print(first.tool_names)       # ['search_memory', 'add_memory']
+first("Remember that I prefer metric units.")
+
+# Conversation 2, in a new agent (or a new process): the fact is injected before the model call
+second = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    memory_manager=MemoryManager(stores=[FileMemoryStore(name="assistant-memory")]),
+    callback_handler=None,
+)
+print(second("Which units do I prefer?"))
+```
+
+With `FileMemoryStore`, the first line of an entry (a Markdown heading such as `# User preferences`) becomes the file name, and later facts under the same heading are appended to the same file. `await memory.search("units")` and `await memory.add("...")` use the same stores directly from your own code, for example to seed a store or to show a user what is remembered.
+
+Memory is shared by everyone who uses the store, so give each user their own store name (or, for the Knowledge Base store, their own `scope`) and keep personal data out of stores you do not control. Retrieved text reaches the model verbatim; treat what the store holds as untrusted input if users can write to it.
+
 ## Limits, cancellation and concurrency
 
 ```python
@@ -685,19 +814,263 @@ def answer(text: str) -> str:
 
 Strands already retries throttling, so do not wrap every call in a second retry loop; adjust `retry_strategy=ModelRetryStrategy(max_attempts=..., initial_delay=..., max_delay=...)` instead. Logging uses the `strands` logger: `logging.getLogger("strands").setLevel(logging.DEBUG)` shows requests and tool calls.
 
+## Real-time voice and text with BidiAgent
+
+`Agent` is request and response: one call in, one result out. `BidiAgent` (from `strands.bidi`) keeps a persistent connection to a real-time model, so audio or text can flow in while the model is still speaking. The user can interrupt (barge in), tools run while the conversation continues, and the connection is renewed before the provider's session limit. Use it for voice assistants and live-captioned chat; use `Agent` for everything else, because it has more features (see the limits at the end of this section).
+
+### Install
+
+The pieces are separate extras, so install what you use:
+
+| Extra | Adds | Python |
+|-------|------|--------|
+| `bidi` | The Bedrock client for `BedrockNovaSonicModel` (Amazon Nova Sonic) | 3.12 or later |
+| `bidi-openai` | `OpenAIRealtimeModel` (WebSocket) | 3.10 or later |
+| `bidi-google` | `GoogleGeminiLiveModel` | 3.10 or later |
+| `bidi-io` | `ConsoleIO`, a text console for trying an agent in a terminal | 3.10 or later |
+| `bidi-pyaudio` | `AudioIO`, microphone and speaker through PyAudio (needs the PortAudio system library) | 3.10 or later |
+| `bidi-aec` | Echo cancellation and noise suppression for `AudioIO(audio_processor=True)` | 3.10 or later |
+
+`bidi-all` installs the lot. `OpenAILiveModel` (extra `bidi-openai-live`) is a second OpenAI provider that warns it is experimental.
+
+```bash
+pip install "strands-agents[bidi,bidi-pyaudio]==%%version=strands-agents%%"
+```
+
+### A voice agent
+
+`BidiAgent` takes the same `tools`, `system_prompt`, `hooks`, `state`, `messages` and `session_manager` as `Agent`, and a `BidiModel` instead of a text model. With no `model`, it uses Nova Sonic (`amazon.nova-2-5-sonic`). `run()` connects the model to input and output streams until the connection closes:
+
+```python
+import asyncio
+
+from strands import tool
+from strands.bidi import BidiAgent
+from strands.bidi.io import AudioIO
+from strands.bidi.models import BedrockNovaSonicModel
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the weather for a city.
+
+    Args:
+        city: City name.
+    """
+    return f"Rain in {city}"
+
+
+model = BedrockNovaSonicModel(model_id="amazon.nova-2-5-sonic", voice="matthew")
+agent = BidiAgent(
+    model=model,
+    tools=[get_weather],
+    system_prompt="You are a friendly voice assistant. Keep answers short.",
+)
+
+
+async def main() -> None:
+    audio_io = AudioIO()
+    await agent.run(inputs=[audio_io.input()], outputs=[audio_io.output()])
+
+
+asyncio.run(main())
+```
+
+This needs AWS credentials with access to the model, a microphone and speakers, so it was checked for imports and constructor arguments only. `AudioIO` reads the sample rate and format from the model (`model.get_audio_config()`; 16 kHz mono PCM for Nova Sonic by default), clears its playback buffer when the user barges in, and takes device and buffer options. Other providers differ only in the model object:
+
+| Model | Constructor |
+|-------|-------------|
+| `BedrockNovaSonicModel` | `model_id` (required), `boto_session` or `region`, `audio`, `voice="matthew"` |
+| `GoogleGeminiLiveModel` | `model_id` (required), `client_args` (for the Google GenAI client), `audio`, `voice` |
+| `OpenAIRealtimeModel` | `model_id` and `transcription_model_id` (both required; `None` turns off user transcription), `api_key` (or `OPENAI_API_KEY`), `voice="alloy"`, `timeout_s` |
+
+All three accept `params` (provider-specific request options) and `connection`, for example `connection={"auto_restart": False}`.
+
+### Driving the connection yourself
+
+`run()` suits a microphone. To feed the agent from a WebSocket, a test or your own UI, use the agent as an async context manager and call `send()` and `receive()`, or pass your own streams to `run()`. An *input stream* is an async callable returning the next input; an *output stream* is an async callable that takes each event. Either may define `start(agent)` and `stop()`.
+
+The example below runs offline. `ScriptedLiveModel` stands in for a real-time model (it asks for `get_weather` when it receives text, then reports the result), so it also shows what a `BidiModel` must implement: `start`, `stop`, `send`, `receive`, `get_config` and `update_config`.
+
+```python
+import asyncio
+from collections.abc import AsyncIterable
+from typing import Any
+
+from strands import tool
+from strands.bidi import BidiAgent
+from strands.bidi.hooks import BidiAgentStopEvent
+from strands.bidi.models import BidiModel
+from strands.bidi.types import (
+    BidiAgentInput,
+    BidiConnectionStartEvent,
+    BidiMessage,
+    BidiOutputEvent,
+    BidiResponseStartEvent,
+    BidiResponseStopEvent,
+    BidiTextDeltaEvent,
+    BidiTextStartEvent,
+    BidiTextStopEvent,
+    BidiToolUseBlocksEvent,
+)
+from strands.hooks import BeforeToolCallEvent
+from strands.types.tools import ToolResultBlock
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the weather for a city.
+
+    Args:
+        city: City name.
+    """
+    return f"Rain in {city}"
+
+
+class ScriptedLiveModel(BidiModel):
+    """Stands in for a real-time model: asks for get_weather, then reports the tool result."""
+
+    def __init__(self) -> None:
+        self.config: dict[str, Any] = {"model_id": "scripted-live"}
+        self.inbox: asyncio.Queue = asyncio.Queue()
+
+    def get_config(self) -> dict[str, Any]:
+        return self.config
+
+    def update_config(self, **model_config: Any) -> None:
+        self.config.update(model_config)
+
+    async def start(self, system_prompt=None, tools=None, messages=None, **kwargs) -> None:
+        pass
+
+    async def stop(self) -> None:
+        pass
+
+    async def send(self, content) -> None:
+        await self.inbox.put(content)
+
+    async def receive(self) -> AsyncIterable[BidiOutputEvent]:
+        yield BidiConnectionStartEvent(connection_id="c1", model="scripted-live")
+        while True:
+            content = await self.inbox.get()
+            if isinstance(content, BidiMessage) and isinstance(content.content[0], ToolResultBlock):
+                text = f"It says: {content.content[0].content[0]['text']}"
+                yield BidiTextStartEvent(content_id="t1")
+                yield BidiTextDeltaEvent(delta=text, content_id="t1")
+                yield BidiTextStopEvent(content_id="t1")
+                yield BidiResponseStopEvent(response_id="r1")
+                continue
+            yield BidiResponseStartEvent(response_id="r1")
+            yield BidiToolUseBlocksEvent(
+                tool_uses=[{"toolUseId": "u1", "name": "get_weather", "input": {"city": "Leeds"}}]
+            )
+
+
+class OneQuestion:
+    """An input stream: yields one question, then waits for ever."""
+
+    def __init__(self) -> None:
+        self.asked = False
+
+    async def __call__(self) -> BidiAgentInput:
+        if not self.asked:
+            self.asked = True
+            return "What's the weather in Leeds?"
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+
+agent = BidiAgent(model=ScriptedLiveModel(), tools=[get_weather], system_prompt="Be brief.")
+
+
+def log_tool(event: BeforeToolCallEvent) -> None:
+    print("tool:", event.tool_use["name"], event.tool_use["input"], event.invocation_state.get("user_id"))
+
+
+def on_stop(event: BidiAgentStopEvent) -> None:
+    print("agent stopped; messages kept:", len(event.agent.messages))
+
+
+agent.add_hook(log_tool)
+agent.add_hook(on_stop)
+
+
+async def print_text(event: BidiOutputEvent) -> None:
+    if event.get("type") == "bidi_text_delta":
+        print("assistant:", event["delta"])
+
+
+async def main() -> None:
+    try:
+        await asyncio.wait_for(
+            agent.run(inputs=[OneQuestion()], outputs=[print_text], invocation_state={"user_id": "u-17"}),
+            timeout=3,
+        )
+    except asyncio.TimeoutError:
+        pass  # run() returns only when the connection closes; here we just stop waiting
+
+
+asyncio.run(main())
+```
+
+The same agent can be driven without `run()`:
+
+```python
+async def chat() -> None:
+    async with agent:                       # start() on entry, stop() on exit
+        await agent.send("What's the weather in Leeds?")
+        async for event in agent.receive():
+            if event.get("type") == "bidi_text_delta":
+                print(event["delta"], end="")
+            elif event.get("type") == "bidi_response_stop":
+                break
+```
+
+`send()` accepts a string, a `TextBlock` or `ImageBlock`, their dict forms (`{"text": ...}`, `{"image": {...}}`), a list of those (one user message), and `AudioDelta` or `{"audio_delta": {...}}` for streamed audio, which is sent one chunk at a time and is not stored in the history.
+
+### Events and hooks
+
+`receive()` yields typed events; each has a `type`:
+
+| `type` | Meaning |
+|--------|---------|
+| `bidi_connection_start`, `bidi_connection_stop` | Connection opened; closed (reason `user_request` after `cancel()`) |
+| `bidi_response_start`, `bidi_response_stop` | One model response begins and ends |
+| `bidi_audio_start`, `bidi_audio_delta`, `bidi_audio_stop` | Output audio; a delta carries base64 `audio`, `format`, `sample_rate`, `channels` |
+| `bidi_text_*`, `bidi_reasoning_*` | Start, delta, stop for text and reasoning; the agent adds a completed `bidi_text_block` or `bidi_reasoning_block` |
+| `bidi_transcript_*` | Speech transcripts with a `role` of `user` or `assistant`, and a completed `bidi_transcript_block` |
+| `bidi_barge_in` | The user interrupted; stop playing queued audio |
+| `bidi_tool_use_blocks` | The model asked for one group of tool calls |
+| `bidi_usage` | Token counts since the last usage event (add them up; breakdowns may overlap) |
+| `bidi_connection_warning`, `bidi_connection_restart` | A renewal is coming; the connection was renewed (`reason` is `scheduled` or `timeout`, and `turn_interrupted` says whether a response was cut off) |
+
+Tool execution also yields events (`tool_result`, and `message` when the results are recorded) that are plain dicts without a `type` key, which is why the examples use `event.get("type")`.
+
+Hooks are registered with `add_hook()` or `hooks=[...]` (hook providers only). The agent-loop tool events (`BeforeToolCallEvent`, `AfterToolCallEvent`) and `MessageAddedEvent` fire as usual, and `strands.bidi.hooks` adds `BidiResponseStopEvent`, `BidiBargeInEvent`, `BidiBeforeConnectionRestartEvent`, `BidiAfterConnectionRestartEvent` and `BidiAgentStopEvent`.
+
+### Connections renew themselves
+
+Real-time providers close sessions after a fixed time. The agent restarts the model connection ahead of the limit, waiting briefly for the current turn to finish; how much context survives depends on the provider's replay or resumption support. The default schedule comes from each model's `connection` config: `restart_after_s` is 420 seconds for Nova Sonic, 540 for Gemini Live and 2700 for OpenAI Realtime in this release. Set `connection={"restart_after_s": ..., "auto_restart": False}` on the model to change that or to receive the timeout as an exception instead. A response in progress can be cut by a restart, so watch `turn_interrupted` and re-prompt if it matters.
+
+### What BidiAgent does not have
+
+It shares tools, hooks, state and sessions with `Agent`, but not the rest: no `structured_output_model`, no `limits=` or `cancel_signal=` per call (`agent.cancel()` closes the connection once any running tool group finishes), no `plugins=`, `interventions=` or conversation manager, and `event_loop_metrics` raises `NotImplementedError`. Token usage arrives as `bidi_usage` events instead. For a session manager, `SnapshotSessionManager(bidi_agent_save_latest_on=...)` controls when the conversation is saved (`"message"` by default, or `"stop"`).
+
 ## Other features
 
 These exist in this release and are worth knowing about, but are newer and change more often than the core:
 
-- **Plugins and Agent Skills** (`plugins=[AgentSkills(skills=["./skills"])]`): see [hooks and interrupts](/strands-agents-guide/python/strands_hooks_and_interrupts/#plugins).
+- **Plugins and Agent Skills** (`plugins=[AgentSkills(skills=["./skills"])]`): see [hooks and interrupts](/strands-agents-guide/python/strands_hooks_and_interrupts/#plugins). The same page covers `ContextInjector`, `GoalLoop`, `ContextOffloader` and steering handlers.
 - **Sandboxes** (`sandbox=DockerSandbox(...)`): route the vended shell and file tools into a container. See [tools](/strands-agents-guide/python/strands_tools_and_mcp/#sandboxes).
-- **Memory manager** (`memory_manager=MemoryManager(stores=[...])`): cross-session memory with extraction, backed by stores such as `BedrockKnowledgeBaseStore`.
-- **Background tasks** (`background_tasks=True`): the model can start tools in the background and receive their results later.
-- **Checkpointing** (`checkpointing=True`): the loop pauses at cycle boundaries with `stop_reason == "checkpoint"`, for durable execution engines.
-- **Bidirectional streaming** (`strands.bidi.BidiAgent`): real-time voice and text over a persistent connection with Nova Sonic, Gemini Live or OpenAI Realtime models.
+- **Long-term memory** (`memory_manager=MemoryManager(stores=[...])`): see [above](#long-term-memory).
+- **Real-time voice** (`strands.bidi.BidiAgent`): see [above](#real-time-voice-and-text-with-bidiagent).
+- **Background tasks** (`background_tasks=True`): the model can start tools in the background and receive their results later. A `BackgroundTasksConfig` sets `wait_for_completion` (default `True`: an invocation does not return until background work finishes), `max_concurrency` (default 4), a per-execution `timeout`, and which tools run in the background: `agentic` (the model chooses; the default for every tool), `always` or `never`.
+- **Checkpointing** (`checkpointing=True`): the loop pauses at cycle boundaries with `stop_reason == "checkpoint"` and a `result.checkpoint`, so a durable execution engine such as Temporal can persist progress and resume after a crash. The checkpoint types live in `strands.experimental.checkpoint` and may change.
+- **Concurrent invocations**: by default a second call on a busy agent raises `ConcurrencyException`. `concurrent_invocation_mode=ConcurrentInvocationMode.UNSAFE_REENTRANT` (from `strands.types.agent`) lifts the lock without making the agent safe to share; the documentation for the option gives no guarantees about what happens to the history.
 
 ## Revision history
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added real-time voice (`BidiAgent`, models, I/O, events, hooks, limits), long-term memory (`MemoryManager`), OpenAI-compatible Bedrock endpoints (`bedrock_mantle_config`), `ClassifierStrategy` routing, Gemini, Mistral, llama.cpp and Responses API examples, and background tasks, checkpointing and concurrent-invocation options. Corrected the extras table (voice extras, Python 3.12 for Nova Sonic). |
 | 2026-10-24 | 1.62.0 | New page in the standalone Strands guide, replacing the Strands page in the Amazon Bedrock guide. Adds the agent loop, `AgentResult`, provider table, routing, streaming events, conversation and context managers, snapshot sessions, limits and cancellation. All examples run against an offline Bedrock stub. |

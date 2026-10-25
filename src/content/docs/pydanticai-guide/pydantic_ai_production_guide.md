@@ -334,7 +334,7 @@ Outside a workflow the capability does nothing, so the same agent still runs in 
 - **Streaming APIs.** `run_stream()` and `run_stream_events()` behind a FastAPI or Starlette endpoint: see [Streaming server (FastAPI)](/pydanticai-guide/pydantic_ai_streaming_server_fastapi/).
 - **Chat front ends.** `AGUIAdapter.dispatch_request(request, agent=agent)` and `VercelAIAdapter.dispatch_request(...)` speak the AG-UI and Vercel AI SDK protocols directly ([integrations](/pydanticai-guide/pydantic_ai_integrations/#ui-protocols-and-front-ends)).
 - **Internal tools.** `agent.to_web()` returns a Starlette chat app, useful for an internal demo or a support console.
-- **One key for several providers.** The Pydantic AI Gateway proxies OpenAI, Anthropic, Google and others behind one API key ; use a `gateway/` model prefix such as `'gateway/anthropic:%%model=anthropic%%'` ([model providers](/pydanticai-guide/pydantic_ai_model_providers/#gateway-routing)).
+- **One key for several providers.** The Pydantic AI Gateway proxies OpenAI, Anthropic, Google and others behind one API key; use a `gateway/` model prefix such as `'gateway/anthropic:%%model=anthropic%%'` ([model providers](/pydanticai-guide/pydantic_ai_model_providers/#gateway-routing)).
 
 ## Testing in CI
 
@@ -457,5 +457,6 @@ assert pass_rate is not None and pass_rate >= 0.5, f'eval pass rate fell to {pas
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Re-checked against pydantic-ai %%version=pydantic-ai%%; every example re-run offline. No corrections needed beyond a typo. |
 | 2026-10-21 | Rewritten around PydanticAI's own production features (instrumentation, limits, retries and fallback, concurrency, approvals, durability, testing and evals). Generic FastAPI, Docker, Kubernetes, Prometheus, Redis, nginx and Celery material removed. |
 | 2025-11 | First edition (1.x). |

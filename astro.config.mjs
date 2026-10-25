@@ -108,7 +108,7 @@ export default defineConfig({
     starlight({
       title: 'Agent Guides',
       description:
-        'Guides to building AI agents with eighteen frameworks in Python, TypeScript, .NET and Go.',
+        'Guides to building AI agents with the main frameworks in Python, TypeScript, .NET and Go.',
       favicon: '/favicon.svg',
       components: {
         SiteTitle: './src/components/SiteTitle.astro',

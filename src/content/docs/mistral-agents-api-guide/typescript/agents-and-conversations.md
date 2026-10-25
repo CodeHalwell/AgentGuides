@@ -31,9 +31,9 @@ export function textOf(response: ConversationResponse): string {
 }
 ```
 
-`new Mistral()` resolves credentials in this order: an `Authorization` header passed per request, the `apiKey` option (a string or an async function returning one), the service-account token file named by `MISTRAL_SA_TOKEN_PATH` (re-read on every request, so rotation is picked up), then `MISTRAL_API_KEY`. Pass `server: "eu"` or `server: "us"` for a regional endpoint.
+`new Mistral()` resolves credentials in this order: an `Authorization` header passed per request, the `apiKey` option (a string or an async function returning one), the service-account token file named by `MISTRAL_SA_TOKEN_PATH` (re-read on every request, so rotation is picked up), then `MISTRAL_API_KEY`. The examples pass `apiKey` explicitly for clarity; because that outranks the token file, omit it (`new Mistral()`) when you rely on `MISTRAL_SA_TOKEN_PATH`. Pass `server: "eu"` or `server: "us"` for a regional endpoint.
 
-Model names are the same as in Python: `mistral-medium-latest` (Mistral Medium 3.5) as the default for agentic work, `mistral-small-latest` for routers and cheap agents, and dated names such as `mistral-medium-3-5` when you need to pin. See the [models table](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#3-models).
+Model names are the same as in Python: `%%model=mistral%%` (Mistral Medium 3.5) as the default for agentic work, `%%model=mistral-small%%` for routers and cheap agents, and dated names such as `mistral-medium-3-5` when you need to pin. See the [models table](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#3-models).
 
 ---
 
@@ -45,7 +45,7 @@ Model names are the same as in Python: `mistral-medium-latest` (Mistral Medium 3
 import { client } from "./common.js";
 
 const agent = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "research-assistant",
   description: "Answers questions using current information from the web.",
   instructions: "Search before answering anything time-sensitive. Cite sources inline.",
@@ -133,7 +133,7 @@ console.log(textOf(response));
 
 // Without a stored agent: pass model (and optionally instructions and tools)
 const adHoc = await client.beta.conversations.start({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   instructions: "Answer in one sentence.",
   inputs: [{ role: "user", content: "What is the capital of Slovenia?" }],
 });
@@ -197,7 +197,7 @@ await client.beta.conversations.delete({ conversationId });
 
 // One-off request that is not persisted (cannot be appended to afterwards)
 const ephemeral = await client.beta.conversations.start({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   inputs: "Translate 'good morning' into Welsh.",
   store: false,
 });
@@ -277,7 +277,7 @@ const Ticket = z.object({
 });
 
 const classifier = await client.beta.agents.create({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   name: "ticket-classifier",
   instructions: "Classify the support ticket.",
   completionArgs: { responseFormat: responseFormatFromZodObject(Ticket) },
@@ -302,7 +302,7 @@ import { client } from "./common.js";
 const Ticket = z.object({ category: z.string(), priority: z.number(), summary: z.string() });
 
 const result = await client.chat.parse({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   messages: [{ role: "user", content: "Classify: the app crashes on login since today." }],
   responseFormat: Ticket,
 });
@@ -317,7 +317,7 @@ console.log(result.choices?.[0]?.message?.parsed);
 import { client } from "./common.js";
 
 const safe = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "public-assistant",
   instructions: "You are a helpful assistant for the public website.",
   guardrails: [{ blockOnError: true, moderationLlmV2: {} }],

@@ -5,9 +5,12 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "azure-ai-agents add-on"
+  order: 90
 ---
 
 > **Clarification:** `azure-ai-agents` is **not** a replacement for `agent-framework`. It is an optional Microsoft SDK for direct access to the Azure AI Agents service REST API. Use it alongside `agent-framework` when you need low-level control over Azure AI Agents service resources (threads, runs, vector stores). For everyday agent development, use `agent-framework` directly.
+
+> **Deprecation:** `azure-ai-agents` (1.1.0) targets the **classic** Foundry Agent Service: the threads, messages and runs API. Microsoft Learn marks Agents (classic) as deprecated, to be retired on 31 March 2027, and says that models later than GPT-5 need the new agents. New code should use the new Foundry Agent Service, which `agent-framework` reaches through `FoundryChatClient` and `FoundryAgent` (`agent-framework-foundry`, built on `azure-ai-projects` 2.x). See Microsoft's [migration guide](https://learn.microsoft.com/azure/foundry/agents/how-to/migrate).
 
 ---
 
@@ -15,7 +18,7 @@ sidebar:
 
 | | `agent-framework` | `azure-ai-agents` |
 |---|---|---|
-| **Role** | Primary agent framework | Azure AI Agents service add-on |
+| **Role** | Primary agent framework | Classic Azure AI Agents service SDK (deprecated service) |
 | **Install** | `pip install agent-framework` | `pip install azure-ai-agents azure-identity` |
 | **Import root** | `agent_framework` | `azure.ai.agents` |
 | **Entry-point class** | `Agent` | `AgentsClient` |
@@ -72,7 +75,7 @@ client = AgentsClient(
 )
 
 agent = client.create_agent(
-    model="%%model=openai%%",
+    model=os.environ["MODEL_DEPLOYMENT_NAME"],   # a deployment the classic service supports
     name="my-assistant",
     instructions="You are a helpful assistant.",
 )
@@ -120,3 +123,9 @@ pip install agent-framework-declarative    # Declarative YAML agents and workflo
 - [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) — `FoundryChatClient`, `OpenAIChatClient`, `AnthropicClient`
 - [`azure-ai-agents` reference on Microsoft Learn](https://learn.microsoft.com/python/api/overview/azure/ai-agents-readme) — `AgentsClient`, threads, runs, tool sets and vector stores
 - [Official `azure-ai-agents` PyPI page](https://pypi.org/project/azure-ai-agents/)
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-25 | 1.22.0 | Added the deprecation of the classic Agents service that `azure-ai-agents` targets (retirement on 31 March 2027, per Microsoft Learn), and replaced the current model placeholder in the classic example with a deployment name, because the classic service does not support models after GPT-5. |

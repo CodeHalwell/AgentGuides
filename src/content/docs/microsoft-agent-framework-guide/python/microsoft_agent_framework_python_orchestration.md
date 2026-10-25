@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Multi-Agent Orchestration"
 description: "Sequential, Concurrent, Handoff, GroupChat and Magentic-One builders, plus WorkflowBuilder graphs — real signatures and runnable examples."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Multi-agent orchestration"
+  order: 20
 ---
 
 Five built-in orchestration patterns ship in `agent-framework-orchestrations`. Each is a fluent builder that produces a `Workflow` — the same object type returned by `WorkflowBuilder`. Once you have a workflow, run it with `workflow.run(...)` or stream events with `workflow.run(..., stream=True)`.
@@ -77,7 +80,7 @@ Optional knobs:
 
 - `chain_only_agent_responses=True` — pass only assistant messages between agents (skip user history). Useful when the conversation would otherwise balloon.
 - `intermediate_output_from="all_other"` (or a list of participants) — also surface per-participant responses, as `intermediate` events.
-- `checkpoint_storage=...` — persist state between runs; see the [HITL page](./microsoft_agent_framework_python_hitl/) for resuming from a checkpoint.
+- `checkpoint_storage=...` — persist state between runs; see the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) for resuming from a checkpoint.
 - `.with_request_info(agents=[...])` — pause after each (or a subset of) participants for human review.
 
 ```python
@@ -246,7 +249,7 @@ result = await workflow.run("Write a research memo on post-training alignment.")
 print(result.get_outputs()[-1])
 ```
 
-Alternative: bring your own manager by subclassing `MagenticManagerBase` (abstract methods `plan`, `replan`, `create_progress_ledger`, `prepare_final_answer`) and passing it as `manager=`. Use this when you want deterministic planning logic rather than an LLM-driven coordinator — the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) has a worked example.
+Alternative: bring your own manager by subclassing `MagenticManagerBase` (abstract methods `plan`, `replan`, `create_progress_ledger`, `prepare_final_answer`) and passing it as `manager=`. Use this when you want deterministic planning logic rather than an LLM-driven coordinator — the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) has a worked example.
 
 ### HITL — plan sign-off
 
@@ -296,7 +299,7 @@ async for event in workflow.run("…", stream=True):
             print("Final answer:", event.data)
 ```
 
-See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/) for how to respond to request-info events from your caller.
+See the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/) for how to respond to request-info events from your caller.
 
 ## Picking a pattern
 
@@ -329,7 +332,7 @@ workflow = (
 result = await workflow.run("Quantum sensors in 2026")
 ```
 
-`WorkflowBuilder(start_executor=..., output_executors=[...])` both accept an executor instance or a bare agent — the builder wraps agents in `AgentExecutor` automatically. Use `add_chain([a, b, c])` as a shorthand when the edges are strictly linear.
+`WorkflowBuilder(start_executor=..., output_from=[...])` both accept an executor instance or a bare agent — the builder wraps agents in `AgentExecutor` automatically. Use `add_chain([a, b, c])` as a shorthand when the edges are strictly linear.
 
 `AgentExecutor` is the executor that `SequentialBuilder` / `HandoffBuilder` / etc. wrap your agents in behind the scenes. Constructing it directly lets you:
 
@@ -396,7 +399,7 @@ result = await workflow.run(
 )
 ```
 
-Tools read these values through `FunctionInvocationContext.kwargs`, as they do for a plain agent (see [Tools → runtime context](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#runtime-context--hidden-parameters)).
+Tools read these values through `FunctionInvocationContext.kwargs`, as they do for a plain agent (see [Tools → runtime context](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#runtime-context-hidden-parameters)).
 
 ### Cloning executors for graph reuse — `AgentExecutor.clone`
 

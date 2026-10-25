@@ -27,6 +27,7 @@ Strands has four layers for changing what the agent loop does, from the most gen
 | `BeforeInvocationEvent` | Start of each call | `messages` (the new input), `cancel` |
 | `AfterInvocationEvent` | End of each call, success or failure | `resume` (start another call with this input) |
 | `MessageAddedEvent` | A message was appended to `agent.messages` | |
+| `MessageUpdatedEvent` | The framework replaced a message already in the history (`tracking_id`, `message`) | |
 | `BeforeModelCallEvent` | Before each model call | `cancel` |
 | `AfterModelCallEvent` | After each model call (`stop_response` or `exception`) | `retry` |
 | `BeforeToolsEvent` | Before a batch of tool calls from one turn | `cancel` |
@@ -293,7 +294,7 @@ agent = Agent(model="us.anthropic.%%model=anthropic%%", plugins=[audit], callbac
 print(agent.tool_names)   # ['audit_log']
 ```
 
-`MultiAgentPlugin` is the equivalent for `Swarm` and `Graph`. Strands ships several plugins in `strands.vended_plugins`: `AgentSkills` (below), `ContextInjector` (add context such as the current time to each turn), `ContextOffloader` (move large tool results out of the context into storage), `GoalLoop` (keep working until a judge says a goal is met) and steering handlers.
+`MultiAgentPlugin` is the equivalent for `Swarm` and `Graph`. Strands ships several plugins in `strands.vended_plugins`, described below: `AgentSkills`, `ContextInjector`, `GoalLoop`, `ContextOffloader` and steering handlers.
 
 ### Agent Skills
 
@@ -319,6 +320,116 @@ print(agent.tool_names)   # ['skills']
 ```
 
 Skills can also be `Skill` objects or `https://` URLs of a `SKILL.md`.
+
+### Context injection
+
+`ContextInjector` adds text to the model input for one call without storing it in the history or the session. Use it for values that go stale, such as the current time or the caller's account status, which would be wrong if replayed from a saved conversation. The callback may be sync or async and returns the text (or `None` to skip). The default trigger, `"userTurn"`, injects only when the latest message is a fresh user message; `trigger="everyTurn"` injects before every model call, including mid-task tool turns:
+
+```python
+import datetime
+
+from strands import Agent
+from strands.vended_plugins.context_injector import ContextInjector
+
+agent = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    plugins=[ContextInjector(lambda context: f"<now>{datetime.datetime.now(datetime.timezone.utc).isoformat()}</now>")],
+    callback_handler=None,
+)
+agent("What time is it?")
+print(agent.messages[0]["content"])   # only the user's text: the injected block is not kept
+```
+
+The injected text reaches the model verbatim, so escape any field a user influences. If the callback raises, injection is skipped and the model call goes ahead. `current_time` in `strands-agents-tools` is deprecated in favour of this.
+
+### Goal loops
+
+`GoalLoop` re-runs the agent until its answer meets a goal. After each invocation it checks the answer; if the check fails, it feeds the feedback back as a new user message and continues, until the goal is met, `max_attempts` is reached or `timeout` (seconds) passes. The goal is either a sentence, judged by a model (`judge=JudgeConfig(model=...)`, otherwise the agent's `aux_model`, otherwise its `model`), or a function that returns `True`, `False` or `{"passed": ..., "feedback": ...}`:
+
+```python
+from strands import Agent
+from strands.vended_plugins.goal import GoalLoop
+
+
+def at_most_fifty_words(response, agent):
+    text = " ".join(block["text"] for block in response["content"] if "text" in block)
+    words = len(text.split())
+    if words <= 50:
+        return True
+    return {"passed": False, "feedback": f"Too long ({words} words). Cut it to 50 words or fewer."}
+
+
+goal = GoalLoop(goal=at_most_fifty_words, max_attempts=3, timeout=60.0)
+agent = Agent(model="us.anthropic.%%model=anthropic%%", plugins=[goal], callback_handler=None)
+
+print(agent("Explain how a rainbow forms."))
+print(goal.last_result(agent))   # GoalResult(passed=..., stop_reason='satisfied' | 'max_attempts' | 'timeout', attempts=[...])
+```
+
+`max_attempts` and `timeout` both default to infinity, so always set one: a goal the model cannot meet would otherwise loop for ever. By default each retry keeps the earlier attempts in the conversation, which costs tokens; `preserve_context=False` restarts every attempt from the original conversation. `GoalLoop` uses `AfterInvocationEvent.resume`, so attaching a second one to the same agent raises `RuntimeError`. For a one-off retry, the `resume` hook shown earlier is enough.
+
+### Offloading large tool results
+
+A tool that returns a whole document or query result can fill the context window in one step. `ContextOffloader` intercepts results above `max_result_tokens` (2,500 by default), saves the full content to a storage backend, and leaves the model a preview (`preview_tokens`, 1,000 by default) with a reference. With `include_retrieval_tool=True` (the default) the model also gets a `retrieve_offloaded_content` tool that fetches a regex match or a line range instead of the whole thing. `evict_after_cycles` (20 by default; `None` disables it) deletes stored content once it is that many agent-loop cycles old:
+
+```python
+from strands import Agent, tool
+from strands.vended_plugins.context_offloader import ContextOffloader, InMemoryStorage
+
+
+@tool
+def big_report() -> str:
+    """Return the full nightly report."""
+    return "line of report data\n" * 4000
+
+
+agent = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    tools=[big_report],
+    plugins=[ContextOffloader(storage=InMemoryStorage(), max_result_tokens=500, preview_tokens=100)],
+    callback_handler=None,
+)
+print(agent.tool_names)     # ['big_report', 'retrieve_offloaded_content']
+agent("Summarise tonight's report.")
+```
+
+Use `FileStorage("./artifacts")` or `S3Storage` (both from the same module) to keep offloaded content beyond the process; `should_offload=` takes a function to offload only some tools.
+
+### Steering
+
+A steering handler gives the agent just-in-time guidance instead of a long system prompt. Subclass `SteeringHandler` and override `steer_before_tool` (to judge a tool call) and/or `steer_after_model` (to judge a model response). Return `Proceed(reason=...)`, `Guide(reason=...)` or, for tool calls only, `Interrupt(reason=...)`. A `Guide` on a tool call cancels it and tells the model why, so it can try something else; on a model response it discards the response and calls the model again with the guidance added. `Interrupt` pauses for a person through the [interrupt](#interrupts) mechanism, and a "no" cancels the call:
+
+```python
+from strands import Agent, tool
+from strands.vended_plugins.steering import Guide, Proceed, SteeringHandler
+
+
+@tool
+def send_email(to: str, body: str) -> str:
+    """Send an email.
+
+    Args:
+        to: Recipient.
+        body: Message body.
+    """
+    return f"sent to {to}"
+
+
+class InternalOnly(SteeringHandler):
+    name = "internal-only"
+
+    async def steer_before_tool(self, *, agent, tool_use, **kwargs):
+        recipient = tool_use["input"].get("to", "")
+        if tool_use["name"] == "send_email" and not recipient.endswith("@example.com"):
+            return Guide(reason="External recipients need review. Save a draft and ask the user to confirm.")
+        return Proceed(reason="internal recipient")
+
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[send_email], plugins=[InternalOnly()], callback_handler=None)
+agent("Email pat@other.org that the report is ready.")
+```
+
+`LLMSteeringHandler(system_prompt=...)` makes the same decisions with a model reading your rules in plain language; it judges with `model=` if given, otherwise the agent's `aux_model`, otherwise its `model`, and keeps a ledger of earlier tool calls as context by default. A handler that raises is ignored (the action proceeds), so keep checks simple and test them. For policy that must hold, [intervention handlers](#interventions) are the stricter tool: they run in a fixed order, can `Deny`, and can fail closed with `on_error="deny"`.
 
 ## Interventions
 
@@ -500,4 +611,5 @@ Prefer hooks for observing and simple edits; reach for middleware when you need 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added `MessageUpdatedEvent` and examples for `ContextInjector`, `GoalLoop`, `ContextOffloader` and steering handlers. |
 | 2026-10-24 | 1.62.0 | New page. Hook events with writable fields, hook providers, blocking, redaction, retries and resume patterns, plugins and Agent Skills, intervention handlers, interrupts from tools and hooks, and middleware. |

@@ -5,17 +5,20 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Streaming server (FastAPI)"
+  order: 55
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`**, **`fastapi>=0.111`**, **`uvicorn>=0.29`**.
 
-This guide shows how to expose a LangGraph compiled graph over HTTP using FastAPI and Server-Sent Events (SSE). It covers all five `stream_mode` options, token-level LLM streaming, authentication, background task patterns, and production deployment.
+This guide shows how to expose a LangGraph compiled graph over HTTP using FastAPI and Server-Sent Events (SSE). It covers the stream modes a web client usually needs, token-level LLM streaming, authentication and deployment. The examples were run with FastAPI's `TestClient` and a scripted model.
+
+If you would rather not build the HTTP layer, the LangGraph Agent Server (`langgraph dev`, LangSmith Deployment) already provides streaming endpoints, threads and background runs; see the [production guide](/langgraph-guide/python/langgraph_production_guide/).
 
 ---
 
 ## 1. Stream mode overview
 
-`CompiledStateGraph.astream()` accepts a `stream_mode` parameter that controls what events the server sends:
+`CompiledStateGraph.astream()` accepts a `stream_mode` parameter that controls what events the server sends. These five are the useful ones for a web client (the full list, including `"checkpoints"`, `"tasks"` and `"tools"`, is in the [streaming modes reference](/langgraph-guide/python/reference-streaming-modes/)):
 
 | `stream_mode` | What each event contains | Best for |
 |---|---|---|
@@ -35,8 +38,9 @@ You can combine modes: `stream_mode=["messages", "custom"]` emits both token eve
 # app.py — minimal LangGraph SSE server
 from __future__ import annotations
 
+import dataclasses
 import json
-from typing import Annotated, AsyncGenerator
+from typing import Annotated, Any, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -48,6 +52,17 @@ from langgraph.graph.message import add_messages
 from typing_extensions import TypedDict
 
 app = FastAPI(title="LangGraph SSE Demo")
+
+
+def to_json(obj: Any) -> str:
+    """json.dumps that also handles messages (Pydantic) and Interrupt (dataclass)."""
+    def default(o: Any) -> Any:
+        if hasattr(o, "model_dump"):
+            return o.model_dump()
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        return str(o)
+    return json.dumps(obj, default=default)
 
 
 class State(TypedDict):
@@ -78,7 +93,8 @@ async def event_stream(thread_id: str, query: str) -> AsyncGenerator[str, None]:
         config,
         stream_mode="updates",   # only changed fields per node
     ):
-        yield f"data: {json.dumps(event)}\n\n"
+        # The update holds AIMessage objects, which plain json.dumps rejects.
+        yield f"data: {to_json(event)}\n\n"
     yield "data: [DONE]\n\n"
 
 
@@ -172,6 +188,7 @@ from typing_extensions import TypedDict
 from langchain_core.messages import AnyMessage, AIMessageChunk, HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langchain_anthropic import ChatAnthropic
 from langgraph.runtime import Runtime
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -182,6 +199,11 @@ class State(TypedDict):
 
 
 model = ChatAnthropic(model="%%model=anthropic%%")
+
+
+async def search_documents(query: str) -> list[str]:
+    """Stand-in for your retriever."""
+    return [f"Document about {query}"]
 
 
 async def research_agent(state: State, runtime: Runtime) -> dict:
@@ -296,26 +318,33 @@ async def debug_stream(thread_id: str, query: str) -> AsyncGenerator[str, None]:
 
 ## 7. Production FastAPI app — authentication + multi-endpoint
 
+Two changes from the demo matter in production. The checkpointer must be shared by every worker and replica, so use Postgres instead of `InMemorySaver` (which lives in one process: with `--workers 2`, a thread created on one worker is unknown to the other). And open it once, in the app's lifespan.
+
 ```python
 # production_app.py
 from __future__ import annotations
 
+import dataclasses
 import json
-from typing import Annotated, AsyncGenerator
+import os
+from contextlib import asynccontextmanager
+from typing import Annotated, Any, AsyncGenerator
 
-from fastapi import FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import AnyMessage, AIMessageChunk, HumanMessage
-from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
+DB_URI = os.environ["DATABASE_URL"]   # postgresql://user:pass@host:5432/db
 
-# ── Graph setup ───────────────────────────────────────────────────────────────
+
+# ── Graph definition (compiled in the lifespan, once the saver is open) ──────
 
 class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
@@ -324,138 +353,122 @@ class State(TypedDict):
 model = ChatAnthropic(model="%%model=anthropic%%")
 
 
-def call_model(state: State) -> dict:
-    return {"messages": [model.invoke(state["messages"])]}
+async def call_model(state: State) -> dict:
+    return {"messages": [await model.ainvoke(state["messages"])]}
 
 
 builder = StateGraph(State)
 builder.add_node("agent", call_model)
 builder.add_edge(START, "agent")
 builder.add_edge("agent", END)
-graph = builder.compile(checkpointer=InMemorySaver())
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    async with AsyncPostgresSaver.from_conn_string(DB_URI) as saver:
+        await saver.setup()                      # idempotent
+        app.state.graph = builder.compile(checkpointer=saver)
+        yield
 
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
-VALID_API_KEYS = {"sk-prod-secret-key", "sk-dev-secret-key"}   # use a DB in production
+VALID_API_KEYS = {"sk-prod-secret-key", "sk-dev-secret-key"}   # use a secret store in production
+
 
 def verify_api_key(x_api_key: str = Header(...)) -> str:
     if x_api_key not in VALID_API_KEYS:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
     return x_api_key
 
 
-# ── Request / response models ─────────────────────────────────────────────────
+def to_json(obj: Any) -> str:
+    def default(o: Any) -> Any:
+        if hasattr(o, "model_dump"):
+            return o.model_dump()
+        if dataclasses.is_dataclass(o):
+            return dataclasses.asdict(o)
+        return str(o)
+    return json.dumps(obj, default=default)
+
+
+# ── Request model ─────────────────────────────────────────────────────────────
 
 class ChatRequest(BaseModel):
     thread_id: str
-    message:   str
-    stream_mode: str = "messages"   # "messages" | "updates" | "values" | "custom" | "debug"
+    message: str
+    stream_mode: str = "messages"   # "messages" | "updates" | "values" | "debug"
 
 
-# ── FastAPI app ───────────────────────────────────────────────────────────────
-
-app = FastAPI(title="LangGraph Production API", version="1.0.0")
-
+app = FastAPI(title="LangGraph Production API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://app.example.com"],   # restrict in production
+    allow_origins=["https://app.example.com"],   # your front end, not "*"
     allow_methods=["GET", "POST"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
 
 
-async def build_event_stream(
-    request: ChatRequest,
-) -> AsyncGenerator[str, None]:
-    """Build the appropriate SSE generator based on stream_mode."""
-    config = {"configurable": {"thread_id": request.thread_id}}
-    input_data = {"messages": [HumanMessage(request.message)]}
+async def build_event_stream(graph, req: ChatRequest) -> AsyncGenerator[str, None]:
+    config = {"configurable": {"thread_id": req.thread_id}, "recursion_limit": 25}
+    input_data = {"messages": [HumanMessage(req.message)]}
 
-    if request.stream_mode == "messages":
-        # Token-by-token output
+    if req.stream_mode == "messages":
         async for chunk, metadata in graph.astream(input_data, config, stream_mode="messages"):
             if isinstance(chunk, AIMessageChunk) and chunk.content:
-                yield f"data: {json.dumps({'type': 'token', 'content': chunk.content})}\n\n"
-
-    elif request.stream_mode in ("updates", "values"):
-        # State deltas or full state per node
-        async for event in graph.astream(input_data, config, stream_mode=request.stream_mode):
-            yield f"data: {json.dumps({'type': request.stream_mode, 'data': event})}\n\n"
-
-    elif request.stream_mode == "debug":
-        # Node lifecycle events
-        async for event in graph.astream(input_data, config, stream_mode="debug"):
-            yield f"data: {json.dumps(event)}\n\n"
+                yield f"data: {to_json({'type': 'token', 'content': chunk.content})}\n\n"
+    else:   # "updates", "values" or "debug"
+        async for event in graph.astream(input_data, config, stream_mode=req.stream_mode):
+            yield f"data: {to_json({'type': req.stream_mode, 'data': event})}\n\n"
 
     yield 'data: {"type": "done"}\n\n'
 
 
 @app.post("/v1/chat/stream")
 async def chat_stream(
-    request: ChatRequest,
-    api_key: str = Header(alias="x-api-key"),
+    req: ChatRequest, request: Request, _key: str = Depends(verify_api_key)
 ) -> StreamingResponse:
-    """Stream a chat response as SSE."""
-    verify_api_key(api_key)
     return StreamingResponse(
-        build_event_stream(request),
+        build_event_stream(request.app.state.graph, req),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control":    "no-cache",
-            "X-Accel-Buffering": "no",
-            "Connection":       "keep-alive",
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
 @app.get("/v1/threads/{thread_id}/state")
 async def get_thread_state(
-    thread_id: str,
-    api_key: str = Header(alias="x-api-key"),
+    thread_id: str, request: Request, _key: str = Depends(verify_api_key)
 ) -> dict:
-    """Return the current state of a thread."""
-    verify_api_key(api_key)
-    config = {"configurable": {"thread_id": thread_id}}
-    snapshot = graph.get_state(config)
+    snapshot = await request.app.state.graph.aget_state({"configurable": {"thread_id": thread_id}})
     return {
         "thread_id": thread_id,
-        "next":      list(snapshot.next),
-        "values":    {k: str(v)[:200] for k, v in snapshot.values.items()},
+        "next": list(snapshot.next),
+        "values": {k: str(v)[:200] for k, v in snapshot.values.items()},
     }
 
 
 @app.get("/v1/threads/{thread_id}/history")
 async def get_thread_history(
-    thread_id: str,
-    limit: int = 10,
-    api_key: str = Header(alias="x-api-key"),
+    thread_id: str, request: Request, limit: int = 10, _key: str = Depends(verify_api_key)
 ) -> dict:
-    """Return the checkpoint history for a thread."""
-    verify_api_key(api_key)
     config = {"configurable": {"thread_id": thread_id}}
-    history = list(graph.get_state_history(config))
-    return {
-        "thread_id":   thread_id,
-        "checkpoints": [
-            {
-                "checkpoint_id": s.config["configurable"]["checkpoint_id"],
-                "created_at":    s.created_at,
-                "step":          s.metadata.get("step"),
-                "next":          list(s.next),
-            }
-            for s in history[:limit]
-        ],
-    }
+    checkpoints = []
+    async for s in request.app.state.graph.aget_state_history(config, limit=limit):
+        checkpoints.append({
+            "checkpoint_id": s.config["configurable"]["checkpoint_id"],
+            "created_at": s.created_at,
+            "step": s.metadata.get("step"),
+            "next": list(s.next),
+        })
+    return {"thread_id": thread_id, "checkpoints": checkpoints}
 
 
 @app.get("/healthz")
 async def health() -> dict:
     return {"status": "ok"}
 ```
+
+`from_conn_string` opens one connection, which is fine for a few concurrent requests; under load pass an `AsyncConnectionPool` to `AsyncPostgresSaver(pool)` instead ([checkpointers reference](/langgraph-guide/python/reference-checkpointers/#connection-pooling)). Every request still needs a thread the caller is allowed to use: check ownership of `thread_id` before streaming.
 
 ---
 
@@ -486,12 +499,13 @@ CMD ["uvicorn", "production_app:app", \
 
 **`requirements.txt`**:
 
-```
+```text
 langgraph==%%version=langgraph%%
-langchain-anthropic>=0.3
-fastapi>=0.111
-uvicorn[standard]>=0.29
-httpx>=0.27
+langgraph-checkpoint-postgres==%%version=langgraph-checkpoint-postgres%%
+psycopg[binary,pool]
+langchain-anthropic
+fastapi
+uvicorn[standard]
 ```
 
 ### Kubernetes
@@ -576,24 +590,24 @@ async function streamChat(
 
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
+  let buffer = "";
 
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
 
-    const text = decoder.decode(value);
-    for (const line of text.split("\n")) {
-      if (!line.startsWith("data: ")) continue;
-      const payload = line.slice(6).trim();
-      if (!payload || payload === "[DONE]") continue;
+    // A network chunk can end mid-event, so keep the unfinished tail.
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
 
-      try {
-        const event = JSON.parse(payload);
-        if (event.type === "token") onToken(event.content);
-        if (event.type === "done")  onDone();
-      } catch {
-        // partial chunk — continue accumulating
-      }
+    for (const block of events) {
+      if (!block.startsWith("data: ")) continue;
+      const payload = block.slice(6).trim();
+      if (!payload || payload === "[DONE]") continue;
+      const event = JSON.parse(payload);
+      if (event.type === "token") onToken(event.content);
+      if (event.type === "done") onDone();
     }
   }
 }
@@ -611,7 +625,7 @@ async function streamChat(
 | **CORS** | Set `allow_origins` to your specific frontend domain, not `"*"` |
 | **Timeout** | Set uvicorn `--timeout-keep-alive` (75 s) and nginx `proxy_read_timeout` (120 s) |
 | **Buffering** | Always set `X-Accel-Buffering: no` to prevent nginx from buffering SSE |
-| **Memory** | `InMemorySaver` is not safe for multi-process / multi-replica deployments — use a PostgreSQL-backed checkpointer in production |
+| **Memory** | `InMemorySaver` lives in one process, so it breaks with several workers or replicas; use `AsyncPostgresSaver` as in section 7 |
 
 ---
 

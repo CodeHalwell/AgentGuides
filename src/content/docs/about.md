@@ -1,235 +1,45 @@
 ---
-title: "Agent Guides"
-description: "Comprehensive AI Agent Framework Documentation"
+title: "About Agent Guides"
+description: "What these guides cover, how they are kept current, and how to report a mistake or contribute."
 ---
 
-**Comprehensive, production-ready documentation for building AI agents across 16+ frameworks.**
+Agent Guides is documentation for building AI agents with the main open-source and cloud frameworks, in Python, TypeScript, .NET and Go. Each framework has its own section with an overview, a comprehensive guide, recipes and a production guide; larger frameworks add topic pages for areas such as memory, workflows or deployment.
 
-Welcome to the Agent Guides collection—your complete resource for mastering AI agent development. Whether you're building your first chatbot or deploying enterprise-scale multi-agent systems, you'll find detailed guides, practical recipes, and production patterns here.
+## Where to start
 
----
+- [Quick Start](/quick-start/) has a short, runnable first agent for five frameworks.
+- [Framework Comparison](/frameworks/) explains how the frameworks differ and which to pick for which job.
+- [All Guides](/guides/) lists every page, grouped as in the sidebar, with the package version each guide targets.
+- The [home page](/) has a use-case picker that suggests frameworks for what you want to build.
 
-## 🎯 Featured Frameworks
+## How a guide is organised
 
-### ⭐ New & Recommended
+The layout varies a little by framework, because the frameworks differ, but most guides follow this shape:
 
-#### [OpenAI Agents SDK](/openai-agents-sdk-guides/)
-Multi-agent systems with lightweight primitives and powerful abstractions.
+1. **Overview.** What the framework is for, the current version, how to install it, and a reading order (labelled Zero to Hero on most overviews).
+2. **Comprehensive guide.** The main reference: concepts, the public API and worked examples.
+3. **Topic pages.** Deeper treatment of one area, such as memory, streaming, workflows or the CLI.
+4. **Recipes.** Self-contained examples for common tasks.
+5. **Production guide.** Limits, timeouts, secrets, observability, testing and deployment.
+6. **Diagrams.** Architecture and control-flow pictures.
 
-**Quick Links**:
-- 📖 [Comprehensive Guide](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/)
-- 🚀 [Production Guide](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/)
-- 👨‍💻 [Recipes](/openai-agents-sdk-guides/openai_agents_sdk_recipes/)
+Where a framework has several languages, each language has its own subsection.
 
-**Install**: `pip install openai-agents`
+## How the guides are kept accurate
 
----
+- **One record of versions.** Current package versions and model IDs are written in a single data file, [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json). Pages refer to it by placeholder and the site fills the values in when it is built, so a version bump is a one-line change. The date of the last check is shown on the pages that use it.
+- **Examples are run.** Each example is meant to work against the release the guide names. Authors install the package, check imports and signatures against the installed source, and run the code with a mock or test model where one is possible. Examples that need a live service or an account are marked as such.
+- **No invented APIs.** If a framework lacks a feature, the guide says so rather than describing something similar.
+- **History is separate.** Literal version numbers appear only for history, such as when a feature was added, in migration notes and in revision-history tables. The [Updates](/updates/april-2026-summary/) section records past changes.
 
-#### [SmolAgents](/smolagents-guide/)
-Lightweight Python framework where agents write code instead of JSON.
+Frameworks change quickly. If a page and a release disagree, trust the release's own documentation and please report the page.
 
-**Quick Links**:
-- 📖 [Comprehensive Guide](/smolagents-guide/smolagents_comprehensive_guide/)
-- 🚀 [Production Guide](/smolagents-guide/smolagents_production_guide/)
-- 👨‍💻 [Recipes](/smolagents-guide/smolagents_recipes/)
+## Style
 
-**Install**: `pip install smolagents`
+The guides use British English and aim to be plain and understated. They describe trade-offs as well as features, and avoid claims about popularity or learning time that cannot be checked.
 
----
+## Reporting a mistake and contributing
 
-## 🔍 Quick Navigation
+The source is at [github.com/CodeHalwell/AgentGuides](https://github.com/CodeHalwell/AgentGuides). To report an error, open an issue naming the page and the release you are using. To contribute a fix or an improvement, follow the [contribution guidelines](https://github.com/CodeHalwell/AgentGuides/blob/main/README.md#contributing).
 
-<div class="framework-grid">
-
-### By Use Case
-- **Chatbots & Assistants**: OpenAI Agents SDK, SmolAgents, CrewAI
-- **Data & Retrieval**: LlamaIndex, Haystack
-- **Complex Workflows**: LangGraph, AG2
-- **Cloud Native**: Amazon Bedrock, Microsoft Agent Framework
-- **Type Safety**: PydanticAI
-
-### By Language
-- **Python**: All frameworks
-- **TypeScript**: LangGraph, Claude SDK, OpenAI SDK
-- **C#**: Semantic Kernel
-
-### By Skill Level
-- **Beginner**: SmolAgents, PydanticAI, CrewAI
-- **Intermediate**: LangGraph, LlamaIndex, OpenAI Agents SDK
-- **Advanced**: AG2, Haystack, Custom multi-agent systems
-
-</div>
-
----
-
-## 📚 All Frameworks
-
-### Core Multi-Agent Orchestration
-- [CrewAI](/crewai-guide/) - Role-based agent teams
-- [AG2](/ag2-guide/) - Research & experimentation
-- [LangGraph](/langgraph-guide/python/) - Graph-based workflows
-- [LangGraph TypeScript](/langgraph-guide/typescript/) - TypeScript workflows
-
-### Data & Knowledge Retrieval
-- [LlamaIndex](/llamaindex-guide/) - RAG and data indexing
-- [Haystack](/haystack-guide/) - Production search systems
-
-### Type-Safe Development
-- [PydanticAI](/pydanticai-guide/) - Structured validation
-- [Semantic Kernel](/semantic-kernel-guide/) - Microsoft patterns
-
-### Cloud & Hosted Models
-- [Amazon Bedrock Agents](/amazon-bedrock-agents-guide/) - AWS integration
-- [Microsoft Agent Framework](/microsoft-agent-framework-guide/) - Azure integration
-- [Google ADK](/google-adk-guide/) - Google integration
-- [Mistral Agents API](/mistral-agents-api-guide/) - Mistral platform
-
-### Model-Specific
-- [Anthropic Claude](/anthropic-claude-agent-sdk-guide/) - Python
-- [Anthropic Claude TypeScript](/anthropic-claude-agent-sdk-typescript-guide/) - TypeScript
-- [OpenAI Agents TypeScript](/openai-agents-sdk-typescript-guide/) - TypeScript
-
-[View All Guides →](./guides)
-
----
-
-## 📖 Each Guide Includes
-
-Every framework guide contains:
-
-1. **README** - Quick start & overview
-2. **Comprehensive Guide** - Complete feature reference (~50-100 pages)
-3. **Production Guide** - Deployment & scaling
-4. **Diagrams Guide** - Architecture visualisations
-5. **Recipes** - Copy-paste ready code examples
-
----
-
-## 🚀 Getting Started
-
-### Step 1: Choose Your Framework
-
-Use the table below or browse above:
-
-| Framework | Best For | Complexity | Time to Learn |
-|-----------|----------|-----------|---------------|
-| **SmolAgents** | Simple agents | Low | 1 hour |
-| **PydanticAI** | Type safety | Low-Medium | 2 hours |
-| **OpenAI Agents SDK** | Multi-agent | Medium | 4 hours |
-| **CrewAI** | Role-based teams | Medium | 4 hours |
-| **LangGraph** | Complex workflows | High | 8 hours |
-| **LlamaIndex** | RAG systems | Medium | 6 hours |
-
-### Step 2: Read the Framework's README
-
-Each guide folder contains a README with:
-- Installation instructions
-- Basic example
-- Key concepts
-- Links to deeper documentation
-
-### Step 3: Explore Practical Recipes
-
-The Recipes guide contains copy-paste ready examples:
-- Common use cases
-- Integration patterns
-- Best practices in action
-
-### Step 4: Study Production Deployment
-
-For production systems, read:
-- Production Guide
-- Diagrams Guide for architecture
-- Security & monitoring sections
-
----
-
-## 💡 Key Concepts Explained
-
-### Agents
-Autonomous systems with instructions, tools, and decision-making.
-
-### Tools/Functions
-Executable actions agents can call to interact with external systems.
-
-### Multi-Agent Systems
-Coordination of multiple specialised agents:
-- Sequential handoffs
-- Parallel execution
-- Hierarchical delegation
-
-### Guardrails
-Safety constraints:
-- Input validation
-- Output filtering
-- Rate limiting
-- Access control
-
-### Sessions & Memory
-State management:
-- Conversation history
-- Long-term storage
-- Context management
-
----
-
-## 📊 Framework Comparison
-
-Want to compare features across frameworks? Check out our [Comparison Guide](./frameworks).
-
----
-
-## 🆘 Need Help?
-
-### Questions?
-1. Check the framework's README
-2. Search the Comprehensive Guide
-3. Look for examples in Recipes
-4. Review the Production Guide for deployment issues
-
-### Found an Issue?
-- Report documentation errors
-- Suggest improvements
-- Contribute examples
-
----
-
-## 🤝 Contributing
-
-Help make this resource better:
-- Fix errors or typos
-- Add new examples
-- Improve diagrams
-- Update for new versions
-- Share your patterns
-
-[Contribution Guidelines →](https://github.com/CodeHalwell/AgentGuides/blob/main/README.md#contributing)
-
----
-
-## 📄 Documentation Standards
-
-All guides follow consistent standards:
-- ✅ **British English** spelling (optimisation, favour, analyse)
-- ✅ **Tested code** examples
-- ✅ **Production-ready** patterns
-- ✅ **Clear structure** from basic to advanced
-- ✅ **Visual diagrams** for architecture
-
----
-
-## 📅 Versions
-
-Every guide targets the current release of its framework, recorded in one place: [`src/data/versions.json`](https://github.com/CodeHalwell/AgentGuides/blob/main/src/data/versions.json). Last checked %%versions-checked%%. Pages read their version numbers from that file at build time, so a version bump is a one-line change.
-
----
-
-## 🙏 Acknowledgments
-
-This collection is maintained by the community for the community. Thank you to all contributors!
-
----
-
-**Start exploring**: [Browse All Guides →](./guides)
-
-
+New material should improve an existing page rather than add a separate one: what you learn from studying one class or API belongs in the section of the guide where a reader would look for it.

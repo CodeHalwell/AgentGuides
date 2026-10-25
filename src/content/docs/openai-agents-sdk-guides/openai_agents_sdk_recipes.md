@@ -127,14 +127,14 @@ async def main():
     # Example support interactions
     customer_id = "CUST-123456"
     
-    responses = await asyncio.gather(
-        handle_support_request(customer_id, "I need to cancel my flight and get a refund"),
-        handle_support_request(customer_id, "Can I change my flight to an earlier time?"),
-        handle_support_request(customer_id, "What's the status of flight AA101?")
-    )
-    
-    for response in responses:
-        print(f"Response: {response}\n")
+    # One customer, one conversation: run the turns in order. Concurrent runs
+    # on the same session would interleave their history.
+    for query in [
+        "I need to cancel my flight and get a refund",
+        "Can I change my flight to an earlier time?",
+        "What's the status of flight AA101?",
+    ]:
+        print(f"Response: {await handle_support_request(customer_id, query)}\n")
 
 asyncio.run(main())
 ```
@@ -461,14 +461,20 @@ tester_agent = Agent(
     tools=[generate_unit_tests]
 )
 
+# Specialists are tools, not handoffs: the manager keeps control, so the run ends
+# on the manager and `final_output` is a CodeImplementation.
 code_manager = Agent(
     name="Code Manager",
     instructions="""Manage code generation workflow:
-    1. Use Code Developer to write implementation
-    2. Use Code Reviewer for quality review
-    3. Use Test Generator for test creation
+    1. Use write_code to write the implementation
+    2. Use review_code for quality review
+    3. Use write_tests for test creation
     Produce complete, production-ready code.""",
-    handoffs=[developer_agent, reviewer_agent, tester_agent],
+    tools=[
+        developer_agent.as_tool(tool_name="write_code", tool_description="Write an implementation"),
+        reviewer_agent.as_tool(tool_name="review_code", tool_description="Review code and suggest improvements"),
+        tester_agent.as_tool(tool_name="write_tests", tool_description="Write unit tests for code"),
+    ],
     output_type=CodeImplementation
 )
 
@@ -575,7 +581,6 @@ class TranslationResult(BaseModel):
     translated: str
     source_language: str
     target_language: str
-    confidence: float
 
 translators = {
     "English": Agent(
@@ -626,7 +631,6 @@ async def translate_text(
         translated=result.final_output,
         source_language=source_language,
         target_language=target_language,
-        confidence=0.95
     )
 
 async def main():
@@ -652,10 +656,12 @@ asyncio.run(main())
 
 ### Content Safety System
 
+The patterns below are deliberately simple keyword checks so the recipe runs without a second model. Keyword lists block legitimate messages and miss rephrased ones; for real moderation use a small model with a structured verdict, as in the [production guide](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#guardrails).
+
 ```python
 # content_moderation.py
 from agents import Agent, Runner, input_guardrail, output_guardrail
-from agents import GuardrailFunctionOutput, RunContextWrapper
+from agents import GuardrailFunctionOutput, InputGuardrailTripwireTriggered, OutputGuardrailTripwireTriggered, RunContextWrapper
 from pydantic import BaseModel
 import asyncio
 import re
@@ -711,8 +717,10 @@ async def moderate_interaction(user_input: str) -> str:
     try:
         result = await Runner.run(safe_agent, user_input)
         return result.final_output
-    except Exception as e:
-        return f"Content blocked: {str(e)}"
+    except InputGuardrailTripwireTriggered:
+        return "Content blocked: the request was refused."
+    except OutputGuardrailTripwireTriggered:
+        return "Content blocked: the response was withheld."
 ```
 
 ---
@@ -783,14 +791,13 @@ async def assist_user(user_id: str, request: str) -> str:
 async def main():
     user_id = "user_1"
     
-    responses = await asyncio.gather(
-        assist_user(user_id, "What's on my calendar today?"),
-        assist_user(user_id, "Add 'Review reports' to my to-do"),
-        assist_user(user_id, "What's the weather like?")
-    )
-    
-    for response in responses:
-        print(f"Assistant: {response}\n")
+    # Turns of one conversation run in order so the session history stays coherent
+    for request in [
+        "What's on my calendar today?",
+        "Add 'Review reports' to my to-do",
+        "What's the weather like?",
+    ]:
+        print(f"Assistant: {await assist_user(user_id, request)}\n")
 
 asyncio.run(main())
 ```

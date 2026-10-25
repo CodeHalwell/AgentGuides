@@ -149,10 +149,8 @@ Text diagrams of what happens inside a run. Code for each step is in the [compre
    Specialised        Specialised        Specialised
    Response          Response           Response
 
-Routing Logic:
-  billing → /billing|invoice|payment/i
-  technical → /bug|error|crash|technical/i
-  general → default
+Routing is the model's decision: it sees one transfer_to_<agent> tool per
+specialist, with that agent's handoffDescription, and calls the best match.
 ```
 
 ---

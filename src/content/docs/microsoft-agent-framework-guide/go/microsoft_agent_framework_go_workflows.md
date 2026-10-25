@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Go) — Workflows"
 description: "Graph workflows in the Go SDK: executors and edges, conditional routing, sequential / concurrent / group-chat agent orchestration, request ports for human in the loop, checkpointing, and hosting a workflow as an agent."
 framework: "microsoft-agent-framework"
 language: "go"
+sidebar:
+  label: "Workflows"
+  order: 20
 ---
 
 The `workflow` package is a graph-execution engine. You build a graph of **executors** joined by **edges**, then run it with an execution environment from `workflow/inproc`. Execution proceeds in *supersteps*: each message delivered along an edge triggers its target executor, and the run streams events (`ExecutorCompletedEvent`, `OutputEvent`, `RequestInfoEvent` and others) as it goes.

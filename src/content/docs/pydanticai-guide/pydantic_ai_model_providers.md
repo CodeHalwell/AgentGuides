@@ -46,7 +46,7 @@ Verified from `infer_provider_class` in `providers/__init__.py`:
 | `bedrock-mantle`        | Bedrock Mantle                      | Needs the `bedrock-mantle` extra.                                       |
 | `groq`                  | `GroqModel`                         | `GROQ_API_KEY`. Needs the `groq` extra.                                 |
 | `mistral`               | `MistralModel`                      | `MISTRAL_API_KEY`. Needs the `mistral` extra.                           |
-| `cohere`                | `CohereModel`                       | `COHERE_API_KEY`. Needs the `cohere` extra.                             |
+| `cohere`                | `CohereModel`                       | `CO_API_KEY`. Needs the `cohere` extra.                                 |
 | `xai`                   | `XaiModel`                          | `XAI_API_KEY`. Supports `XSearchTool`. Replaces V1's `grok:`. Needs the `xai` extra. |
 | `deepseek`              | OpenAI-compatible DeepSeek          |                                                                         |
 | `openrouter`            | `OpenRouterModel`                   | Route to any OpenRouter model.                                          |
@@ -56,11 +56,12 @@ Verified from `infer_provider_class` in `providers/__init__.py`:
 | `zai`                   | Z.AI                                |                                                                         |
 | `fireworks`, `together`, `heroku`, `crusoe`, `nebius`, `ovhcloud`, `alibaba`, `sambanova`, `meta`, `snowflake` | OpenAI-compatible | hosted / regional providers |
 | `huggingface`           | HF Inference Providers              | Needs the `huggingface` extra.                                          |
-| `ollama`                | `OllamaModel` (local)               | Set `OLLAMA_BASE_URL`; no API key.                                      |
-| `vllm`, `litellm`       | OpenAI-compatible                   | Self-hosted server / LiteLLM proxy.                                     |
+| `ollama`                | `OllamaModel` (local)               | Set `OLLAMA_BASE_URL` (e.g. `http://localhost:11434/v1`); no API key.   |
+| `vllm`, `litellm`       | OpenAI-compatible                   | Self-hosted server / LiteLLM proxy (`vllm:` needs `VLLM_BASE_URL`).     |
 | `github`, `github-copilot` | GitHub Models / Copilot          |                                                                         |
 | `sentence-transformers`, `voyageai` | Embeddings only         | `pydantic_ai.embeddings`.                                               |
 | `gateway/<upstream>`    | Any upstream via Pydantic AI Gateway| e.g. `'gateway/openai:<model>'`.                                       |
+| `typesafe`, `system-one`, `openai-codex`, `openai-chatgpt`, `openai-decisions` | provider-specific model classes | Newer integrations; see the docstrings in `pydantic_ai.models`.        |
 | `test`                  | `TestModel`                         | No network; `Agent('test')`.                                            |
 
 Removed in 2.0: the `grok:`, `google-gla:`, `google-vertex:` / `vertexai:` prefixes and the Outlines integration. A bare model name with no prefix (`Agent('gpt-5')`) now raises `UserError`.
@@ -95,7 +96,7 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 
 ## `ModelSettings` — provider-agnostic knobs
 
-`pydantic_ai.settings.ModelSettings` is a `TypedDict`; every key is optional and a provider silently ignores keys it does not support. Settings merge in order agent → run → capability, later wins.
+`pydantic_ai.settings.ModelSettings` is a `TypedDict`; every key is optional. Most keys a model does not support are ignored silently; the few whose absence changes what the request guarantees (`timeout`, `max_retries`, `stop_sequences`, `parallel_tool_calls=False`, `extra_headers`, `extra_body`) emit an `UnsupportedSettingWarning`. Settings are layered key by key — the model's own `settings`, then the agent's `model_settings`, then capabilities, then the run's `model_settings=` — and the later layer wins.
 
 | Key | Notes |
 |---|---|
@@ -320,7 +321,7 @@ model = FallbackModel(
 
 ### `FallbackExceptionGroup` — when all models fail
 
-If every model in the chain fails, `FallbackModel` raises a `FallbackExceptionGroup` — a `BaseExceptionGroup` subclass that bundles all the individual exceptions:
+If every model in the chain fails, `FallbackModel` raises a `FallbackExceptionGroup` — an `ExceptionGroup` subclass that bundles all the individual exceptions:
 
 ```python
 import asyncio
@@ -351,6 +352,9 @@ asyncio.run(main())
 ### `FallbackModel.models` — inspecting the chain
 
 ```python
+from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.models.fallback import FallbackModel
+
 model = FallbackModel(
     'openai:%%model=openai%%',
     'anthropic:%%model=anthropic-small%%',
@@ -464,6 +468,8 @@ dev_settings = InstrumentationSettings(
 To avoid double-counting on observability backends that sum child+parent spans:
 
 ```python
+from pydantic_ai.models.instrumented import InstrumentationSettings
+
 # Already the default since 2.0: agent-run spans use
 # gen_ai.aggregated_usage.input_tokens / output_tokens, model-request spans keep gen_ai.usage.*.
 # To keep the V1 attribute names on run spans (e.g. for existing dashboards):
@@ -554,7 +560,9 @@ model = InstrumentedModel('openai:%%model=openai%%', options=settings)
 Prefix a known provider with `gateway/` to route it through the [Pydantic AI Gateway](https://pydantic.dev/docs/ai/overview/gateway/):
 
 ```python
-agent = Agent('gateway/openai:%%model=openai%%')
+from pydantic_ai import Agent
+
+agent = Agent('gateway/openai:%%model=openai%%')   # needs PYDANTIC_AI_GATEWAY_API_KEY
 # => uses the gateway provider, normalising to the upstream OpenAI profile
 ```
 
@@ -563,7 +571,9 @@ agent = Agent('gateway/openai:%%model=openai%%')
 ## Local models
 
 ```python
-# Ollama (no key, OpenAI-chat compatible)
+from pydantic_ai import Agent
+
+# Ollama (no key; set OLLAMA_BASE_URL=http://localhost:11434/v1)
 agent = Agent('ollama:llama3.1')
 
 # Any OpenAI-compatible local server
@@ -584,6 +594,7 @@ model = OpenAIChatModel(
 
 ```python
 from pydantic_ai import limit_model_concurrency
+from pydantic_ai.models.openai import OpenAIChatModel
 
 model = limit_model_concurrency(OpenAIChatModel('%%model=openai%%'), 8)   # or ConcurrencyLimit(max_running=8, max_queued=100)
 ```
@@ -593,6 +604,9 @@ Enforces a max of 8 concurrent in-flight requests at the model layer.
 ### 2. Region-aware fallback
 
 ```python
+from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.models.fallback import FallbackModel
+
 model = FallbackModel(
     'bedrock:us.anthropic.%%model=anthropic%%',
     'bedrock:eu.anthropic.%%model=anthropic%%',
@@ -603,6 +617,11 @@ model = FallbackModel(
 ### 3. Rate-limit-aware fallback with response sniff
 
 ```python
+from pydantic_ai.exceptions import ModelAPIError
+from pydantic_ai.messages import ModelResponse
+from pydantic_ai.models.fallback import FallbackModel
+
+
 def empty_or_short(resp: ModelResponse) -> bool:
     for p in resp.parts:
         if getattr(p, 'part_kind', None) == 'text' and len(p.content) >= 20:
@@ -617,6 +636,8 @@ model = FallbackModel('openai:%%model=openai%%', 'anthropic:%%model=anthropic%%'
 
 ```python
 import httpx
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai import OpenAIProvider
 
 shared = httpx.AsyncClient(timeout=60, limits=httpx.Limits(max_connections=50))
 provider = OpenAIProvider(base_url='http://vllm:8000/v1', api_key='x', http_client=shared)
@@ -626,6 +647,15 @@ model = OpenAIChatModel('meta-llama/Llama-3.1-8B-Instruct', provider=provider)
 ### 5. Swap model per environment with `agent.override`
 
 ```python
+import os
+
+from pydantic_ai import Agent
+from pydantic_ai.models.fallback import FallbackModel
+
+agent = Agent('openai:%%model=openai%%', defer_model_check=True)
+env = os.getenv('APP_ENV', 'test')
+prompt = 'Hello'
+
 if env == 'production':
     ctx = agent.override(model='openai:%%model=openai%%')
 elif env == 'canary':

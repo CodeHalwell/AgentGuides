@@ -260,6 +260,8 @@ index = VectorStoreIndex.from_documents(documents, storage_context=storage_conte
 index = VectorStoreIndex.from_vector_store(vector_store)
 ```
 
+Changing documents later needs care. Give each `Document` a stable `doc_id` (for example the file path) and delete by it with `index.delete_ref_doc(doc_id)`, which removes that document's chunks from the vector store, including after `from_vector_store`. `index.refresh_ref_docs(documents)` (re-insert changed documents) relies on a docstore that remembers earlier hashes; an index reconnected with `from_vector_store` has none, so it inserts the updated document as new and leaves the stale chunks behind. For incremental updates across runs, use an `IngestionPipeline` with a persisted docstore and `DocstoreStrategy.UPSERTS`, as shown in the [production guide](/llamaindex-guide/python/llamaindex_production_guide/#1-ingestion-is-a-job-not-a-request).
+
 ### 3.6 Retrievers
 
 ```python
@@ -273,6 +275,23 @@ retriever = vector_index.as_retriever(
 for hit in retriever.retrieve("What is LlamaIndex?"):
     print(f"{hit.score:.3f}  {hit.node.get_content()[:80]}")
 ```
+
+`ExactMatchFilter` only does equality. `MetadataFilter` takes an `operator` (`FilterOperator.EQ`, `NE`, `GT`, `GTE`, `LT`, `LTE`, `IN`, `NIN`, `ANY`, `ALL`, `CONTAINS`, `TEXT_MATCH`, `IS_EMPTY` and others) and `MetadataFilters` combines filters with `condition=FilterCondition.AND`, `OR` or `NOT`:
+
+```python
+from llama_index.core.vector_stores import FilterCondition, FilterOperator, MetadataFilter, MetadataFilters
+
+recent_hr_or_finance = MetadataFilters(
+    filters=[
+        MetadataFilter(key="year", operator=FilterOperator.GTE, value=2024),
+        MetadataFilter(key="dept", operator=FilterOperator.IN, value=["hr", "finance"]),
+    ],
+    condition=FilterCondition.AND,
+)
+retriever = vector_index.as_retriever(similarity_top_k=5, filters=recent_hr_or_finance)
+```
+
+The in-memory vector store applies filters itself; external stores translate them into their own query language, and not every store supports every operator, so check the integration's documentation before relying on one. For diverse results, `as_retriever(vector_store_query_mode="mmr", vector_store_kwargs={"mmr_threshold": 0.5})` selects results by maximal marginal relevance instead of raw similarity (store support varies here too).
 
 ### 3.7 Query engines
 
@@ -300,16 +319,77 @@ for token in streaming_response.response_gen:
     print(token, end="", flush=True)
 ```
 
-### 3.8 Chat engines
+`similarity_top_k` defaults to 2, which is low for most corpora; start at 4 to 6 and measure. `response.source_nodes` carries the retrieved chunks with their scores, so you can show citations or log what the answer was based on.
 
-For a conversational RAG bot that does not need tools, a chat engine is simpler than an agent. Since 0.13.0 the default `as_chat_engine()` returns a `CondensePlusContextChatEngine`:
+**Response modes.** After retrieval, a *response synthesiser* turns the chunks into an answer. `response_mode` selects how, and it decides how many LLM calls a query costs:
+
+| `response_mode` | What it does | Use it for |
+|---|---|---|
+| `compact` (default) | Packs as many chunks as fit into each prompt, answers from the first prompt, then refines the answer with the rest | General Q&A; fewest calls for a given context |
+| `refine` | One LLM call per chunk, each refining the previous answer | Long answers that must consider every chunk; slowest |
+| `tree_summarize` | Summarises batches of chunks, then summarises the summaries | "Summarise these documents"; pairs well with `SummaryIndex` |
+| `simple_summarize` | Merges all chunks into a single prompt | Small result sets; fails if they exceed the context window |
+| `accumulate` / `compact_accumulate` | Answers the query once per chunk (or packed chunk) and concatenates the answers | When each chunk should be answered independently |
+| `no_text` | Retrieves only; no LLM call. The chunks are in `response.source_nodes` | Debugging retrieval cheaply |
+| `context_only` | Returns the retrieved text concatenated, with no LLM call | Feeding your own prompt |
+| `generation` | Ignores the context and asks the LLM directly | Comparing against "no RAG" |
+
+A query engine is a retriever, optional node post-processors and a synthesiser. `as_query_engine()` wires them for you; to choose each part yourself, build the engine explicitly:
 
 ```python
-chat_engine = vector_index.as_chat_engine(chat_mode="condense_plus_context")
+from llama_index.core import get_response_synthesizer
+from llama_index.core.postprocessor import SimilarityPostprocessor
+from llama_index.core.query_engine import RetrieverQueryEngine
+
+retriever = vector_index.as_retriever(similarity_top_k=6)
+synthesizer = get_response_synthesizer(response_mode="tree_summarize", use_async=True)
+
+engine = RetrieverQueryEngine(
+    retriever=retriever,
+    response_synthesizer=synthesizer,
+    node_postprocessors=[SimilarityPostprocessor(similarity_cutoff=0.3)],
+)
+print(engine.query("Summarise the documents."))
+
+# Retrieval only, no LLM call: useful when tuning chunk sizes and top_k
+dry_run = vector_index.as_query_engine(response_mode="no_text").query("What is LlamaIndex?")
+print([(n.score, n.node.node_id) for n in dry_run.source_nodes])
+```
+
+`use_async=True` makes the synchronous `query()` issue the per-chunk calls of `tree_summarize` and `accumulate` concurrently; `aquery()` already does so for `tree_summarize`. Streaming (`streaming=True`) works with `compact`, `refine`, `tree_summarize` and `simple_summarize`; `accumulate` raises `ValueError: Unable to stream in Accumulate response mode`. The upstream changelog lists "restore compact and refine streaming" under 0.14.25, so on older releases test streaming first.
+
+### 3.8 Chat engines
+
+For a conversational RAG bot that does not need tools, a chat engine is simpler than an agent. It keeps the conversation history, retrieves on every turn and answers with the retrieved text in the prompt. Since 0.13.0 the default `as_chat_engine()` (`chat_mode="best"`) returns a `CondensePlusContextChatEngine`:
+
+```python
+chat_engine = vector_index.as_chat_engine(chat_mode="condense_plus_context", similarity_top_k=4)
 print(chat_engine.chat("What is LlamaIndex?"))
-print(chat_engine.chat("And how does it relate to RAG?"))
+print(chat_engine.chat("And how does it relate to RAG?"))   # the follow-up is rewritten into a standalone question first
+print(len(chat_engine.chat_history))                         # user and assistant messages so far
 chat_engine.reset()
 ```
+
+| `chat_mode` | Engine | Behaviour |
+|---|---|---|
+| `condense_plus_context` (also `best`) | `CondensePlusContextChatEngine` | Rewrites the latest message and history into a standalone question, retrieves for it, answers with the context in the system prompt. The usual choice. |
+| `context` | `ContextChatEngine` | Retrieves using the latest message as written. Cheaper (no rewrite call) but follow-ups like "and the second one?" retrieve poorly. |
+| `condense_question` | `CondenseQuestionChatEngine` | Rewrites the question, then runs a full query engine. Does not accept `system_prompt` (it raises `NotImplementedError`). |
+| `simple` | `SimpleChatEngine` | No retrieval; the LLM alone. |
+
+`react` and `openai` were removed in 0.13.0 and raise a `ValueError` that points you to `ReActAgent` or `FunctionAgent` with a `QueryEngineTool`. Extra keyword arguments such as `similarity_top_k` and `node_postprocessors` are passed to the retriever and engine. Streaming and async variants exist for every engine:
+
+```python
+streaming = chat_engine.stream_chat("Summarise our conversation.")
+for token in streaming.response_gen:
+    print(token, end="", flush=True)
+print(len(streaming.source_nodes))                  # sources are available once streaming has finished
+
+# async: response = await chat_engine.achat(...); stream = await chat_engine.astream_chat(...)
+#        async for token in stream.async_response_gen(): ...
+```
+
+Pass `memory=` to control history length or to persist it: `ChatMemoryBuffer.from_defaults(token_limit=3000)` keeps the most recent messages within a token budget, and a database-backed `Memory` (section 9.3) with a stable `session_id` survives restarts. A chat engine holds one conversation, so create one per user or session; the index and retriever underneath can be shared.
 
 ### 3.9 Property graphs
 
@@ -375,6 +455,63 @@ print(llm.chat([msg]).message.content)
 ```
 
 For PDFs and slides where the images are embedded in pages, parsing with LlamaParse ([section 18.2](#182-llamaparse-and-llamacloud)) usually works better than extracting the images yourself.
+
+### 3.11 Chunking strategies and metadata extraction
+
+The chunk is the unit that gets embedded, retrieved and shown to the LLM, so chunking decides retrieval quality more than most other settings. `SentenceSplitter` is the default: it splits on sentence boundaries into chunks of up to `chunk_size` tokens (1024 unless you change `Settings.chunk_size`), with `chunk_overlap` tokens repeated between neighbours (200 by default). The overlap must be smaller than the chunk size, or the constructor raises `ValueError`. Other parsers solve specific problems:
+
+| Parser | Splits by | Use it when |
+|---|---|---|
+| `SentenceSplitter` | Token budget, respecting sentences | The default for prose |
+| `TokenTextSplitter` | Token budget only | You need hard token limits and do not care about sentence boundaries |
+| `MarkdownNodeParser` | Markdown headings; records the heading path in `header_path` metadata | Documentation and notes written in Markdown |
+| `SentenceWindowNodeParser` | One sentence per node, with the surrounding sentences stored in metadata | Precise matching with wider context for the LLM (see [19.6](#196-small-to-big-retrieval-sentence-windows-and-auto-merging)) |
+| `HierarchicalNodeParser` | Several chunk sizes at once, linked parent to child | Merging small hits into their parent chunk (see [19.6](#196-small-to-big-retrieval-sentence-windows-and-auto-merging)) |
+| `SemanticSplitterNodeParser` | Breaks where the embedding similarity between neighbouring sentence groups drops | Text with topic shifts and no structure; needs an embedding call per sentence group |
+| `CodeSplitter`, `JSONNodeParser`, `HTMLNodeParser` | Syntax of the format | Source code, JSON, HTML |
+
+```python
+from llama_index.core import Document, Settings
+from llama_index.core.node_parser import MarkdownNodeParser, SemanticSplitterNodeParser, SentenceSplitter
+
+doc = Document(text="# Leave\n\nStaff get 25 days. " * 30 + "\n\n# Expenses\n\nClaims are paid in 30 days. " * 30,
+               metadata={"file_name": "handbook.md"})
+
+nodes = SentenceSplitter(chunk_size=256, chunk_overlap=32).get_nodes_from_documents([doc])
+print(len(nodes), nodes[1].prev_node is not None)     # neighbouring chunks are linked
+
+md_nodes = MarkdownNodeParser().get_nodes_from_documents([doc])
+print([n.metadata.get("header_path") for n in md_nodes])
+
+semantic = SemanticSplitterNodeParser(
+    embed_model=Settings.embed_model,        # any embedding model; called once per sentence group
+    buffer_size=1,                           # sentences grouped when comparing neighbours
+    breakpoint_percentile_threshold=95,      # lower values give more, smaller chunks
+)
+semantic_nodes = semantic.get_nodes_from_documents([doc])
+```
+
+Every parser is a transformation, so it can sit in an `IngestionPipeline` (section 3.3) or be passed to an index with `VectorStoreIndex.from_documents(docs, transformations=[...])`. `Settings.node_parser` sets the default for indexes built without one.
+
+**Metadata extractors** add LLM-generated fields to each chunk: `TitleExtractor` (`document_title`), `QuestionsAnsweredExtractor` (`questions_this_excerpt_can_answer`), `SummaryExtractor` (`section_summary`, and with `summaries=["prev", "self", "next"]` the neighbours' summaries too) and `KeywordExtractor` (`excerpt_keywords`). They run after the splitter, one LLM call per chunk per extractor:
+
+```python
+from llama_index.core.extractors import KeywordExtractor, QuestionsAnsweredExtractor, TitleExtractor
+from llama_index.core.ingestion import IngestionPipeline
+
+pipeline = IngestionPipeline(
+    transformations=[
+        SentenceSplitter(chunk_size=256, chunk_overlap=0),
+        TitleExtractor(nodes=3, llm=llm),                      # title from the first three chunks of each document
+        QuestionsAnsweredExtractor(questions=2, llm=llm),
+        KeywordExtractor(keywords=5, llm=llm),
+    ]
+)
+enriched = pipeline.run(documents=[doc])
+print(sorted(enriched[0].metadata))
+```
+
+By default metadata is included in the text that is embedded and shown to the LLM, so extracted questions and keywords change what the chunk matches. That is often the point, but it also increases token use; use `excluded_embed_metadata_keys` and `excluded_llm_metadata_keys` (section 3.1) to hide fields from either side. Extraction multiplies ingestion cost by the number of extractors, so run it in the ingestion job with the pipeline cache enabled, not at query time.
 
 ---
 
@@ -605,7 +742,7 @@ response = await agent.run(user_msg="...", max_iterations=10)
 agent = FunctionAgent(tools=[multiply, add], llm=llm, timeout=120)   # workflow timeout in seconds
 ```
 
-`early_stopping_method="generate"` asks the LLM for a final answer when the limit is reached instead of raising.
+`max_iterations` defaults to 20 LLM-and-tool rounds. When a run reaches the limit, the default (`early_stopping_method="force"`) raises a `WorkflowRuntimeError`; `early_stopping_method="generate"` instead asks the LLM for a best-effort final answer from what it has gathered. Set it per run (`agent.run(..., early_stopping_method="generate")`), or on the agent or `AgentWorkflow` constructor to change the default.
 
 ### 6.4 Inspecting the result
 
@@ -1277,7 +1414,7 @@ documents = [
 
 ### 18.3 Other sources
 
-Readers for databases, SaaS tools and the web are separate packages, for example:
+Readers for databases, SaaS tools and the web are separate packages; PyPI lists more than 200 `llama-index-readers-*` packages (counted %%versions-checked%%). Some common ones:
 
 | Source | Package | Class |
 |---|---|---|
@@ -1439,6 +1576,97 @@ class SimpleRAG(CustomQueryEngine):
 engine = SimpleRAG(retriever=index.as_retriever(), llm=OpenAI(model="%%model=openai-small%%"))
 ```
 
+### 19.6 Small-to-big retrieval: sentence windows and auto-merging
+
+Small chunks match a question precisely but give the LLM too little context; large chunks give context but match vaguely. Two patterns retrieve small and answer with big.
+
+**Sentence windows.** `SentenceWindowNodeParser` makes one node per sentence and stores the surrounding sentences in metadata. The embedding is computed from the single sentence; `MetadataReplacementPostProcessor` swaps in the window before synthesis:
+
+```python
+from llama_index.core import VectorStoreIndex
+from llama_index.core.node_parser import SentenceWindowNodeParser
+from llama_index.core.postprocessor import MetadataReplacementPostProcessor
+
+window_parser = SentenceWindowNodeParser.from_defaults(
+    window_size=3,                              # three sentences each side
+    window_metadata_key="window",
+    original_text_metadata_key="original_text",
+)
+window_nodes = window_parser.get_nodes_from_documents(documents)
+window_index = VectorStoreIndex(window_nodes)
+
+window_engine = window_index.as_query_engine(
+    similarity_top_k=4,
+    node_postprocessors=[MetadataReplacementPostProcessor(target_metadata_key="window")],
+)
+print(window_engine.query("What does the handbook say about leave?"))
+```
+
+The `window` and `original_text` metadata are excluded from the embedding and the LLM prompt automatically, so they do not distort retrieval.
+
+**Auto-merging.** `HierarchicalNodeParser` produces parent chunks and nested children (`chunk_sizes=[2048, 512, 128]` by default). Index only the leaves, but keep every level in the docstore. When enough sibling leaves are retrieved together, `AutoMergingRetriever` replaces them with their parent:
+
+```python
+from llama_index.core import StorageContext, VectorStoreIndex
+from llama_index.core.node_parser import HierarchicalNodeParser, get_leaf_nodes
+from llama_index.core.retrievers import AutoMergingRetriever
+from llama_index.core.query_engine import RetrieverQueryEngine
+
+hierarchy = HierarchicalNodeParser.from_defaults(chunk_sizes=[1024, 256, 64])
+all_nodes = hierarchy.get_nodes_from_documents(documents)
+leaf_nodes = get_leaf_nodes(all_nodes)
+
+storage_context = StorageContext.from_defaults()
+storage_context.docstore.add_documents(all_nodes)             # parents must be in the docstore
+leaf_index = VectorStoreIndex(leaf_nodes, storage_context=storage_context)
+
+retriever = AutoMergingRetriever(
+    leaf_index.as_retriever(similarity_top_k=6),
+    storage_context,
+    simple_ratio_thresh=0.5,      # merge when more than half of a parent's children were retrieved
+    verbose=True,
+)
+engine = RetrieverQueryEngine.from_args(retriever)
+print(engine.query("How are expenses reimbursed?"))
+```
+
+Persist `storage_context` (section 3.5) and reload it, rather than re-chunking, so parent and child IDs stay stable. With an external vector store, only the leaves go to the store; the docstore with all levels still has to be kept somewhere durable (a Redis, MongoDB or Postgres docstore integration, or the local JSON file).
+
+### 19.7 Query transformations
+
+Short or vague questions embed poorly. `HyDEQueryTransform` asks the LLM to write a hypothetical answer and embeds that (together with the original query when `include_original=True`), because an answer resembles the relevant passage more than the question does. `TransformQueryEngine` applies a transform in front of any query engine:
+
+```python
+from llama_index.core.indices.query.query_transform import HyDEQueryTransform
+from llama_index.core.query_engine import TransformQueryEngine
+
+hyde = HyDEQueryTransform(include_original=True)
+hyde_engine = TransformQueryEngine(vector_index.as_query_engine(), query_transform=hyde)
+print(hyde_engine.query("notice period"))
+```
+
+HyDE adds one LLM call per query and can hurt when the model does not know the domain, since a wrong hypothetical answer pulls retrieval in the wrong direction. Compare hit rate with and without it on your evaluation set (section 21.2) before adopting it. `StepDecomposeQueryTransform` and `DecomposeQueryTransform` in the same module break a question into sub-steps; for multi-document questions `SubQuestionQueryEngine` (19.4) is usually simpler.
+
+### 19.8 Answers with citations
+
+`CitationQueryEngine` splits the retrieved chunks into smaller numbered sources and prompts the LLM to cite them as `[1]`, `[2]`. The numbered sources are returned in `response.source_nodes`, so you can map each marker back to a document:
+
+```python
+from llama_index.core.query_engine import CitationQueryEngine
+
+citation_engine = CitationQueryEngine.from_args(
+    vector_index,
+    similarity_top_k=4,
+    citation_chunk_size=256,        # size of each numbered source
+)
+response = citation_engine.query("What is LlamaIndex?")
+print(response)                      # text containing markers such as [1]
+for i, source in enumerate(response.source_nodes, start=1):
+    print(i, source.node.metadata.get("file_name"), source.node.get_content()[:60])
+```
+
+The model decides where to place markers, so check that cited numbers exist before showing them to users, and do not treat a marker as proof that the cited text supports the claim; `FaithfulnessEvaluator` (section 21.1) tests that.
+
 ---
 
 ## 20. Prompts
@@ -1565,6 +1793,7 @@ Notes:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | 0.14.25 / workflows 2.26.1 | Added response modes and explicit query-engine assembly (3.7), chat engine modes and streaming (3.8), metadata filter operators (3.6), chunking strategies and metadata extractors (3.11), sentence-window and auto-merging retrieval (19.6), HyDE query transformation (19.7) and citation query engine (19.8). Documented `max_iterations` default and `early_stopping_method`, and the `refresh_ref_docs` behaviour after `from_vector_store`. |
 | 2026-10-24 | 0.14.25 / workflows 2.26.1 | Section 13 cut to an introduction; Workflows now have their own [page](/llamaindex-guide/python/llamaindex_workflows/). Its retry example used the deprecated `ConstantDelayRetryPolicy`. |
 | 2026-10-21 | 0.14.25 | Added property graphs (3.9), multimodal (3.10), `WorkflowServer`/`WorkflowClient`/`llamactl` serving (14), LlamaParse via the `llama-cloud` SDK (18.2) and evaluation datasets (21.2). `SubQuestionQueryEngine` example now passes `question_gen` (the default needs a package that cannot be installed with current releases). |
 | 2026-10-21 | 0.14.25 | Rewritten. Previous edition used APIs that do not exist (`AgentWorkflow.from_tools`, `from llama_index.core.workflow import AgentWorkflow`, `llama_index.core.tools.Tool`, `BM25Retriever` in core, `llama_agents`) and wrongly stated that `ReActAgent` raises `ImportError`. All examples now use the workflow-based agents and were checked against an installed `llama-index-core`. Version banner now tracks the site's version registry. |

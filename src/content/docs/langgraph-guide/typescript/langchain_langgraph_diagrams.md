@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "typescript"
 sidebar:
   label: "Diagrams"
+  order: 45
 ---
 
 Comprehensive visual representations of architectures, workflows, and patterns for TypeScript-based LLM applications.
@@ -27,7 +28,7 @@ Comprehensive visual representations of architectures, workflows, and patterns f
 │  ┌─────────────────┐  ┌──────────────┐  ┌─────────────────────┐ │
 │  │  Chat Models    │  │  Prompt      │  │  Output Parsers     │ │
 │  │  - OpenAI       │  │  Templates   │  │  - JSON Parser      │ │
-│  │  - Anthropic    │  │  - Variables │  │  - Zod Parser       │ │
+│  │  - Anthropic    │  │  - Variables │  │  - Structured output│ │
 │  │  - Google       │  │  - Templates │  │  - String Parser    │ │
 │  └─────────────────┘  └──────────────┘  └─────────────────────┘ │
 │                                                                   │
@@ -35,7 +36,10 @@ Comprehensive visual representations of architectures, workflows, and patterns f
 │  │  Tools           │  │  Retrievers  │  │  Memory Systems     │ │
 │  │  - Structured    │  │  - Vector DB │  │  - Checkpointers    │ │
 │  │  - Dynamic       │  │  - Document  │  │    (thread state)   │ │
-│  │  - Custom        │  │  - Search    │  │  - Stores (long-term)│ │
+│  │  - Custom        │  │  - Search    │  │    (@langchain/     │ │
+│  │                  │  │              │  │     langgraph-      │ │
+│  │                  │  │              │  │     checkpoint)     │ │
+│  │                  │  │              │  │  - Stores (long-term)│ │
 │  └──────────────────┘  └──────────────┘  └─────────────────────┘ │
 │                                                                   │
 │  LCEL (LangChain Expression Language)                             │
@@ -108,8 +112,8 @@ Comprehensive visual representations of architectures, workflows, and patterns f
 │   ────────────── │
 │   - Create Model │
 │   - Set Tools    │
-│   - Configure    │
-│   Executor       │
+│   - createAgent  │
+│     (+ middleware)│
 └────────┬─────────┘
          │
          ▼
@@ -128,7 +132,7 @@ Comprehensive visual representations of architectures, workflows, and patterns f
 │  - Tool 1                    │
 │  - Tool 2                    │
 │  - Tool 3                    │
-│  - FINAL_ANSWER              │
+│  - or no tool call (answer)  │
 └────────┬─────────────────────┘
          │
       ┌──┴──────────────────────┐
@@ -151,7 +155,7 @@ Comprehensive visual representations of architectures, workflows, and patterns f
          │                   │
          └───────┬───────────┘
                  │
-         Repeat until FINAL_ANSWER
+         Repeat until the model replies without tool calls
                  │
                  ▼
          ┌──────────────────┐
@@ -441,7 +445,7 @@ LangGraph has two memory layers. (The older LangChain `BufferMemory` / `Conversa
    │ keyed by thread_id         │  │ optional vector search      │
    │                            │  │                             │
    │ MemorySaver (tests)        │  │ InMemoryStore (dev)         │
-   │ SqliteSaver / PostgresSaver│  │ Postgres-backed store       │
+   │ SqliteSaver / PostgresSaver│  │ PostgresStore               │
    └────────────────────────────┘  └─────────────────────────────┘
         compile({ checkpointer })        compile({ store })
 ```
@@ -460,11 +464,11 @@ Graph Compilation
     ▼
 Execution with Checkpointer
     │
-    ├─ Execute Node 1 → Save Checkpoint 1
+    ├─ Super-step 1 (Node 1) → save checkpoint
     │
-    ├─ Execute Node 2 → Save Checkpoint 2
+    ├─ Super-step 2 (Nodes 2 and 3, parallel) → save checkpoint
     │
-    ├─ Execute Node 3 → Save Checkpoint 3
+    ├─ ...
     │
     └─ Complete
 
@@ -633,7 +637,7 @@ if (state.priority === 'high') {
 } else if (state.type === 'question') {
   return 'qa_agent';
 } else if (state.error_count > 3) {
-  return 'END';
+  return END; // the END constant ('__end__'), not the string 'END'
 } else {
   return 'default_handler';
 }
@@ -680,57 +684,33 @@ if (state.priority === 'high') {
 ### Human-in-the-Loop Interruption Flow
 
 ```
-    Workflow Execution
+    Node runs and calls interrupt(payload)
           │
           ▼
-    ┌─────────────┐
-    │ Execute     │
-    │ Node        │
-    └──────┬──────┘
-           │
-           ▼
-    ┌──────────────────┐
-    │ Check for        │
-    │ interrupt()      │
-    │ call?            │
-    └────┬────────┬────┘
-         │        │
-        YES      NO
-         │        │
-         ▼        │
-    ┌──────────┐  │
-    │ PAUSE    │  │
-    │Execution │  │
-    └────┬─────┘  │
-         │        │
-         ▼        │
-    ┌────────────────────────┐
-    │ Human Inspector        │
-    │ - View state           │
-    │ - Make decision        │
-    │ - Modify state         │
-    │ - Approve/Reject       │
-    └────┬───────────────────┘
-         │
-         ▼
-    ┌──────────────────┐
-    │ Resume with      │
-    │ new state        │
-    └────┬─────────────┘
-         │
-         ├─────────────┐
-         │             │
-         ▼             ▼
-    Continue      Abort
-         │             │
-         │             ▼
-         │         Error State
-         │
-         ▼
-    Continue Execution
-         │
-         ▼
-    Return Result
+    ┌──────────────────────────────┐
+    │ Run pauses; checkpoint saved │  needs a checkpointer and a thread_id
+    │ invoke() returns state with  │
+    │ result[INTERRUPT] = [payload]│
+    └──────────────┬───────────────┘
+                   │
+                   ▼
+    ┌──────────────────────────────┐
+    │ Human / caller decides       │  can also inspect getState() or
+    │ (approve, edit, reject ...)  │  change it with updateState()
+    └──────────────┬───────────────┘
+                   │
+                   ▼
+    ┌──────────────────────────────┐
+    │ invoke(new Command({ resume: │
+    │   value }), same thread)     │
+    └──────────────┬───────────────┘
+                   │
+                   ▼
+    The interrupted node re-runs from its start;
+    interrupt() now returns `value`
+                   │
+                   ▼
+    Graph continues to END (or the next interrupt)
 ```
 
 ---

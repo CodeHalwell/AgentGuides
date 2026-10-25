@@ -56,7 +56,7 @@ gemini = LLM(model="gemini/%%model=gemini%%")                   # needs crewai[g
 local = LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434")
 ```
 
-API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
+API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` (or `MODEL_NAME`, `OPENAI_MODEL_NAME`) environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
 
 ## Simple agents
 
@@ -135,7 +135,7 @@ polish = Task(
 print(Crew(agents=[researcher, writer, editor], tasks=[facts, draft, polish]).kickoff(inputs={"topic": "tides"}).raw)
 ```
 
-When `context` is unset, a task sees the outputs of **all** earlier tasks; `context=[...]` narrows it, and `context=[]` gives the task none. Tasks with `async_execution=True` run concurrently until the next synchronous task, which waits for them.
+When `context` is unset, a task sees the outputs of **all** earlier tasks; `context=[...]` narrows it, and `context=[]` gives the task none. Outputs are added to the prompt as context text. They are not substituted into `{placeholders}`, which come only from `kickoff(inputs=...)`. Tasks with `async_execution=True` run concurrently until the next synchronous task, which waits for them.
 
 ### Structured output
 
@@ -167,7 +167,7 @@ print(result.pydantic.headline)      # final task's model
 print(result.tasks_output[0].raw)    # raw text of any task
 ```
 
-`output_pydantic` asks for JSON in the prompt and parses it; `response_model` uses the provider's native structured output; `output_json` keeps a dict in `json_dict`. A `CrewOutput` is not a string or a dict: read `.raw`, `.pydantic` or `.json_dict` (or `json.loads(result.raw)` when you asked for JSON). Guardrails, conditional tasks, file inputs and `human_input` are covered on the [Task API](/crewai-guide/crewai_task_api_python/) page.
+`output_pydantic` puts the schema in the prompt, asks the provider for structured output where it can, and parses the answer into `.pydantic`; `output_json` does the same but keeps a dict in `json_dict`. `response_model` only asks the provider for structured output: in 1.15.28 it leaves `.pydantic` empty and `.raw` holds the JSON, so prefer `output_pydantic` when you want a model instance. A `CrewOutput` is not a string or a dict: read `.raw`, `.pydantic` or `.json_dict`. Guardrails, conditional tasks, file inputs and `human_input` are covered on the [Task API](/crewai-guide/crewai_task_api_python/) page.
 
 ## Crews and processes
 
@@ -195,7 +195,7 @@ print(crew.kickoff(inputs={"topic": "heat pumps"}).raw)
 ```
 
 - A hierarchical crew **requires** `manager_llm` or `manager_agent`; without either, `Crew(...)` raises a `ValidationError` ("Attribute `manager_llm` or `manager_agent` is required when using hierarchical process"). A `manager_agent` must not also appear in `agents`.
-- Tasks in a hierarchical crew may omit `agent`; the manager assigns and delegates them.
+- Tasks in a hierarchical crew may omit `agent`. The manager runs every task itself and delegates to your agents through tools, so `TaskOutput.agent` shows the manager's role. Placeholders such as `{topic}` are not interpolated into a `manager_agent`'s own role, goal or backstory.
 - `planning=True` adds a planning step before the tasks run; `planning_llm` chooses its model.
 - Delegation between agents (`allow_delegation=True`), manager design and A2A are on [Multi-agent patterns](/crewai-guide/crewai_advanced_multi_agent_python/).
 
@@ -236,7 +236,7 @@ print(asyncio.run(main()).raw[:80])
 
 | Attribute | Contents |
 |---|---|
-| `.raw` | Final task's text output. |
+| `.raw` | Text output of the last task that produced any (a skipped conditional task at the end does not blank it). |
 | `.pydantic` / `.json_dict` | Final task's structured output, if it had one. |
 | `.tasks_output` | One `TaskOutput` per task, in execution order. |
 | `.token_usage` | `UsageMetrics`: prompt, completion, cached, reasoning and cache-creation tokens, request count. |
@@ -274,8 +274,8 @@ MCP support is built in (`crewai.mcp`): stdio, HTTP and SSE servers, tool filter
 
 ## Memory and knowledge
 
-- **Memory** is one `Memory` class with scoped views. `Crew(memory=True)` gives the crew a default store (LanceDB, OpenAI for analysis and embeddings); pass `memory=Memory(...)` to choose the storage, embedder and scope. The older short-term, long-term and entity memories were folded into it. See [Memory](/crewai-guide/crewai_memory_python/).
-- **Knowledge** is a read-mostly vector store built from files or strings and attached with `knowledge_sources=[...]` on an agent or crew. See [Knowledge](/crewai-guide/crewai_knowledge_python/).
+- **Memory** is one `Memory` class with scoped views. `Crew(memory=True)` gives the crew a default LanceDB store under the root scope `/crew/<crew name>`; its analysis uses the first agent's LLM and its embeddings use the crew's `embedder` (OpenAI by default). Pass `memory=Memory(...)` to choose the storage, embedder and scope. With memory on, each agent recalls up to five matching memories into every task prompt, gets `search_memory` and `save_to_memory` tools, and the task's result is distilled and saved when it finishes. The older short-term, long-term and entity memories were folded into it. See [Memory](/crewai-guide/crewai_memory_python/).
+- **Knowledge** is a read-mostly vector store built from files or strings and attached with `knowledge_sources=[...]` on an agent or crew. Before each task the agent rewrites the task text into a search query with its own LLM (one extra model call) and appends the matching chunks to the prompt. See [Knowledge](/crewai-guide/crewai_knowledge_python/).
 
 Both need an embedder; without one configured they use OpenAI and need `OPENAI_API_KEY`.
 

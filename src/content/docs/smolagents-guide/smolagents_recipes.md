@@ -148,13 +148,15 @@ The same parts are importable from `smolagents.vision_web_browser` when you want
 import helium
 from selenium import webdriver
 from smolagents import CodeAgent, LiteLLMModel, WebSearchTool
+from smolagents import vision_web_browser
 from smolagents.vision_web_browser import (
     close_popups, go_back, helium_instructions, save_screenshot, search_item_ctrl_f,
 )
 
 options = webdriver.ChromeOptions()
 options.add_argument("--window-size=1000,1350")
-helium.start_chrome(headless=False, options=options)
+driver = helium.start_chrome(headless=False, options=options)
+vision_web_browser.driver = driver      # go_back, close_popups and search_item_ctrl_f read this module-level name
 
 browser_agent = CodeAgent(
     tools=[WebSearchTool(), go_back, close_popups, search_item_ctrl_f],
@@ -167,7 +169,7 @@ browser_agent.python_executor("from helium import *")
 browser_agent.run("Find the opening hours of the Science Museum in London." + helium_instructions)
 ```
 
-The model's code drives a real browser on your machine with the local executor, so the pages it visits can try to steer it. Keep it away from logged-in sessions and privileged tools.
+The three tools use a module-level `driver` that `webagent` sets for itself; when you build the agent yourself, assign it as above or they fail with `NameError: name 'driver' is not defined`. The model's code drives a real browser on your machine with the local executor, so the pages it visits can try to steer it. Keep it away from logged-in sessions and privileged tools.
 
 ### Recipe 6: Agentic RAG
 
@@ -695,7 +697,7 @@ def run_robustly(agent, task: str, attempts: int = 3, backoff: float = 2.0):
             continue
         if result.state == "success":
             return result.output
-        print(f"Attempt {attempt}: hit max_steps after {len(result.steps)} steps")
+        print(f"Attempt {attempt}: hit max_steps after {sum('step_number' in s for s in result.steps)} steps")
     return None
 
 

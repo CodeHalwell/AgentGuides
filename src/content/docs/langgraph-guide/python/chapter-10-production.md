@@ -10,7 +10,7 @@ sidebar:
 
 **What you'll learn:** what changes when a graph leaves your laptop: where state is stored, how often it is written, how runaway loops and flaky calls are contained, how to test without calling a model, and how to deploy with the `langgraph` CLI.
 
-Checked against `langgraph` %%version=langgraph%%, `langchain` %%version=langchain%% and `langgraph-cli` 0.4.37. **Time:** ~30 minutes.
+Checked against `langgraph` %%version=langgraph%%, `langchain` %%version=langchain%% and `langgraph-cli` %%version=langgraph-cli%%. **Time:** ~30 minutes.
 
 > The [production guide](/langgraph-guide/python/langgraph_production_guide/) is the deployment reference (`langgraph.json`, LangSmith Deployment, self-hosting). This chapter is the tutorial path to it.
 
@@ -233,6 +233,8 @@ def test_single_node():
     assert "check" in graph.nodes
 ```
 
+`GenericFakeChatModel` streams by splitting the message content, so it suits tests that call `invoke`. Under `stream(..., stream_mode="messages")` a scripted message with empty content and only `tool_calls` fails with `ValueError: No generations found in stream`; with non-empty content it runs, but the streamed chunks carry no tool calls, so the agent stops after the first turn. Test streaming of tool-calling agents with a fake that implements `_stream` and yields `AIMessageChunk`s with `tool_call_chunks`.
+
 Other useful techniques (from the [LangGraph testing docs](https://docs.langchain.com/oss/python/langgraph/test)):
 
 - `graph.nodes["name"].invoke(state)` runs one node on its own.
@@ -258,13 +260,13 @@ The CLI (`pip install -U "langgraph-cli[inmem]"`) runs your graphs in the LangGr
 
 | Command | What it does |
 |---|---|
-| `langgraph new --template new-langgraph-project-python my-app` | Start a project from a template |
+| `langgraph new --template new-langgraph-project-python my-app` | Start a project from a template (others: `agent-python`, `deep-agent-python` and the `-js` variants) |
 | `langgraph dev` | Run the server in-process with hot reload (no Docker) on port 2024 and open LangSmith Studio |
 | `langgraph validate` | Check `langgraph.json` |
 | `langgraph build -t my-agent` | Build a Docker image of the server and your code |
 | `langgraph up` | Run the image locally with Postgres and Redis (needs Docker and a LangSmith licence or API key) |
 | `langgraph dockerfile Dockerfile` | Write the Dockerfile instead of building |
-| `langgraph deploy` (beta) | Build and deploy to LangSmith Deployment; `deploy list`, `deploy logs` and `deploy revisions list` inspect it |
+| `langgraph deploy` (beta) | Build and deploy to LangSmith Deployment; `deploy list`, `deploy logs`, `deploy revisions list` and `deploy delete` manage it |
 
 Once deployed, call the graph with the `langgraph-sdk` client, or with [`RemoteGraph`](/langgraph-guide/python/reference-remote-graph/), which has the same `invoke`/`stream`/`get_state` interface as a local graph. The [production guide](/langgraph-guide/python/langgraph_production_guide/) covers the other `langgraph.json` keys (TTL, auth, HTTP), self-hosting, and running a graph inside your own service.
 
@@ -272,13 +274,15 @@ Once deployed, call the graph with the `langgraph-sdk` client, or with [`RemoteG
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `interrupt()` returns at once and `Command(resume=...)` does nothing | No checkpointer, or a different `thread_id` | Compile with a checkpointer; reuse the same config |
+| `RuntimeError: Cannot use Command(resume=...) without checkpointer` | The graph was compiled without a checkpointer | Compile with a checkpointer |
+| `Command(resume=...)` starts a fresh run or finds nothing to resume | A different `thread_id` from the paused run | Reuse the same config |
+| `RuntimeError: When there are multiple pending interrupts, you must specify the interrupt id when resuming.` | Parallel nodes are paused at once | `Command(resume={interrupt.id: value, ...})` ([Chapter 7](/langgraph-guide/python/chapter-07-human-in-the-loop/#example-3-resume-by-interrupt-id)) |
 | `ValueError: Checkpointer requires ... thread_id` | Compiled with a checkpointer, invoked without a thread | Add `{"configurable": {"thread_id": ...}}` |
 | `InvalidUpdateError: At key 'x': Can receive only one value per step` | Two parallel nodes wrote a key that has no reducer | `Annotated[list, operator.add]` (or another reducer) |
 | A list key is replaced, not appended | No reducer on the key | Add the reducer to the type: `messages: Annotated[list, add_messages]` |
 | The model never calls tools | The model in your node is not bound to them | `model.bind_tools(tools)`, or use `create_agent` |
 | `GraphRecursionError` | A loop with no exit, or a limit too low for the task | Fix the routing; set `recursion_limit` |
-| `ValueError: Node timeouts are only supported for async nodes` at `compile()` | A timeout (possibly from `set_node_defaults`) on a sync node or handler | Make it `async def` |
+| `ValueError: Node timeouts are only supported for async nodes` | At `compile()`: a timeout (possibly from `set_node_defaults`) on a sync node or handler. At run time: `Send(..., timeout=...)` to a sync node | Make it `async def` |
 | `LangGraphDeprecatedSinceV10` warning for `create_react_agent` | Deprecated factory | `langchain.agents.create_agent` ([Chapter 2](/langgraph-guide/python/chapter-02-simple-agents/)) |
 
 ## Next steps

@@ -87,6 +87,84 @@ Reads `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and optionally `LANGFUSE_HOST
 
 Inputs and outputs are attached as tags only when content tracing is enabled (`HAYSTACK_CONTENT_TRACING_ENABLED=true`). Leave it off where prompts may contain personal data, or redact in your exporter.
 
+### Recording spans in tests
+
+A tracer is a small abstract class: `Tracer.trace()` is a context manager that yields a `Span`, and `Span.set_tag()` receives the tags. Writing one that keeps spans in a list lets a test assert on what a pipeline or agent actually did (which tools ran, how many steps) without any external backend. The model is scripted with `MockChatGenerator`, so this runs offline:
+
+```python
+import contextlib
+from collections.abc import Iterator
+from typing import Any
+
+from haystack import Pipeline, tracing
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage, ToolCall
+from haystack.tools import tool
+from haystack.tracing import Span, Tracer
+
+
+class RecordedSpan(Span):
+    def __init__(self, name: str, tags: dict[str, Any] | None):
+        self.name = name
+        self.tags = dict(tags or {})
+
+    def set_tag(self, key: str, value: Any) -> None:
+        self.tags[key] = value
+
+
+class RecordingTracer(Tracer):
+    """Keeps every span in a list, so a test can assert on what ran."""
+
+    def __init__(self):
+        self.spans: list[RecordedSpan] = []
+
+    @contextlib.contextmanager
+    def trace(
+        self, operation_name: str, tags: dict[str, Any] | None = None, parent_span: Span | None = None
+    ) -> Iterator[Span]:
+        span = RecordedSpan(operation_name, tags)
+        self.spans.append(span)
+        yield span
+
+    def current_span(self) -> Span | None:
+        return None      # only used to correlate log records with spans
+
+
+@tool
+def get_weather(city: str) -> str:
+    """Get the current weather for a city."""
+    return f"Sunny in {city}"
+
+
+llm = MockChatGenerator(responses=[
+    ChatMessage.from_assistant(tool_calls=[ToolCall(tool_name="get_weather", arguments={"city": "Paris"})]),
+    "It is sunny in Paris.",
+])
+pipeline = Pipeline()
+pipeline.add_component("agent", Agent(chat_generator=llm, tools=[get_weather]))
+
+recorder = RecordingTracer()
+tracing.enable_tracing(recorder)
+try:
+    pipeline.run({"agent": {"messages": [ChatMessage.from_user("Weather in Paris?")]}})
+finally:
+    tracing.disable_tracing()
+
+for span in recorder.spans:
+    print(span.name, span.tags.get("haystack.tool.name", ""))
+# haystack.pipeline.run
+# haystack.component.run
+# haystack.agent.run
+# haystack.agent.step
+# haystack.agent.step.llm
+# haystack.agent.step.tool get_weather
+# haystack.agent.step
+# haystack.agent.step.llm
+```
+
+Two steps ran: the first called `get_weather`, the second produced the final text. Use `tracing.disable_tracing()` in a `finally` block or fixture so one test's tracer does not leak into the next. Real backends implement the same two classes; `OpenTelemetryTracer` and the Langfuse tracer are examples.
+
 ## Logging
 
 Importing Haystack no longer reconfigures the root logger. Its handler is attached to the `haystack`, `haystack_integrations` and `haystack_experimental` loggers only.
@@ -99,7 +177,7 @@ haystack_logging.configure_logging(propagate=False)        # stop duplicate line
 haystack_logging.configure_logging(logger_name="")         # 2.x behaviour: format every record in the process
 ```
 
-Correlate logs with traces by logging the trace or request ID in your API layer; JSON logging includes the current trace and span IDs when a tracer is active.
+Correlate logs with traces by logging the trace or request ID in your API layer. With `use_json=True`, each record also carries the current trace and span IDs when the active tracer provides them; the OpenTelemetry and Langfuse tracers do, `LoggingTracer` does not.
 
 ## Error recovery
 

@@ -84,7 +84,7 @@ async def model_request(
 
 ## `model_request_sync` — synchronous, non-streaming
 
-Drop-in synchronous wrapper around `model_request`. Runs a new event loop internally — **do not call from within an already-running async loop**.
+Drop-in synchronous wrapper around `model_request`. It runs the request with `run_until_complete()` on the thread's event loop (creating one if there is none), so **do not call it from code that is already running inside an event loop** — use `await model_request(...)` there.
 
 ```python
 from pydantic_ai import ModelRequest
@@ -133,14 +133,25 @@ Stream events (`messages.py`):
 | `PartEndEvent` | The part is complete |
 | `FinalResultEvent` | The final result tool call was selected |
 
-After the `async with` exits, `stream.get()` returns the assembled `ModelResponse`.
+Inside the `async with` block, `stream.get()` returns the `ModelResponse` assembled so far; after draining the stream it is the complete response.
 
 ```python
-async with model_request_stream('openai:%%model=openai-small%%', messages) as stream:
-    async for _ in stream:
-        pass  # drain
-    response = stream.get()
-    print(response.usage)
+import asyncio
+
+from pydantic_ai import ModelRequest
+from pydantic_ai.direct import model_request_stream
+
+
+async def main():
+    messages = [ModelRequest.user_text_prompt('Name three rivers.')]
+    async with model_request_stream('openai:%%model=openai-small%%', messages) as stream:
+        async for _ in stream:
+            pass  # drain
+        response = stream.get()   # the ModelResponse assembled so far (all of it, once drained)
+    print(response.usage, response.finish_reason)
+
+
+asyncio.run(main())
 ```
 
 ## `model_request_stream_sync` — synchronous streaming
@@ -165,7 +176,7 @@ print()
 
 ## `StreamedResponseSync` — the sync stream wrapper
 
-`model_request_stream_sync` returns a `StreamedResponseSync` instance, a dataclass that owns the background thread:
+`model_request_stream_sync` returns a `StreamedResponseSync`. It runs no thread of its own: on entering the `with` block it keeps the async stream open in a long-lived task on the calling thread's event loop and drives it as you iterate, so async clients keep their event-loop affinity:
 
 ```python
 from pydantic_ai.direct import StreamedResponseSync, model_request_stream_sync
@@ -330,7 +341,7 @@ def inspect(response: ModelResponse) -> None:
     print(f'timestamp: {response.timestamp}')
     print(f'input tokens: {response.usage.input_tokens}')
     print(f'output tokens: {response.usage.output_tokens}')
-    print(f'finish reason: {response.finish_reason}')  # 'stop' | 'tool_calls' | 'length' | None
+    print(f'finish reason: {response.finish_reason}')  # 'stop' | 'length' | 'content_filter' | 'tool_call' | 'error' | None
 
     for part in response.parts:
         if isinstance(part, TextPart):
@@ -374,20 +385,24 @@ asyncio.run(compare('Explain async/await in Python in one sentence.'))
 ```python
 from pydantic_ai import ModelRequest
 from pydantic_ai.direct import model_request_sync
+from pydantic_ai.messages import SystemPromptPart, TextPart, UserPromptPart
+
 
 def classify(text: str, categories: list[str]) -> str:
     """Synchronous helper for non-async callers."""
     cats = ', '.join(categories)
     resp = model_request_sync(
         'openai:%%model=openai-small%%',
-        [ModelRequest(parts=[
-            __import__('pydantic_ai.messages', fromlist=['SystemPromptPart']).SystemPromptPart(
-                content=f'Classify the input into exactly one of: {cats}. Reply with the category name only.'
-            ),
-            __import__('pydantic_ai.messages', fromlist=['UserPromptPart']).UserPromptPart(content=text),
-        ])],
+        [
+            ModelRequest(
+                parts=[
+                    SystemPromptPart(f'Classify the input into exactly one of: {cats}. Reply with the category name only.'),
+                    UserPromptPart(text),
+                ]
+            )
+        ],
     )
-    return resp.parts[0].content.strip()
+    return ''.join(p.content for p in resp.parts if isinstance(p, TextPart)).strip()
 
 print(classify('I love the new Python 3.13 release', ['tech', 'sports', 'politics']))
 ```
@@ -481,7 +496,7 @@ async def resilient_request(
 | `model_request_sync` | `pydantic_ai.direct` | Sync wrapper around `model_request` |
 | `model_request_stream` | `pydantic_ai.direct` | Async context manager → `StreamedResponse` |
 | `model_request_stream_sync` | `pydantic_ai.direct` | Sync context manager → `StreamedResponseSync` |
-| `StreamedResponseSync` | `pydantic_ai.direct` | Background-thread async producer; sync iterator |
+| `StreamedResponseSync` | `pydantic_ai.direct` | Sync wrapper over the async stream; use inside `with`, iterate synchronously, then read `.response` |
 | `ModelRequest.user_text_prompt` | `pydantic_ai.messages` | Convenience constructor for a plain text user turn |
 | `ModelRequestParameters` | `pydantic_ai.models` | Tool schemas, output schema, sampling |
 | `ModelResponse` | `pydantic_ai.messages` | Provider response with parts + usage |

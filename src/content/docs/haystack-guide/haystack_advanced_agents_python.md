@@ -125,10 +125,18 @@ Initial values for state keys are passed as keyword arguments to `run()`: `agent
 
 ## Structured output
 
-Ask the chat generator for JSON that matches a Pydantic model with `response_format`, then validate the final message:
+There are two ways to get machine-readable output from an Agent, and they suit different providers.
+
+### `response_format` on the chat generator
+
+`OpenAIChatGenerator` (and the other OpenAI-family generators) accept a Pydantic model or a JSON schema as `generation_kwargs["response_format"]`. A Pydantic model is converted to a strict JSON schema and sent through OpenAI's structured-output ("parse") endpoint; the final text reply is then JSON you can validate:
 
 ```python
 from pydantic import BaseModel
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack.dataclasses import ChatMessage
 
 
 class Verdict(BaseModel):
@@ -149,7 +157,101 @@ result = agent.run(messages=[ChatMessage.from_user("Is the Great Wall visible fr
 verdict = Verdict.model_validate_json(result["last_message"].text)
 ```
 
-Alternatively give the agent a `final_answer` tool whose parameters are the fields you need and set `exit_conditions=["final_answer"]`; this works with any tool-calling model.
+Limits to know about:
+
+- The schema applies to the model's final answer. If the Agent has tools, tool-call replies are not constrained; only the reply that ends the run is JSON.
+- Structured outputs need a model that supports them (OpenAI documents this for GPT-4o and later). With streaming enabled, pass a JSON schema dictionary rather than a Pydantic class.
+- `response_format` is an OpenAI-family option. Other providers' generators take their own kwargs (see the integration's documentation), so for portable code use the tool approach below.
+
+Even with a schema, validate: `model_validate_json` raises `ValidationError` on a refusal, truncated output or a field the model got wrong. The usual remedy is to show the model its error and ask again, with a hard limit on attempts. This version scripts the model with `MockChatGenerator` (first reply invalid, second valid) so it runs offline:
+
+```python
+import json
+
+from pydantic import BaseModel, ValidationError
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage, ChatRole
+
+
+class Verdict(BaseModel):
+    answer: str
+    confidence: float
+    sources: list[str]
+
+
+def ask(agent: Agent, question: str, retries: int = 2) -> Verdict:
+    """Run the agent and validate its JSON reply, feeding validation errors back to the model."""
+    messages = [ChatMessage.from_user(question)]
+    for _ in range(retries + 1):
+        result = agent.run(messages=messages)
+        try:
+            return Verdict.model_validate_json(result["last_message"].text)
+        except ValidationError as exc:
+            problems = json.dumps(exc.errors(include_url=False, include_context=False, include_input=False))
+            history = [m for m in result["messages"] if not m.is_from(ChatRole.SYSTEM)]
+            messages = history + [
+                ChatMessage.from_user(f"That reply did not match the schema: {problems}. Reply with valid JSON only.")
+            ]
+    raise ValueError("The model did not return valid JSON")
+
+
+llm = MockChatGenerator(responses=[
+    "The Wall is hard to see from orbit.",                                  # not JSON
+    '{"answer": "Rarely", "confidence": 0.7, "sources": ["nasa.gov"]}',   # valid
+])
+agent = Agent(chat_generator=llm, system_prompt="Answer as JSON with answer, confidence and sources.")
+print(ask(agent, "Is the Great Wall visible from orbit?"))
+# answer='Rarely' confidence=0.7 sources=['nasa.gov']
+```
+
+The system message is dropped from the history before retrying because the Agent prepends it again on every run.
+
+### A `final_answer` tool
+
+Give the Agent a tool whose parameters are the fields you need and make it the exit condition. The model fills in the arguments through ordinary function calling, which every tool-capable provider supports, and the run stops as soon as the tool has executed:
+
+```python
+from typing import Annotated
+
+from pydantic import BaseModel
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage, ToolCall
+from haystack.tools import tool
+
+
+class Verdict(BaseModel):
+    answer: str
+    confidence: float
+    sources: list[str]
+
+
+@tool
+def final_answer(
+    answer: Annotated[str, "The answer"],
+    confidence: Annotated[float, "Between 0 and 1"],
+    sources: Annotated[list[str], "Where the answer came from"],
+) -> dict:
+    """Submit the final answer."""
+    return {"answer": answer, "confidence": confidence, "sources": sources}
+
+
+llm = MockChatGenerator(responses=[
+    ChatMessage.from_assistant(tool_calls=[ToolCall(
+        tool_name="final_answer", arguments={"answer": "Rarely", "confidence": 0.7, "sources": ["nasa.gov"]},
+    )]),
+])
+agent = Agent(chat_generator=llm, tools=[final_answer], exit_conditions=["final_answer"])
+
+result = agent.run(messages=[ChatMessage.from_user("Is the Great Wall visible from orbit?")])
+print(result["exit_reason"])                                                    # final_answer
+print(Verdict.model_validate_json(result["last_message"].tool_call_result.result))
+```
+
+The tool result arrives as a JSON string, so validate it the same way. If the tool itself raises, the error goes back to the model and the loop continues rather than exiting, which gives you retry behaviour for free. The trade-off against `response_format` is one extra argument-generation step and a schema the model sees on every call.
 
 ## Custom components with async and lifecycle
 

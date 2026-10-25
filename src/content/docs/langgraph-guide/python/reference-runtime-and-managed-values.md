@@ -14,15 +14,15 @@ This page covers the three mechanisms LangGraph provides for injecting execution
 
 | Mechanism | Where it applies | Added in |
 |---|---|---|
-| `Runtime[ContextT]` | Node functions | v0.6.0 |
-| `ToolRuntime[ContextT, StateT]` | Tool functions called by `ToolNode` | v0.6.0 |
-| `IsLastStep` / `RemainingSteps` | State schema fields (managed values) | v0.3 / v1.2 |
+| `Runtime[ContextT]` | Node functions | `langgraph` 0.6.0 |
+| `ToolRuntime[ContextT, StateT]` | Tool functions called by `ToolNode` | `langgraph-prebuilt` 1.0.2 |
+| `IsLastStep` / `RemainingSteps` | State schema fields (managed values) | before 0.4 (both in 0.4.10) |
 
 ---
 
 ## `Runtime[ContextT]` — node-level injection
 
-`Runtime` is a dataclass injected by the Pregel executor whenever a node function declares a `runtime` parameter. It bundles together every piece of execution context a node might need: the typed context object, the store, a stream writer, the previous state snapshot, rich execution metadata, and cooperative drain control.
+`Runtime` is a dataclass injected by the Pregel executor whenever a node function declares a `runtime` parameter. It bundles the execution context a node might need: the typed context object, the store, a stream writer, a heartbeat for idle timeouts, the Functional API's `previous` value, execution metadata, and cooperative drain control.
 
 ### Class definition
 
@@ -35,26 +35,29 @@ ContextT = TypeVar("ContextT")
 
 @dataclass
 class Runtime(Generic[ContextT]):
-    context: ContextT | None        # type-safe context from context_schema
-    store: BaseStore | None         # graph's persistent store
-    stream_writer: StreamWriter     # write events to the custom stream channel
-    previous: Any                   # previous state (used for checkpointing diffs)
-    execution_info: ExecutionInfo   # metadata about the current execution
-    server_info: ServerInfo | None  # LangSmith Server info; None in OSS LangGraph
-    control: RunControl | None      # cooperative drain / pause control
+    context: ContextT                       # what you passed as invoke(..., context=...); None if nothing
+    store: BaseStore | None                 # graph's store
+    stream_writer: StreamWriter             # write events to the custom stream channel
+    heartbeat: Callable[[], None]           # refresh an idle timeout (TimeoutPolicy)
+    previous: Any                           # Functional API: the entrypoint's last saved value
+    execution_info: ExecutionInfo | None    # metadata about the current task
+    server_info: ServerInfo | None          # set inside the Agent Server, else None
+    control: RunControl | None              # cooperative drain handle
+    # properties: drain_requested, drain_reason
 ```
 
 ### Field reference
 
 | Field | Type | Description |
 |---|---|---|
-| `context` | `ContextT \| None` | The typed context object passed in `configurable["context"]`. `None` if no `context_schema` was set on the graph. |
+| `context` | `ContextT` | The object passed as `invoke(..., context=...)` (or `stream`/`ainvoke`/`astream`). `None` if the caller passed none. `context_schema` types it; it is not validated against the schema. |
 | `store` | `BaseStore \| None` | The graph's persistent store (e.g. `InMemoryStore`, Postgres-backed store). `None` if no store was provided at compile time. |
 | `stream_writer` | `StreamWriter` | Callable that emits a value on the `"custom"` stream channel. Equivalent to injecting `writer: StreamWriter` directly. |
-| `previous` | `Any` | The previous channel state snapshot before this step ran. Useful for computing diffs without re-reading from the checkpointer. |
-| `execution_info` | `ExecutionInfo` | Structured metadata: checkpoint ID, thread ID, task ID, run ID, retry count, and first-attempt timestamp. |
-| `server_info` | `ServerInfo \| None` | Populated when running inside a LangSmith-hosted deployment. Always `None` in open-source LangGraph. |
-| `control` | `RunControl \| None` | Cooperative drain handle. Allows a node to signal that it is safe to pause or cancel the run mid-execution. |
+| `heartbeat` | `() -> None` | Signals progress so a `TimeoutPolicy(idle_timeout=...)` does not fire. A no-op when no idle timeout is active. |
+| `previous` | `Any` | Functional API only: the value the `@entrypoint` returned (or `save`d) on the previous call in this thread. `None` in `StateGraph` nodes. |
+| `execution_info` | `ExecutionInfo \| None` | Structured metadata: checkpoint ID, namespace, task ID, thread ID, run ID, attempt number and first-attempt time. Always set inside a node. |
+| `server_info` | `ServerInfo \| None` | Populated when the graph runs in the Agent Server (LangSmith Deployment, a self-hosted server or `langgraph dev`). `None` when you call the graph in your own process. |
+| `control` | `RunControl \| None` | Cooperative drain handle. External code calls `control.request_drain()`; a long node can check `runtime.drain_requested` and return early. See [graceful shutdown](/langgraph-guide/python/reference-graceful-shutdown/). |
 
 > **`config` is not on `Runtime`.** If you need `RunnableConfig` (e.g. to pass to `ChatModel.invoke`), add a separate `config: RunnableConfig` parameter to the node. Both parameters can coexist.
 
@@ -139,7 +142,7 @@ class ExecutionInfo:
     checkpoint_id: str
     checkpoint_ns: str
     task_id: str
-    thread_id: str | None               # None if no checkpointer is attached
+    thread_id: str | None               # from config["configurable"]["thread_id"]; None if absent
     run_id: str | None                  # None if not set in RunnableConfig
     node_attempt: int = 1               # 1-indexed retry count (1 = first attempt)
     node_first_attempt_time: float | None = None  # unix timestamp of first attempt
@@ -149,10 +152,10 @@ class ExecutionInfo:
 
 | Field | Type | Description |
 |---|---|---|
-| `checkpoint_id` | `str` | ID of the checkpoint written after the previous step. |
-| `checkpoint_ns` | `str` | Namespace of the checkpoint, used to isolate subgraphs. |
+| `checkpoint_id` | `str` | ID of the checkpoint this step runs from. |
+| `checkpoint_ns` | `str` | The task's namespace, `"<node>:<task_id>"`; subgraphs add `\|`-separated segments. |
 | `task_id` | `str` | ID of the Pregel task executing this node invocation. |
-| `thread_id` | `str \| None` | Conversation thread identifier. `None` when no checkpointer is attached. |
+| `thread_id` | `str \| None` | Conversation thread identifier from the config, with or without a checkpointer. `None` when the config has none. |
 | `run_id` | `str \| None` | Run ID from `RunnableConfig`. `None` if not supplied by the caller. |
 | `node_attempt` | `int` | How many times this node has been attempted for the current step (1-indexed). Increments on retries. |
 | `node_first_attempt_time` | `float \| None` | Unix timestamp of the very first attempt. Useful for computing total time spent across retries. |
@@ -160,6 +163,7 @@ class ExecutionInfo:
 ### Usage example
 
 ```python
+import time
 from langgraph.runtime import Runtime
 
 
@@ -204,7 +208,7 @@ def my_node(state: State) -> dict:
     return {}
 ```
 
-`get_runtime()` raises a `RuntimeError` if called outside of a LangGraph node execution context (i.e., outside an active Pregel task). Prefer parameter injection when the function signature is under your control — it is more explicit and easier to test.
+`get_runtime()` raises `RuntimeError: Called get_config outside of a runnable context` if called outside a running node or task. Prefer parameter injection when the function signature is under your control — it is more explicit and easier to test.
 
 ---
 
@@ -216,28 +220,30 @@ def my_node(state: State) -> dict:
 
 Verified against the installed `langgraph-prebuilt==%%version=langgraph-prebuilt%%` source (`langgraph.prebuilt.tool_node`):
 
-```python
+```text
 @dataclass
-class ToolRuntime(Generic[ContextT, StateT]):
-    state: StateT | None                       # current graph state snapshot
-    context: ContextT | None                   # type-safe context from context_schema
-    config: RunnableConfig | None              # runnable config passed to the tool
-    stream_writer: StreamWriter | None         # write events to the custom stream channel
+class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
+    state: StateT                              # current graph state
+    context: ContextT                          # run context (None if not passed)
+    config: RunnableConfig                     # runnable config passed to the tool
+    stream_writer: StreamWriter                # write events to the custom stream channel
     tool_call_id: str | None                   # ID of the ToolCall being executed
-    store: BaseStore | None                    # graph's persistent store
-    tools: list[BaseTool]                      # all tools registered with ToolNode
-    execution_info: ExecutionInfo | None = None  # execution metadata (always set)
+    store: BaseStore | None                    # graph's store
+    tools: list[BaseTool] = field(default_factory=list)  # tools registered with ToolNode
+    execution_info: ExecutionInfo | None = None  # execution metadata
     server_info: ServerInfo | None = None        # Agent Server metadata (None outside the server)
+
+    def emit_output_delta(self, delta: Any) -> None: ...   # partial output on stream_mode="tools"
 ```
 
 ### Field reference
 
 | Field | Type | Description |
 |---|---|---|
-| `state` | `StateT \| None` | The current graph state at the time the tool is called. Lets tools read state without passing it through tool call arguments. |
-| `context` | `ContextT \| None` | The typed context object from the graph's `context_schema`. |
-| `config` | `RunnableConfig \| None` | The full `RunnableConfig`. Unlike `Runtime`, `ToolRuntime` includes `config` directly. |
-| `stream_writer` | `StreamWriter \| None` | Emit events on the custom stream channel. |
+| `state` | `StateT` | The current graph state at the time the tool is called. Lets tools read state without passing it through tool call arguments. |
+| `context` | `ContextT` | The run's context object (`None` if the caller passed none). |
+| `config` | `RunnableConfig` | The full `RunnableConfig`. Unlike `Runtime`, `ToolRuntime` includes `config` directly. |
+| `stream_writer` | `StreamWriter` | Emit events on the custom stream channel (a no-op unless `"custom"` is streamed). |
 | `tool_call_id` | `str \| None` | The ID of the `ToolCall` message that triggered this tool invocation. |
 | `store` | `BaseStore \| None` | The graph's persistent store (`None` if not compiled with one). |
 | `tools` | `list[BaseTool]` | All tools registered with the `ToolNode`. Lets one tool look up or delegate to another. |
@@ -248,7 +254,11 @@ class ToolRuntime(Generic[ContextT, StateT]):
 
 ```python
 from dataclasses import dataclass
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AnyMessage
 from langchain_core.tools import tool
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolRuntime
 
@@ -279,9 +289,8 @@ def fetch_user_data(query: str, runtime: ToolRuntime[AppContext, State]) -> str:
         {"query": query, "tier": tier},
     )
 
-    # Emit a streaming event
-    if runtime.stream_writer:
-        runtime.stream_writer({"tool": "fetch_user_data", "query": query})
+    # Emit a streaming event (no-op unless stream_mode includes "custom")
+    runtime.stream_writer({"tool": "fetch_user_data", "query": query})
 
     return f"Results for {user_id} (tier={tier}): ..."
 
@@ -393,17 +402,18 @@ def adaptive_node(state: dict, runtime: Runtime) -> dict:
 | **Import** | `langgraph.runtime` | `langgraph.prebuilt.tool_node` |
 | **`context`** | Yes | Yes |
 | **`store`** | Yes | Yes |
-| **`stream_writer`** | Yes (never `None`) | Yes (`None` if not available) |
+| **`stream_writer`** | Yes | Yes |
 | **`config`** | **No** — add `config: RunnableConfig` separately | Yes (included directly) |
 | **`state`** | No — read from the `state` parameter | Yes — current graph state snapshot |
 | **`tool_call_id`** | No | Yes |
 | **`tools`** | No | Yes — all tools registered with `ToolNode` |
-| **`execution_info`** | Yes (`ExecutionInfo` dataclass) | Yes (`ExecutionInfo \| None`, always populated) |
-| **`previous`** | Yes — previous state snapshot | No |
-| **`server_info`** | Yes (`None` in OSS) | Yes (`None` in OSS) |
+| **`execution_info`** | Yes | Yes |
+| **`heartbeat`** | Yes | No |
+| **`previous`** | Yes — Functional API's last saved value | No |
+| **`server_info`** | Yes (`None` outside the Agent Server) | Yes (`None` outside the Agent Server) |
 | **`control`** | Yes (`RunControl`) | No |
 | **Generic type params** | `Runtime[ContextT]` | `ToolRuntime[ContextT, StateT]` |
-| **Added in** | v0.6.0 | v0.6.0 |
+| **Added in** | `langgraph` 0.6.0 | `langgraph-prebuilt` 1.0.2 |
 
 ---
 
@@ -415,10 +425,10 @@ Two managed values ship with LangGraph out of the box:
 
 | Type alias | Module | Type | Value |
 |---|---|---|---|
-| `IsLastStep` | `langgraph.managed.is_last_step` | `bool` | `True` when `step == recursion_limit - 1` |
-| `RemainingSteps` | `langgraph.managed.is_last_step` | `int` | `recursion_limit - current_step` |
+| `IsLastStep` | `langgraph.managed.is_last_step` | `bool` | `True` on the last step the recursion limit allows |
+| `RemainingSteps` | `langgraph.managed.is_last_step` | `int` | Steps left before the limit, counting the current one |
 
-Both are `Annotated[T, ManagedValueManager]` type aliases. The graph rewrites them before every step — nodes must never write to them.
+Both are `Annotated[T, <Manager>]` type aliases (`IsLastStepManager`, `RemainingStepsManager`). The graph computes them for every step; a node that returns one of these keys has the write dropped with a logged warning (`wrote to unknown channel ..., ignoring it`).
 
 ### Imports
 
@@ -470,7 +480,7 @@ graph.invoke({"messages": [HumanMessage("Start")]}, {"recursion_limit": 5})
 IsLastStep = Annotated[bool, IsLastStepManager]
 ```
 
-`IsLastStep` is `True` exactly when `current_step == recursion_limit - 1`. Use it to detect imminent recursion-limit exhaustion and return a graceful partial result instead of raising `GraphRecursionError`.
+`IsLastStep` is `True` on the last step the run may take before `GraphRecursionError`. Use it to return a graceful partial result instead of raising.
 
 ```python
 from langgraph.managed import IsLastStep
@@ -490,9 +500,9 @@ def agent(state: AgentState) -> dict:
 
 Step-count details:
 
-- Default recursion limit: **10007** steps (set by `LANGGRAPH_DEFAULT_RECURSION_LIMIT`; older releases used 25). That default is too high to act as a loop guard, so set it per call.
+- Default recursion limit: **10007** steps (override with the `LANGGRAPH_DEFAULT_RECURSION_LIMIT` environment variable; releases up to 1.0.5 used 25, and 1.0.6 to 1.1.3 used 10000). That default is too high to act as a loop guard, so set it per call.
 - Override per-call: `graph.invoke(input, {"recursion_limit": 50})`.
-- With `recursion_limit=50`, `IsLastStep` becomes `True` on the 50th step.
+- The input counts as a step. In the minimal example above, with `recursion_limit=5` the node runs four times: `RemainingSteps` reads 4, 3, 2, 1 and `IsLastStep` is `True` on the fourth run.
 
 ### `RemainingSteps`
 
@@ -500,7 +510,7 @@ Step-count details:
 RemainingSteps = Annotated[int, RemainingStepsManager]
 ```
 
-`RemainingSteps` returns `recursion_limit - current_step` — how many steps are left. It decrements by 1 each step.
+`RemainingSteps` is the number of steps left, counting the current one, and decrements by 1 each step; it is 1 on the step where `IsLastStep` is `True`.
 
 ```python
 from langgraph.managed import RemainingSteps
@@ -610,10 +620,8 @@ graph = builder.compile(checkpointer=InMemorySaver(), store=store)
 
 result = graph.invoke(
     {"messages": [HumanMessage("What is the weather?")]},
-    {"configurable": {
-        "thread_id": "session-42",
-        "context": UserContext(user_id="alice", locale="en-GB"),
-    }},
+    {"configurable": {"thread_id": "session-42"}},
+    context=UserContext(user_id="alice", locale="en-GB"),   # not inside "configurable"
 )
 ```
 
@@ -667,8 +675,7 @@ def look_up_account(query: str, runtime: ToolRuntime[AppContext, MyState]) -> st
     # State gives the current account_id without passing it via tool args
     account_id = runtime.state["account_id"] if runtime.state else "unknown"
 
-    if runtime.stream_writer:
-        runtime.stream_writer({"tool": "look_up_account", "account": account_id})
+    runtime.stream_writer({"tool": "look_up_account", "account": account_id})
 
     return call_accounts_api(api_key=api_key, account_id=account_id, query=query)
 
@@ -718,7 +725,7 @@ def pipeline_node(state: PipelineState, runtime: Runtime[AppContext]) -> dict:
 
 ## How managed values work (internals)
 
-Each managed value is a subclass of `ManagedValue[T]` with a `get(scratchpad)` static method. The Pregel executor calls `get` before every step and injects the return value into the state the node sees — but does **not** persist it to a channel (so it never appears in checkpoints or reducer chains).
+Each managed value is a subclass of `ManagedValue[T]` with a `get(scratchpad)` static method. The Pregel executor calls `get` when it builds a node's input and adds the result to the state the node sees. It is not a channel, so it never appears in checkpoints or `get_state()`.
 
 ```python
 # Simplified internals — do not import these directly
@@ -735,7 +742,7 @@ class RemainingStepsManager(ManagedValue[int]):
         return scratchpad.stop - scratchpad.step
 ```
 
-`PregelScratchpad.stop` is the recursion limit; `PregelScratchpad.step` is the 0-indexed current step.
+`PregelScratchpad.step` is the thread's current step number and `stop` is where this run must end: at the start of each `invoke`, `stop = step + recursion_limit + 1`. That is why every `invoke` gets the full limit again.
 
 ---
 
@@ -745,19 +752,11 @@ class RemainingStepsManager(ManagedValue[int]):
 
 - **`ToolRuntime` is not `Runtime`.** They are different classes from different modules. A node annotated with `runtime: ToolRuntime` will not receive injection — it must use `Runtime`. The inverse also holds.
 
-- **Managed values are read-only.** Any node return dict that includes `IsLastStep` or `RemainingSteps` keys is silently ignored — the graph overwrites them before the next node sees them.
+- **Managed values are read-only.** A node that returns a managed-value key has that write dropped, with only a logged warning.
 
 - **Managed values do not appear in checkpoints.** They are reconstructed from the scratchpad at runtime. You cannot read them from `StateSnapshot` or `get_state_history` results.
 
-- **Provide a default for managed value fields.** Since they are never in the initial `invoke` input, declare them with a default matching their type:
-  ```python
-  class State(TypedDict, total=False):
-      is_last_step: IsLastStep       # total=False makes the field optional
-  # or with a dataclass / Pydantic model:
-  class State(BaseModel):
-      is_last_step: IsLastStep = False
-      remaining: RemainingSteps = 10
-  ```
+- **You never pass managed values in the input.** A `TypedDict` field annotated `IsLastStep` or `RemainingSteps` does not need `total=False` or a default; the graph fills it in for every node.
 
 - **`recursion_limit` is per-invoke, not per-graph.** Different calls to `graph.invoke` can use different limits. `IsLastStep` and `RemainingSteps` track whichever limit was active when the run started.
 

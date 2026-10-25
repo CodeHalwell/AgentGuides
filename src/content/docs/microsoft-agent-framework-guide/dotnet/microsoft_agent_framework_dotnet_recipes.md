@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Recipes"
+  order: 80
 ---
 
 A collection of practical C# recipes for common agent patterns with the Microsoft Agent Framework for .NET.

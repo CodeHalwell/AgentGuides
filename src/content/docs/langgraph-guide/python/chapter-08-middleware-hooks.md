@@ -130,7 +130,18 @@ Notes on the hooks used:
 - **`jump_to`** is allowed only when the hook declares it: `@after_model(can_jump_to=["end"])`. Targets are `"end"`, `"model"` and `"tools"`.
 - **`wrap_model_call`** receives a `ModelRequest` (`model`, `messages`, `system_message`, `tools`, `tool_choice`, `response_format`, `state`, `runtime`, `model_settings`). `request.override(...)` returns a modified copy, so the change applies to this call only.
 - **`dynamic_prompt`** is a shortcut for a `wrap_model_call` that replaces the system prompt.
-- **`wrap_tool_call`** receives a `ToolCallRequest` (`request.tool_call` is the call dict) and returns a `ToolMessage` or a `Command`.
+- **`wrap_tool_call`** receives a `ToolCallRequest` (`request.tool_call` is the call dict) and returns a `ToolMessage` or a `Command`. For the common case of turning tool exceptions into messages, the built-in `ToolErrorMiddleware` does the same job with less code:
+
+```python
+from langchain.agents.middleware import ToolErrorMiddleware
+
+def describe(exc: Exception, request) -> str | None:
+    if isinstance(exc, ValueError):
+        return f"{request.tool_call['name']} failed: {exc}. Try another order ID."
+    return None   # anything else propagates and fails the run
+
+tool_errors = ToolErrorMiddleware(on_error=describe, tools=["lookup_order"])
+```
 
 Async agents (`ainvoke`, `astream`) use async functions with the same decorators.
 
@@ -186,9 +197,10 @@ All of these are in `langchain.agents.middleware`.
 | `ToolCallLimitMiddleware(tool_name=..., run_limit=..., thread_limit=...)` | Caps calls to one tool (or all tools) |
 | `ModelRetryMiddleware(max_retries=...)`, `ToolRetryMiddleware(...)` | Retries failed model or tool calls with exponential backoff |
 | `ModelFallbackMiddleware(first_model, *others)` | Tries other models in order when the main one fails |
-| `ToolErrorMiddleware(on_error=...)` | Turns tool exceptions into messages the model can read |
+| `ToolErrorMiddleware(on_error=fn, tools=None)` | Calls `fn(exc, request)` for each exception a tool raises; return text to send it to the model as an error `ToolMessage`, or `None` to let it propagate. Argument-validation errors never reach it (`ToolNode` handles those first) |
 | `PIIMiddleware(pii_type, strategy=...)` | Detects e-mail addresses, card numbers, IPs, MAC addresses, URLs or a custom pattern, and blocks, redacts, masks or hashes them |
 | `LLMToolSelectorMiddleware(model=..., max_tools=...)` | Uses a small model to choose which tools to offer when there are many |
+| `ProviderToolSearchMiddleware(searchable_tools=[...])` | Defers the named tools behind the provider's server-side tool search (Anthropic and OpenAI only), so their schemas are not sent on every call |
 | `TodoListMiddleware()` | Gives the agent a `write_todos` planning tool |
 | `ShellToolMiddleware`, `FilesystemFileSearchMiddleware`, `LLMToolEmulator` | Shell and file-search tools; emulated tools for testing |
 
@@ -258,10 +270,72 @@ print(result["messages"][-1].content)
 
 Each decision in `resume={"decisions": [...]}` is one of:
 
-- `{"type": "approve"}`
-- `{"type": "edit", "edited_action": {"name": "send_email", "args": {...}}}`
-- `{"type": "reject", "message": "Not now"}`: the tool does not run and the message goes back to the model
-- `{"type": "respond", "message": "..."}`
+- `{"type": "approve"}`: the call runs as the model wrote it.
+- `{"type": "edit", "edited_action": {"name": "send_email", "args": {...}}}`: the edited call runs instead. The tool result is prefixed with a note (`edit_notice=`, pass `None` to drop it) telling the model a reviewer changed the call.
+- `{"type": "reject", "message": "Not now"}`: the tool does not run; the model receives an error `ToolMessage` framed as the user's rejection. Without `message`, it is told not to retry unless asked.
+- `{"type": "respond", "message": "..."}`: the tool does not run; your text comes back as a successful `ToolMessage`. Use it for "ask the user" tools whose real implementation is a human answer.
+
+In the default `interrupt_mode="batched"`, one interrupt covers every gated call from a model turn, and `decisions` must hold one entry per entry in `action_requests`, in the same order. `interrupt_on={"tool": True}` allows all four decisions.
+
+### Approving only some calls, one interrupt per call
+
+An `InterruptOnConfig` dict can also carry `when`, a predicate that receives the `ToolCallRequest` and returns `False` to auto-approve that call, and `description`, a string or a `(tool_call, state, runtime) -> str` function for the text the reviewer sees. With `interrupt_mode="per_call"`, each gated call raises its own interrupt (value `{"type": "tool_approval", "tool_call_id", "name", "args", "description", ...}`), and you answer each one with a single decision keyed by interrupt id:
+
+```python
+from langchain.agents import create_agent
+from langchain.agents.middleware import HumanInTheLoopMiddleware
+from langchain.tools import tool
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
+
+
+@tool
+def send_email(to: str, body: str) -> str:
+    """Send an email."""
+    return f"sent to {to}"
+
+
+def external_recipient(request) -> bool:
+    # request is a ToolCallRequest; returning False auto-approves the call.
+    return not request.tool_call["args"]["to"].endswith("@example.com")
+
+
+agent = create_agent(
+    "anthropic:%%model=anthropic%%",
+    tools=[send_email],
+    middleware=[
+        HumanInTheLoopMiddleware(
+            interrupt_on={
+                "send_email": {
+                    "allowed_decisions": ["approve", "reject"],
+                    "when": external_recipient,
+                    "description": lambda tool_call, state, runtime: f"Email to {tool_call['args']['to']}",
+                }
+            },
+            interrupt_mode="per_call",
+        )
+    ],
+    checkpointer=InMemorySaver(),
+)
+
+config = {"configurable": {"thread_id": "mail-1"}}
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Tell ops the disk is at 91% and tell the customer their refund is on its way"}]},
+    config,
+)
+
+# Only calls to outside addresses pause; ops@example.com was sent already.
+for intr in result.get("__interrupt__", []):
+    print(intr.value["name"], intr.value["args"]["to"], intr.value["description"])
+
+# per_call mode: one Decision per interrupt id, no "decisions" list.
+answers = {intr.id: {"type": "reject", "message": "Do not email customers yet."}
+           for intr in result.get("__interrupt__", [])}
+if answers:
+    result = agent.invoke(Command(resume=answers), config)
+```
+
+With a scripted model that asks for one internal and one external e-mail, the internal one runs straight away, the external one pauses, and after the rejection the model receives an error `ToolMessage` that says the user rejected the `send_email` call and quotes the reason.
 
 [Chapter 7](/langgraph-guide/python/chapter-07-human-in-the-loop/) covers `interrupt()` itself, which this middleware uses.
 

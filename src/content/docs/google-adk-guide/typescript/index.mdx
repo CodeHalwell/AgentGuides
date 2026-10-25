@@ -1,6 +1,6 @@
 ---
 title: "Google ADK (TypeScript)"
-description: "TypeScript edition of the Google Agent Development Kit — LlmAgent, tools, runners and graph workflows for Node.js and the browser."
+description: "TypeScript edition of the Google Agent Development Kit — LlmAgent, Zod-typed tools, runners, graph workflows, MCP and A2A for Node.js and the browser."
 framework: "google-adk"
 language: "typescript"
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**The TypeScript edition of Google ADK.** Same architecture as the Python and Go kits — `LlmAgent`, tools, a `Runner` with session, memory and artifact services, plugins, MCP, A2A and graph `Workflow`s — with Zod-typed tool parameters and ESM, CommonJS and web bundles.
+**The TypeScript edition of Google ADK.** `LlmAgent`, Zod-typed function tools, a `Runner` with session, memory and artifact services, plugins, graph `Workflow`s with human-in-the-loop pauses, MCP and A2A, with ESM, CommonJS and browser builds.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
@@ -23,12 +23,12 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     **v%%version=@google/adk%%** (checked %%versions-checked%%)
   </Card>
   <Card title="Best for" icon="puzzle">
-    Full-stack Gemini agents, Node backends, browser-hosted agents.
+    Gemini agents in Node.js backends and full-stack TypeScript apps.
   </Card>
 </CardGrid>
 
-<Aside type="note" title="Feature coverage">
-  The TypeScript kit versions independently of Python and tracks it closely — the 2.x releases have been porting Python features across (auth, sessions, flows, plugins, CLI). For concepts and deeper patterns, the [Python guide](/google-adk-guide/python/) applies almost one-to-one: camelCase the names (`output_key` → `outputKey`, `run_async` → `runAsync`).
+<Aside type="note" title="Versioning">
+  ADK for TypeScript versions independently of the Python and Go kits. The 2.x releases have been porting Python features across, but not everything has arrived: see [What TypeScript does not have](/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#what-typescript-does-not-have).
 </Aside>
 
 ## Minimal example
@@ -46,14 +46,14 @@ const getWeather = new FunctionTool({
   execute: async ({city}) => ({city, forecast: 'sunny', tempC: 21}),
 });
 
-const agent = new LlmAgent({
+export const rootAgent = new LlmAgent({
   name: 'assistant',
   model: '%%model=gemini%%',
   instruction: 'You are a helpful assistant. Use get_weather for weather questions.',
   tools: [getWeather],
 });
 
-const runner = new InMemoryRunner({agent, appName: 'demo'});
+const runner = new InMemoryRunner({agent: rootAgent, appName: 'demo'});
 
 for await (const event of runner.runEphemeral({
   userId: 'u1',
@@ -65,165 +65,27 @@ for await (const event of runner.runEphemeral({
 }
 ```
 
-Set `GOOGLE_GENAI_API_KEY` (`GOOGLE_API_KEY` and `GEMINI_API_KEY` also work), or use Vertex AI with `GOOGLE_GENAI_USE_VERTEXAI=1` (or `GOOGLE_GENAI_USE_ENTERPRISE=1`) plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`, before running. For multi-turn conversations, create a session with `runner.sessionService.createSession(...)` and call `runner.runAsync({userId, sessionId, newMessage})`.
+Set `GOOGLE_GENAI_API_KEY` (`GOOGLE_API_KEY` and `GEMINI_API_KEY` also work), or use Vertex AI with `GOOGLE_GENAI_USE_ENTERPRISE=1` plus `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. The file uses top-level `await`, so the package needs `"type": "module"`. With `rootAgent` exported, `npx adk run agent.ts` chats with it in the terminal and `npx adk web` opens the dev UI.
 
-Export the agent as `rootAgent` from `agent.ts` and you can drive it with the dev tools: `npx @google/adk-devtools run agent.ts` or `npx @google/adk-devtools web`. Always name the package — a bare `npx adk` fetches an unrelated package from the registry.
+## Zero → Hero
 
-## Tools
-
-A `FunctionTool` takes a Zod schema for its parameters; the second argument to `execute` is the `ToolContext`, which gives access to session state. `AgentTool` lets one agent call another and get its answer back, and `GOOGLE_SEARCH` is Gemini's built-in search grounding.
-
-```typescript
-import {AgentTool, FunctionTool, GOOGLE_SEARCH, LlmAgent, ToolContext} from '@google/adk';
-import {z} from 'zod';
-
-const addToBasket = new FunctionTool({
-  name: 'add_to_basket',
-  description: "Add an item to the customer's basket.",
-  parameters: z.object({
-    sku: z.string().describe('The product SKU'),
-    quantity: z.number().int().min(1).describe('How many to add'),
-  }),
-  execute: async ({sku, quantity}, toolContext?: ToolContext) => {
-    const basket = toolContext?.state.get<Record<string, number>>('basket', {}) ?? {};
-    basket[sku] = (basket[sku] ?? 0) + quantity;
-    toolContext?.state.set('basket', basket); // saved with the session
-    return {basket};
-  },
-});
-
-const researcher = new LlmAgent({
-  name: 'researcher',
-  model: '%%model=gemini%%',
-  description: 'Searches the web and summarises what it finds.',
-  instruction: 'Answer using Google Search. Cite sources.',
-  tools: [GOOGLE_SEARCH],
-});
-
-export const shopAssistant = new LlmAgent({
-  name: 'shop_assistant',
-  model: '%%model=gemini%%',
-  instruction: 'Help customers shop. Use the researcher for product questions.',
-  tools: [addToBasket, new AgentTool({agent: researcher})],
-});
-```
-
-Built-in Gemini tools such as `GOOGLE_SEARCH` run on the model side; wrapping the searching agent in `AgentTool`, as here, is the way to combine them with your own function tools.
-
-## Sessions and the runner
-
-`Runner` takes the services explicitly; `InMemoryRunner` is the same with in-memory services built in. A session holds the conversation and its state, so the second turn below sees the first:
-
-```typescript
-import {InMemorySessionService, LlmAgent, Runner, isFinalResponse, stringifyContent} from '@google/adk';
-
-const agent = new LlmAgent({
-  name: 'assistant',
-  model: '%%model=gemini%%',
-  instruction: 'You are a helpful assistant. The customer is called {user:name?}.',
-});
-
-const sessionService = new InMemorySessionService();
-const runner = new Runner({appName: 'support', agent, sessionService});
-
-// Sessions must exist before runAsync, unless the runner has autoCreateSession: true.
-const session = await sessionService.createSession({
-  appName: 'support',
-  userId: 'u1',
-  state: {'user:name': 'Sam'}, // the user: prefix shares this value across the user's sessions
-});
-
-for (const text of ['My order number is A123.', 'What was my order number?']) {
-  for await (const event of runner.runAsync({
-    userId: 'u1',
-    sessionId: session.id,
-    newMessage: {role: 'user', parts: [{text}]},
-  })) {
-    if (isFinalResponse(event)) {
-      console.log(stringifyContent(event));
-    }
-  }
-}
-
-const saved = await sessionService.getSession({appName: 'support', userId: 'u1', sessionId: session.id});
-console.log(saved?.events.length, 'events stored');
-```
-
-State keys follow the Python rules: no prefix for this session, `user:` for all of a user's sessions, `app:` for the whole app and `temp:` for the current invocation only. `{key}` and `{key?}` in an instruction insert state values. Swap `InMemorySessionService` for `DatabaseSessionService` or `VertexAiSessionService` to persist sessions.
-
-## Multi-agent systems
-
-Give an `LlmAgent` `subAgents` and it can transfer the conversation to whichever one's `description` fits:
-
-```typescript
-import {LlmAgent} from '@google/adk';
-
-const billing = new LlmAgent({
-  name: 'billing',
-  model: '%%model=gemini%%',
-  description: 'Handles invoices, refunds and payment problems.',
-  instruction: 'Resolve billing questions. Ask for the invoice number.',
-});
-
-const technical = new LlmAgent({
-  name: 'technical',
-  model: '%%model=gemini%%',
-  description: 'Handles bugs, errors and how-to questions about the product.',
-  instruction: 'Diagnose technical problems step by step.',
-});
-
-// The coordinator transfers the conversation to whichever specialist fits.
-export const coordinator = new LlmAgent({
-  name: 'coordinator',
-  model: '%%model=gemini-small%%',
-  instruction: 'Work out what the customer needs and transfer to the right specialist.',
-  subAgents: [billing, technical],
-});
-```
-
-For fixed pipelines use a `Workflow`. An edge is an array: a chain of nodes, with a nested array for a parallel fan-out. Agents, tools and functions can all be nodes:
-
-```typescript
-import {App, FunctionNode, InMemoryRunner, JoinNode, LlmAgent, START, Workflow} from '@google/adk';
-
-const security = new LlmAgent({
-  name: 'security',
-  model: '%%model=gemini%%',
-  instruction: 'List security issues in the code. Bullet points only.',
-});
-const style = new LlmAgent({
-  name: 'style',
-  model: '%%model=gemini-small%%',
-  instruction: 'List readability issues in the code. Bullet points only.',
-});
-
-// A JoinNode passes {branchName: output} to the next node.
-const report = new FunctionNode('report', (_ctx, input: Record<string, unknown>) =>
-  Object.entries(input)
-    .map(([name, text]) => `## ${name}\n${String(text)}`)
-    .join('\n\n'),
-);
-
-const review = new Workflow({
-  name: 'code_review',
-  edges: [[START, [security, style], new JoinNode({name: 'join'}), report]],
-});
-
-const runner = new InMemoryRunner({app: new App({name: 'review_app', rootAgent: review})});
-
-let result: unknown;
-for await (const event of runner.runEphemeral({
-  userId: 'u1',
-  newMessage: {role: 'user', parts: [{text: "def f(q): return db.execute(f'SELECT {q}')"}]},
-})) {
-  if (event.output !== undefined) {
-    result = event.output; // each node reports its output; the last one is the report
-  }
-}
-console.log(result);
-```
-
-`Workflow` is still marked experimental in the TypeScript kit. The concepts (routing maps, loops, retries, human-in-the-loop pauses) match the [Python Workflows page](/google-adk-guide/python/workflows/).
+<CardGrid>
+  <LinkCard title="1 · Installation and setup" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#installation-and-setup" description="Packages, optional peers, credentials" />
+  <LinkCard title="2 · Your first agent" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#your-first-agent" description="Runner, events, the adk command" />
+  <LinkCard title="3 · Agents" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#agents" description="Instructions, templates, structured output" />
+  <LinkCard title="4 · Models" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#models" description="Gemini, Vertex AI, writing your own BaseLlm" />
+  <LinkCard title="5 · Tools" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#tools" description="FunctionTool, AgentTool, built-ins, toolsets" />
+  <LinkCard title="6 · Callbacks" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#callbacks" description="Guardrails and result filtering per agent" />
+  <LinkCard title="7 · Multi-agent systems" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#multi-agent-systems" description="Delegation, agents as tools" />
+  <LinkCard title="8 · Workflows" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#workflows" description="Fan-out, routing, loops, retries, human input" />
+  <LinkCard title="9 · Sessions and state" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#sessions-and-state" description="State scopes, database sessions" />
+  <LinkCard title="10 · Memory and artifacts" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#memory" description="Long-term memory, versioned files" />
+  <LinkCard title="11 · Human approval" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#human-approval-for-tool-calls" description="requireConfirmation round trip" />
+  <LinkCard title="12 · Plugins and streaming" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#plugins" description="App-wide hooks, SSE chunks, abort signals" />
+  <LinkCard title="13 · MCP and A2A" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#mcp" description="MCP toolsets, serving and calling A2A agents" />
+  <LinkCard title="14 · Testing" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/#testing" description="A scripted BaseLlm with node:test" />
+  <LinkCard title="15 · Production" href="/google-adk-guide/typescript/google_adk_typescript_production_guide/" description="adk deploy, your own server, policies, telemetry, evaluation" />
+</CardGrid>
 
 ## What changed in 2.x
 
@@ -234,14 +96,15 @@ The 2.0.0 release (August 2026) introduced graph orchestration and made a few br
 - `SequentialAgent`, `ParallelAgent` and `LoopAgent` log a one-time deprecation warning; they still work.
 - `LLMAgentWrapper` is removed — pass an agent to an edge directly.
 - `InvocationContext.agent` is optional; inside an agent, use `requireAgent(ctx)`.
+- `FunctionTool` gained `requireConfirmation` for human approval, and `Runner.runLive` arrived for live sessions.
 
-Later 2.x releases added `Runner.autoCreateSession` (opt-in), `DebugLoggingPlugin`, `ToolCallIntegrityPlugin`, and broad parity work with the Python kit.
+Later 2.x releases added planners (`BuiltInPlanner`, `PlanReActPlanner`), `ContainerCodeExecutor`, `Runner.autoCreateSession` (opt-in), `DebugLoggingPlugin` and `ToolCallIntegrityPlugin`, alongside parity work with the Python kit. Release notes are in the [adk-js changelog](https://github.com/google/adk-js/blob/main/core/CHANGELOG.md).
 
-## Getting started
+## Reference
 
 <CardGrid>
-  <LinkCard title="Python reference" href="/google-adk-guide/python/" description="Complete ADK feature documentation — patterns apply." />
-  <LinkCard title="Go reference" href="/google-adk-guide/go/" description="ADK for Go documentation." />
+  <LinkCard title="Comprehensive guide" href="/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/" description="Every feature with a type-checked, runnable example." />
+  <LinkCard title="Production guide" href="/google-adk-guide/typescript/google_adk_typescript_production_guide/" description="Dev tools, deployment, security, telemetry, evaluation." />
 </CardGrid>
 
 ---
@@ -250,6 +113,7 @@ Later 2.x releases added `Runner.autoCreateSession` (opt-in), `DebugLoggingPlugi
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | current | Added the [comprehensive guide](/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/) and [production guide](/google-adk-guide/typescript/google_adk_typescript_production_guide/); the tools, sessions, multi-agent and workflow examples moved there. Noted that the npm `adk` command needs `@google/adk-devtools` installed. |
 | 2026-10-21 | current | Added tools, sessions, multi-agent and workflow examples, each type-checked with `tsc --strict` and run against a stub model. Dropped the unsupported Node.js version claim. |
 | 2026-10-21 | 2.3.0 | Re-verified against the current npm release. Replaced the minimal example, which called a non-existent `agent.run()`, with a type-checked `InMemoryRunner.runEphemeral` example; added the 2.x changes; version now read from the site's version data. |
 | 2026-04-21 | 1.0.0 | Bumped to installed v1.0.0 GA after npm introspection; LLMAgent → LlmAgent (matches Python casing). |

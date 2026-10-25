@@ -27,9 +27,10 @@ ADK for Go versions independently of the Python and TypeScript kits, so feature 
 9. [Agent2Agent (A2A) Protocol](#agent2agent-a2a-protocol)
 10. [Go Idioms and Patterns](#go-idioms-and-patterns)
 11. [Session Management](#session-management)
-12. [Testing](#testing)
-13. [Best Practices](#best-practices)
-14. [What's new since v1.0.0](#whats-new-since-v100)
+12. [Memory and Artifacts](#memory-and-artifacts)
+13. [Testing](#testing)
+14. [Best Practices](#best-practices)
+15. [What's new since v1.0.0](#whats-new-since-v100)
 
 For deployment, telemetry and serving, continue in the [production guide](/google-adk-guide/go/google_adk_go_production_guide/); for task-shaped examples see the [recipes](/google-adk-guide/go/google_adk_go_recipes/).
 
@@ -888,6 +889,147 @@ func main() {
 
 `RequireConfirmation: true` (always) or `RequireConfirmationProvider` (per call, typed on your argument struct) pauses the run and emits an `adk_request_confirmation` function call; the client answers with a function response and the tool runs or is rejected. Inside a tool you can also call `ctx.RequestConfirmation(hint, payload)` and read `ctx.ToolConfirmation()` yourself. Set `IsLongRunning: true` for tools that start work and finish later.
 
+### Human approval for tool calls
+
+With `RequireConfirmation` or `RequireConfirmationProvider` set, ADK does not run the tool when the model first asks for it. The turn ends with two things: a function response to the model saying the tool `requires confirmation, please approve or reject`, and an `adk_request_confirmation` function call (`toolconfirmation.FunctionCallName`) whose arguments carry the original call. Your application shows that call to a person and answers it on the next turn with a `FunctionResponse` that has the same ID, the same name and `{"confirmed": true}` (or `false`). The program below runs the whole round trip; a small scripted model stands in for Gemini so it runs without credentials:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"iter"
+	"log"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
+	"google.golang.org/adk/tool/toolconfirmation"
+)
+
+type refundArgs struct {
+	OrderID string  `json:"order_id"`
+	Amount  float64 `json:"amount"`
+}
+
+func issueRefund(ctx agent.ToolContext, args refundArgs) (map[string]any, error) {
+	return map[string]any{"status": "refunded", "order_id": args.OrderID}, nil
+}
+
+// approve answers a pending adk_request_confirmation call.
+func approve(callID string, ok bool) *genai.Content {
+	return &genai.Content{
+		Role: string(genai.RoleUser),
+		Parts: []*genai.Part{{FunctionResponse: &genai.FunctionResponse{
+			ID:       callID,
+			Name:     toolconfirmation.FunctionCallName,
+			Response: map[string]any{"confirmed": ok},
+		}}},
+	}
+}
+
+// turn runs one turn and returns the ID of a confirmation request, if any.
+func turn(ctx context.Context, r *runner.Runner, sessionID string, msg *genai.Content) (string, error) {
+	var pending string
+	for event, err := range r.Run(ctx, "u1", sessionID, msg, agent.RunConfig{}) {
+		if err != nil {
+			return "", err
+		}
+		if event.Content == nil {
+			continue
+		}
+		for _, p := range event.Content.Parts {
+			if fc := p.FunctionCall; fc != nil && fc.Name == toolconfirmation.FunctionCallName {
+				original, err := toolconfirmation.OriginalCallFrom(fc)
+				if err != nil {
+					return "", err
+				}
+				fmt.Printf("approval needed: %s(%v)\n", original.Name, original.Args)
+				pending = fc.ID
+			}
+			if fr := p.FunctionResponse; fr != nil && fr.Name == "issue_refund" {
+				fmt.Println("tool result:", fr.Response)
+			}
+		}
+	}
+	return pending, nil
+}
+
+func run(ctx context.Context, m model.LLM) error {
+	refund, err := functiontool.New(functiontool.Config{
+		Name:                        "issue_refund",
+		Description:                 "Refunds an order.",
+		RequireConfirmationProvider: func(a refundArgs) bool { return a.Amount > 100 },
+	}, issueRefund)
+	if err != nil {
+		return err
+	}
+	a, err := llmagent.New(llmagent.Config{
+		Name:        "support",
+		Model:       m,
+		Instruction: "Issue refunds when asked.",
+		Tools:       []tool.Tool{refund},
+	})
+	if err != nil {
+		return err
+	}
+	r, err := runner.New(runner.Config{
+		AppName:           "shop",
+		Agent:             a,
+		SessionService:    session.InMemoryService(),
+		AutoCreateSession: true,
+	})
+	if err != nil {
+		return err
+	}
+
+	// Turn 1: the model calls issue_refund; ADK pauses and asks for approval.
+	callID, err := turn(ctx, r, "s1", genai.NewContentFromText("Refund order A1, 250 pounds.", genai.RoleUser))
+	if err != nil || callID == "" {
+		return err
+	}
+	// Turn 2: a person approves (false would reject the call).
+	_, err = turn(ctx, r, "s1", approve(callID, true))
+	return err
+}
+
+func main() {
+	if err := run(context.Background(), &scripted{}); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// scripted stands in for Gemini: it asks for a refund, then answers.
+type scripted struct{ n int }
+
+func (s *scripted) Name() string { return "scripted" }
+
+func (s *scripted) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	s.n++
+	var c *genai.Content
+	if s.n == 1 {
+		c = &genai.Content{Role: string(genai.RoleModel), Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
+			ID: "call-1", Name: "issue_refund", Args: map[string]any{"order_id": "A1", "amount": 250},
+		}}}}
+	} else {
+		c = genai.NewContentFromText("Done: order A1 has been refunded.", genai.RoleModel)
+	}
+	return func(yield func(*model.LLMResponse, error) bool) { yield(&model.LLMResponse{Content: c}, nil) }
+}
+```
+
+- `toolconfirmation.OriginalCallFrom(fc)` extracts the tool call being approved, so you can show its name and arguments.
+- A `"payload"` field in the response reaches the tool through `ctx.ToolConfirmation().Payload`, which lets the approver adjust the call (an approved amount, say) rather than only accept or reject it.
+- The session must survive between the two turns, so use a persistent session service when approval can take longer than a process lifetime.
+- `mcptoolset.Config` takes the same two fields, and `tool.WithConfirmation` wraps any toolset.
+
 ### Custom Tool Implementation
 
 You rarely implement `tool.Tool` directly. To control *which* tools are offered on each turn, implement `tool.Toolset`:
@@ -1381,6 +1523,150 @@ The runner applies these deltas when it appends the event, so state and history 
 
 ---
 
+## Memory and Artifacts
+
+**Artifacts** are versioned files stored per session: reports a tool generates, uploads, images. Give the runner an `ArtifactService` and tools reach it through `ctx.Artifacts()` (`Save`, `Load`, `LoadVersion`, `List`). Each save of a name creates a new version, and a name starting with `user:` is shared across all of the user's sessions. `loadartifactstool.New()` lets the model list and open artifacts itself.
+
+**Memory** is searchable knowledge across a user's sessions. Add a finished session to a `memory.Service` with `AddSessionToMemory`; agents search it with `loadmemorytool.New()` (the model decides when) or `preloadmemorytool.New()` (searched on every turn and added to the request), and tools can call `ctx.SearchMemory(ctx, query)`.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"iter"
+	"log"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/artifact"
+	"google.golang.org/adk/memory"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
+	"google.golang.org/adk/tool/loadartifactstool"
+	"google.golang.org/adk/tool/loadmemorytool"
+)
+
+type reportArgs struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}
+
+// saveReport stores a Markdown file as a session artifact. Each save of the
+// same name creates a new version.
+func saveReport(ctx agent.ToolContext, a reportArgs) (map[string]any, error) {
+	part := genai.NewPartFromBytes([]byte("# "+a.Title+"\n\n"+a.Body), "text/markdown")
+	resp, err := ctx.Artifacts().Save(ctx, "report.md", part)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"file": "report.md", "version": resp.Version}, nil
+}
+
+func newRunner(m model.LLM, sessions session.Service, artifacts artifact.Service, mem memory.Service) (*runner.Runner, error) {
+	save, err := functiontool.New(functiontool.Config{
+		Name:        "save_report",
+		Description: "Saves a report for the user to download.",
+	}, saveReport)
+	if err != nil {
+		return nil, err
+	}
+	a, err := llmagent.New(llmagent.Config{
+		Name:        "assistant",
+		Model:       m,
+		Instruction: "Write reports with save_report. Use load_memory when the user refers to earlier conversations.",
+		Tools:       []tool.Tool{save, loadartifactstool.New(), loadmemorytool.New()},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return runner.New(runner.Config{
+		AppName:           "reports",
+		Agent:             a,
+		SessionService:    sessions,
+		ArtifactService:   artifacts, // needed by ctx.Artifacts() and load_artifacts
+		MemoryService:     mem,
+		AutoCreateSession: true,
+	})
+}
+
+func main() {
+	ctx := context.Background()
+	sessions := session.InMemoryService()
+	artifacts := artifact.InMemoryService() // gcsartifact.NewService(ctx, bucket) in production
+	mem := memory.InMemoryService()         // memory/vertexai for Memory Bank
+
+	r, err := newRunner(&scripted{}, sessions, artifacts, mem)
+	if err != nil {
+		log.Fatal(err)
+	}
+	msg := genai.NewContentFromText("Write a status report. Our launch date is 3 March.", genai.RoleUser)
+	for _, err := range r.Run(ctx, "u1", "monday", msg, agent.RunConfig{}) {
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	// Read artifacts through the service, outside the agent.
+	list, err := artifacts.List(ctx, &artifact.ListRequest{AppName: "reports", UserID: "u1", SessionID: "monday"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, name := range list.FileNames {
+		got, err := artifacts.Load(ctx, &artifact.LoadRequest{AppName: "reports", UserID: "u1", SessionID: "monday", FileName: name})
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("%s: %q\n", name, got.Part.InlineData.Data)
+	}
+
+	// When a conversation ends, add it to memory so later sessions can search it.
+	done, err := sessions.Get(ctx, &session.GetRequest{AppName: "reports", UserID: "u1", SessionID: "monday"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err := mem.AddSessionToMemory(ctx, done.Session); err != nil {
+		log.Fatal(err)
+	}
+	found, err := mem.SearchMemory(ctx, &memory.SearchRequest{AppName: "reports", UserID: "u1", Query: "launch date"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(len(found.Memories), "memories match")
+}
+
+// scripted stands in for Gemini: it calls save_report once, then answers.
+type scripted struct{ n int }
+
+func (s *scripted) Name() string { return "scripted" }
+
+func (s *scripted) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	s.n++
+	c := genai.NewContentFromText("Saved report.md. Launch is on 3 March.", genai.RoleModel)
+	if s.n == 1 {
+		c = &genai.Content{Role: string(genai.RoleModel), Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
+			ID: "c1", Name: "save_report", Args: map[string]any{"title": "Status", "body": "On track."},
+		}}}}
+	}
+	return func(yield func(*model.LLMResponse, error) bool) { yield(&model.LLMResponse{Content: c}, nil) }
+}
+```
+
+| Service | In memory | Google Cloud |
+|---|---|---|
+| Artifacts | `artifact.InMemoryService()` | `gcsartifact.NewService(ctx, bucket)` |
+| Memory | `memory.InMemoryService()` (word matching) | `memory/vertexai` (Vertex AI Memory Bank) |
+
+The in-memory services lose everything when the process exits; use them for tests and local runs.
+
+---
+
 ## Testing
 
 ### Unit Testing Agents
@@ -1480,6 +1766,132 @@ func TestAgentReplies(t *testing.T) {
 
 ```bash
 go test ./...
+```
+
+### Scripting tool calls
+
+A fake that only returns text never exercises your tools. Script the model's responses instead, including function calls, and assert on what the model was sent next: that is where tool results, state templating and instructions show up.
+
+```go
+package orders
+
+import (
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/agent/llmagent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/tool"
+	"google.golang.org/adk/tool/functiontool"
+)
+
+type orderArgs struct {
+	OrderID string `json:"order_id"`
+}
+
+type orderStatus struct {
+	OrderID string `json:"order_id"`
+	Status  string `json:"status"`
+}
+
+func getOrder(_ agent.ToolContext, a orderArgs) (orderStatus, error) {
+	return orderStatus{OrderID: a.OrderID, Status: "shipped"}, nil
+}
+
+// NewAgent takes the model as a parameter so tests can pass a fake.
+func NewAgent(m model.LLM) (agent.Agent, error) {
+	lookup, err := functiontool.New(functiontool.Config{
+		Name:        "get_order",
+		Description: "Looks up an order.",
+	}, getOrder)
+	if err != nil {
+		return nil, err
+	}
+	return llmagent.New(llmagent.Config{
+		Name:        "orders",
+		Model:       m,
+		Instruction: "Answer order questions with get_order.",
+		Tools:       []tool.Tool{lookup},
+	})
+}
+```
+
+```go
+package orders
+
+import (
+	"context"
+	"fmt"
+	"iter"
+	"testing"
+
+	"google.golang.org/genai"
+
+	"google.golang.org/adk/agent"
+	"google.golang.org/adk/model"
+	"google.golang.org/adk/runner"
+	"google.golang.org/adk/session"
+)
+
+// scriptedLLM returns its responses in order and records every request.
+type scriptedLLM struct {
+	responses []*genai.Content
+	requests  []*model.LLMRequest
+}
+
+func (s *scriptedLLM) Name() string { return "scripted" }
+
+func (s *scriptedLLM) GenerateContent(ctx context.Context, req *model.LLMRequest, stream bool) iter.Seq2[*model.LLMResponse, error] {
+	s.requests = append(s.requests, req)
+	return func(yield func(*model.LLMResponse, error) bool) {
+		if len(s.requests) > len(s.responses) {
+			yield(nil, fmt.Errorf("unexpected model call %d", len(s.requests)))
+			return
+		}
+		yield(&model.LLMResponse{Content: s.responses[len(s.requests)-1]}, nil)
+	}
+}
+
+func TestLooksUpOrder(t *testing.T) {
+	fake := &scriptedLLM{responses: []*genai.Content{
+		{Role: string(genai.RoleModel), Parts: []*genai.Part{{FunctionCall: &genai.FunctionCall{
+			ID: "call-1", Name: "get_order", Args: map[string]any{"order_id": "A123"},
+		}}}},
+		genai.NewContentFromText("Order A123 has shipped.", genai.RoleModel),
+	}}
+	a, err := NewAgent(fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := runner.New(runner.Config{
+		AppName: "test", Agent: a, SessionService: session.InMemoryService(), AutoCreateSession: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var answer string
+	msg := genai.NewContentFromText("Where is A123?", genai.RoleUser)
+	for event, err := range r.Run(t.Context(), "u1", "s1", msg, agent.RunConfig{}) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if event.IsFinalResponse() && event.Content != nil {
+			answer = event.Content.Parts[0].Text
+		}
+	}
+
+	if answer != "Order A123 has shipped." {
+		t.Errorf("answer = %q", answer)
+	}
+	if len(fake.requests) != 2 {
+		t.Fatalf("model called %d times, want 2", len(fake.requests))
+	}
+	// The second request carries the tool's result back to the model.
+	last := fake.requests[1].Contents[len(fake.requests[1].Contents)-1]
+	fr := last.Parts[0].FunctionResponse
+	if fr == nil || fr.Name != "get_order" || fr.Response["status"] != "shipped" {
+		t.Errorf("tool result not sent to the model: %+v", last.Parts[0])
+	}
+}
 ```
 
 `session/sessiontestsuite` provides a shared conformance suite if you write your own `session.Service`.
@@ -1635,7 +2047,7 @@ func main() {
 
 ## What's new since v1.0.0
 
-Releases since v1.0.0 (March 2026) have been additive; code written for 1.0 still compiles. The changes worth knowing about:
+Releases since v1.0.0 (March 2026) have added packages rather than removed them: superseded packages such as the v1 A2A ones are deprecated but still build. The changes worth knowing about:
 
 - **A2A v2.** `server/adka2a/v2` and `agent/remoteagent/v2` target `a2a-go/v2`; the v1 packages are deprecated. Remote agents take an `AgentCardProvider` (for example `remoteagent.NewAgentCardProvider(url)`).
 - **Skills.** `tool/skilltoolset` loads skill folders (a `SKILL.md` plus resources) for an agent.
@@ -1650,5 +2062,6 @@ Releases since v1.0.0 (March 2026) have been additive; code written for 1.0 stil
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-24 | current | Added human approval for tool calls (a runnable confirmation round trip), a Memory and Artifacts section, and a scripted-model test that exercises a tool call. Every new program run with `go run` or `go test`. |
 | 2026-10-21 | current | Rewritten against the current release. Earlier revisions used an API that ADK for Go never had (`gemini.New`, pointer `Config` arguments, single-value constructors, `agent.Response`, `tool.Schema`, `server/mcp`, `server/restapi`, `adk.NewAgent`); every example is now a program compiled with `go vet`, and the testing example runs under `go test`. Corrected the Go requirement to 1.25 and the workflow-agent import paths (`agent/workflowagents/...`). |
 | April 2026 | 1.0.0 | GA guide. |

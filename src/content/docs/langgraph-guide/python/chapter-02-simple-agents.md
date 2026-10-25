@@ -319,20 +319,25 @@ result = graph.invoke({"messages": [{"role": "user", "content": "What is 12 * 12
 print(result["messages"][-1].content)
 ```
 
-`tools_condition` is equivalent to:
+`tools_condition` is roughly equivalent to:
 
 ```python
 from langgraph.graph import END
 
-def tools_condition(state):
-    from langchain_core.messages import AIMessage
-    last = state["messages"][-1]
-    # Match LangGraph's real tools_condition: only an AIMessage with non-empty
-    # tool_calls routes to tools; arbitrary objects with a tool_calls attribute do not.
-    if isinstance(last, AIMessage) and last.tool_calls:
+def tools_condition(state, messages_key: str = "messages"):
+    # Accepts a list of messages, a dict state, or an object with a messages attribute.
+    messages = state if isinstance(state, list) else (
+        state.get(messages_key, []) if isinstance(state, dict) else getattr(state, messages_key, [])
+    )
+    if not messages:
+        raise ValueError(f"No messages found in input state to tool_edge: {state}")
+    last = messages[-1]
+    if hasattr(last, "tool_calls") and len(last.tool_calls) > 0:
         return "tools"
     return END
 ```
+
+It returns the literal string `"tools"`, so the tool node must be registered under that name; if yours is called something else, pass a path map: `add_conditional_edges("agent", tools_condition, {"tools": "my_tools", END: END})`. If your messages live under another key, wrap it: `lambda s: tools_condition(s, messages_key="chat_history")`.
 
 ---
 

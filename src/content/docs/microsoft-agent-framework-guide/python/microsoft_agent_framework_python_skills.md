@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Skills"
 description: "Progressive-disclosure domain knowledge for agents. InlineSkill / ClassSkill / FileSkillsSource / SkillsProvider with code-defined and file-based skills, composable sources, script runners, and approval gates."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Skills"
+  order: 13
 ---
 
 Skills are a **progressive-disclosure** knowledge pattern. Instead of stuffing every reference doc and procedure into the system prompt, you advertise skill *names and descriptions* (cheap), let the model decide which to load (`load_skill`), and then fetch resources (`read_skill_resource`) or run scripts (`run_skill_script`) on demand. The total context stays small until the agent actually needs deeper knowledge.
@@ -23,6 +26,7 @@ This follows the [Agent Skills specification](https://agentskills.io). Verified 
 | `AggregatingSkillsSource` | Combines multiple `SkillsSource` instances into one |
 | `FilteringSkillsSource` | Filters skills from a source by a predicate |
 | `DeduplicatingSkillsSource` | Removes duplicate skills (by name) from a source |
+| `CachingSkillsSource` | Caches another source's skills, optionally per caller and with a refresh interval |
 | `SkillScriptRunner` | Strategy protocol for running file-based scripts (sandbox, subprocess, hosted) |
 
 > **API change in 1.3.0:** `Skill` is now an abstract base class. Use `InlineSkill` for code-defined skills (with `instructions=` instead of `content=`). `SkillsProvider` now takes a positional `source` argument instead of `skills=`/`skill_paths=` keyword args. For file-based skills use `SkillsProvider.from_paths(...)`.
@@ -379,55 +383,40 @@ asyncio.run(main())
 
 Pass exactly one of `client=` (a live `mcp.ClientSession`) or `session_provider=`. The `archive_max_file_count` (default 20), `archive_max_size_bytes` and `archive_max_uncompressed_size_bytes` (1 MB each), `archive_resource_extensions` and `archive_resource_search_depth` (default 2) limits protect against oversized or zip-bomb archives. A non-null `sha256:` digest on an archive entry is verified before extraction, and a mismatched archive is skipped with a warning. The source doesn't cache, so wrap it in `CachingSkillsSource` to avoid re-reading the index every run. Skills from a remote server are untrusted input, so keep the default approval flags on `SkillsProvider` unless you control the server.
 
-## `DelegatingSkillsSource` — composable decorators
+## Sources, context and caching
 
-`DelegatingSkillsSource` is the abstract base class for composable source decorators. It wraps an `inner_source` and delegates `get_skills()` to it while allowing the subclass to augment, filter, cache, or transform the result. All three built-in composable sources subclass it:
+Every source implements `async get_skills(context: SkillsSourceContext) -> list[Skill]`. The context carries the invoking `agent` and, when there is one, the `session`, so a source can return different skills for different agents, users or tenants.
 
-| Subclass | What it does |
-|---|---|
-| `DeduplicatingSkillsSource` | Removes duplicate skills (by name); first occurrence wins |
-| `FilteringSkillsSource` | Applies a predicate to filter which skills are exposed |
-| `AggregatingSkillsSource` | Combines multiple `SkillsSource` instances into one |
-
-### Custom subclass — caching example
-
-Subclass `DelegatingSkillsSource` when the built-ins don't cover your use case. The most common reason is caching: wrap any slow `SkillsSource` (file I/O, database, HTTP) in a cache layer without modifying the underlying source:
+`SkillsProvider` caches what its source returns: by default it discovers skills once and reuses them. `cache_refresh_interval=timedelta(minutes=5)` re-discovers them periodically, and `disable_caching=True` asks the source on every run (useful when the source itself is per-request, as in the filtering example below). For finer control, wrap a source in `CachingSkillsSource` yourself:
 
 ```python
-import time
-from agent_framework import (
-    DelegatingSkillsSource,
-    FileSkillsSource,
-    InMemorySkillsSource,
-    InlineSkill,
-    SkillsProvider,
-    SkillsSource,
+from datetime import timedelta
+from agent_framework import CachingSkillsSource, FileSkillsSource, SkillsProvider
+
+cached = CachingSkillsSource(
+    FileSkillsSource("./domain-skills"),
+    refresh_interval=timedelta(minutes=10),
+    # One cache entry per session id; return None to share one entry.
+    cache_isolation_key_selector=lambda ctx: ctx.session.session_id if ctx.session else None,
 )
-
-
-class CachingSkillsSource(DelegatingSkillsSource):
-    """Cache skills for 60 s to avoid repeated I/O."""
-
-    def __init__(self, inner_source: SkillsSource) -> None:
-        super().__init__(inner_source)
-        self._cache: list | None = None
-        self._expires_at: float = 0.0
-
-    async def get_skills(self):
-        if self._cache is None or time.monotonic() > self._expires_at:
-            self._cache = await self.inner_source.get_skills()
-            self._expires_at = time.monotonic() + 60
-        return self._cache
-
-
-# Wrap any slow source — here a file-based source — with the cache
-slow_source = FileSkillsSource("./domain-skills")
-cached_source = CachingSkillsSource(slow_source)
-
-provider = SkillsProvider(cached_source)
+provider = SkillsProvider(cached, disable_caching=True)   # the source does the caching
 ```
 
-`self.inner_source` is the attribute set by `DelegatingSkillsSource.__init__`. Your `get_skills()` override calls `await self.inner_source.get_skills()` to fetch from the delegate and can transform the result freely. The cache is transparent to `SkillsProvider` — it always calls `source.get_skills()` and the caching decorator intercepts that call.
+### `DelegatingSkillsSource` — your own decorators
+
+`DelegatingSkillsSource` is the base class of the built-in decorators (`CachingSkillsSource`, `FilteringSkillsSource`, `DeduplicatingSkillsSource`). It stores the wrapped source as `self.inner_source`; override `get_skills(self, context)` to transform what it returns. For example, a decorator that hides skills marked `metadata: {"stage": "beta"}` from everyone except staff agents:
+
+```python
+from agent_framework import DelegatingSkillsSource, Skill, SkillsSourceContext
+
+
+class HideBetaSkills(DelegatingSkillsSource):
+    async def get_skills(self, context: SkillsSourceContext) -> list[Skill]:
+        skills = await self.inner_source.get_skills(context)
+        if context.agent is not None and getattr(context.agent, "name", "") == "staff-assistant":
+            return skills
+        return [s for s in skills if (s.frontmatter.metadata or {}).get("stage") != "beta"]
+```
 
 ## Composable sources
 
@@ -444,6 +433,7 @@ from agent_framework import (
     FileSkillsSource,
     FilteringSkillsSource,
     InlineSkill,
+    InMemorySkillsSource,
     SkillsProvider,
 )
 from agent_framework.openai import OpenAIChatClient
@@ -460,8 +450,8 @@ analytics_skill = InlineSkill(
 # File-based source
 file_source = FileSkillsSource("./domain-skills")
 
-# Aggregate both sources
-combined = AggregatingSkillsSource([file_source, [analytics_skill]])
+# Aggregate both sources (each element must be a SkillsSource, so wrap the list)
+combined = AggregatingSkillsSource([file_source, InMemorySkillsSource([analytics_skill])])
 
 # Deduplicate in case both sources define a skill with the same name
 unique = DeduplicatingSkillsSource(combined)
@@ -472,20 +462,24 @@ agent = Agent(client=OpenAIChatClient(), context_providers=[provider])
 
 ### Filtering skills per request
 
-Use `FilteringSkillsSource` to expose only skills relevant to the current user or context:
+Use `FilteringSkillsSource` to expose only skills relevant to the current user or context. The predicate receives the skill **and** the `SkillsSourceContext`; skill metadata lives on `skill.frontmatter`:
 
 ```python
 from agent_framework import FilteringSkillsSource, FileSkillsSource, SkillsProvider
 
 all_source = FileSkillsSource("./skills")
 
-# Only expose skills tagged for the "finance" domain
+# Expose skills whose SKILL.md frontmatter has metadata: {domain: finance},
+# plus anything the session has been granted explicitly.
 finance_source = FilteringSkillsSource(
     inner_source=all_source,
-    predicate=lambda skill: "finance" in skill.description.lower(),
+    predicate=lambda skill, ctx: (
+        (skill.frontmatter.metadata or {}).get("domain") == "finance"
+        or (ctx.session is not None and skill.frontmatter.name in ctx.session.state.get("granted_skills", []))
+    ),
 )
 
-provider = SkillsProvider(finance_source)
+provider = SkillsProvider(finance_source, disable_caching=True)   # re-filter on every run
 ```
 
 ### Deduplicating
@@ -504,20 +498,18 @@ source = DeduplicatingSkillsSource(AggregatingSkillsSource([primary, fallback]))
 
 ## Running file-based scripts
 
-File-based scripts need a `SkillScriptRunner` — pass it to `FileSkillsSource` or `SkillsProvider.from_paths`:
+File-based scripts need a `SkillScriptRunner` — pass it to `FileSkillsSource` or `SkillsProvider.from_paths`. A runner is any callable `(skill: FileSkill, script: FileSkillScript, args) -> result`; `skill.path` is the skill's directory, `script.full_path` the script file, and `args` a dict (or a list of strings, for command-line style arguments):
 
 ```python
 import asyncio
 import json
 import sys
-from pathlib import Path
-from agent_framework import Skill, SkillScript, SkillsProvider
+from agent_framework import FileSkill, FileSkillScript, SkillsProvider
 
 
-async def subprocess_runner(skill: Skill, script: SkillScript, args: dict | None = None) -> str:
-    path = Path(skill.path) / script.path
+async def subprocess_runner(skill: FileSkill, script: FileSkillScript, args: dict | list[str] | None = None) -> str:
     proc = await asyncio.create_subprocess_exec(
-        sys.executable, str(path), "--args", json.dumps(args or {}),
+        sys.executable, script.full_path, "--args", json.dumps(args or {}),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -543,7 +535,8 @@ For untrusted scripts, isolate execution with Docker:
 ```python
 import asyncio
 import json
-from agent_framework import Skill, SkillScript, SkillsProvider
+from pathlib import Path
+from agent_framework import FileSkill, FileSkillScript, SkillsProvider
 
 
 class DockerSkillRunner:
@@ -553,7 +546,8 @@ class DockerSkillRunner:
         self.memory = memory
         self.timeout = timeout
 
-    async def __call__(self, skill: Skill, script: SkillScript, args: dict | None = None) -> str:
+    async def __call__(self, skill: FileSkill, script: FileSkillScript, args: dict | list[str] | None = None) -> str:
+        relative = Path(script.full_path).relative_to(skill.path).as_posix()
         cmd = [
             "docker", "run", "--rm",
             f"--network={self.network}",
@@ -561,7 +555,7 @@ class DockerSkillRunner:
             "--read-only",
             "-v", f"{skill.path}:/skill:ro",
             self.image,
-            "python", f"/skill/{script.path}",
+            "python", f"/skill/{relative}",
             "--args", json.dumps(args or {}),
         ]
         proc = await asyncio.create_subprocess_exec(
@@ -572,7 +566,7 @@ class DockerSkillRunner:
         except asyncio.TimeoutError:
             proc.kill()
             await proc.wait()
-            raise RuntimeError(f"Docker execution of {script.path} timed out after {self.timeout}s")
+            raise RuntimeError(f"Docker execution of {script.name} timed out after {self.timeout}s")
         if proc.returncode != 0:
             raise RuntimeError(stderr.decode("utf-8"))
         return stdout.decode("utf-8")
@@ -952,7 +946,7 @@ The `{skills}` placeholder is mandatory — the provider renders names and descr
 | | Tools (`@tool`) | MCP | Skills |
 |---|---|---|---|
 | Surface | Flat list of callables | Remote server with dozens of tools | Progressive disclosure — names first, content on demand |
-| Prompt cost | Full schema in every turn | Full schema in every turn | ~100 tokens per skill until loaded |
+| Prompt cost | Full schema in every turn | Full schema in every turn | Name and description per skill until loaded |
 | Best for | Small, always-available functions | Third-party integrations | Large knowledge domains + procedures |
 
 Skills compose with tools and MCP. A skill's `instructions` often tells the agent to use specific tools — e.g. "Call `search_crm` with the customer ID then summarise."
@@ -961,8 +955,14 @@ Skills compose with tools and MCP. A skill's `instructions` often tells the agen
 
 **Rarely-used domain knowledge.** Accounting rules, tax brackets, safety protocols — huge content that matters 5% of the time. Skills keep it out of the default prompt.
 
-**Multi-tenant agents.** Build a `FilteringSkillsSource` that filters by tenant ID and pass it as the `source` to `SkillsProvider` — each request gets a tailored skill set.
+**Multi-tenant agents.** Build a `FilteringSkillsSource` whose predicate reads the tenant from `ctx.session.state`, and set `disable_caching=True` on the provider (or isolate a `CachingSkillsSource` by tenant) so each request gets its tenant's skill set.
 
 **Dynamic reference docs.** Back a resource with an async function that queries a live CMS / Notion / Confluence — the agent sees fresh content on every `read_skill_resource` call.
 
 **Composable skill libraries.** Maintain skills in separate directories (shared core + team-specific). Aggregate with `AggregatingSkillsSource`, deduplicate with `DeduplicatingSkillsSource`, wrap in `SkillsProvider`.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Fixed examples that failed at run time: `FilteringSkillsSource` predicates take `(skill, context)`, skill metadata is on `skill.frontmatter`, `AggregatingSkillsSource` needs sources (not lists), script runners receive `FileSkill` / `FileSkillScript` (`script.full_path`, not `script.path`). Replaced a hand-written cache that shadowed the built-in `CachingSkillsSource` and used the old `get_skills()` signature; documented `SkillsSourceContext` and provider caching options. |

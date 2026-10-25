@@ -126,6 +126,7 @@ Ready? **[Start Zero → Hero Step 1 →](/openai-agents-sdk-guides/openai_agent
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-10-24 | %%version=openai-agents%% | Deep-dive audit: ran every example against a scripted model; fixed recipes whose handoff chains could not return their declared output type, concurrent runs sharing one session, and an invented confidence score; documented approval versus tool-guardrail ordering (`ToolExecutionConfig`); expanded the multi-agent page (`handoff()` options, `as_tool()` options); FastAPI streaming now handles errors and disconnects. | — |
 | 2026-10-21 | %%version=openai-agents%% | Rewrote the production guide around the SDK's own controls and the middleware stub as a hooks, tool-guardrails and approvals page; added realtime/voice, hosted MCP and testing sections; folded the "2025 features" page into the comprehensive guide and this page (one release table). | — |
 | 2026-10-21 | %%version=openai-agents%% | Re-verified all code against the current release; replaced non-existent APIs; corrected the breaking-changes summary (MCP failure default was stated backwards); "What's new" rewritten from the upstream changelog. | — |
 | 2026-04-24 – 2026-05-27 | 0.14.5 – 0.17.4 | Routine version bumps with symbol checks against each installed release. | Claude routine |

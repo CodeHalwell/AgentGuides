@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
   <LinkCard
     title="Python"
     href="/google-adk-guide/python/"
-    description="google-adk %%version=google-adk%% · the reference implementation — full feature set, richest ecosystem."
+    description="google-adk %%version=google-adk%% · the reference implementation, with the widest feature set and the most integrations."
   />
   <LinkCard
     title="Go"
@@ -72,6 +72,7 @@ Changes to this guide. Package release notes are in each language's changelog: [
 
 | Date | Changes |
 |------|---------|
+| 2026-10-24 | **Audit against the current releases.** TypeScript: new comprehensive and production guides (agents, models, tools, callbacks, multi-agent, workflows, sessions, memory, artifacts, tool confirmation, plugins, streaming, MCP, A2A, testing, `adk` CLI, deployment, evaluation), every example type-checked with `tsc --strict` and run against a stub model. Go: added tool confirmation, memory and artifacts, scripted-model testing, live sessions and `adkgo` deployment, with every program built. Python: corrected workflow parameter binding and human-in-the-loop examples, session database URLs and migrations, memory method support, span names, code executors (the deprecated `VertexAiCodeExecutor` recipe now uses `AgentEngineSandboxCodeExecutor`), Secret Manager calls, custom eval metrics and the eval metric list, and removed an invented computer-use API. |
 | 2026-10-21 | **Accuracy rewrite.** Python: rewrote the comprehensive guide as a verified single-page tour (the separate class-by-class reference was removed; its user-facing facts are on the topic pages), added the `adk` CLI, rebuilt the production guide around `adk deploy` and the Agent Platform SDK, fixed runner examples that skipped session creation, the direct-Anthropic example and several other broken snippets, and moved examples off the Gemini 2.5 models. Merged three changelogs into one. TypeScript: added tools, multi-agent, session and runner examples. Go: model IDs in deployment config now follow the current default. |
 | 2026-10-21 | **Version and accuracy sweep.** Version numbers now come from the site's version data. Python imports and constructor arguments re-checked against the current release; Go pages rewritten around the real API with every program compiled; TypeScript example replaced with a type-checked one. |
 | 2026-09-21 | Python pages updated for 2.9.2, including the optimisation module, `TelemetryConfig`, `UrlContextTool`, skills and `VertexAiRagMemoryService`. |

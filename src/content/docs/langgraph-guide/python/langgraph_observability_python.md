@@ -5,6 +5,7 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Observability"
+  order: 53
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** (modules: `langgraph.runtime`, `langgraph.types`, `langgraph.graph.state`).
@@ -45,6 +46,11 @@ class State(TypedDict):
 
 
 model = ChatAnthropic(model="%%model=anthropic%%")
+
+
+def web_search(query: str) -> list[str]:
+    """Stand-in for a real search API."""
+    return [f"result {i} for {query}" for i in range(3)]
 
 
 def research_node(state: State, runtime: Runtime) -> dict:
@@ -123,7 +129,7 @@ class ExecutionInfo:
     checkpoint_id:           str
     checkpoint_ns:           str
     task_id:                 str
-    thread_id:               str | None          # None if no checkpointer
+    thread_id:               str | None          # from the config; None if not set
     run_id:                  str | None          # None if not in RunnableConfig
     node_attempt:            int = 1             # 1-indexed; increments on retries
     node_first_attempt_time: float | None = None # unix timestamp of first attempt
@@ -223,7 +229,7 @@ snapshot = graph.get_state(config)
 print(f"Values:   {snapshot.values}")       # current state dict
 print(f"Next:     {snapshot.next}")         # which nodes run next (empty = done)
 print(f"Created:  {snapshot.created_at}")  # ISO timestamp of this checkpoint
-print(f"Metadata: {snapshot.metadata}")    # step number, source, writes
+print(f"Metadata: {snapshot.metadata}")    # source, step, parents (and run_id if set)
 ```
 
 ### 3.2 Full checkpoint history (time-travel)
@@ -253,17 +259,18 @@ result = graph.invoke(None, old_config)
 print(f"Replayed from checkpoint: {result}")
 ```
 
-### 3.4 `get_subgraphs` — inspect nested graph state
+### 3.4 Inspecting subgraph state
 
-When your graph contains subgraphs, `aget_subgraphs()` (async) traverses the nested execution:
+Subgraph state is stored under the parent's thread, so read it through the parent: `get_state(config, subgraphs=True)` fills `task.state` with the subgraph's own `StateSnapshot` for any task that is a paused or running subgraph. (Calling `get_state` on the subgraph object itself fails with `ValueError: No checkpointer set` unless it was compiled with its own checkpointer.)
 
 ```python
-async def inspect_subgraphs():
-    config = {"configurable": {"thread_id": "sub-1"}}
-    async for name, subgraph in graph.aget_subgraphs(recurse=True):
-        state = await subgraph.aget_state(config)
-        print(f"Subgraph '{name}': {list(state.values.keys())}")
+snapshot = graph.get_state(config, subgraphs=True)
+for task in snapshot.tasks:
+    if task.state is not None:                       # this task is a subgraph
+        print(f"Subgraph '{task.name}': next={task.state.next} keys={list(task.state.values)}")
 ```
+
+`graph.get_subgraphs(recurse=True)` (or `aget_subgraphs`) lists the nested compiled graphs by name, which is useful for drawing or introspection but not for reading state.
 
 ---
 
@@ -303,7 +310,7 @@ Set two environment variables and every graph run is automatically traced in Lan
 ```bash
 export LANGSMITH_API_KEY="lsv2_..."
 export LANGSMITH_TRACING="true"
-export LANGCHAIN_PROJECT="my-agent"   # optional; defaults to "default"
+export LANGSMITH_PROJECT="my-agent"   # optional; defaults to "default"
 ```
 
 No code changes needed. Every `graph.invoke()` and `graph.stream()` call will appear in the LangSmith UI with:
@@ -344,7 +351,7 @@ tracer = trace.get_tracer("langgraph-app")
 
 async def run_with_otel_tracing(query: str) -> dict:
     config = {"configurable": {"thread_id": "otel-1"}}
-    spans: dict[str, trace.Span] = {}
+    spans: dict[str, trace.Span] = {}   # keyed by task id: parallel Send tasks share a name
     result = {}
 
     async for event in graph.astream(
@@ -354,6 +361,7 @@ async def run_with_otel_tracing(query: str) -> dict:
 
         if event_type == "task":
             node_name = event["payload"]["name"]
+            task_id = event["payload"]["id"]
             span = tracer.start_span(
                 f"langgraph.node.{node_name}",
                 attributes={
@@ -362,11 +370,10 @@ async def run_with_otel_tracing(query: str) -> dict:
                     "graph.thread":  config["configurable"]["thread_id"],
                 },
             )
-            spans[node_name] = span
+            spans[task_id] = span
 
         elif event_type == "task_result":
-            node_name = event["payload"]["name"]
-            span = spans.pop(node_name, None)
+            span = spans.pop(event["payload"]["id"], None)
             if span:
                 error = event["payload"].get("error")
                 if error:
@@ -393,7 +400,7 @@ async def run_with_otel_tracing(query: str) -> dict:
 | Active threads | Thread IDs in use | Track in your own DB keyed by `thread_id` |
 | State size | `len(json.dumps(state.values))` | After each `get_state()` call |
 | Token usage | LangSmith traces OR `usage_metadata` on AI messages | LangSmith or parse responses |
-| Cache hit rate | Custom event from node before/after cache check | `runtime.stream_writer({"cache": "hit"})` |
+| Cache hit rate | A cached node does not run, so it cannot report itself; in `"updates"` mode its output arrives with `"__metadata__": {"cached": True}` | `stream_mode="updates"` |
 
 ---
 

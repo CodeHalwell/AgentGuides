@@ -275,7 +275,7 @@ shop_assistant = LlmAgent(
 - A parameter named `tool_context` is injected by ADK and hidden from the model. It gives access to `state`, artifacts, memory search, credentials and confirmation requests.
 - `async def` functions work the same way and are awaited.
 - `AgentTool` lets one agent call another like a function and get its answer back; control stays with the caller. This is also how to combine `google_search` with your own function tools.
-- Raise an exception or return `{"error": "..."}` from a tool to report failure; `ReflectAndRetryToolPlugin` can turn exceptions into a retry prompt.
+- Return `{"error": "..."}` from a tool for failures the model should handle. An exception raised in a tool ends the run unless an `on_tool_error_callback` or `ReflectAndRetryToolPlugin` (which turns it into a retry prompt) handles it.
 
 Long-running tools, confirmation prompts (`require_confirmation=`), OpenAPI and Google Cloud toolsets, custom `BaseTool` and `BaseToolset` classes are on the [Tools page](/google-adk-guide/python/tools/).
 

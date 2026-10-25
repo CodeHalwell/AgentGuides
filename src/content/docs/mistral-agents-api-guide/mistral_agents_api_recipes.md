@@ -38,7 +38,7 @@ def text_of(response: ConversationResponse) -> str:
 from common import client, text_of
 
 agent = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="web-researcher",
     description="Answers questions with current information from the web.",
     instructions="Search before answering anything time-sensitive and cite your sources.",
@@ -91,7 +91,7 @@ def forget(user_id: str) -> None:
         client.beta.conversations.delete(conversation_id=conversation_id)
         STORE.write_text(json.dumps(sessions))
 
-bot = client.beta.agents.create(model="mistral-small-latest", name="concierge", instructions="You are a friendly hotel concierge.")
+bot = client.beta.agents.create(model="%%model=mistral-small%%", name="concierge", instructions="You are a friendly hotel concierge.")
 print(chat(bot.id, "u-42", "Hi, I'm arriving on Friday with two children."))
 print(chat(bot.id, "u-42", "What did I say about my arrival?"))
 ```
@@ -104,19 +104,19 @@ print(chat(bot.id, "u-42", "What did I say about my arrival?"))
 from common import client, text_of
 
 maths = client.beta.agents.create(
-    model="mistral-medium-latest", name="maths",
+    model="%%model=mistral%%", name="maths",
     description="Solves quantitative problems with Python.",
     instructions="Use the code interpreter for every calculation.",
     tools=[{"type": "code_interpreter"}],
 )
 news = client.beta.agents.create(
-    model="mistral-medium-latest", name="news",
+    model="%%model=mistral%%", name="news",
     description="Answers questions about current events.",
     instructions="Search the web and cite sources.",
     tools=[{"type": "web_search"}],
 )
 router = client.beta.agents.create(
-    model="mistral-small-latest", name="router",
+    model="%%model=mistral-small%%", name="router",
     description="Routes questions to the right specialist.",
     instructions="Hand off to maths for calculations and to news for current events. Do not answer yourself.",
     handoffs=[maths.id, news.id],
@@ -157,7 +157,7 @@ def check_stock(sku: str) -> dict:
 
 async def main() -> None:
     client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-    async with RunContext(model="mistral-small-latest") as run_ctx:
+    async with RunContext(model="%%model=mistral-small%%") as run_ctx:
         run_ctx.register_func(check_stock)
         result = await client.beta.conversations.run_async(
             run_ctx=run_ctx,
@@ -199,7 +199,7 @@ while pending:
     time.sleep(2)
 
 hr = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="hr-assistant",
     description="Answers HR policy questions from the handbook.",
     instructions="Answer only from the handbook and name the policy you used. If it is not covered, say so.",
@@ -297,7 +297,7 @@ from common import client, text_of
 
 def main() -> None:
     agent = client.beta.agents.create(
-        model="mistral-medium-latest",
+        model="%%model=mistral%%",
         name="cli-assistant",
         instructions="You are a concise assistant.",
         tools=[{"type": "web_search"}],

@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Installation & quick start"
+  order: 1
 ---
 
 This guide covers everything you need to get your first agent running in Python using `agent-framework` (version %%version=agent-framework%%, checked %%versions-checked%%).
@@ -24,14 +25,17 @@ This guide covers everything you need to get your first agent running in Python 
 pip install agent-framework
 ```
 
-Provider-specific sub-packages (install whichever chat backend you need):
+The `agent-framework` meta package depends on `agent-framework-core[all]`, so it pulls in every integration package (OpenAI, Foundry, Anthropic, A2A, Redis, DevUI and so on, including the beta ones). That is convenient for learning but heavy for a deployed service. For a smaller install, take the core and only the integrations you use:
 
 ```bash
-pip install agent-framework-foundry        # Microsoft Foundry (FoundryChatClient)
+pip install agent-framework-core           # Agent, tools, sessions, workflows
 pip install agent-framework-openai         # OpenAI / Azure OpenAI (OpenAIChatClient)
-pip install agent-framework-a2a --pre      # A2A protocol (pre-release)
+pip install agent-framework-foundry        # Microsoft Foundry (FoundryChatClient)
+pip install agent-framework-a2a --pre      # A2A protocol (beta)
 pip install agent-framework-declarative    # Declarative YAML agents
 ```
+
+The import paths are the same either way (`agent_framework.openai`, `agent_framework.foundry`, ...); a namespace whose package is not installed raises a `ModuleNotFoundError` naming the package to install. Two integrations have platform limits: `agent-framework-github-copilot` needs Python 3.11+, and `agent-framework-hyperlight` installs only on Linux x86-64 and Windows AMD64.
 
 ---
 
@@ -70,7 +74,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-### Using Azure AI Foundry
+### Using Microsoft Foundry
 
 Replace `OpenAIChatClient` with `FoundryChatClient` for Azure-hosted models:
 
@@ -194,13 +198,17 @@ asyncio.run(main())
 
 Run `pip install agent-framework` in your active environment. For provider-specific classes, install the matching sub-package (e.g. `pip install agent-framework-openai`).
 
-### `ModuleNotFoundError: No module named 'agent_framework.foundry'`
+### `ModuleNotFoundError: The 'agent-framework-foundry' package is not installed`
 
-Install the Microsoft Foundry provider: `pip install agent-framework-foundry`. (The older `agent-framework-azure-ai` package stopped at 1.0.0rc6 and does not provide `agent_framework.foundry`.)
+The `agent_framework.foundry`, `agent_framework.openai`, `agent_framework.anthropic` (and so on) namespaces ship with the core package and load their integration package on first use. Install the package the message names: `pip install agent-framework-foundry`. (The older `agent-framework-azure-ai` package stopped at 1.0.0rc6 and does not provide `FoundryChatClient`.)
 
-### `AttributeError: 'Agent' object has no attribute 'run'`
+### `ImportError: cannot import name 'ChatAgent'` (or `ChatMessage`, `ai_function`)
 
-You may have an old version of the package. Upgrade with `pip install --upgrade agent-framework`.
+The code was written for a 2025 preview. Those names were renamed before 1.0: `ChatAgent` → `Agent`, `ChatMessage` → `Message`, `@ai_function` → `@tool`. See the list of [breaking changes](/microsoft-agent-framework-guide/python/#breaking-changes-worth-knowing).
+
+### `SettingNotFoundError` when creating the client
+
+`OpenAIChatClient()` with no arguments reads `OPENAI_API_KEY` and `OPENAI_MODEL` (or `OPENAI_CHAT_MODEL`) from the environment. A missing model gives "Model must be specified via the 'model' parameter or the 'OPENAI_CHAT_MODEL', 'OPENAI_MODEL' environment variable"; a missing key gives the less obvious "Exactly one of 'base_url', 'endpoint' must be provided", because without a key the client cannot tell which service you mean. Set the variables, or pass `model=` and `api_key=` explicitly. A `.env` file is read only when you pass `env_file_path=`.
 
 ---
 

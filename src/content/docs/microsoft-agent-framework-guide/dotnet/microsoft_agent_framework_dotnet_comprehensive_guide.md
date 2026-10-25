@@ -2,6 +2,7 @@
 title: "Microsoft Agent Framework (.NET) — Comprehensive Guide"
 sidebar:
   label: "Comprehensive guide"
+  order: 2
 description: "Microsoft.Agents.AI for .NET: ChatClientAgent, hosting and DI, workflows, tools, structured output, MCP, memory, the harness agent, Anthropic and GitHub Copilot agents, evaluation and DevUI, with compiled examples."
 framework: "microsoft-agent-framework"
 language: "dotnet"

@@ -61,12 +61,12 @@ print(result["messages"][-1].content)  # 42
 | `InjectedStore` | `langgraph.prebuilt.tool_node` (also re-exported from `langgraph.prebuilt`) |
 | `ToolRuntime` | `langgraph.prebuilt` |
 | `ToolCallRequest` | `langgraph.prebuilt.tool_node` |
-| `ToolCallTransformer` | `langgraph.prebuilt._tool_call_transformer` |
+| `ToolCallTransformer` | `langgraph.prebuilt` (defined in `langgraph.prebuilt._tool_call_transformer`) |
 | `ToolCallStream` | `langgraph.prebuilt._tool_call_stream` |
 | `ValidationNode` | `langgraph.prebuilt.tool_validator` (deprecated) |
 | `MessagesState` | `langgraph.graph.message` |
 
-The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, `InjectedStore`, and `ToolRuntime`. `ToolCallRequest`, `ToolCallTransformer`, and `ToolCallStream` must be imported from their specific sub-modules directly.
+The top-level `langgraph.prebuilt.__init__` re-exports `ToolNode`, `tools_condition`, `InjectedState`, `InjectedStore`, `ToolRuntime`, `ToolCallTransformer`, `ValidationNode` and the deprecated `create_react_agent`. `ToolCallRequest` and `ToolCallStream` must be imported from their sub-modules.
 
 ## `ToolNode`
 
@@ -151,7 +151,7 @@ When any tool returns a `Command`, the node returns a list that may mix `ToolMes
 | `Callable[..., str]` | Catch the exception types named in the formatter's first-parameter annotation (all exceptions if unannotated); its return value is the error string |
 | `False` | Disable error handling entirely; all exceptions propagate to the graph |
 
-The default error template is: `"Error: {exception_repr}\n Please fix your mistakes."`.
+With `True`, a tuple or an exception type, the content is `"Error: {repr(exc)}\n Please fix your mistakes."` and the `ToolMessage` has `status="error"`. The default handler returns the `ToolInvocationError` message instead, which lists the invalid fields.
 
 ### `wrap_tool_call` / `awrap_tool_call`
 
@@ -216,7 +216,7 @@ A built-in routing function for `add_conditional_edges`. Inspects the last messa
 builder.add_conditional_edges("agent", tools_condition)
 ```
 
-When `state` is a dict, `messages_key` controls which key holds the list (default `"messages"`). When `state` is a list, it is used directly. When `state` is a Pydantic model, the `messages` attribute is accessed.
+When `state` is a dict, `messages_key` controls which key holds the list (default `"messages"`). When `state` is a list, it is used directly. Otherwise the `messages_key` attribute is read (for a Pydantic or dataclass state). With no messages at all it raises `ValueError`.
 
 > **Important:** `tools_condition` always returns the literal string `"tools"` or `"__end__"`. Your `ToolNode` must be registered with `name="tools"` (the default). If you name the node differently, add a `path_map` to remap the return value:
 >
@@ -284,16 +284,11 @@ def save_preference(key: str, value: str, store: Annotated[BaseStore, InjectedSt
     return f"Saved {key}={value}"
 ```
 
-Requirements:
-
-- `langchain-core >= 0.3.8`
-- Graph must be compiled with `store=` — e.g., `builder.compile(store=InMemoryStore())`
-
-If the graph has no store compiled in, the injected value is `None` and tools that depend on it will fail at runtime.
+The graph must be compiled with `store=`, e.g. `builder.compile(store=InMemoryStore())`. Without one, `ToolNode` raises `ValueError: Cannot inject store into tools with InjectedStore annotations - please compile your graph with a store.` when the tool is called. (`ToolRuntime.store`, by contrast, is simply `None`.)
 
 ## `ToolRuntime`
 
-A dataclass injected into tools that declare a `runtime` parameter with type `ToolRuntime`. No `Annotated` wrapper is needed — `ToolNode` detects the parameter name `runtime` and the type annotation.
+A dataclass injected into tools that declare a parameter annotated `ToolRuntime` (conventionally named `runtime`). No `Annotated` wrapper is needed: the annotation alone marks it as injected, and it is left out of the schema the model sees.
 
 ```python
 from dataclasses import dataclass, field
@@ -317,7 +312,7 @@ Fields:
 - `state` — the full current graph state, same as `InjectedState()`.
 - `context` — the run-level context passed to `invoke(context=...)` (from `context_schema`).
 - `config` — the `RunnableConfig` for the current run (thread\_id, callbacks, etc.).
-- `stream_writer` — callable that writes deltas to the `tools` stream channel; see `emit_output_delta`.
+- `stream_writer` — callable that writes to `stream_mode="custom"`, like `get_stream_writer()`. For partial tool output on the `"tools"` mode, use `emit_output_delta` instead.
 - `tool_call_id` — the `id` field of the tool call currently being executed.
 - `store` — the `BaseStore` compiled into the graph, or `None`.
 - `tools` — the list of tools registered with this `ToolNode`.
@@ -913,7 +908,7 @@ After registration, `stream_events(..., version="v3")` returns a `GraphRunStream
 | `tool_name` | `str` | Name of the tool being invoked. |
 | `input` | `dict \| None` | Input arguments as received by the tool (from `on_tool_start`). `None` if not captured. |
 | `output_deltas` | `StreamChannel[Any]` | Channel of incremental delta chunks. Iterate sync or async as they arrive. |
-| `output` | `Any` | Terminal output from `tool-finished` (for a `ToolNode` tool, the tool's return value). `None` until the tool completes successfully. |
+| `output` | `Any` | Terminal output from `tool-finished`. For a `ToolNode` tool this is the `ToolMessage` content as a string (a tool returning `42` gives `'42'`). `None` until the tool completes successfully. |
 | `error` | `str \| None` | Terminal error message from `tool-error`. `None` until the tool fails. |
 | `completed` | `bool` | `True` once either `tool-finished` or `tool-error` has been observed. |
 
@@ -1076,8 +1071,8 @@ Mapping of the old arguments (`prompt`, `pre_model_hook`, `post_model_hook`, `st
 ## Gotchas
 
 - **`InjectedState` / `InjectedStore` parameters are invisible to the model.** They are stripped from the JSON schema before it is sent to the LLM. Do not prompt the model to fill them in.
-- **`InjectedStore` requires `store=` on compile.** If the graph was compiled without `store=`, the injected value is `None` and any tool that calls `store.get(...)` will raise `AttributeError`.
-- **`ToolRuntime` is detected by parameter name `runtime` + type annotation.** Rename the parameter and injection silently stops. Keep the name exactly `runtime`.
+- **`InjectedStore` requires `store=` on compile.** Without it, the tool call fails with `ValueError: Cannot inject store into tools with InjectedStore annotations - please compile your graph with a store.`
+- **`ToolRuntime` is detected by its type annotation.** Any parameter name works (`rt: ToolRuntime` is injected too); `runtime` is the convention. Without the annotation, the parameter becomes a normal argument the model must fill.
 - **`ToolRuntime` is not `Runtime`.** `Runtime` (from `langgraph.runtime`) is injected into graph nodes; `ToolRuntime` is injected into tools by `ToolNode`. Mixing them up causes type errors at runtime.
 - **`emit_output_delta` is a no-op outside `stream_mode="tools"`.** If you invoke the graph without streaming or with a mode that excludes `"tools"`, calls to `emit_output_delta` do nothing and do not raise.
 - **Direct attribute assignment on `ToolCallRequest` is deprecated.** Always use `request.override(...)` to produce a modified copy.
@@ -1090,7 +1085,6 @@ Mapping of the old arguments (`prompt`, `pre_model_hook`, `post_model_hook`, `st
 
 | Version | Change |
 |---|---|
-| 1.0.2 (prebuilt) | `ToolCallRequest.override()` introduced; direct attribute assignment deprecated. |
+| 1.1.0 (prebuilt) | `ToolRuntime.emit_output_delta()`, `ToolCallTransformer` and `ToolCallStream` added (used with the `"tools"` stream mode of `langgraph` 1.2.0). |
+| 1.0.2 (prebuilt) | `ToolRuntime` and `ToolCallRequest.override()` introduced; direct attribute assignment on `ToolCallRequest` deprecated. |
 | 1.0.0 (prebuilt) | `ValidationNode` deprecated (planned removal v2.0.0) — **no drop-in replacement**: `ToolNode(handle_tool_errors=True)` with a pydantic `args_schema` when tool execution is acceptable; use a custom validation node (`tool.args_schema.model_validate(tc["args"])`) for validate-only workflows where tools must not execute. `AgentState` / `AgentStatePydantic` **deprecated** — top-level re-export removed from `langgraph.prebuilt.__init__`, but still importable from `langgraph.prebuilt.chat_agent_executor`; scheduled for removal in v2.0.0. Use `MessagesState` or a custom `TypedDict` for new code. |
-| 1.2.0 / prebuilt 1.1.0 | `ToolRuntime` dataclass introduced in `langgraph-prebuilt`; exposes `state`, `context`, `config`, `stream_writer`, `tool_call_id`, `store`, `tools`, `execution_info`, `server_info`. `emit_output_delta` added. `ToolCallTransformer` stream transformer and `ToolCallStream` handle added; enable per-tool-call structured streaming via `compile(transformers=[ToolCallTransformer])` + `stream_mode="tools"`. |
-| 0.3.8 (langchain-core) | `InjectedStore` requires `langchain-core >= 0.3.8`. |

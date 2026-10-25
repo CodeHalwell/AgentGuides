@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Streaming server"
+  order: 50
 ---
 
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%.

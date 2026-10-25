@@ -4,6 +4,7 @@ description: "Call remote Agent2Agent (A2A) agents with A2AAgent and serve your 
 framework: "microsoft-agent-framework"
 sidebar:
   label: "A2A protocol"
+  order: 20
 ---
 
 [Agent2Agent (A2A)](https://a2a-protocol.org/) is an open protocol that lets agents built on different frameworks call each other over HTTP (JSON-RPC, HTTP+JSON or gRPC bindings). Microsoft Agent Framework supports both directions:

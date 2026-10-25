@@ -79,11 +79,12 @@ Tool guardrails wrap one function tool. An input guardrail sees the call the mod
 
 - `allow()` lets the call proceed.
 - `rejectContent(message)` skips the tool (input) or replaces its result (output), and sends `message` to the model instead; the run continues.
-- `throwException()` stops the run with `ToolInputGuardrailTripwireTriggered` / `ToolOutputGuardrailTripwireTriggered`.
+- `throwException()` stops the run with `ToolInputGuardrailTripwireTriggered` / `ToolOutputGuardrailTripwireTriggered`. Unlike agent-level guardrails, these reach `run()`'s caller wrapped in a `ToolCallError`; the tripwire is its `error` property.
 
 ```typescript
 import {
   Agent,
+  ToolCallError,
   ToolGuardrailFunctionOutputFactory,
   ToolOutputGuardrailTripwireTriggered,
   defineToolInputGuardrail,
@@ -131,8 +132,12 @@ try {
   const result = await run(agent, 'Refund 900 on order A-17.');
   console.log(result.finalOutput);
 } catch (error) {
-  if (error instanceof ToolOutputGuardrailTripwireTriggered) console.error('Blocked tool output');
-  else throw error;
+  // A thrown tool guardrail reaches your code wrapped in a ToolCallError
+  if (error instanceof ToolCallError && error.error instanceof ToolOutputGuardrailTripwireTriggered) {
+    console.error('Blocked tool output');
+  } else {
+    throw error;
+  }
 }
 ```
 
@@ -222,6 +227,8 @@ if (saved) {
   console.log(resumed.finalOutput);
 }
 ```
+
+Tool input guardrails and approvals interact. By default the approval check comes first: a call that needs approval pauses the run before its input guardrails run, and they run only after a person approves. To reject a bad call without bothering anyone, set `toolExecution: { preApprovalInputGuardrails: true }` in the `run()` options or on the `Runner`; the guardrails still run again just before execution after approval.
 
 Treat stored state as sensitive and trusted-only: it contains the conversation and the pending tool arguments, and loading it resumes execution. `approve(item, { alwaysApprove: true })` approves that tool for the rest of the run. With streaming, wait for `stream.completed`, then read `stream.interruptions` and resume with `run(agent, stream.state, { stream: true })`.
 

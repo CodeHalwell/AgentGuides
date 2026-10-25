@@ -5,12 +5,14 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Ref · RemoteGraph"
-  order: 39
+  order: 38
 ---
 
 Verified against **`langgraph==%%version=langgraph%%`** / **`langgraph-sdk==%%version=langgraph-sdk%%`** (module: `langgraph.pregel.remote`).
 
-`RemoteGraph` is a drop-in replacement for a compiled `StateGraph` that calls a graph running in the **LangGraph Agent Server** (a LangSmith Deployment, a standalone server, or `langgraph dev`) (LangSmith, self-hosted server, or any API that speaks the LangGraph Server spec) over HTTP. It exposes the same `invoke`, `stream`, `get_state`, `update_state`, `get_state_history` surface as a local graph, so you can swap a local graph for a remote one without changing the calling code.
+`RemoteGraph` calls a graph running in the **LangGraph Agent Server** (a LangSmith Deployment, a self-hosted server, or `langgraph dev`) over HTTP. It exposes the same `invoke`, `stream`, `get_state`, `update_state`, `get_state_history` surface as a local graph.
+
+It is close to a drop-in replacement, with one difference to plan for: **results come back as JSON**. Messages in `invoke` and `stream` output are plain dicts (`{"type": "ai", "content": ...}`), not `AIMessage` objects, and `__interrupt__` entries in streamed chunks are dicts too. `get_state()` does rebuild `Interrupt` objects. When a `RemoteGraph` runs as a node inside a local graph, the parent's reducers (such as `add_messages`) turn the dicts back into message objects.
 
 `RemoteGraph` is also a valid LangGraph **node**: you can add it to a parent `StateGraph` with `add_node(remote_graph)`, enabling local-remote hybrid architectures.
 
@@ -28,8 +30,10 @@ remote = RemoteGraph(
 
 cfg: RunnableConfig = {"configurable": {"thread_id": "thread-1"}}
 result = remote.invoke({"messages": [("user", "Hello")]}, cfg)
-print(result["messages"][-1].content)
+print(result["messages"][-1]["content"])   # a dict, not an AIMessage
 ```
+
+Checked against a local `langgraph dev` server. The thread is created on first use (`if_not_exists="create"`); without a `thread_id` the call runs statelessly.
 
 > **Requires `langgraph-sdk`** — installed automatically with `langgraph`:
 > ```bash
@@ -42,11 +46,7 @@ print(result["messages"][-1].content)
 from langgraph.pregel.remote import RemoteGraph, RemoteException
 ```
 
-Both are also exported from `langgraph.pregel`:
-
-```python
-from langgraph.pregel.remote import RemoteGraph
-```
+`langgraph.pregel` does not re-export them; import from `langgraph.pregel.remote`.
 
 ## Constructor
 
@@ -78,7 +78,7 @@ RemoteGraph(
 | `name` | Human-readable name shown in diagrams and traces. Defaults to `assistant_id`. |
 | `distributed_tracing` | Forward LangSmith tracing headers so server-side spans appear under the local trace. |
 
-Provide **at least one of** `url`, `client`, or `sync_client`.
+Provide `url`, or the client for the methods you call (`sync_client` for `invoke`/`stream`, `client` for `ainvoke`/`astream`). The constructor accepts neither; the first call then raises `ValueError: Sync client is not initialized: please provide url or sync_client ...`.
 
 ## Methods
 
@@ -92,12 +92,13 @@ All methods mirror the `CompiledStateGraph` surface:
 | `astream(...)` | `AsyncIterator` | Async generator. |
 | `get_state(config, *, subgraphs, headers, params)` | `StateSnapshot` | Requires checkpointer on server. |
 | `aget_state(...)` | `StateSnapshot` | Async variant. |
-| `get_state_history(config, *, filter, before, limit, headers, params)` | `Iterator[StateSnapshot]` | Oldest-first. |
+| `get_state_history(config, *, filter, before, limit, headers, params)` | `Iterator[StateSnapshot]` | Newest first, as locally. |
 | `aget_state_history(...)` | `AsyncIterator[StateSnapshot]` | Async variant. |
 | `update_state(config, values, as_node, *, headers, params)` | `RunnableConfig` | Write state without running the graph. |
 | `aupdate_state(...)` | `RunnableConfig` | Async variant. |
-| `bulk_update_state(config, updates)` | `RunnableConfig` | Apply multiple super-steps at once. |
-| `abulk_update_state(...)` | `RunnableConfig` | Async variant. |
+| `bulk_update_state(config, updates)` | — | Raises `NotImplementedError` in %%version=langgraph%%. Call `update_state` once per step instead. |
+| `abulk_update_state(...)` | — | Raises `NotImplementedError`. |
+| `stream_events(..., version="v3")` / `astream_events(..., version="v3")` | run handle | The experimental v3 API works remotely; `astream_events` with `"v1"`/`"v2"` raises `NotImplementedError`. |
 | `get_graph(config, *, xray, headers, params)` | `DrawableGraph` | Fetch the server-side graph topology for visualization. |
 | `aget_graph(...)` | `DrawableGraph` | Async variant. |
 | `with_config(config, **kwargs)` | `Self` | Return a copy with merged config. |
@@ -134,16 +135,19 @@ for chunk in remote.stream(
     print(chunk)
 ```
 
+With a **list** of modes, a local graph yields `(mode, data)` tuples, but `RemoteGraph` (with the default `version="v1"`) yields the SDK's `StreamPart` named tuples, which have three fields (`event`, `data`, `id`), so `for mode, data in ...` fails with `ValueError: too many values to unpack`. Use `version="v2"` for the same typed dicts a local graph gives you:
+
 ```python
-# Multiple modes, async:
-async for mode, data in remote.astream(
+# Multiple modes, async, typed parts:
+async for part in remote.astream(
     {"messages": [("user", "hi")]},
     {"configurable": {"thread_id": "t-1"}},
     stream_mode=["updates", "messages"],
+    version="v2",
 ):
-    if mode == "messages":
-        msg, meta = data
-        print(msg.content, end="", flush=True)
+    if part["type"] == "messages":
+        msg, meta = part["data"]
+        print(msg["content"], end="", flush=True)   # msg is a dict
 ```
 
 All seven stream modes work: `"values"`, `"updates"`, `"messages"`, `"custom"`, `"checkpoints"`, `"tasks"`, `"debug"`.
@@ -163,12 +167,9 @@ print(snap.interrupts)     # pending Interrupt objects
 for snap in remote.get_state_history(cfg, limit=10):
     print(snap.metadata["step"], snap.values)
 
-# Time-travel: resume from an older checkpoint
+# Time-travel: re-run from an older checkpoint
 old_cfg = snap.config     # config pointer from history
-result = remote.invoke(
-    Command(resume="yes"),
-    old_cfg,
-)
+result = remote.invoke(None, old_cfg)
 ```
 
 ## Interrupt / resume over a remote graph
@@ -183,8 +184,11 @@ cfg = {"configurable": {"thread_id": "t-human"}}
 # First call — triggers an interrupt on the server
 for chunk in remote.stream({"query": "Analyse financials"}, cfg):
     if "__interrupt__" in chunk:
-        question = chunk["__interrupt__"][0].value
+        question = chunk["__interrupt__"][0]["value"]   # dicts over the wire
         print("Server asks:", question)
+
+# get_state() returns Interrupt objects
+print(remote.get_state(cfg).interrupts[0].value)
 
 # Resume with the human's answer
 result = remote.invoke(Command(resume="Approve"), cfg)
@@ -228,7 +232,7 @@ graph = builder.compile()
 result = graph.invoke({"messages": [("user", "Summarise: ...")]})
 ```
 
-When used as a node, `RemoteGraph` forwards the parent's `config` (including `thread_id`) automatically. The subgraph uses `checkpointer=True` semantics — it inherits the parent's checkpointing scope.
+When used as a node, `RemoteGraph` forwards the parent's config, and the parent's `thread_id` becomes the remote thread's ID (created if missing). Without a `thread_id` the remote run is stateless. The remote output goes through the parent's reducers, so `add_messages` turns the message dicts back into `AIMessage` objects.
 
 ## Distributed tracing with LangSmith
 
@@ -242,7 +246,7 @@ remote = RemoteGraph(
 )
 ```
 
-Under the hood, `RemoteGraph` adds `X-Langsmith-Trace` headers to every request when a LangSmith `RunTree` is active.
+Under the hood, `RemoteGraph` merges the current LangSmith run tree's tracing headers into each request when one is active.
 
 ## `with_config` — partial application
 
@@ -287,16 +291,17 @@ remote = RemoteGraph("chat_agent", url="https://my-deployment.langsmith.com")
 
 async def chat(user_input: str, thread_id: str) -> None:
     cfg = {"configurable": {"thread_id": thread_id}}
-    async for mode, data in remote.astream(
+    async for part in remote.astream(
         {"messages": [("user", user_input)]},
         cfg,
         stream_mode=["updates", "messages"],
+        version="v2",
     ):
-        if mode == "messages":
-            msg, meta = data
-            if msg.content:
-                print(msg.content, end="", flush=True)
-        elif mode == "updates" and "__interrupt__" in data:
+        if part["type"] == "messages":
+            msg, meta = part["data"]
+            if msg.get("content"):
+                print(msg["content"], end="", flush=True)
+        elif part["type"] == "updates" and "__interrupt__" in part["data"]:
             print("\n[Waiting for approval]")
 
 
@@ -414,20 +419,20 @@ def invoke_with_fallback(input_: dict, cfg: dict) -> dict:
 
 ## Gotchas
 
-- **`url` is required for auto-created clients.** If you pass neither `url` nor an explicit `client` / `sync_client`, every method call raises `ValueError`.
+- **`url` is required for auto-created clients.** If you pass neither `url` nor an explicit `client` / `sync_client`, the constructor succeeds but every method call raises `ValueError`.
+- **Outputs are JSON.** Read `result["messages"][-1]["content"]`, not `.content`, unless the `RemoteGraph` runs as a node under `add_messages`.
+- **Multi-mode `stream` yields `StreamPart(event, data, id)` tuples in v1.** Pass `version="v2"` and read `part["type"]` / `part["data"]`.
 - **`assistant_id` is positional-only.** You cannot write `RemoteGraph(assistant_id="x", url=...)` — the first arg has no keyword form.
-- **Thread-ID must come from the caller.** Unlike a local graph compiled with `InMemorySaver`, the remote server has its own checkpointer. Always set `config["configurable"]["thread_id"]`.
-- **`checkpointer=True` semantics when used as a subgraph.** When wired into a parent `StateGraph`, the `RemoteGraph` uses the parent's `thread_id` to isolate its checkpoint namespace. The server-side checkpointer must be enabled on the deployment.
+- **Thread-ID must come from the caller.** The server has its own checkpointer and keeps state per thread. Without a `thread_id` each call is stateless.
+- **Subgraph threads.** As a node, the `RemoteGraph` uses the parent's `thread_id` as the remote thread ID, so two parents that share a thread ID also share the remote thread.
 - **`name` defaults to `assistant_id`.** Always pass `name=` when adding as a node; the Mermaid diagram shows `assistant_id` otherwise, which is usually a UUID.
-- **`astream_events` raises `NotImplementedError`.** Use `astream` with the appropriate `stream_mode` instead.
-- **`distributed_tracing=True` requires an active LangSmith session.** Without a `LANGSMITH_API_KEY` and an active `RunTree`, the tracing headers are not added — no error is raised.
+- **`astream_events` only supports `version="v3"`.** With `"v1"`/`"v2"` it raises `NotImplementedError`; use `astream` with the appropriate `stream_mode`.
+- **`distributed_tracing=True` needs an active LangSmith run.** Without one there are no tracing headers to send; no error is raised.
 - **`params=` are passed as HTTP query parameters.** Useful for server-side feature flags or route selection, but their interpretation is deployment-specific.
 - **`subgraphs=True` on `stream` exposes inner namespace paths.** The namespace tuples include the server-side task IDs, which change on each run. Filter by node name prefix, not the full tuple.
 
-## Breaking changes
+## History
 
 | Version | Change |
 |---|---|
-| 0.3.14 (sdk) | `RemoteGraph` uses the LangGraph SDK `SyncLangGraphClient` / `LangGraphClient` internally; `url` auto-creates both. |
-| 1.2.1 | `bulk_update_state` / `abulk_update_state` added for multi-step state injection. `name=` kwarg respects custom labels in diagram. |
-| 1.0 | `RemoteGraph` first stabilised; moved from `langgraph.pregel.remote` to top-level re-export from `langgraph.pregel`. |
+| 1.2.3 | `stream_events` / `astream_events` with `version="v3"` supported on `RemoteGraph`. |

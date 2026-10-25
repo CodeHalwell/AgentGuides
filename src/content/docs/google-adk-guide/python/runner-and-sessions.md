@@ -8,7 +8,7 @@ sidebar:
   order: 50
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini.
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 
@@ -53,7 +53,7 @@ from google.adk.agents.context_cache_config import ContextCacheConfig
 
 app = App(
     name="demo",
-    root_agent=my_agent_or_workflow,
+    root_agent=agent,                      # an LlmAgent or a Workflow
     plugins=[LoggingPlugin()],
     resumability_config=ResumabilityConfig(is_resumable=True),
     events_compaction_config=EventsCompactionConfig(
@@ -62,7 +62,7 @@ app = App(
         token_threshold=50_000,
         event_retention_size=50,
     ),
-    context_cache_config=ContextCacheConfig(...),  # optional, for explicit Gemini cache
+    context_cache_config=ContextCacheConfig(cache_intervals=10),  # optional, for explicit Gemini cache
 )
 ```
 
@@ -85,7 +85,7 @@ from google.adk.sessions import DatabaseSessionService
 
 runner = Runner(
     app=app,                                   # preferred
-    session_service=DatabaseSessionService(db_url="sqlite:///./adk.db"),
+    session_service=DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db"),
     memory_service=memory_service,             # optional
     artifact_service=artifact_service,         # optional
     credential_service=credential_service,     # optional
@@ -100,9 +100,9 @@ Exactly one of `app=`, `agent=`, or `node=` is required (`runners.py`). `plugins
 
 | Method | Purpose |
 |---|---|
-| `async run_async(*, user_id, session_id, new_message=None, invocation_id=None, run_config=None, state_delta=None, yield_user_message=False)` | Primary entry point. Yields `Event`s. |
+| `async run_async(*, user_id, session_id, new_message=None, invocation_id=None, run_config=None, state_delta=None, yield_user_message=False, abort_signal=None)` | Primary entry point. Yields `Event`s. `abort_signal` (an `asyncio.Event`, 2.11.0) stops the run when set |
 | `run(...)` | Sync wrapper — starts a background thread. For local testing only. |
-| `async run_live(*, live_request_queue, user_id, session_id, run_config=None)` | Bidi streaming (audio/video). Experimental. |
+| `async run_live(*, live_request_queue, user_id=None, session_id=None, run_config=None, session=None)` | Bidi streaming (audio/video). Experimental. |
 | `async run_debug(user_messages, *, user_id="debug_user_id", session_id="debug_session_id", run_config=None, quiet=False, verbose=False)` | Quick REPL-style helper. Returns a list of events. |
 | `async rewind_async(*, user_id, session_id, rewind_before_invocation_id, run_config=None)` | Rewinds the session state and artifacts to before the given invocation. |
 | `async close()` | Closes toolsets and plugins. Call it on shutdown (or use `async with runner:`). |
@@ -117,7 +117,7 @@ Passed to each `run_async`/`run_live` call (`agents/run_config.py`). Notable fie
 |---|---|---|
 | `streaming_mode` | `StreamingMode.NONE` | `SSE` for HTTP streaming, `BIDI` for live API |
 | `max_llm_calls` | `500` | Hard cap per run (env: `ADK_MAX_LLM_CALLS`). `<=0` disables |
-| `service_tier` | `None` | `ServiceTier.DEFERRED` queues model calls for off-peak capacity; incompatible with `StreamingMode.SSE` |
+| `service_tier` | `None` | `ServiceTier.FLEX`, `STANDARD`, `PRIORITY` or `DEFERRED`; only reaches `Gemini` models on the Interactions API. `DEFERRED` is incompatible with `StreamingMode.SSE` |
 | `labels` | `None` | `dict[str, str]` forwarded to Gemini billing/attribution (e.g. `{"team": "growth"}`) |
 | `http_options` | `None` | `types.HttpOptions` — per-invocation timeout/header overrides (ms units for `timeout`) |
 | `custom_metadata` | `None` | Merged into every emitted event; useful for APM trace correlation |
@@ -153,11 +153,11 @@ cfg = RunConfig(
 **Key constraints (source-verified in `run_config.py`):**
 - Cannot be combined with `StreamingMode.SSE` — a deferred request returns an interaction ID, not a result, so there is nothing to stream. ADK raises `ValueError` at `RunConfig` construction time.
 - `ManagedAgent` ignores `service_tier` — it calls `interactions.create` from its own execution loop and never reads this field.
-- Only honoured by models that use the **Interactions API** transport (e.g., Gemini via Vertex AI). Models on the `generate_content` path — including `LiteLlm`-backed models and any model that calls `generate_content` directly — silently ignore `service_tier`; the field is passed through but never read by those code paths.
+- Only honoured by `Gemini` models that use the **Interactions API** (`Gemini(model=..., use_interactions_api=True)`). Models on the `generate_content` path, which is the default, and non-Gemini models such as `LiteLlm` ignore `service_tier` silently.
 
 ```python
 from google.adk.agents.run_config import RunConfig, StreamingMode
-from google.adk.models._service_tier import ServiceTier
+from google.adk.models import ServiceTier
 
 # Off-peak — useful for batch jobs and background processing
 # ADK blocks on the queue result; total latency is queue time + compute time.
@@ -366,7 +366,7 @@ All subclass `BaseSessionService` and expose `create_session`, `get_session`, `l
 | Service | Import | Storage | Notes |
 |---|---|---|---|
 | `InMemorySessionService` | `google.adk.sessions` | Python dict | Dev/testing |
-| `DatabaseSessionService(db_url)` | `google.adk.sessions` (lazy) | Any SQLAlchemy URL | Requires `sqlalchemy>=2.0`, async driver. Supports SQLite, Postgres, MySQL, Spanner |
+| `DatabaseSessionService(db_url)` | `google.adk.sessions` (lazy) | SQLAlchemy URL with an async driver | `pip install "google-adk[db]"` plus the driver: `aiosqlite` (bundled), `asyncpg`, `aiomysql`, `asyncmy` |
 | `SqliteSessionService` | `google.adk.sessions.sqlite_session_service` | SQLite file (async) | Zero-dep alternative to `DatabaseSessionService` for SQLite only |
 | `VertexAiSessionService(project, location, agent_engine_id, *, express_mode_api_key=None)` | `google.adk.sessions` | Vertex AI Agent Engine | Production-ready, scales with Agent Engine |
 
@@ -422,19 +422,15 @@ svc = DatabaseSessionService(
 # ── MySQL / MariaDB ───────────────────────────────────────────────────────────
 # pip install aiomysql
 svc = DatabaseSessionService(db_url="mysql+aiomysql://user:pass@localhost:3306/adk")
-
-# ── Cloud Spanner ─────────────────────────────────────────────────────────────
-# pip install sqlalchemy-spanner
-svc = DatabaseSessionService(
-    db_url="spanner+spanner:///projects/my-proj/instances/my-inst/databases/adk"
-)
 ```
 
-`**kwargs` are forwarded directly to `create_async_engine` — use them for pool parameters, SSL settings, etc.
+Cloud Spanner does not work here in %%version=google-adk%%: the `sqlalchemy-spanner` dialect that the `db` extra installs is synchronous, and a `spanner+spanner:///projects/...` URL fails with the synchronous-driver `ValueError`. For managed storage on Google Cloud, use Cloud SQL (PostgreSQL or MySQL) or `VertexAiSessionService`.
+
+`**kwargs` are forwarded directly to `create_async_engine` — use them for pool parameters, SSL settings, etc. The URL must name an async driver: a plain `sqlite:///...` or `postgresql://...` URL raises `ValueError: ... resolves to a synchronous driver`. (The `adk` CLI's `--session_service_uri` is different: there `sqlite:///path.db` selects `SqliteSessionService`.)
 
 ### Schema and tables
 
-ADK creates three tables automatically on first use (via `_prepare_tables`). There are two schema versions; new deployments use **V1**:
+ADK creates its tables on first use (or when you call `await svc.prepare_tables()`, which is worth doing at start-up). There are two schema versions; new databases get **V1**, recorded in an `adk_internal_metadata` table alongside these four:
 
 | Table | Purpose |
 |---|---|
@@ -552,7 +548,15 @@ async def safe_append(svc: DatabaseSessionService, session, event: Event):
 
 ### Schema migration (V0 → V1)
 
-ADK detects the schema version from the existing tables. If the DB was created with an older ADK release (V0 schema), a migration is triggered automatically on first use. No manual migration scripts are needed; `_prepare_tables` handles it.
+ADK detects the schema version from the existing tables. A database created by an older release (V0 schema, one column per event field) is **not** migrated automatically: ADK keeps using the V0 tables and logs a warning that some event fields are not stored. Migrate it with the CLI, which copies into a new database:
+
+```bash
+adk migrate session \
+  --source_db_url "sqlite:///./sessions.db" \
+  --dest_db_url "sqlite:///./sessions_v1.db"
+```
+
+Then point the service at the new database. Back up first; `--allow_unsafe_unpickling` is only for trusted legacy databases that stored pickled values.
 
 ### Production setup with Runner
 
@@ -563,7 +567,7 @@ from google.adk.sessions import DatabaseSessionService
 from google.adk.artifacts import GcsArtifactService
 from google.adk.memory import VertexAiMemoryBankService
 
-app = App(name="prod_app", root_agent=my_agent)
+app = App(name="prod_app", root_agent=agent)
 
 runner = Runner(
     app=app,
@@ -739,13 +743,14 @@ asyncio.run(main())
 
 ### Migration detection
 
-`SqliteSessionService` raises a `RuntimeError` if it detects a DB created with the old `event_data` column schema that needs migration:
+`SqliteSessionService` raises a `RuntimeError` at construction if the file was written by `DatabaseSessionService`'s SQLAlchemy schema. The message gives the conversion command:
 
-```
-RuntimeError: Database schema is in old format. Please migrate.
+```bash
+python -m google.adk.sessions.migration.migrate_from_sqlalchemy_sqlite \
+  --source_db_path sessions.db --dest_db_path sessions.db.new
 ```
 
-Migrate by re-creating the DB file (for dev) or using `DatabaseSessionService` which handles migration automatically.
+Then back up the original and rename the new file into place.
 
 ## Session state
 
@@ -772,7 +777,7 @@ from google.adk.sessions import DatabaseSessionService
 
 app = App(
     name="cached_app",
-    root_agent=my_agent,
+    root_agent=agent,
     context_cache_config=ContextCacheConfig(
         cache_intervals=20,     # reuse the same cache for up to 20 invocations
         ttl_seconds=3600,       # 1-hour TTL on the cache entry
@@ -799,7 +804,7 @@ runner = Runner(
 - Large tool schemas registered on the agent
 - High-frequency, short user messages (chat, Q&A)
 
-> **Experimental**: `ContextCacheConfig` requires `@experimental(FeatureName.AGENT_CONFIG)`. It is only compatible with Gemini models that support context caching (check the Gemini docs for supported model versions).
+> **Experimental**: `ContextCacheConfig` is marked experimental (`@experimental(FeatureName.AGENT_CONFIG)` in the source) and logs a warning when used. It only works with Gemini models that support context caching; check the Gemini docs for supported model versions.
 
 ### `ContextCacheConfig` — the `create_http_options` timeout knob
 
@@ -919,15 +924,15 @@ Tools set these through `tool_context`: `tool_context.state[...] = ...` becomes 
 
 ### Emitting custom events from tools
 
-Tools that want to influence routing or state without being the final response can construct and return structured dicts — the runner converts them. For more control, a `@node` in a `Workflow` can `yield Event(state={"key": "val"})` or `yield Event(route="billing")`:
+Tools change state and routing through `tool_context` (above). A `@node` in a `Workflow` can instead `yield Event(state={"key": "val"})` or `yield Event(route="billing")`, or both at once:
 
 ```python
 from google.adk.events.event import Event
 from google.adk.workflow import node
 
-@node(rerun_on_resume=True)
-async def classify_and_route(user_msg: str, ctx):
-    intent = "billing" if "invoice" in user_msg.lower() else "support"
+@node
+async def classify_and_route(node_input: str, ctx):
+    intent = "billing" if "invoice" in node_input.lower() else "support"
     # Emit a state update alongside the routing decision
     yield Event(
         state={"last_intent": intent},
@@ -1021,7 +1026,7 @@ events = await runner.run_debug(["Hi", "What's my name?"])
 Uses fixed `user_id="debug_user_id"`, `session_id="debug_session_id"`. Reuse the same session id across calls to continue the conversation.
 
 ### 2 — Production with Vertex Agent Engine
-`Runner(app=app, session_service=VertexAiSessionService(...), memory_service=VertexAiMemoryBankService(...))`. Combine with `ArtifactEngine`-backed GCS storage and `CloudTracePlugin` for full GCP integration.
+`Runner(app=app, session_service=VertexAiSessionService(...), memory_service=VertexAiMemoryBankService(...), artifact_service=GcsArtifactService(bucket_name=...))`, with traces exported to Cloud Trace (`adk deploy ... --otel_to_cloud`, or the telemetry setup in the [production guide](/google-adk-guide/python/google_adk_production_guide/)).
 
 ### 3 — Local SQLite persistence
 `DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db")` plus `FileArtifactService(root_dir="./artifacts")`. Works offline; easy to ship in a Docker image.

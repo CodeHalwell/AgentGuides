@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Production guide"
+  order: 85
 ---
 
 This page covers what is specific to running `Microsoft.Agents.AI` agents in production. Container builds, networking and CI/CD pipelines are standard ASP.NET Core practice and are not repeated; see the [Azure Container Apps documentation](https://learn.microsoft.com/azure/container-apps/) for those.

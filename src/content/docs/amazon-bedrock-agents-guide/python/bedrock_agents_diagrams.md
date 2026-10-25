@@ -44,7 +44,7 @@ One `runtimeSessionId` maps to one microVM. Reusing the ID returns to the same m
 ```text
                     ┌──────────────── AgentCore Runtime ─────────────────┐
  InvokeHarness ───► │ managed harness                                    │
-  (messages,        │   harness.json: model, system prompt, tools,       │
+  (messages,        │   harness.yaml: model, system prompt, tools,       │
    per-call         │   skills, memory, limits, lifecycle hooks          │
    overrides)       │   AWS runs the agent loop                          │
                     │                                                    │
@@ -53,10 +53,10 @@ One `runtimeSessionId` maps to one microVM. Reusing the ID returns to the same m
   (payload)         │   CrewAI, OpenAI Agents SDK... you own the loop    │
                     └────────────────────────────────────────────────────┘
 
-   agentcore create --defaults        ──► harness project
-   agentcore create --framework ...   ──► code project
+   agentcore add harness              ──► managed harness (harness.yaml)
+   agentcore add runtime / --template ──► code-defined runtime
    agentcore export harness           ──► harness converted to Strands code
-   agentcore create --type import     ──► Agents Classic agent converted to code
+   agentcore add runtime --agent-id   ──► Agents Classic agent converted to code
 ```
 
 See [Managed harness](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#managed-harness).
@@ -67,7 +67,7 @@ Short-term memory is the raw event log. Long-term records are extracted from it 
 
 ```text
  agent turn
-   │ create_event(memory_id, actor_id, session_id, messages)
+   │ add_turns(...)  (CreateEvent: memory_id, actor_id, session_id, messages)
    ▼
 ┌──────────────────────────┐   async extraction   ┌─────────────────────────────┐
 │ short-term: events       │ ───────────────────► │ long-term: memory records   │
@@ -76,7 +76,7 @@ Short-term memory is the raw event log. Long-term records are extracted from it 
 └──────────────────────────┘   USER_PREFERENCE    │ /summaries/{actorId}/{sid}  │
    ▲  list_events             SUMMARIZATION       └──────────────┬──────────────┘
    │  (recent turns)          EPISODIC                           │
-   │                                       retrieve_memories(namespace, query)
+   │                              search_long_term_memories(namespace_path, query)
    └──────────── agent context for next turn ◄───────────────────┘
 ```
 
@@ -118,7 +118,7 @@ See [Integration patterns](/amazon-bedrock-agents-guide/python/bedrock_agentcore
           ▼             ▼           ▼            ▼              ▼
      IAM execution   Runtime +   Memory     Gateway +     Online eval
      role            endpoints              targets       configs
-     (CodeZip in S3, or ECR image built by CodeBuild)
+     (CodeZip bundle, or a container image in ECR)
 ```
 
 See the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/).

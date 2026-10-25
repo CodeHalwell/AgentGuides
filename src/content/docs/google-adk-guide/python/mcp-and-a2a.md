@@ -8,9 +8,9 @@ sidebar:
   order: 75
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted; `to_mcp_server` needs 2.5.0+. MCP and A2A are optional extras: `pip install "google-adk[mcp,a2a]"`.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/mcp_tool/`, `google/adk/agents/remote_a2a_agent.py`, `google/adk/a2a/`), checked %%versions-checked%%. Constructors were checked against the installed packages; the stdio MCP and A2A examples need a running server and were not run end to end. `to_mcp_server` needs 2.5.0+. MCP and A2A are optional extras: `pip install "google-adk[mcp,a2a]"`.
 
-ADK supports both **Model Context Protocol** (Anthropic's tool-server protocol) and **Agent-to-Agent** (Google's cross-framework agent-handoff protocol). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
+ADK supports both the **Model Context Protocol** (an open protocol for tool servers, introduced by Anthropic) and **Agent2Agent** (an open protocol for calling agents across frameworks, started by Google). MCP flows are client-side tool toolsets; A2A flows let you expose or consume whole agents.
 
 ## Minimal example — MCP client
 
@@ -57,8 +57,16 @@ From `google/adk/tools/mcp_tool/mcp_session_manager.py`:
 ## `McpToolset` constructor
 
 ```python
+import sys
+
+from mcp import StdioServerParameters
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool import StdioConnectionParams
+
 toolset = McpToolset(
-    connection_params=...,
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(command="python3", args=["-m", "my_mcp_server"]),
+    ),
     tool_filter=["read_file"],        # or a ToolPredicate callable
     tool_name_prefix="fs",             # ADK adds "_" automatically: "fs_read_file"
     errlog=sys.stderr,                # where the server's stderr goes
@@ -70,6 +78,8 @@ toolset = McpToolset(
     use_mcp_resources=False,          # adds `load_mcp_resource` tool when True
     sampling_callback=None,
     sampling_capabilities=None,
+    elicitation_callback=None,        # answer server-initiated elicitation requests
+    tool_list_cache_ttl_seconds=None, # cache list_tools results for this long
     credential_key=None,              # key for storing/loading this credential in credential service
 )
 ```
@@ -87,15 +97,24 @@ All args are keyword-only (see `mcp_toolset.py`). Key behaviours:
 MCP servers can call back into **your** model via the sampling mechanism. Pass `sampling_callback` and `sampling_capabilities` to let the server request completions:
 
 ```python
+from mcp import StdioServerParameters
 from mcp.types import SamplingCapability
-async def handle_sampling(request, ctx):
-    # delegate to your model/agent
-    ...
+from google.adk.tools import McpToolset
+from google.adk.tools.mcp_tool import StdioConnectionParams
+
+
+async def handle_sampling(context, params):
+    # Called with the MCP client request context and CreateMessageRequestParams.
+    # Call your model here and return an mcp.types.CreateMessageResult.
+    raise NotImplementedError
+
 
 toolset = McpToolset(
-    connection_params=...,
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(command="python3", args=["-m", "my_mcp_server"]),
+    ),
     sampling_callback=handle_sampling,
-    sampling_capabilities=SamplingCapability(...),
+    sampling_capabilities=SamplingCapability(),
 )
 ```
 
@@ -150,7 +169,7 @@ from google.adk.agents.remote_a2a_agent import RemoteA2aAgent
 
 remote_solver = RemoteA2aAgent(
     name="remote_solver",
-    agent_card="https://agents.example.com/.well-known/agent.json",  # URL, path, or AgentCard
+    agent_card="https://agents.example.com/.well-known/agent-card.json",  # URL, path, or AgentCard
     description="Math solver hosted elsewhere",
     timeout=30.0,
 )
@@ -180,7 +199,7 @@ from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes,
 
 secure_peer = RemoteA2aAgent(
     name="secure_peer",
-    agent_card="https://secure-agent.example.com/.well-known/agent.json",
+    agent_card="https://secure-agent.example.com/.well-known/agent-card.json",
     auth_scheme=HTTPBearer(scheme="bearer"),
     auth_credential=AuthCredential(
         auth_type=AuthCredentialTypes.HTTP,
@@ -201,7 +220,7 @@ class ResearchOutput(BaseModel):
 
 researcher = RemoteA2aAgent(
     name="researcher",
-    agent_card="https://research.example.com/.well-known/agent.json",
+    agent_card="https://research.example.com/.well-known/agent-card.json",
     mode="task",
     output_schema=ResearchOutput,
 )
@@ -229,7 +248,7 @@ cfg = A2aRemoteAgentConfig(
         RequestInterceptor(before_request=add_auth_header),
     ],
 )
-agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-known/agent.json", config=cfg)
+agent = RemoteA2aAgent(name="r", agent_card="https://remote.example.com/.well-known/agent-card.json", config=cfg)
 ```
 
 `ParametersConfig` carries `request_metadata` and `client_call_context` per outgoing message. Modify it inside a `before_request` hook; the return value `(message, params)` is forwarded to the A2A send call. `after_request` receives each incoming `A2AEvent` and can filter or transform it. See `a2a/agent/config.py`.
@@ -267,8 +286,8 @@ Each team ships `to_a2a(agent, port=XXXX)`. Your orchestrator uses `RemoteA2aAge
 ### 4 — Hybrid local + remote
 `sub_agents=[local_agent, RemoteA2aAgent(name="specialist", agent_card=...)]`. The LLM emits `transfer_to_agent("specialist")` and ADK routes through A2A transparently.
 
-### 5 — HITL via MCP sampling
-MCP server requests sampling via `sampling_callback`. ADK forwards the request to your model (possibly a different agent), returns the completion to the server. Useful for tool workflows that need human-style reasoning.
+### 5 — Server-requested completions via sampling
+An MCP server asks the client for a model completion; your `sampling_callback` answers it, with whichever model you choose, and returns the result to the server. Useful when a tool server needs language understanding but should not hold its own model credentials.
 
 ## Complete examples
 
@@ -427,8 +446,8 @@ async def main():
     weather_remote = RemoteA2aAgent(
         name="weather_specialist",
         description="Remote weather agent that can answer weather questions.",
-        # The agent card URL — served by the A2A server at /.well-known/agent.json
-        agent_card="http://localhost:8080/.well-known/agent.json",
+        # The agent card URL — served by the A2A server at /.well-known/agent-card.json
+        agent_card="http://localhost:8080/.well-known/agent-card.json",
     )
 
     # Orchestrator routes questions to the remote agent via A2A protocol

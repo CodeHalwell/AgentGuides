@@ -32,7 +32,7 @@ const Settings = z.object({
 export const settings = Settings.parse(process.env);
 ```
 
-Credentials come from `MISTRAL_API_KEY`, or from a service-account token file named by `MISTRAL_SA_TOKEN_PATH`, which takes precedence and is re-read on every request so rotated tokens are picked up. An unreadable or empty token file fails the request with `UnexpectedClientError`.
+Credentials come from `MISTRAL_API_KEY`, or from a service-account token file named by `MISTRAL_SA_TOKEN_PATH`, which takes precedence over the environment key and is re-read on every request so rotated tokens are picked up. An unreadable or empty token file fails the request with `UnexpectedClientError` (wrapping a `ServiceAccountTokenError`). Any `apiKey` option, even an empty string, outranks both: `new Mistral({ apiKey: process.env["MISTRAL_API_KEY"] ?? "" })` never reads the token file and sends no credential when the variable is unset. Call `new Mistral()` with no options, as in the settings above, to let the SDK resolve credentials itself. The Python guide's [security section](/mistral-agents-api-guide/mistral_agents_api_production_guide/#9-security) explains where service-account tokens come from.
 
 **Create agents in a deploy step, not per request.** A script updates the agent, moves a version alias, and the service always starts conversations with `agentVersion: "prod"`. A rollback is moving the alias back.
 

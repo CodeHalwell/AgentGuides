@@ -4,6 +4,7 @@ description: "Running Microsoft Agent Framework services in production: choosing
 framework: "microsoft-agent-framework"
 sidebar:
   label: "Production guide"
+  order: 85
 ---
 
 Reviewed %%versions-checked%% against `agent-framework` %%version=agent-framework%% (Python) and `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (.NET). Language-specific detail is in the [Python](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/) and [.NET](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/) production guides.

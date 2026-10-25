@@ -8,7 +8,7 @@ sidebar:
   order: 80
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; the authenticated-tool and OpenTelemetry examples need external services.
 
 ## Planners
 
@@ -57,7 +57,7 @@ async for event in runner.run_async(...):
 - `process_planning_response` returns `None` — response parts are not post-processed.
 - `apply_thinking_config` is the actual workhorse — it sets `llm_request.config.thinking_config`.
 
-**Precedence:** If you also set `thinking_config` inside `generate_content_config` on the agent, the planner's config wins (a `UserWarning` is emitted).
+**Precedence:** If you also set `thinking_config` inside `generate_content_config` on the agent, the planner's config wins (ADK logs this at debug level).
 
 ### `PlanReActPlanner` — textual Plan-then-Act
 
@@ -67,11 +67,17 @@ async for event in runner.run_async(...):
 from google.adk.planners import PlanReActPlanner
 from google.adk.agents import LlmAgent
 
+
+def lookup_order(order_id: str) -> dict:
+    """Look up an order by ID."""
+    return {"order_id": order_id, "status": "shipped"}
+
+
 agent = LlmAgent(
     name="planner_bot",
     model="%%model=gemini%%",          # works with any model — no native thinking needed
-    instruction="You are a research assistant.",
-    tools=[my_search_tool, my_db_tool],
+    instruction="You are a support assistant.",
+    tools=[lookup_order],
     planner=PlanReActPlanner(),
 )
 ```
@@ -80,12 +86,13 @@ The model will produce text like:
 
 ```
 /*PLANNING*/
-I need to search for X, then look up Y in the database.
-/*PLANNING*/
-
+1. Search for X.
+2. Look up Y in the database.
 /*ACTION*/
 [function call: search(query="X")]
 ```
+
+The tags mark the start of each section; there are no closing tags.
 
 ADK classifies `/*PLANNING*/` / `/*REASONING*/` / `/*ACTION*/` blocks as thoughts and `/*FINAL_ANSWER*/` as the user-visible response.
 
@@ -135,7 +142,6 @@ agent = LlmAgent(
     name="budget_agent",
     model="%%model=gemini%%",
     planner=BudgetPlanner(max_steps=3),
-    tools=[...],
 )
 ```
 
@@ -192,7 +198,7 @@ class DatabaseLookupTool(BaseTool):
 
 
 # Usage
-db_tool = DatabaseLookupTool(db_pool=my_pool)
+db_tool = DatabaseLookupTool(db_pool=my_pool)   # e.g. my_pool = await asyncpg.create_pool(dsn)
 agent = LlmAgent(
     name="catalog",
     model="%%model=gemini%%",
@@ -203,38 +209,63 @@ agent = LlmAgent(
 
 ### Overriding `process_llm_request`
 
-Use this when you need to inject tool-related data into the **request** before it reaches the model — not the same as a before_model callback:
+`process_llm_request` runs every time the agent builds a request, before callbacks and the model see it. The default adds the tool's declaration; override it when the tool should also shape the request, for example by adding an instruction that depends on state, or by attaching a model-side tool. This is how ADK's built-in Gemini tools add themselves.
 
 ```python
-from google.adk.models.llm_request import LlmRequest
+from typing import Any
 
-class ComputerUseTool(BaseTool):
-    """Injects a computer-use tool declaration into the LlmRequest."""
+from google.genai import types
+
+from google.adk.agents import LlmAgent
+from google.adk.models.llm_request import LlmRequest
+from google.adk.tools.base_tool import BaseTool
+from google.adk.tools.tool_context import ToolContext
+
+
+class UnitsAwareConverter(BaseTool):
+    """A tool that also tells the model which units this user prefers."""
 
     def __init__(self):
-        super().__init__(
-            name="computer_use",
-            description="Control the browser/desktop.",
+        super().__init__(name="convert_units", description="Convert a value between units.")
+
+    def _get_declaration(self) -> types.FunctionDeclaration:
+        return types.FunctionDeclaration(
+            name=self.name,
+            description=self.description,
+            parameters=types.Schema(
+                type=types.Type.OBJECT,
+                properties={
+                    "value": types.Schema(type=types.Type.NUMBER),
+                    "from_unit": types.Schema(type=types.Type.STRING),
+                    "to_unit": types.Schema(type=types.Type.STRING),
+                },
+                required=["value", "from_unit", "to_unit"],
+            ),
         )
 
-    def _get_declaration(self) -> Optional[types.FunctionDeclaration]:
-        return None   # built-in; not declared in config.tools
+    async def process_llm_request(self, *, tool_context: ToolContext, llm_request: LlmRequest) -> None:
+        # The default implementation adds this tool's declaration to the request.
+        await super().process_llm_request(tool_context=tool_context, llm_request=llm_request)
+        units = tool_context.state.get("user:units", "metric")
+        llm_request.append_instructions([f"The user prefers {units} units; convert answers with convert_units."])
 
-    async def process_llm_request(
-        self, *, tool_context: ToolContext, llm_request: LlmRequest
-    ) -> None:
-        # Inject a built-in computer-use block
-        llm_request.config = llm_request.config or types.GenerateContentConfig()
-        llm_request.config.tools = llm_request.config.tools or []
-        llm_request.config.tools.append(
-            types.Tool(computer_use=types.ToolComputerUse(...))
-        )
+    async def run_async(self, *, args: dict[str, Any], tool_context: ToolContext) -> dict:
+        factors = {("mi", "km"): 1.609344, ("km", "mi"): 1 / 1.609344}
+        factor = factors.get((args["from_unit"], args["to_unit"]))
+        if factor is None:
+            return {"error": f"cannot convert {args['from_unit']} to {args['to_unit']}"}
+        return {"value": round(args["value"] * factor, 3), "unit": args["to_unit"]}
 
-    async def run_async(
-        self, *, args: dict[str, Any], tool_context: ToolContext
-    ) -> dict:
-        ...
+
+agent = LlmAgent(
+    name="travel_helper",
+    model="%%model=gemini%%",
+    instruction="Help with travel questions.",
+    tools=[UnitsAwareConverter()],
+)
 ```
+
+ADK's own computer-use support (`google.adk.tools.computer_use.ComputerUseToolset`, with your `BaseComputer` implementation) is built the same way.
 
 ## Custom `BaseToolset`
 
@@ -425,8 +456,7 @@ Calling multiple specialists concurrently from a coordinator:
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
-from google.adk.tools import AgentTool
-from google.adk.runners import InMemoryRunner
+from google.adk.tools import AgentTool, google_search
 from pydantic import BaseModel
 
 class ResearchQuery(BaseModel):
@@ -566,7 +596,7 @@ Deployment (`adk deploy agent_engine | cloud_run | gke`, the Agent Platform SDK'
 
 ## Observability — OpenTelemetry
 
-ADK emits OpenTelemetry traces, metrics, and logs via `google.adk.telemetry`. Every `run_async` call creates a root span named `adk.invocation`; tool calls and agent-to-agent transfers create child spans.
+ADK emits OpenTelemetry traces, metrics, and logs via `google.adk.telemetry`. Every `run_async` call creates a root span named `invocation`, with child spans for each agent run, model call and tool call (see the table at the end of this section).
 
 ### Using the ADK-native `maybe_set_otel_providers`
 
@@ -661,14 +691,16 @@ async def lifespan(app: FastAPI):
 web_app = FastAPI(lifespan=lifespan)
 ```
 
-**What ADK instruments** (span names emitted by `google.adk.telemetry`):
+**What ADK instruments** (span names emitted by `google.adk.telemetry`; the tracer is named `gcp.vertex.agent`):
 
 | Span | Key attributes |
 |---|---|
-| `adk.invocation` | `invocation_id`, `session_id`, `user_id`, `app_name` |
-| `adk.agent.<name>` | `agent_name`, `agent_class` |
-| `adk.tool.<name>` | `tool_name`, `tool_type` |
-| `adk.model.<model>` | `model`, `prompt_tokens`, `output_tokens` |
+| `invocation` | The root span of one `run_async` call |
+| `invoke_agent <agent name>` | `gen_ai.agent.name`, `gen_ai.agent.description`, `gen_ai.conversation.id` (the session ID) |
+| `call_llm` and `generate_content <model>` | `gen_ai.request.model`, `gen_ai.system`, request settings such as `gen_ai.request.max_tokens`, token usage, `gen_ai.response.finish_reasons` |
+| `execute_tool <tool name>` | `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`, and `gcp.vertex.agent.tool_call_args` / `tool_response` when content capture is on |
+
+Attribute names follow the OpenTelemetry GenAI semantic conventions; which ones appear depends on `OTEL_SEMCONV_STABILITY_OPT_IN` and the capture settings above.
 
 ## Alternative model providers
 
@@ -815,9 +847,9 @@ root = LlmAgent(
 
 ## Gotchas
 
-- `BuiltInPlanner.thinking_config` takes precedence over `generate_content_config.thinking_config` on the same agent — a `UserWarning` is emitted if both are set.
+- `BuiltInPlanner.thinking_config` takes precedence over `generate_content_config.thinking_config` on the same agent; ADK only logs this at debug level, so do not rely on a warning.
 - `PlanReActPlanner` requires the model to follow tag conventions (`/*PLANNING*/` etc.). Smaller or non-instruction-tuned models may not comply reliably.
 - `BaseTool._get_declaration` returning `None` means no function schema is added to `LlmRequest.config.tools`. This is intentional for truly built-in (Gemini-side) tools — call `process_llm_request` instead to inject them.
 - `BaseToolset.get_tools_with_prefix` is `@final` — override `get_tools` only.
 - Authenticated tools that call `tool_context.request_credential` **pause** the current invocation. ADK stores the credential request in the event stream; the next user turn should carry the credential response.
-- `AuthConfig.credential_key` defaults to a SHA-256 digest of the auth scheme + raw credential. Two toolsets with identical configs share the same stored credential automatically.
+- `AuthConfig.credential_key` defaults to a key derived from a SHA-256 digest of the auth scheme and raw credential. Two toolsets with identical configs share the same stored credential automatically.

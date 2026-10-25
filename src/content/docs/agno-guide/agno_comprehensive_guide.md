@@ -91,7 +91,7 @@ d = Agent(model=Gemini(id="%%model=gemini%%"))
 e = Agent(model="anthropic:%%model=anthropic%%")   # same as Claude(id=...)
 ```
 
-Useful string prefixes (from `agno.models.utils`): `openai` (the Responses API, `OpenAIResponses`), `openai-chat` (`OpenAIChat`), `anthropic` (`Claude`), `google` (`Gemini`), `aws-bedrock`, `azure-openai`, `groq`, `mistral`, `ollama`, `openrouter`, `litellm`, `vllm`, `xai` and about forty more. Each provider lives in `agno.models.<provider>`; OpenAI-compatible endpoints use `OpenAILike(id=..., base_url=..., api_key=...)`.
+Useful string prefixes (from `agno.models.utils`): `openai` (the Responses API, `OpenAIResponses`), `openai-chat` (`OpenAIChat`), `anthropic` (`Claude`), `google` (`Gemini`), `aws-bedrock`, `azure-openai`, `groq`, `mistral`, `ollama`, `openrouter`, `litellm`, `vllm`, `xai` and more (68 prefixes in `agno.models.utils.MODEL_PROVIDER_CLASSES` in this release). Each provider lives in `agno.models.<provider>`; OpenAI-compatible endpoints use `OpenAILike(id=..., base_url=..., api_key=...)`.
 
 Settings that every model class shares (`agno.models.base.Model`): `retries`, `delay_between_retries`, `exponential_backoff`, `cache_response` (cache responses on disk, for development), `cache_ttl`. Provider classes add their own: `temperature`, `max_tokens` / `max_output_tokens`, `reasoning_effort` on the OpenAI classes, `thinking` on `Claude`, `api_key`, `base_url`, `timeout`.
 
@@ -486,7 +486,45 @@ print(agent.get_session_state(session_id="list-1"))  # {'items': ['milk']}
 
 ### Session summaries and compaction
 
-`enable_session_summaries=True` has a model write a summary of the session after runs; `add_session_summary_to_context=True` sends it to later runs. `compaction=True` (or a `agno.compaction.Compaction` object) archives older messages and replaces them with a summary once a session grows past a threshold. Both need a `db`. They were not exercised for this page.
+Two features keep long sessions affordable. Both need a `db`.
+
+**Session summaries.** `enable_session_summaries=True` has a model write a summary of the session after every run (one extra model call per run); `add_session_summary_to_context=True` puts it in the system message of later runs. The summary is stored on the session:
+
+```python
+from agno.agent import Agent
+from agno.db.sqlite import SqliteDb
+from agno.models.openai import OpenAIResponses
+
+agent = Agent(
+    model=OpenAIResponses(id="%%model=openai%%"),
+    db=SqliteDb(db_file="agno.db"),
+    enable_session_summaries=True,
+    add_session_summary_to_context=True,
+)
+agent.run("I am planning a trip to Leeds in May.", session_id="trip")
+agent.run("What should I pack?", session_id="trip")      # this run's system message includes the summary
+
+summary = agent.get_session(session_id="trip").summary
+print(summary.summary, summary.topics)
+```
+
+**Compaction.** `compaction=True`, or an `agno.compaction.Compaction` object, folds older history into a summary once the context reaches `compact_at_tokens` (150,000 by default). Later runs receive the summary as a first message ("Summary of earlier conversation (compacted)") followed by the turns since the last fold, and the agent gets a tool to search the archived messages. With compaction on, `num_history_runs` and `num_history_messages` no longer apply: the token threshold is the limit. Use it with `add_history_to_context=True`:
+
+```python
+from agno.agent import Agent
+from agno.compaction import Compaction
+from agno.db.sqlite import SqliteDb
+from agno.models.openai import OpenAIResponses
+
+agent = Agent(
+    model=OpenAIResponses(id="%%model=openai%%"),
+    db=SqliteDb(db_file="agno.db"),
+    add_history_to_context=True,
+    compaction=Compaction(compact_at_tokens=100_000),
+)
+```
+
+Both examples were run with a scripted model; compaction was checked with a deliberately tiny threshold (200 tokens) so that folds happened within six short runs. Agno logs a warning when the threshold leaves too little room after the system prompt and tools, so choose one well above those.
 
 ## Memory
 
@@ -569,10 +607,49 @@ Two retrieval styles:
 
 Readers for PDFs, Word, CSV, Markdown, web pages and more are chosen by file extension and live in `agno.knowledge.reader` (several need extras such as `agno[pdf]`). Embedders live in `agno.knowledge.embedder` (OpenAI, Gemini, Cohere, Mistral, Ollama, Voyage, sentence-transformers, …); vector stores in `agno.vectordb` (PgVector, LanceDB, Qdrant, Chroma, Pinecone, Weaviate, Milvus, MongoDB, Redis, …). A reranker can be set on `Knowledge(reranker=...)`.
 
-Without embeddings:
+### Without embeddings
 
-- `agno.knowledge.FileSystemKnowledge(base_dir=...)` gives the agent `grep_file`, `list_files` and `get_file` tools over a directory.
-- Any object implementing `agno.knowledge.protocol.KnowledgeProtocol` (`build_context`, `get_tools`, `aget_tools`, optionally `retrieve`) can be passed as `knowledge=`.
+`agno.knowledge.FileSystemKnowledge(base_dir=...)` searches a local directory with grep instead of a vector store, so it needs no embedder, vector database or ingestion step. `include_patterns` and `exclude_patterns` (defaults skip `.git`, `__pycache__`, `node_modules`, `.venv`, `venv`) choose the files, and `max_results` caps matches. It works as agentic RAG as soon as you pass it as `knowledge=`:
+
+```python
+from pathlib import Path
+
+from agno.agent import Agent
+from agno.knowledge import FileSystemKnowledge
+from agno.models.openai import OpenAIResponses
+
+root = Path("handbook")
+(root / "policies").mkdir(parents=True, exist_ok=True)
+(root / "policies" / "leave.md").write_text("# Leave\nStaff get 25 days of annual leave plus bank holidays.\n")
+(root / "policies" / "expenses.md").write_text("# Expenses\nFile expenses within 30 days with a receipt.\n")
+
+files = FileSystemKnowledge(base_dir="handbook", include_patterns=["*.md"])
+
+agent = Agent(
+    model=OpenAIResponses(id="%%model=openai%%"),
+    knowledge=files,
+    instructions="Answer from the handbook files only, and name the file you used.",
+)
+run = agent.run("How much annual leave do I get?")
+print([(t.tool_name, t.tool_args) for t in run.tools])   # [('search_knowledge_base', {'query': 'annual leave'})]
+```
+
+In this release the agent's `search_knowledge_base(query)` tool calls the class's `retrieve()`, which greps the files and returns each matching file as a document. Two details checked against 3.1.10:
+
+- The class also defines three richer tools, `grep_file(query)`, `list_files(pattern)` and `get_file(path)`, and its `build_context()` text tells the model to use them. `Agent` does not register them for you, so with the code above the model is told about tools it does not have. To give it those tools, pass them yourself and switch the generic search tool off:
+
+  ```python
+  agent = Agent(
+      model=OpenAIResponses(id="%%model=openai%%"),
+      knowledge=files,
+      tools=files.get_tools(),     # grep_file, list_files, get_file
+      search_knowledge=False,
+      instructions="Answer from the handbook files only, and name the file you used.",
+  )
+  ```
+
+  The model can then list the folder, grep it and read a whole file. `FileSystemKnowledge` paths are resolved inside `base_dir`; a path that escapes it (`../secret.txt`) is reported as not found.
+- The same applies to your own classes. Anything implementing `agno.knowledge.protocol.KnowledgeProtocol` (`build_context`, `get_tools`, `aget_tools`, and optionally `retrieve` / `aretrieve`) can be passed as `knowledge=`. The agent adds `build_context()` to the system message and uses `retrieve()` for `search_knowledge_base` and for `add_knowledge_to_context=True`; it does not call `get_tools()`, so register those functions with `tools=` as above.
 
 ## Reasoning
 

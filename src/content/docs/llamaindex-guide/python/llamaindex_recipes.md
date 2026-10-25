@@ -23,6 +23,8 @@ language: "python"
 8. [Knowledge Graph Builder](#knowledge-graph-builder)
 9. [Multi-Step Reasoning Agent](#multi-step-reasoning-agent)
 10. [Customer Support Triage Agent](#customer-support-triage-agent)
+11. [Cited answers over filtered documents](#cited-answers-over-filtered-documents)
+12. [Text-to-SQL with NLSQLTableQueryEngine](#text-to-sql-with-nlsqltablequeryengine)
 
 ---
 
@@ -109,7 +111,20 @@ if __name__ == "__main__":
     run_chatbot()
 ```
 
-### Docker Compose Setup
+### Container set-up
+
+The chatbot reads from a mounted folder and takes input from the terminal, so the container needs a TTY. A minimal image:
+
+```dockerfile
+# Dockerfile
+FROM python:3.13-slim
+WORKDIR /app
+RUN pip install --no-cache-dir "llama-index==%%version=llama-index%%"
+COPY simple_rag_chatbot.py .
+CMD ["python", "simple_rag_chatbot.py"]
+```
+
+and a Compose file that mounts the documents and keeps the terminal open:
 
 ```yaml
 # docker-compose.yml for RAG chatbot
@@ -459,6 +474,8 @@ news_analysis_agent.py
 Analyze news in real-time with agent
 """
 
+# pip install feedparser nltk
+# python -c "import nltk; nltk.download('vader_lexicon')"    # one-off download for the sentiment scorer
 from llama_index.core.agent.workflow import FunctionAgent
 import asyncio
 from llama_index.core.tools import FunctionTool
@@ -764,7 +781,7 @@ if __name__ == "__main__":
     print(f"Result: {result}")
 ```
 
-For a ready-made alternative, `NLSQLTableQueryEngine` (with `SQLDatabase` from `llama_index.core`) does schema-aware text-to-SQL and can be wrapped in a `QueryEngineTool`.
+For a ready-made alternative, see [Text-to-SQL with NLSQLTableQueryEngine](#text-to-sql-with-nlsqltablequeryengine) below.
 
 ---
 
@@ -1092,6 +1109,153 @@ if __name__ == "__main__":
     print(f"Department: {result.department.value}")
     print(f"Suggested Response: {result.suggested_response}")
 ```
+
+---
+
+## Cited answers over filtered documents
+
+### Per-department answers with source references
+
+A common requirement: answer only from the documents a caller may see, and show which documents were used. This recipe tags documents with metadata at load time, restricts retrieval with `MetadataFilters`, and returns the answer with numbered sources from `CitationQueryEngine`.
+
+```python
+"""
+cited_answers.py
+Answer from one department's documents and return numbered sources
+"""
+
+from dataclasses import dataclass
+
+from llama_index.core import Document, VectorStoreIndex
+from llama_index.core.query_engine import CitationQueryEngine
+from llama_index.core.vector_stores import FilterOperator, MetadataFilter, MetadataFilters
+from llama_index.llms.openai import OpenAI
+
+
+@dataclass
+class CitedAnswer:
+    text: str
+    sources: list[dict]
+
+
+class DepartmentAssistant:
+    def __init__(self, documents: list[Document]):
+        self.index = VectorStoreIndex.from_documents(documents)
+        self.llm = OpenAI(model="%%model=openai-small%%")
+
+    def ask(self, question: str, department: str, top_k: int = 4) -> CitedAnswer:
+        filters = MetadataFilters(
+            filters=[MetadataFilter(key="department", operator=FilterOperator.EQ, value=department)]
+        )
+        engine = CitationQueryEngine.from_args(
+            self.index,
+            llm=self.llm,
+            similarity_top_k=top_k,
+            citation_chunk_size=256,
+            filters=filters,              # passed to the retriever
+        )
+        response = engine.query(question)
+        sources = [
+            {
+                "number": i,
+                "file": node.node.metadata.get("file_name"),
+                "score": round(node.score, 3) if node.score is not None else None,
+                "excerpt": node.node.get_content()[:120],
+            }
+            for i, node in enumerate(response.source_nodes, start=1)
+        ]
+        return CitedAnswer(text=str(response), sources=sources)
+
+
+if __name__ == "__main__":
+    documents = [
+        Document(text="Staff receive 25 days of paid holiday a year.",
+                 metadata={"department": "hr", "file_name": "leave.md"}),
+        Document(text="Production deployments need two approvals.",
+                 metadata={"department": "engineering", "file_name": "deploy.md"}),
+    ]
+    assistant = DepartmentAssistant(documents)
+    answer = assistant.ask("How many days of holiday do I get?", department="hr")
+    print(answer.text)
+    for source in answer.sources:
+        print(source)
+```
+
+Notes:
+
+- The filter is applied in the retriever, so documents from other departments never reach the prompt. Do not rely on the prompt to hide them.
+- The numbers in the answer (`[1]`, `[2]`) refer to the order of `response.source_nodes`. The model chooses where to place them, so validate that each cited number exists before displaying it.
+- Which filter operators work depends on the vector store. The default in-memory store supports all of them; see [retrievers](/llamaindex-guide/python/llamaindex_comprehensive_guide/#36-retrievers).
+- Each citation node's text starts with `Source N:`, so strip that prefix if you show excerpts.
+- The same engine can be used as a `QueryEngineTool` so an agent can cite sources too.
+
+---
+
+## Text-to-SQL with NLSQLTableQueryEngine
+
+### Natural-language questions over a read-only database
+
+`NLSQLTableQueryEngine` shows the LLM the table schemas, asks for a SQL query, runs it and has the LLM write the answer from the rows. Compared with the hand-built agent above, the prompting and result handling are done for you. It needs SQLAlchemy, which `llama-index-core` already depends on.
+
+```python
+"""
+text_to_sql.py
+Ask questions about a SQLite database in plain English
+"""
+
+import asyncio
+
+from llama_index.core import SQLDatabase
+from llama_index.core.agent.workflow import FunctionAgent
+from llama_index.core.query_engine import NLSQLTableQueryEngine
+from llama_index.core.tools import QueryEngineTool
+from llama_index.llms.openai import OpenAI
+from sqlalchemy import create_engine
+
+llm = OpenAI(model="%%model=openai-small%%")
+
+# mode=ro makes SQLite refuse writes, whatever SQL the model produces
+engine = create_engine("sqlite:///file:shop.db?mode=ro&uri=true")
+sql_database = SQLDatabase(engine, include_tables=["customers", "orders"])
+
+sql_engine = NLSQLTableQueryEngine(
+    sql_database=sql_database,
+    tables=["customers", "orders"],
+    llm=llm,
+    synthesize_response=True,        # False returns the raw rows instead of a written answer
+)
+
+response = sql_engine.query("How many orders has each customer placed?")
+print(response)
+print(response.metadata["sql_query"])     # the SQL that was run
+print(response.metadata.get("result"))  # the rows; absent if the SQL failed
+
+# As a tool, alongside document search
+agent = FunctionAgent(
+    tools=[
+        QueryEngineTool.from_defaults(
+            query_engine=sql_engine,
+            name="shop_database",
+            description="Orders and customers. Use for counts, totals and lookups.",
+        )
+    ],
+    llm=llm,
+)
+
+
+async def main():
+    print(await agent.run(user_msg="Which country has the highest order total?"))
+
+
+asyncio.run(main())
+```
+
+Notes:
+
+- The model writes the SQL, so the database account is the security boundary. Use a read-only user (or `mode=ro` for SQLite as above) and `include_tables` to limit what the model can see.
+- With many tables, the schema prompt grows; `SQLTableRetrieverQueryEngine` retrieves the relevant table schemas per question instead of sending all of them.
+- Always log `response.metadata["sql_query"]`. When an answer is wrong, the generated SQL is the first thing to read.
+- Column names and types come from the database. Adding a comment or a descriptive table name helps the model more than prompt tweaks.
 
 ---
 

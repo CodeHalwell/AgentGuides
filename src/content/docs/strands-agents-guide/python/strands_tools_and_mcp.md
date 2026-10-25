@@ -310,7 +310,8 @@ Version 0.8 deprecates most of the general-purpose tools in favour of tools vend
 
 | Deprecated (`strands_tools`) | Replacement |
 |------------------------------|-------------|
-| `shell`, `calculator`, `environment` | `strands.vended_tools.shell` (note: arbitrary commands, so a wider boundary than `calculator`) |
+| `shell` | `strands.vended_tools.shell`, which runs through the agent's sandbox instead of directly on the host |
+| `calculator`, `environment` | `strands.vended_tools.shell` (note: arbitrary commands, so a wider boundary than the tools it replaces) |
 | `editor` | `strands.vended_tools.file_editor` |
 | `http_request` | `strands.vended_tools.http_request` and `web_fetch` |
 | `python_repl`, `sleep` | `strands.vended_tools.python_repl`, `sleep` |
@@ -323,7 +324,7 @@ Version 0.8 deprecates most of the general-purpose tools in favour of tools vend
 | `memory`, `retrieve`, `mem0_memory` | `MemoryManager` with `BedrockKnowledgeBaseStore`, or the `mem0-strands` store |
 | `tavily`, `exa`, `bright_data`, `slack`, `chat_video`, `search_video` | The vendor's official MCP server |
 | `cron` | EventBridge Scheduler (or `shell`) |
-| `diagram`, `rss` | No replacement |
+| `diagram`, `rss` | No replacement tool: have the model write code with graphviz, Mermaid or the `diagrams` package (`diagram`), or parse feeds with `feedparser` (`rss`) |
 
 Not deprecated in this release: `file_read`, `file_write`, `use_aws`, `workflow`, `swarm`, `graph`, `agent_graph`, `use_agent`, `use_llm`, `handoff_to_user`, `stop`, `load_tool`, `image_reader`, `generate_image`, `generate_image_stability`, `nova_reels`, `speak`, `use_computer`, `agent_core_memory`, `elasticsearch_memory`, `mongodb_memory`, `code_interpreter` (AgentCore Code Interpreter) and `browser` (AgentCore Browser or local Chromium). Some need extras, for example `strands-agents-tools[agent-core-code-interpreter]`.
 
@@ -376,7 +377,7 @@ print(agent.tool_names)   # ['sandbox_file_editor', 'sandbox_shell']
 
 `strands.tools.mcp.MCPClient` connects to a Model Context Protocol server and exposes its tools to an agent. The agent starts the client when it loads its tools and stops it on `agent.cleanup()` or when the agent is garbage-collected.
 
-Strands %%version=strands-agents%% depends on the `mcp` 2.x SDK. In `mcp` 2.x, `FastMCP` has been renamed to `MCPServer` (`from mcp.server.mcpserver import MCPServer`); code written for `mcp` 1.x that imports `mcp.server.fastmcp` fails with `ModuleNotFoundError`.
+Strands %%version=strands-agents%% accepts `mcp` from 1.23 up to (not including) 2.2, so a fresh install resolves to the 2.x series. In `mcp` 2.x, `FastMCP` has been renamed to `MCPServer` (`from mcp.server.mcpserver import MCPServer`); server code written for `mcp` 1.x that imports `mcp.server.fastmcp` fails with `ModuleNotFoundError` there. Pin `mcp<2` if you need the old import.
 
 ### A local stdio server
 
@@ -446,6 +447,36 @@ agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[internal], callba
 
 `auth=` takes OAuth client credentials (machine-to-machine) and `auth_provider=` any `httpx.Auth`. For SSE servers pass `lambda: sse_client(url)` from `mcp.client.sse`. AgentCore Gateway is an MCP server, so it is reached the same way (see [Gateway](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#pattern-1-gateway--expose-existing-apis-as-mcp-tools)).
 
+### Servers from a config file
+
+Many MCP hosts describe their servers in an `mcpServers` JSON file. `MCPClient.load_servers()` builds one client per enabled server from such a file (a path) or from the same structure as a dict. A server with `command` is started over stdio, one with `url` uses Streamable HTTP (set `transport` to `"sse"` or `"streamable-http"` to override), and `${VAR}` in string values is filled from the environment:
+
+```python
+import sys
+
+from strands import Agent
+from strands.tools.mcp import MCPClient
+
+config = {
+    "mcpServers": {
+        "inventory": {"command": sys.executable, "args": ["inventory_server.py"]},
+        "docs": {
+            "url": "https://mcp.example.com/mcp",
+            "headers": {"Authorization": "Bearer ${MCP_TOKEN}"},
+            "continue_on_error": True,
+        },
+        "legacy": {"command": "node", "args": ["server.js"], "disabled": True},
+    }
+}
+
+clients = MCPClient.load_servers(config, prefix_with_server_name=True)
+agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=clients, callback_handler=None)
+print(agent.tool_names)      # ['inventory_stock_level', 'inventory_delete_sku']: "docs" was skipped
+agent.cleanup()
+```
+
+`disabled` servers are skipped. A server whose config cannot be resolved (here `MCP_TOKEN` is not set) is skipped if it has `"continue_on_error": true`, and raises otherwise; the `continue_on_error=` argument sets that default for every server. Malformed JSON or a malformed entry always raises. `prefix_with_server_name=True` prefixes each server's tools with its key (characters outside `[A-Za-z0-9_-]` become `_`), so two servers that both offer `search` do not clash. Note that this example does not filter `delete_sku`; pass `tool_filters` by building the client directly when you need that.
+
 ### Using the client directly
 
 As a context manager, the client can list and call tools, prompts and resources without an agent:
@@ -483,4 +514,5 @@ If a server cannot start, the agent constructor raises a `ValueError` (wrapping 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Corrected the `mcp` dependency range (1.23 up to 2.2, not 2.x only), the `shell` replacement note and the `diagram`/`rss` guidance. Added `MCPClient.load_servers()` for `mcpServers` config files. |
 | 2026-10-24 | 1.62.0 | New page. Documents schema generation limits (`Annotated` with `Field` unsupported; Pydantic parameters arrive as dicts), return-value handling, streaming tools, direct calls, module and class tools, executors, the `strands-agents-tools` 0.8 deprecations, vended tools, sandboxes and MCP with `mcp` 2.x. |

@@ -128,7 +128,7 @@ The checkpointer persists the full message history per `thread_id`, enabling mul
 
 ### Pattern 2: Tree-of-Thoughts
 
-Explore several reasoning paths in parallel, keep the best, and answer from it. The fan-out uses `Send`, which must be returned from a **routing function** (passed to `add_conditional_edges`), not from a node; a node that returns a list of `Send` objects fails with `InvalidUpdateError: Expected dict`.
+Explore several reasoning paths in parallel, keep the best, and answer from it. The fan-out uses `Send`. Return a list of `Send` objects from a **routing function** (passed to `add_conditional_edges`), or from a node wrapped in a `Command`: `return Command(goto=[Send(...), ...])`. A node that returns a bare list of `Send` objects fails with `InvalidUpdateError: Expected dict`.
 
 ```python
 import operator
@@ -194,15 +194,18 @@ print("Final answer:", result["final_answer"])
 
 ### Pattern 3: Self-Reflection
 
-Agent critiques its own output:
+The agent drafts an answer, critiques it, and revises until the critique finds nothing to fix or a revision cap is reached. Each critique looks at the latest draft, not the first one. This continues from Pattern 2 (it reuses `model`):
 
 ```python
-class ReflectionState(TypedDict):
+class ReflectionState(TypedDict, total=False):
     question: str
     initial_response: str
     critique: str
     refined_response: str
     reflection_count: int
+
+def latest_draft(state: ReflectionState) -> str:
+    return state.get("refined_response") or state["initial_response"]
 
 def generate_response(state: ReflectionState) -> dict:
     """Generate initial response."""
@@ -219,8 +222,8 @@ def self_critique(state: ReflectionState) -> dict:
     
     prompt = f"""
     Question: {state['question']}
-    Response: {state['initial_response']}
-    
+    Response: {latest_draft(state)}
+
     Critique this response. What could be improved?
     """
     
@@ -246,9 +249,9 @@ def refine_response(state: ReflectionState) -> dict:
     
     prompt = f"""
     Original question: {state['question']}
-    Your response: {state['initial_response']}
+    Your response: {latest_draft(state)}
     Critique: {state['critique']}
-    
+
     Provide an improved response addressing the critique.
     """
     
@@ -634,12 +637,15 @@ print(result["translated"])   # '[ES] hello world...'
 **Mixed name forms** — pass a `("custom_name", fn)` tuple when you need a specific node name (e.g. to attach conditional edges or retry policies later):
 
 ```python
-builder.add_sequence([
+builder2 = StateGraph(DocState)
+builder2.add_sequence([
     clean,                          # name inferred: "clean"
     ("summarize_v2", summarize),    # explicit name
     translate,                      # name inferred: "translate"
 ])
-
+builder2.add_edge(START, "clean").add_edge("translate", END)
+print(list(builder2.compile().get_graph().nodes))
+# ['__start__', 'clean', 'summarize_v2', 'translate', '__end__']
 ```
 
 `add_sequence` takes no policy options, and adding the same node name again with `add_node` raises `ValueError: Node names must be unique`. If one step needs a retry or cache policy, register that step with `add_node(..., retry_policy=...)` and connect it with `add_edge`, or set graph-wide defaults with `set_node_defaults()` before calling `add_sequence`.
@@ -692,10 +698,12 @@ print(result["events"])
 
 **Why this matters:** Without `Overwrite`, every fan-in from parallel `Send` branches accumulates results in the reducer. Use `Overwrite` when a later node needs to authoritatively set the channel to a clean value regardless of what was collected earlier.
 
+A fan-in node for the crawler in Pattern 10 could deduplicate what the branches collected:
+
 ```python
 from langgraph.types import Overwrite
 
-def consolidate(state: PipelineState) -> dict:
+def consolidate(state: CrawlState) -> dict:
     # Deduplicate and canonicalise — then overwrite so nothing else appends
     canonical = list(dict.fromkeys(state["results"]))
     return {"results": Overwrite(canonical)}
@@ -705,7 +713,7 @@ def consolidate(state: PipelineState) -> dict:
 
 ### Pattern 13: `GraphOutput` with `version="v2"`
 
-The `invoke` and `stream` APIs accept an optional `version` keyword argument. When `version="v2"`, the return type changes from a raw state dict to a `GraphOutput` named-tuple that bundles the output value with any `Interrupt` objects raised during the run.
+The `invoke` and `stream` APIs accept an optional `version` keyword argument. When `version="v2"`, the return type changes from a raw state dict to a `GraphOutput`, a frozen dataclass that bundles the output value with any `Interrupt` objects raised during the run.
 
 ```python
 from langgraph.graph import StateGraph, START, END
@@ -950,9 +958,14 @@ cache = InMemoryCache()
 
 @entrypoint(checkpointer=InMemorySaver(), cache=cache)
 async def crawl(urls: list[str]) -> list[str]:
-    futures = [fetch(u) for u in urls]
-    return [f.result() for f in futures]
+    futures = [fetch(u) for u in urls]      # all fetches start at once
+    return [await f for f in futures]       # await task futures in async code
+
+
+# asyncio.run(crawl.ainvoke(["https://example.com"], {"configurable": {"thread_id": "c1"}}))
 ```
+
+The cache key is the task's arguments, and the cache is shared across threads: a second run on another `thread_id` with the same URL within 300 seconds returns the cached result without calling `fetch` again. In async code, `await` the futures; `.result()` is for sync entrypoints.
 
 ### Resuming after `interrupt` in a task workflow
 

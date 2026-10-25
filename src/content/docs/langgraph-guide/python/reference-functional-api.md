@@ -67,9 +67,9 @@ def fetch(url: str) -> str: ...
 Rules:
 
 - Inputs and outputs must be **serialisable** (JSON-plus via `JsonPlusSerializer`) when the entrypoint has a checkpointer — tasks are the unit the checkpointer caches.
-- Async tasks require Python 3.11+.
+- Async tasks require Python 3.11+ (the docstring of `task` says so: on 3.10 the run context does not propagate into async tasks).
 - Using `retry_policy=<policy>` or `cache_policy=<policy>` turns on the same retry/cache machinery that `StateGraph` nodes use. Pass a sequence to `retry_policy` for ordered fallbacks.
-- Calling `fetch("x")` inside an entrypoint returns a future (`SyncAsyncFuture[T]`). Outside an entrypoint it raises.
+- Calling `fetch("x")` inside an entrypoint returns a future (`SyncAsyncFuture[T]`). Outside an entrypoint it raises `RuntimeError: Called get_config outside of a runnable context`.
 - `fetch.clear_cache(cache)` (or `aclear_cache`) wipes cached results for this task.
 
 Deprecated kwarg: `retry=` (renamed to `retry_policy=` in v0.5 — still works with a warning).
@@ -126,8 +126,10 @@ async def scrape(url: str) -> str:
 @entrypoint(checkpointer=InMemorySaver())
 async def crawl_pipeline(urls: list[str]) -> list[str]:
     futures = [scrape(u) for u in urls]
-    return [f.result() for f in futures]
+    return [await f for f in futures]   # await futures in an async entrypoint
 ```
+
+(`scrape` uses `aiohttp`, which you install separately.) With `refresh_on="heartbeat"`, only `runtime.heartbeat()` resets the idle clock, so a task that never calls it is cancelled after 15 seconds even if the request is still progressing. The next section shows how a task calls it.
 
 `TimeoutPolicy` fields:
 
@@ -139,30 +141,36 @@ async def crawl_pipeline(urls: list[str]) -> list[str]:
 
 ### `runtime.heartbeat()` inside a task
 
-When `idle_timeout` is set and `refresh_on="heartbeat"`, call `runtime.heartbeat()` from inside the task to prove it is still making progress. Access the `Runtime` via the `@entrypoint`'s injectable `runtime` parameter — tasks themselves do not receive `runtime` directly, but you can thread it through:
+When `idle_timeout` is set and `refresh_on="heartbeat"`, the task must call **its own** `runtime.heartbeat()` to show it is still making progress. Tasks can declare a `runtime: Runtime` parameter just like nodes (or call `get_runtime()`); the runtime is injected and is not part of the task's arguments.
 
 ```python
+import asyncio
 from langgraph.runtime import Runtime
 from langgraph.func import entrypoint, task
 from langgraph.types import TimeoutPolicy
 from langgraph.checkpoint.memory import InMemorySaver
 
 
-@task(timeout=TimeoutPolicy(idle_timeout=30.0, refresh_on="heartbeat"))
-async def long_task(items: list[str], heartbeat_fn) -> list[str]:
+@task(timeout=TimeoutPolicy(idle_timeout=0.3, refresh_on="heartbeat"))
+async def long_task(items: list[str], runtime: Runtime) -> list[str]:
     results = []
     for item in items:
-        results.append(await process(item))
-        heartbeat_fn()   # reset idle clock after each item
+        await asyncio.sleep(0.2)          # each item takes 0.2 s ...
+        results.append(item.upper())
+        runtime.heartbeat()               # ... so heartbeat after each one
     return results
 
 
 @entrypoint(checkpointer=InMemorySaver())
-async def pipeline(inp: dict, runtime: Runtime) -> dict:
-    # Pass runtime.heartbeat as a callback so the task can signal progress
-    future = long_task(inp["items"], runtime.heartbeat)
-    return {"results": future.result()}
+async def pipeline(items: list[str]) -> list[str]:
+    return await long_task(items)
+
+
+print(asyncio.run(pipeline.ainvoke(["a", "b", "c", "d"], {"configurable": {"thread_id": "hb"}})))
+# ['A', 'B', 'C', 'D']: 0.8 s in total, but never 0.3 s without a heartbeat
 ```
+
+Passing the **entrypoint's** `runtime.heartbeat` into the task does not work: it refreshes the entrypoint's clock, not the task's, and the task fails with `NodeTimeoutError: Node 'long_task' exceeded its idle timeout ...`.
 
 ## `@entrypoint`
 
@@ -481,7 +489,7 @@ async def crawl(urls: list[str]) -> list[str]:
     results = []
     for f in futures:
         try:
-            results.append(f.result())
+            results.append(await f)
         except Exception as e:
             results.append(f"ERROR: {e}")
     return results
@@ -645,20 +653,19 @@ print(result)  # ['hello world', 'langgraph']
 ## Gotchas
 
 - **Tasks are futures, not values.** A very common bug: `return tasks` instead of `return [t.result() for t in tasks]`. The future object serialises fine but the caller can't use it outside the graph.
-- **Generators aren't allowed.** Authoring `yield` inside an entrypoint raises at decoration time. Use `stream_writer` + `stream_mode="custom"` instead.
-- **`interrupt()` requires a checkpointer.** Pass `checkpointer=InMemorySaver()` even in tests — otherwise the raised `GraphInterrupt` escapes unhandled.
+- **Generators aren't allowed.** Decorating a generator with `@entrypoint` raises `NotImplementedError` at decoration time. Use `runtime.stream_writer` + `stream_mode="custom"` instead.
+- **`interrupt()` needs a checkpointer to resume.** Without one, `invoke` returns `{'__interrupt__': [...]}` and the run cannot be resumed. Pass `checkpointer=InMemorySaver()` even in tests.
 - **Resuming replays the whole entrypoint.** Any side effects outside `@task` (print, counters, file writes) run again. Put side effects in tasks, which are cached by the checkpointer.
 - **`previous` is only available with a checkpointer.** Without one it defaults to `None` and does not update.
 - **Don't `await` a sync task.** A `@task` on a sync function returns `SyncAsyncFuture`; call `.result()`.
 - **Serialisable I/O.** `JsonPlusSerializer` handles most dataclasses, Pydantic models, `datetime`, `UUID`, and LangChain messages. Avoid live connections, file handles, and locks in task outputs.
 - **`context_schema=` data is NOT checkpointed.** Context is injected fresh at each `invoke`/`stream` call. The same `context=` must be passed on every call that resumes from an interrupt.
-- **Calling a task outside an entrypoint raises `RuntimeError`.** Tasks are only valid inside `@entrypoint`-decorated functions or other graph nodes. Do not call them from test code, scripts, or top-level module scope without an active entrypoint.
+- **Calling a task outside an entrypoint raises `RuntimeError`.** Tasks are only valid inside `@entrypoint`-decorated functions or `StateGraph` nodes. To unit-test the logic, test the undecorated function, or run the task through a small entrypoint.
 
 ## Breaking changes
 
 | Version | Change |
 |---|---|
-| 1.2 | `timeout=` parameter added to `@task` and `@entrypoint` (async only). `TimeoutPolicy` dataclass introduced. `task.clear_cache()` / `task.aclear_cache()` added. |
-| 1.0 | Functional API graduates out of experimental; `@entrypoint` / `@task` live in `langgraph.func`. |
+| 1.2.0 | `timeout=` parameter added to `@task` and `@entrypoint` (async only); `TimeoutPolicy` introduced. |
 | 0.6 | `config_schema=` on `@entrypoint` deprecated in favor of `context_schema=`. |
 | 0.5 | `retry=` kwarg on `@task` / `@entrypoint` renamed to `retry_policy=`. |

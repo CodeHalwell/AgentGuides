@@ -139,6 +139,53 @@ AWS's template allows all foundation models and `arn:aws:bedrock:REGION:ACCOUNT:
 }
 ```
 
+Callers that also pass `runtimeUserId` (the `X-Amzn-Bedrock-AgentCore-Runtime-User-Id` header) to identify an end user need a second action on the same resources:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": ["bedrock-agentcore:InvokeAgentRuntime", "bedrock-agentcore:InvokeAgentRuntimeForUser"],
+  "Resource": "arn:aws:bedrock-agentcore:REGION:ACCOUNT:runtime/RUNTIME_ID/runtime-endpoint/prod"
+}
+```
+
+`bedrock-agentcore:InvokeAgentRuntimeCommand` is a separate action that runs a shell command inside a runtime or harness session without going through the model. Do not grant it to callers who should only be able to chat.
+
+## AgentCore Runtime: using Code Interpreter and Browser
+
+Add statements to the execution role for the sandboxed tools the agent calls. The session actions match the API operations; the managed interpreter and browser are owned by the `aws` account.
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CodeInterpreter",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:StartCodeInterpreterSession",
+        "bedrock-agentcore:InvokeCodeInterpreter",
+        "bedrock-agentcore:GetCodeInterpreterSession",
+        "bedrock-agentcore:StopCodeInterpreterSession"
+      ],
+      "Resource": "arn:aws:bedrock-agentcore:REGION:aws:code-interpreter/aws.codeinterpreter.v1"
+    },
+    {
+      "Sid": "Browser",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock-agentcore:StartBrowserSession",
+        "bedrock-agentcore:GetBrowserSession",
+        "bedrock-agentcore:StopBrowserSession"
+      ],
+      "Resource": "arn:aws:bedrock-agentcore:REGION:aws:browser/aws.browser.v1"
+    }
+  ]
+}
+```
+
+Driving the browser over its WebSocket stream (`generate_ws_headers()`) needs additional stream permissions; check the AgentCore Browser documentation for the current action names before locking the role down. A custom interpreter or browser has its own ARN in your account.
+
 ## AgentCore harness
 
 The harness execution role uses the same trust policy. On the public network, it pulls the managed harness image from ECR Public, so it needs `ecr-public:GetAuthorizationToken` and `sts:GetServiceBearerToken` instead of the private ECR statements. In VPC mode, it needs `ecr:BatchGetImage`, `ecr:GetDownloadUrlForLayer` and `ecr:BatchCheckLayerAvailability` on `arn:aws:ecr:REGION:*:repository/harness-*`. The logs, tracing, metrics and model statements are the same as for Runtime, with workload identities named `harness_HARNESS_NAME-*`. Add statements per tool: `bedrock-agentcore:InvokeGateway` on a SigV4 gateway, Code Interpreter or Browser session actions on `arn:aws:bedrock-agentcore:REGION:aws:code-interpreter/*` or `browser/*`, and memory actions on the harness's memory.

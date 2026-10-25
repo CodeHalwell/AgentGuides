@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Observability & Telemetry"
 description: "OpenTelemetry traces, metrics, and logs emitted by agent-framework. Instrumentation is on by default — wire up an exporter (Azure Monitor, OTLP, console, or VS Code AI Toolkit) to receive signals."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Observability"
+  order: 30
 ---
 
 `agent-framework` emits OpenTelemetry signals following the **GenAI semantic conventions**. Every agent run, model call, tool invocation, workflow executor, and edge group is a span; every chat completion emits a duration histogram and a token-usage histogram. Signal *emission* is **on by default** — what you need to add is an OTel *exporter* so those signals are actually received somewhere. Pick one of the three options in the next section; without an exporter signals are emitted but immediately discarded.
@@ -74,14 +77,16 @@ configure_otel_providers(
 
 ### Spans
 
+Span names follow the GenAI convention of "operation plus target", so most carry a suffix: an agent named `weather` produces `invoke_agent weather`, a model call `chat gpt-4o-mini`, a tool call `execute_tool get_weather`. Filter on the `gen_ai.operation.name` attribute (or `span.name.startswith(...)`) rather than on the exact name.
+
 | Span name | Source | Key attributes |
 |---|---|---|
-| `invoke_agent` | `Agent.run()` | `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.conversation.id` |
-| `chat` | Every chat-client call | `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons` |
-| `execute_tool` | Each tool invocation | `gen_ai.tool.name`, `gen_ai.tool.call.id`, `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result` |
+| `invoke_agent <agent name>` | `Agent.run()` | `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.conversation.id` (when the run continues a service-side conversation), `gen_ai.tool.definitions`, usage summed over the run's model calls |
+| `chat <model>` | Every chat-client call | `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons` |
+| `execute_tool <tool name>` | Each tool invocation | `gen_ai.tool.name`, `gen_ai.tool.call.id`; arguments and result only with sensitive data enabled |
 | `workflow.build` / `workflow.run` | Workflow lifecycle | `workflow.name`, `workflow.id` |
-| `executor.process` | Each executor run | `executor.id`, `executor.type` |
-| `edge_group.process` | Each edge traversal | `edge_group.id`, `edge_group.type`, `edge_group.delivery_status` |
+| `executor.process <executor id>` | Each executor run | `executor.id`, `executor.type` |
+| `edge_group.process <edge group type>` | Each edge traversal | `edge_group.id`, `edge_group.type`, `edge_group.delivery_status` |
 | `message.send` | Cross-executor messaging | `message.source_id`, `message.target_id`, `message.type` |
 
 All attribute constants live in `agent_framework.observability.OtelAttr` — use them to build span processors and samplers rather than typing strings.
@@ -216,7 +221,7 @@ for prompt in ["What is the speed of light?", "Explain entanglement briefly."]:
 print(total.get("input_token_count"), total.get("output_token_count"), total.get("cache_read_input_token_count"))
 ```
 
-For a per-tenant budget, do the same in an `AgentMiddleware` after `await call_next()` (read `context.result.usage_details`) and raise `MiddlewareTermination` once the budget is spent.
+For a per-tenant budget, do the same in an `AgentMiddleware` after `await call_next()` (read `context.result.usage_details`), and refuse later runs once the budget is spent by raising your own exception before `call_next()`.
 
 ## Custom spans around business logic
 
@@ -231,7 +236,7 @@ with tracer.start_as_current_span("process_order", attributes={"order.id": order
     response = await agent.run(f"Draft reply for order {order_id}")
 ```
 
-For agent-level wrapping use `AgentMiddleware` instead — see the [middleware page](./microsoft_agent_framework_python_middleware/#emitting-opentelemetry-spans).
+For agent-level wrapping use `AgentMiddleware` instead — see the [middleware page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#emitting-opentelemetry-spans).
 
 ### Use the framework's tracer / meter helpers
 
@@ -270,7 +275,11 @@ from agent_framework.observability import OtelAttr
 
 
 class TokenSpendProcessor(SpanProcessor):
-    """Side-car processor that counts model spend per agent."""
+    """Side-car processor that counts model spend per agent.
+
+    It reads invoke_agent spans, which carry the agent name and the usage summed
+    over the run's model calls (adding chat spans as well would double count).
+    """
 
     def __init__(self) -> None:
         self.totals: dict[str, int] = {}
@@ -280,9 +289,9 @@ class TokenSpendProcessor(SpanProcessor):
         return
 
     def on_end(self, span: ReadableSpan) -> None:
-        if span.name != OtelAttr.CHAT_COMPLETION_OPERATION.value:
-            return
         attrs = dict(span.attributes or {})
+        if attrs.get(OtelAttr.OPERATION.value) != OtelAttr.AGENT_INVOKE_OPERATION.value:
+            return
         agent = attrs.get(OtelAttr.AGENT_NAME.value, "unknown")
         in_tok = attrs.get(OtelAttr.INPUT_TOKENS.value, 0)
         out_tok = attrs.get(OtelAttr.OUTPUT_TOKENS.value, 0)
@@ -357,9 +366,9 @@ Complete `OtelAttr` reference — span attributes, span names, and metric instru
 | `OtelAttr.EDGE_GROUP_TYPE` | `edge_group.type` |
 | `OtelAttr.EDGE_GROUP_DELIVERY_STATUS` | `edge_group.delivery_status` |
 
-**Span names** (compare `span.name` against these)
+**Operation names and span-name prefixes** (compare `gen_ai.operation.name`, or the start of `span.name`, against these)
 
-| Constant | Span name value |
+| Constant | Value |
 |---|---|
 | `OtelAttr.CHAT_COMPLETION_OPERATION` | `chat` |
 | `OtelAttr.EMBEDDING_OPERATION` | `embeddings` |
@@ -426,7 +435,7 @@ class DropInternalEdgeSpans(SpanExporter):
     def export(self, spans):
         keep = [
             s for s in spans
-            if s.name != OtelAttr.EDGE_GROUP_PROCESS_SPAN.value
+            if not s.name.startswith(OtelAttr.EDGE_GROUP_PROCESS_SPAN.value)   # "edge_group.process SingleEdgeGroup"
             or (s.end_time - s.start_time) > self._min_ns
         ]
         return self._inner.export(keep) if keep else SpanExportResult.SUCCESS
@@ -472,7 +481,7 @@ configure_otel_providers(views=views)
 
 Two ways to attach business attributes — pick the one that matches lifetime:
 
-1. **Per-`agent.run(...)` call** — pass `additional_properties={"gen_ai.conversation.id": req_id}` so the conversation correlator uses your upstream request ID.
+1. **Per request** — open your own span around `agent.run(...)` with the request ID as an attribute (see [custom spans](#custom-spans-around-business-logic)); the framework's spans become its children, so the whole tree is found by that ID.
 2. **Per-process resource attributes** — set `OTEL_RESOURCE_ATTRIBUTES=team=payments,env=prod,deployment.version=build-4821` before launching your service. The framework attaches them to every span/metric/log automatically.
 
 ```python
@@ -488,9 +497,7 @@ For request-scoped attributes use a span processor that reads from a `contextvar
 
 ## Correlating conversations
 
-The framework stamps `gen_ai.conversation.id` on every span in a single `agent.run(...)` call and across `session`-scoped runs. In your tracing UI, filter by that attribute to see the full conversation on one trace.
-
-Pass a custom ID through `additional_properties` on `Agent(...)` to use your own correlation key (e.g. a request ID from upstream).
+When a run continues a service-side conversation (a session whose `service_session_id` is set, as with the Responses API), the framework records that id as `gen_ai.conversation.id`. Each `agent.run(...)` is otherwise its own trace. To see a whole conversation together, put your own `session_id` on a parent span (or a span attribute set in middleware) and filter on it; `additional_properties` on the agent are not copied into spans.
 
 ## Azure Monitor
 
@@ -506,9 +513,9 @@ enable_instrumentation()
 
 Then query in Application Insights:
 
-- **All agent runs** — `dependencies | where name == "invoke_agent"`
-- **Slow chat calls** — `dependencies | where name == "chat" | where duration > 3000 | summarize count() by customDimensions.["gen_ai.response.model"]`
-- **Tool-call volume** — `dependencies | where name == "execute_tool" | summarize count() by customDimensions.["gen_ai.tool.name"]`
+- **All agent runs** — `dependencies | where name startswith "invoke_agent"`
+- **Slow chat calls** — `dependencies | where name startswith "chat " | where duration > 3000 | summarize count() by tostring(customDimensions["gen_ai.response.model"])`
+- **Tool-call volume** — `dependencies | where name startswith "execute_tool" | summarize count() by tostring(customDimensions["gen_ai.tool.name"])`
 
 ## Production checklist
 
@@ -517,7 +524,7 @@ Then query in Application Insights:
 - Use OTLP gRPC (`OTEL_EXPORTER_OTLP_PROTOCOL=grpc`) to an in-cluster collector; batch there rather than from each pod.
 - Wire a `LogRecordExporter` too — tool stack traces and middleware failures land in logs, not spans.
 - Filter noise with `create_metric_views()` and pass extra `View(instrument_name="...", aggregation=...)` entries to cap cardinality on high-traffic deployments.
-- Disable the `user-agent` telemetry banner with `AGENT_FRAMEWORK_USER_AGENT_TELEMETRY_DISABLED=true` if corporate policy forbids it.
+- The OpenAI and Foundry clients add an `agent-framework` marker to the HTTP `User-Agent` header; set `AGENT_FRAMEWORK_USER_AGENT_DISABLED=true` if policy forbids it.
 
 ## `ObservabilitySettings` — the runtime toggle singleton
 
@@ -600,3 +607,9 @@ def no_telemetry():
     yield
     enable_instrumentation(force=True)
 ```
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected span names (they carry a suffix, e.g. `invoke_agent weather`, `chat gpt-4o-mini`), so the span processor, exporter filter and Application Insights queries now match on prefixes or `gen_ai.operation.name`; fixed the user-agent opt-out variable (`AGENT_FRAMEWORK_USER_AGENT_DISABLED`); removed the claim that `additional_properties` sets `gen_ai.conversation.id`. |

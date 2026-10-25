@@ -46,7 +46,7 @@ print(flow.state.id)                           # a UUID, generated for every run
 
 - `Flow[GreetingState]` gives the flow a **structured state**. `kickoff(inputs=...)` sets matching fields before the first method runs; fields need defaults.
 - A listener can take the previous method's return value as a parameter (`greeting` above), or read `self.state`.
-- `kickoff()` returns the output of the last method that ran.
+- `kickoff()` returns the output of the last method that ran. When two listeners fire from the same trigger, which output comes back is not something to rely on (in a test where two listeners shared one trigger, it was the first one declared); put results you need in state.
 - Every state gets an `id` field (a UUID) even if your model does not declare one. Persistence uses it.
 
 `self.state` is a read-only property: assign to its fields (`self.state.greeting = ...`), never to `self.state` itself. Overriding `__init__` to set `self.state = {...}` raises `AttributeError: property 'state' ... has no setter`.
@@ -204,7 +204,7 @@ class RetryFlow(Flow[DraftState]):
 print(RetryFlow().kickoff())   # accepted after 3 attempts
 ```
 
-Always keep a counter in state and an exit label; nothing stops an unbounded loop for you.
+Always keep a counter in state and an exit label. As a backstop, `Flow.max_method_calls` (default `100`) makes a run fail with `RecursionError: Method 'check' has been called 100 times in this flow execution, which indicates an infinite loop` when one method is invoked that often; a subclass can lower it with `max_method_calls: int = 10`. Treat it as a safety net, not as your loop condition.
 
 ## Calling crews and agents
 
@@ -509,7 +509,7 @@ Routing and state handling are plain Python, so most of a flow can be tested wit
 
 - **Validation happens at instantiation.** Self-triggering listeners and other wiring errors surface as a `ValidationError` from `MyFlow()`, before anything runs.
 - **Don't assign `self.state`.** Mutate its fields or keys.
-- **Fields need defaults** on a structured state model. Kickoff inputs that match no field are silently ignored, so a misspelt key leaves the default in place.
+- **Fields need defaults** on a structured state model: a field without one makes the flow fail with a `ValidationError` ("Field required") even when you pass that key in `inputs`, because the state is built empty before the inputs are applied. Kickoff inputs that match no field are silently ignored, so a misspelt key leaves the default in place.
 - **`initial_state` is not the kickoff inputs.** Read inputs from `self.state`.
 - **`@listen` takes one argument.** Use `and_` / `or_` for several.
 - **A router's return value is a label, not data.** Put anything the next step needs in state.

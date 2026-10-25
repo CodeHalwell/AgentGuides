@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react';
 import { frameworks, useCaseLabels } from '../data/frameworks';
 import { Chips, withBase } from './FrameworkGrid';
 
-const allUseCases = Array.from(new Set(frameworks.flatMap((f) => f.useCases))).sort();
+// Only the curated tags in useCaseLabels are offered; other useCases tags are search keywords.
+const used = new Set(frameworks.flatMap((f) => f.useCases));
+const allUseCases = Object.keys(useCaseLabels).filter((u) => used.has(u));
 
 export default function UseCasePicker() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -39,7 +41,7 @@ export default function UseCasePicker() {
               aria-pressed={active}
               className="ag-chip"
             >
-              {useCaseLabels[u] ?? u}
+              {useCaseLabels[u]}
             </button>
           );
         })}

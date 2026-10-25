@@ -17,24 +17,49 @@ language: "python"
 ```python
 import json
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 from agents import Agent, Runner
 
 app = FastAPI()
 agent = Agent(name="Assistant", instructions="Answer concisely.")
 
+
+def sse(data: dict, event: str | None = None) -> str:
+    head = f"event: {event}\n" if event else ""
+    return f"{head}data: {json.dumps(data)}\n\n"
+
+
 @app.get("/stream")
-async def stream(q: str):
+async def stream(request: Request, q: str):
     async def gen():
-        result = Runner.run_streamed(agent, q)
-        async for event in result.stream_events():
-            if event.type == "raw_response_event" and event.data.type == "response.output_text.delta":
-                yield f"data: {json.dumps({'delta': event.data.delta})}\n\n"
-            elif event.type == "agent_updated_stream_event":
-                yield f"event: agent\ndata: {json.dumps({'agent': event.new_agent.name})}\n\n"
-        yield "event: done\ndata: {}\n\n"
-    return StreamingResponse(gen(), media_type="text/event-stream")
+        result = Runner.run_streamed(agent, q, max_turns=5)
+        try:
+            async for event in result.stream_events():
+                if await request.is_disconnected():
+                    result.cancel()  # stop the run and its model call
+                    return
+                if event.type == "raw_response_event" and event.data.type == "response.output_text.delta":
+                    yield sse({"delta": event.data.delta})
+                elif event.type == "agent_updated_stream_event":
+                    yield sse({"agent": event.new_agent.name}, "agent")
+        except Exception as exc:  # headers are already sent, so report in-band
+            yield sse({"error": type(exc).__name__}, "error")
+            return
+        yield sse({}, "done")
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+```
+
+Three details matter in production. Once the first byte is sent the HTTP status is fixed, so errors (a guardrail tripwire, `MaxTurnsExceeded`, a model failure) have to travel as an `error` event rather than a 500. `request.is_disconnected()` plus `result.cancel()` stops paying for a run nobody is reading. And output guardrails run on the final output, after the text has streamed, so they cannot recall what the client has already received.
+
+A browser reads this with `EventSource`, which only issues GET requests, so put the question in the query string (and authenticate with a cookie or a signed URL, since `EventSource` cannot set headers):
+
+```javascript
+const source = new EventSource(`/stream?q=${encodeURIComponent(question)}`);
+source.onmessage = (e) => (output.textContent += JSON.parse(e.data).delta);
+source.addEventListener("done", () => source.close());
+source.addEventListener("error", () => source.close()); // also fires on network errors
 ```
 
 ## Raw model streaming without an agent loop
@@ -67,6 +92,7 @@ async def raw(q: str):
 FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
+# requirements.txt: openai-agents==%%version=openai-agents%%, fastapi, uvicorn
 RUN pip install -r requirements.txt
 COPY . .
 EXPOSE 8080

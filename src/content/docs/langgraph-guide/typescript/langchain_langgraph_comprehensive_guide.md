@@ -2668,7 +2668,7 @@ await apiWorkflow.invoke({ endpoint: 'https://api.example.com/data' }); // fetch
 await apiWorkflow.invoke({ endpoint: 'https://api.example.com/data' }); // cached for 5 minutes
 ```
 
-Graph-wide defaults can be set once with `graph.setNodeDefaults({ cachePolicy: { ttl: 300 } })`; a node can opt out with `cachePolicy: false`.
+Graph-wide defaults can be set once on the builder with `new StateGraph(State).setNodeDefaults({ cachePolicy: { ttl: 300 } })` (before `compile()`); a node can opt out with `cachePolicy: false`.
 
 ### Shared caches
 
@@ -3311,13 +3311,106 @@ async function myNode(state: { messages: BaseMessage[] }, config: LangGraphRunna
 
 ## Node policies, draining and other recent features
 
-Features added to `@langchain/langgraph` since 1.3, all present in %%version=@langchain/langgraph%%:
+Features added to `@langchain/langgraph` since 1.3, all present in %%version=@langchain/langgraph%%.
 
-- **Node policies** (1.4.0): per-node `timeout` (milliseconds or a `TimeoutPolicy` with `runTimeout` / `idleTimeout`) raising `NodeTimeoutError`; per-node `errorHandler` that runs after `retryPolicy` is exhausted and may return an update or a `Command`; `StateGraph.setNodeDefaults({ retryPolicy, cachePolicy, timeout, errorHandler })` for graph-wide defaults. Example in the [production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/#durability-recursion-limits-and-node-policies).
-- **`RunControl` / `GraphDrained`** (1.4.0): cooperative draining of a run between supersteps, for graceful shutdown.
-- **`DeltaChannel`** (1.4.0, beta): channels that checkpoint only the writes since the last snapshot, for large append-only state.
-- **`GraphCallbackHandler`** (1.4.17): typed callback handler for graph lifecycle events.
-- **Per-node `tracePolicy`** (1.4.15) for controlling what is sent to tracing.
+### Node policies (1.4.0)
+
+Per-node `timeout` (milliseconds, or a `TimeoutPolicy` with `runTimeout` / `idleTimeout`) fails the node with `NodeTimeoutError`. A per-node `errorHandler` runs after `retryPolicy` is exhausted and may return a state update or a `Command` instead of failing the run. `StateGraph.setNodeDefaults({ retryPolicy, cachePolicy, timeout, errorHandler })` sets graph-wide defaults. There is a worked example in the [production guide](/langgraph-guide/typescript/langchain_langgraph_production_guide/#durability-recursion-limits-and-node-policies).
+
+### Draining a run: `RunControl` and `GraphDrained` (1.4.0)
+
+To stop a run cleanly (for example when a container receives `SIGTERM`), pass a `RunControl` as `control` in the run config and call `requestDrain(reason)` on it. Work already running is not cancelled: the graph finishes the current super-step, saves the checkpoint and then throws `GraphDrained`. With a checkpointer, the run can be resumed later by invoking the same thread with `null`.
+
+```ts
+import {
+  StateGraph, StateSchema, START, END, MemorySaver, RunControl, isGraphDrained,
+} from "@langchain/langgraph";
+import * as z from "zod";
+
+const State = new StateSchema({ steps: z.array(z.string()).default(() => []) });
+
+const control = new RunControl();
+
+const graph = new StateGraph(State)
+  .addNode("a", async (s) => {
+    control.requestDrain("deploy"); // in a real service: from a SIGTERM handler
+    return { steps: [...s.steps, "a"] };
+  })
+  .addNode("b", async (s) => ({ steps: [...s.steps, "b"] }))
+  .addEdge(START, "a")
+  .addEdge("a", "b")
+  .addEdge("b", END)
+  .compile({ checkpointer: new MemorySaver() });
+
+const config = { configurable: { thread_id: "job-1" } };
+
+try {
+  await graph.invoke({}, { ...config, control });
+} catch (e) {
+  if (!isGraphDrained(e)) throw e;
+  console.log("drained:", e.reason);
+  const snap = await graph.getState(config);
+  console.log("saved:", snap.values.steps, "next:", snap.next);
+}
+
+// Later (for example in the new process): resume from the checkpoint.
+console.log(await graph.invoke(null, config));
+```
+
+Output:
+
+```text
+drained: deploy
+saved: [ 'a' ] next: [ 'b' ]
+{ steps: [ 'a', 'b' ] }
+```
+
+`GraphDrained` extends `GraphBubbleUp`, like interrupts, so check for it with `isGraphDrained(err)` before treating an error as a failure. Without a checkpointer there is nothing to resume from. In a server, keep one `RunControl` per in-flight run and call `requestDrain` on all of them from the signal handler.
+
+### Delta channels: `DeltaValue` and `MessagesDeltaValue` (beta)
+
+A normal reducer field (`ReducedValue`, `MessagesValue`) stores the whole accumulated value in every checkpoint, so a long message history is re-serialised at each step. A `DeltaValue` field stores only the writes made in each step, plus a full snapshot every `snapshotFrequency` updates (default 1000), and rebuilds the value on read by replaying the writes through a batch reducer `(current, writes[]) => next`. `MessagesDeltaValue` is the ready-made version for chat messages. The underlying `DeltaChannel` arrived in 1.4.0; the `StateSchema` helpers in 1.4.4.
+
+```ts
+import { StateGraph, StateSchema, DeltaValue, MessagesDeltaValue, START, END, MemorySaver } from "@langchain/langgraph";
+import { AIMessage } from "@langchain/core/messages";
+import * as z from "zod";
+
+const State = new StateSchema({
+  messages: MessagesDeltaValue,
+  log: new DeltaValue(z.array(z.string()).default(() => []), {
+    inputSchema: z.string(),
+    reducer: (current, writes) => [...current, ...writes],
+  }),
+});
+
+const graph = new StateGraph(State)
+  .addNode("work", async () => ({
+    messages: [new AIMessage("done")],
+    log: "work ran",
+  }))
+  .addEdge(START, "work")
+  .addEdge("work", END)
+  .compile({ checkpointer: new MemorySaver() });
+
+const config = { configurable: { thread_id: "d1" } };
+await graph.invoke({ messages: [{ role: "user", content: "hi" }], log: "start" }, config);
+const out = await graph.invoke({ messages: [{ role: "user", content: "again" }] }, config);
+console.log(out.messages.map((m) => m.content), out.log);
+```
+
+Output:
+
+```text
+[ 'hi', 'done', 'again', 'done' ] [ 'start', 'work ran', 'work ran' ]
+```
+
+The reducer must give the same result however the writes are batched (`reducer(reducer(s, xs), ys)` equals `reducer(s, [...xs, ...ys])`), because replay folds many steps' writes at once. The feature is marked beta: the on-disk format may change, so use it where checkpoint size is a measured problem rather than by default.
+
+### Other additions
+
+- **`GraphCallbackHandler`** (1.4.17): callback handler with `handleInterrupt` and `handleResume` hooks; see [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/#interrupt-and-resume-events).
+- **`RemoteGraph` v3 streaming** (1.4.0).
 - **1.5.0** orders parallel writes by task path (matching Python) and fixes a series of `DeltaChannel`, durability and node-cache persistence edge cases. No API removals.
 
 ---
@@ -3326,6 +3419,7 @@ Features added to `@langchain/langgraph` since 1.3, all present in %%version=@la
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.2 | 2026-10-25 | "Recent features" section expanded with runnable `RunControl`/`GraphDrained` and `DeltaValue`/`MessagesDeltaValue` examples; per-node `tracePolicy` removed (not in any released version); `setNodeDefaults` placement clarified. |
 | 1.5.2 | 2026-10-21 | All examples now type-check under `strict`: builders are chained so node names are tracked, `addSequence` steps are typed, a subclassed tool that used `this` before `super()` replaced with a `tool()` factory, `config.writer` replaced with `getWriter()`, a duplicate `addNode` removed. Recommended `tsconfig` updated (ES2022, bundler resolution, `tsx`). `@langchain/community` (deprecated) removed. Hand-rolled hook, cache and memory frameworks cut in favour of middleware, `cachePolicy` and the Store. Interrupts, `Command`, `Send`, subgraphs, Functional API and time travel added on [their own page](/langgraph-guide/typescript/langgraph_control_flow_typescript/). |
 | 1.5.2 | 2026-10-21 | Replaced invented or removed APIs (`AgentExecutor`, `createOpenAIFunctionsAgent`, `@langgraphjs/toolkit`, `value_type` channels, `cache`/`cacheKey`/`cacheTTL`/`deferred` node options, `ZodOutputParser`) with real ones; fixed `tool()` argument order and `.stream()` chunk shapes. |
 | 1.3.0 | 2026-05-05 | `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `pushMessage`. |

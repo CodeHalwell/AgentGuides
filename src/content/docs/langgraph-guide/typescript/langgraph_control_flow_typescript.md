@@ -53,7 +53,7 @@ Things to know:
 - **The node re-runs from the top on resume.** Code before `interrupt()` runs again, so keep it free of side effects (or move side effects after the interrupt, or into a `task`).
 - **`isInterrupted(result)`** narrows the result type so `result[INTERRUPT]` type-checks; `graph.getState(config)` also shows the pending interrupts in `snapshot.tasks`.
 - **Several interrupts in one node** are matched to resume values in order. With interrupts pending in parallel nodes, resume with a map from interrupt ID to value: `new Command({ resume: { [id]: value } })`.
-- **Without a checkpointer** the run still stops at the interrupt, but there is nothing to resume.
+- **Without a checkpointer** `interrupt()` throws `No checkpointer set` (error code `MISSING_CHECKPOINTER`), and `invoke(new Command({ resume }))` throws as well. Compile with at least a `MemorySaver`.
 
 ## Approvals in `createAgent` agents
 

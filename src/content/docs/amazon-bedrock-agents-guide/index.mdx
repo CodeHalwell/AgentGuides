@@ -48,7 +48,7 @@ The harness and code-defined agents both run on AgentCore Runtime, and the CLI c
 ## What's new
 
 - **Bedrock Agents Classic in maintenance mode (30 July 2026)**: closed to accounts without prior usage. AWS names the managed harness as the first migration target and code-defined agents on Runtime for custom orchestration, prompt overrides or multi-agent collaboration.
-- **AgentCore**: generally available since October 2025. Recent additions include the managed harness, A2A and AG-UI server protocols on Runtime, direct code deployment (Python and Node.js), Evaluations, Policy and Payments. The npm **AgentCore CLI** (`@aws/agentcore`) is the recommended deployment tool. It scaffolds harness or code projects, deploys them with CDK, imports Classic agents and exports a harness to Strands code.
+- **AgentCore**: generally available since October 2025. Recent additions include the managed harness, A2A and AG-UI server protocols on Runtime, direct code deployment (Python and Node.js), Evaluations, Policy and Payments. The npm **AgentCore CLI** (`@aws/agentcore`) is the recommended deployment tool. It scaffolds harness or code projects, deploys them with CDK, imports Classic agents (`agentcore add runtime --agent-id`) and exports a harness to Strands code. CLI 1.0 changed the command set from 0.x; `agentcore migrate` converts a 0.x project.
 - **Strands Agents**: 1.0 shipped in July 2025, with minor releases since. Recent releases added `Agent.as_tool`, A2A client and server support, `CacheConfig` for prompt caching (replacing the deprecated `cache_prompt` and `cache_tools`), sandboxes, plugins and Agent Skills.
 - **Claude 5.5 models on Bedrock**: `anthropic.claude-opus-5-5`, `anthropic.claude-sonnet-5-5` and `anthropic.claude-haiku-5-5`, usually called through inference profiles such as `us.anthropic.claude-sonnet-5-5`.
 
@@ -58,6 +58,7 @@ The harness and code-defined agents both run on AgentCore Runtime, and the CLI c
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | Strands 1.62.0 · AgentCore SDK 1.24.2 · AgentCore CLI 1.0.0 | AgentCore CLI instructions rewritten for CLI 1.0 (templates, `add runtime` and `add harness`, `harness.yaml`, `eval`, per-resource `logs` and `traces`). Added Runtime application features, inline-function harness tools, Browser, `MemorySessionManager`, AgentCore error handling and middleware, IAM additions, and two AgentCore recipes. Corrected the harness limits, session ID rules and Code Interpreter output handling. |
 | 2026-10-21 | Strands 1.62.0 · AgentCore SDK 1.24.2 · AgentCore CLI 0.31.1 | Python pages moved into `python/`. Added the managed harness, Classic → AgentCore import and harness export. Fixed the `agentcore create` steps. Production guide rewritten for AgentCore. Agents Classic reference cut to verified material. Diagrams redrawn. Archived March 2025 summary removed. |
 | 2026-10-21 | Strands 1.62.0 · AgentCore SDK 1.24.2 · boto3 1.43.117 | AgentCore, Strands, A2A, recipes, multi-agent, middleware, error-handling, observability and IAM pages rewritten against the installed SDKs. Claude 3.x model IDs replaced with Claude 5.5 IDs. Agents Classic maintenance-mode notice added. TypeScript section added. |
 | 2026-06-07 | Strands 1.42.0 | Version bump from 1.36.0. Broken `__version__` import replaced with `importlib.metadata.version`. |

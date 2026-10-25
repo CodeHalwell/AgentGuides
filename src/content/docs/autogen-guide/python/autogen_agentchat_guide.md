@@ -7,9 +7,9 @@ sidebar:
   order: 1
 ---
 
-> **Verified against `autogen-agentchat` %%version=autogen-agentchat%%** with `autogen-core` and `autogen-ext` at the same version (the three packages are released in lockstep; checked %%versions-checked%%). Every example was run offline with `autogen_ext.models.replay.ReplayChatCompletionClient` or constructed against the installed packages.
+> **Verified against `autogen-agentchat` %%version=autogen-agentchat%%** with `autogen-core` and `autogen-ext` at the same version (the three packages are released in lockstep; checked %%versions-checked%%). Every example was run offline with `autogen_ext.models.replay.ReplayChatCompletionClient` or constructed against the installed packages. Examples that use a literal `gpt-5-mini` need that older ID because this release does not recognise newer ones; [Model clients](#model-clients) shows the `model_info` that lets any other model run.
 
-> **Status: archived.** Microsoft put AutoGen into maintenance mode in October 2025, when it announced [Microsoft Agent Framework](/microsoft-agent-framework-guide/) as the successor, and in October 2026 marked the repository archived and no longer maintained — no bug fixes, security fixes or new features. The last release is 0.7.5 (30 September 2025). Use this page to understand and maintain existing AutoGen 0.4–0.7 code; for new work, Microsoft points to Agent Framework and its [AutoGen migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-autogen/).
+> **Status: archived.** Microsoft moved AutoGen to maintenance mode when it announced [Microsoft Agent Framework](/microsoft-agent-framework-guide/) as the successor, and the repository is now archived and no longer maintained by Microsoft (the upstream README states there are no bug fixes, security fixes or support). The last release is 0.7.5 (30 September 2025). Use this page to understand and maintain existing AutoGen 0.4–0.7 code; for new work, Microsoft points to Agent Framework and its [AutoGen migration guide](https://learn.microsoft.com/en-us/agent-framework/migration-guide/from-autogen/).
 
 This page is about **Microsoft AutoGen** (`autogen_agentchat`, `autogen_core`, `autogen_ext`) — the actor-model rewrite Microsoft shipped as 0.4 in January 2025. It is **not** AG2. The community fork's `import autogen` API (AG2 Classic) is covered in the [AG2 guide](/ag2-guide/classic/); see [the AutoGen overview](/autogen-guide/) for how the two diverged.
 
@@ -254,6 +254,59 @@ asyncio.run(main())
 
 Handlers are routed by the message's type annotation. `publish_message(..., topic_id=...)` broadcasts to subscribers (`@default_subscription`, `TypeSubscription`); `autogen_ext.runtimes.grpc` provides a distributed host and worker runtime.
 
+### Publish and subscribe
+
+Direct `send_message` calls reach one agent. `publish_message` broadcasts to a topic, and every agent subscribed to it receives the message, with no reply expected. `@default_subscription` subscribes an agent type to the default topic, which is the simplest case. `TypeSubscription` and explicit `TopicId`s route by topic type and source instead.
+
+```python
+import asyncio
+from dataclasses import dataclass
+
+from autogen_core import (
+    DefaultTopicId, MessageContext, RoutedAgent, SingleThreadedAgentRuntime, default_subscription, message_handler,
+)
+
+
+@dataclass
+class Order:
+    sku: str
+    quantity: int
+
+
+@default_subscription
+class Warehouse(RoutedAgent):
+    def __init__(self) -> None:
+        super().__init__("Reserves stock")
+        self.reserved: list[Order] = []
+
+    @message_handler
+    async def on_order(self, message: Order, ctx: MessageContext) -> None:
+        self.reserved.append(message)
+        print(f"warehouse reserved {message.quantity} x {message.sku}")
+
+
+@default_subscription
+class Billing(RoutedAgent):
+    def __init__(self) -> None:
+        super().__init__("Invoices orders")
+
+    @message_handler
+    async def on_order(self, message: Order, ctx: MessageContext) -> None:
+        print(f"billing invoiced {message.quantity} x {message.sku}")
+
+
+async def main() -> None:
+    runtime = SingleThreadedAgentRuntime()
+    await Warehouse.register(runtime, "warehouse", lambda: Warehouse())
+    await Billing.register(runtime, "billing", lambda: Billing())
+    runtime.start()
+    await runtime.publish_message(Order("tea-100g", 3), topic_id=DefaultTopicId())   # both subscribers receive it
+    await runtime.stop_when_idle()
+
+
+asyncio.run(main())
+```
+
 ## Memory, model context and code execution
 
 `memory=` adds retrieved content to the model context before each call. `model_context=` controls how much history the model sees. `CodeExecutorAgent` runs the code blocks in the messages it receives:
@@ -302,6 +355,52 @@ asyncio.run(main())
 - **`MagenticOneGroupChat`** (`autogen_agentchat.teams`) is the orchestrator team from Microsoft's Magentic-One system. An orchestrator keeps a task ledger, picks the next agent and re-plans after `max_stalls` turns without progress: `MagenticOneGroupChat([researcher, writer], model_client=model_client, max_turns=20)`. The full Magentic-One agent set (web surfer, file surfer, coder) is `autogen_ext.teams.magentic_one.MagenticOne` (extra `autogen-ext[magentic-one]`, plus Playwright for the browser).
 - **AutoGen Studio** (`pip install autogenstudio`, then `autogenstudio ui --port 8080`) is a low-code web UI for building and testing teams from component JSON. It is a prototyping tool, not a deployment target. Its last release was 0.4.2.2 (May 2025), and it is archived along with the rest of the repository.
 
+## Testing offline with ReplayChatCompletionClient
+
+`autogen_ext.models.replay.ReplayChatCompletionClient` returns scripted responses in order, so tests need no network and no API key. A string is a plain text answer. A `CreateResult` with `finish_reason="function_calls"` and a list of `FunctionCall`s makes the agent call a tool, and the real tool function runs. Pass `model_info` so the client reports the capabilities (here, function calling) that `AssistantAgent` checks for.
+
+```python
+import asyncio
+
+from autogen_agentchat.agents import AssistantAgent
+from autogen_core import FunctionCall
+from autogen_core.models import CreateResult, RequestUsage
+from autogen_ext.models.replay import ReplayChatCompletionClient
+
+
+async def get_weather(city: str) -> str:
+    """Get the weather for a given city."""
+    return f"The weather in {city} is 23 °C and sunny."
+
+
+def tool_call(name: str, arguments: str) -> CreateResult:
+    return CreateResult(
+        finish_reason="function_calls",
+        content=[FunctionCall(id="call-1", name=name, arguments=arguments)],
+        usage=RequestUsage(prompt_tokens=0, completion_tokens=0),
+        cached=False,
+    )
+
+
+async def main() -> None:
+    model_client = ReplayChatCompletionClient(
+        [tool_call("get_weather", '{"city": "Paris"}'), "It is 23 °C and sunny in Paris."],
+        model_info={"vision": False, "function_calling": True, "json_output": False, "family": "unknown", "structured_output": False},
+    )
+    agent = AssistantAgent("assistant", model_client=model_client, tools=[get_weather], reflect_on_tool_use=True)
+    result = await agent.run(task="What is the weather in Paris?")
+
+    kinds = [type(m).__name__ for m in result.messages]
+    assert kinds == ["TextMessage", "ToolCallRequestEvent", "ToolCallExecutionEvent", "TextMessage"], kinds
+    assert result.messages[2].content[0].content == "The weather in Paris is 23 °C and sunny."   # the real tool ran
+    assert result.messages[-1].content == "It is 23 °C and sunny in Paris."
+    print(kinds)
+
+asyncio.run(main())
+```
+
+The replay client raises an error once the script is exhausted, which is useful: a test that makes more model calls than you scripted fails instead of hanging. Teams share one client in this style of test, so script the responses in the order the agents (and, for `SelectorGroupChat`, the selector) will call it.
+
 ## Model clients
 
 | Client | Import | Extra |
@@ -324,7 +423,8 @@ model_client = OpenAIChatCompletionClient(
     model_info=ModelInfo(vision=True, function_calling=True, json_output=True, structured_output=True, family="unknown"),
 )
 ```
- Model clients are components: `client.dump_component()` and `ChatCompletionClient.load_component(config)` round-trip them through JSON, which is how AutoGen Studio stores configurations.
+
+Model clients are components: `client.dump_component()` and `ChatCompletionClient.load_component(config)` round-trip them through JSON, which is how AutoGen Studio stores configurations.
 
 ## Moving on: Microsoft Agent Framework
 

@@ -12,7 +12,7 @@ Checked against **agno %%version=agno%%** (checked %%versions-checked%%). The ap
 
 ## What AgentOS is
 
-`AgentOS` turns your agents, teams and workflows into a FastAPI application: about 80 REST paths (78 for one agent, one team and one workflow with default settings) for runs, sessions, memories, knowledge, evals, traces, metrics and schedules, with Server-Sent Events for streaming. It runs in your own infrastructure and stores everything in your database. Optional extras on the same app: an MCP server, chat interfaces, JWT authorisation with per-user isolation, a background job queue and a cron scheduler.
+`AgentOS` turns your agents, teams and workflows into a FastAPI application: about 80 to 95 REST paths (78 for one agent, one team and one workflow with no database; 95 once a `db` is configured, which adds the session, memory, knowledge, eval, trace, metric and schedule routes) for runs, sessions, memories, knowledge, evals, traces, metrics and schedules, with Server-Sent Events for streaming. It runs in your own infrastructure and stores everything in your database. Optional extras on the same app: an MCP server, chat interfaces, JWT authorisation with per-user isolation, a background job queue and a cron scheduler.
 
 Install it with `pip install "agno[os]"` (FastAPI, uvicorn, SQLAlchemy, PyJWT, OpenTelemetry and the scheduler's dependencies).
 
@@ -105,6 +105,8 @@ The OpenAPI schema at `/openapi.json` is the authoritative list for your configu
 
 A paused run comes back with `status: "PAUSED"`, its `requirements`, and `tools` entries with `requires_confirmation: true` (or `requires_user_input`, `external_execution_required`). Set `confirmed` (or fill the input fields, or `result`) on those entries and post the list back, as a JSON string in the `tools` field, to `/agents/{id}/runs/{run_id}/continue` with the same `session_id` and `user_id`:
 
+The snippet assumes an AgentOS serving an agent with id `ops` that has a tool with `requires_confirmation=True`, such as `delete_file` in the [comprehensive guide](/agno-guide/agno_comprehensive_guide/#confirmation). It was run against a live server with a scripted model.
+
 ```python
 import json
 
@@ -194,10 +196,10 @@ app = agent_os.get_app()
 
 | Interface | Import | Routes | Needs |
 |-----------|--------|--------|-------|
-| AG-UI | `agno.os.interfaces.agui.AGUI(agent=... or team=...)` | `POST /agui` (AG-UI event stream; verified with a `RunAgentInput` body) | `agno[agui]` |
+| AG-UI | `agno.os.interfaces.agui.AGUI(agent=... or team=...)` | `POST /agui` (AG-UI event stream; verified with a `RunAgentInput` body), `GET /status` | `agno[agui]` |
 | A2A | `agno.os.interfaces.a2a.A2A(agents=[...], teams=[...], workflows=[...])`, or `AgentOS(a2a_interface=True)` | `/a2a/agents/{id}/.well-known/agent-card.json`, `/a2a/agents/{id}/v1/message:send`, `.../message:stream`, `.../tasks:get`, `.../tasks:cancel` (and the same for teams and workflows) | `agno[a2a]` |
 | Slack | `agno.os.interfaces.slack.Slack(agent=...)` | `POST /slack/events`, `POST /slack/interactions` | `agno[slack]`, `SLACK_TOKEN`, `SLACK_SIGNING_SECRET` |
-| Telegram | `agno.os.interfaces.telegram.Telegram(agent=...)` | `POST /telegram/webhook`, `GET /telegram/status` | `TELEGRAM_TOKEN` |
+| Telegram | `agno.os.interfaces.telegram.Telegram(agent=...)` | `POST /telegram/webhook`, `GET /telegram/status` | `agno[telegram]` (importing the module without it raises `ImportError`), `TELEGRAM_TOKEN` |
 | WhatsApp | `agno.os.interfaces.whatsapp.Whatsapp(agent=...)` | `/whatsapp/webhook` (GET verify, POST messages), `GET /whatsapp/status` | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` |
 
 Each takes one agent, team or workflow (A2A takes lists) and a `prefix` to change the mount point. This release has no Discord interface module, although the project README mentions Discord.
@@ -236,6 +238,8 @@ app = agent_os.get_app()
 alice = create_dev_token("alice", secret=SECRET, scopes=["agents:*:read", "agents:*:run"])
 # curl -H "Authorization: Bearer $alice" ...
 ```
+
+Each route checks scopes, so a token minted with only `agents:*:read` and `agents:*:run` can run agents but gets `403 Insufficient permissions. Required scope(s): sessions:read` from `GET /sessions`. Add the scopes for the routes the client needs.
 
 Verified behaviour: requests without a token get `401`; Alice's run is stored with `user_id="alice"`; another user asking for Alice's session gets `404`. For production use an asymmetric algorithm (`RS256`, the middleware default) with your provider's public keys (`verification_keys=`, `jwks_file=`, or the `JWT_VERIFICATION_KEY` / `JWT_JWKS_FILE` environment variables), and set `audience=` / `verify_audience=True`.
 

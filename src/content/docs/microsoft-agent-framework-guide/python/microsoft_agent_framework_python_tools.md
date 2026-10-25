@@ -1,20 +1,25 @@
 ---
 title: "Microsoft Agent Framework (Python) — Tools"
-description: "The @tool decorator, FunctionTool class, approval gates, explicit schemas, runtime context, invocation limits, as_tool() / as_mcp_server() composition, and result parsers."
+description: "The @tool decorator and FunctionTool class: schemas, runtime context, approval, result parsing, invocation limits, the tool-loop configuration, provider-hosted tools, and agents as tools or MCP servers."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Tools"
+  order: 11
 ---
 
-Tools are how agents call back into your code. Agent Framework offers two ways to define them — the `@tool` decorator for the common case and the `FunctionTool` class for advanced construction. Both target the same `FunctionTool` object that the agent sees.
+Tools are how an agent calls back into your code. You define them with the `@tool` decorator for the common case, or construct a `FunctionTool` directly when tools are built at runtime. Either way the agent sees a `FunctionTool`: a name, a description, a JSON schema for the arguments, and a callable.
 
-This page covers first-party function tools. For MCP tools see the [MCP page](./microsoft_agent_framework_python_mcp/); for skill-based tools see the [Skills page](./microsoft_agent_framework_python_skills/).
+This page covers function tools, the tool loop that runs them, and provider-hosted tools. MCP servers are on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) and skill tools on the [Skills page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/).
 
-Verified against `agent-framework` %%version=agent-framework%% (`agent_framework._tools`, re-checked %%versions-checked%%; first written for 1.6.0).
+Checked against `agent-framework` %%version=agent-framework%% (`agent_framework._tools`), %%versions-checked%%.
 
 ## Minimal `@tool`
 
 ```python
+import asyncio
 from typing import Annotated
+
 from agent_framework import Agent, tool
 from agent_framework.openai import OpenAIChatClient
 
@@ -28,27 +33,43 @@ def get_weather(
     return f"{location}: 22°{unit[0].upper()}"
 
 
-agent = Agent(
-    client=OpenAIChatClient(),
-    instructions="You are a weather assistant.",
-    tools=[get_weather],
-)
+async def main() -> None:
+    agent = Agent(
+        client=OpenAIChatClient(),
+        instructions="You are a weather assistant.",
+        tools=[get_weather],
+    )
+    response = await agent.run("What's the weather in Amsterdam?")
+    print(response.text)
 
-response = await agent.run("What's the weather in Amsterdam?")
+
+asyncio.run(main())
 ```
 
-What the decorator does automatically:
+What the decorator does:
 
-- Uses the function name as the tool name.
-- Uses the docstring as the tool description.
-- Builds a Pydantic input model from the signature.
-- Converts `Annotated[T, "..."]` hints into parameter descriptions in the JSON schema.
-- Wraps sync and async functions identically.
+- The function name becomes the tool name and the docstring the description.
+- A Pydantic input model is built from the signature, and its JSON schema is what the model sees. `Annotated[T, "text"]` and `Annotated[T, Field(description=...)]` both become parameter descriptions; parameters with defaults are optional.
+- Arguments from the model are validated against that input model before your function runs.
+- Async functions run on the event loop. **Sync functions run in a worker thread** (`asyncio.to_thread`), so blocking I/O does not stall other runs, but the function must be thread-safe.
 
-## Customising via decorator args
+The schema for the tool above, from `get_weather.parameters()`:
+
+```text
+{"properties": {"location": {"description": "The city or region name", "title": "Location", "type": "string"},
+                "unit": {"default": "celsius", "description": "celsius or fahrenheit", "title": "Unit", "type": "string"}},
+ "required": ["location"], "title": "get_weather_input", "type": "object"}
+```
+
+Plain functions passed in `tools=[...]` are wrapped the same way, so `@tool` is only required when you want to set options.
+
+## Decorator options
 
 ```python
-from pydantic import BaseModel, Field
+from typing import Annotated
+
+from pydantic import Field
+from agent_framework import tool
 
 
 @tool(
@@ -56,39 +77,49 @@ from pydantic import BaseModel, Field
     description="Returns current conditions for a city.",
     approval_mode="never_require",   # or "always_require"
     max_invocations=50,              # lifetime cap on this tool instance
-    max_invocation_exceptions=3,     # stop after N errors
+    max_invocation_exceptions=3,     # stop calling it after 3 failures
+    kind="readonly",                 # free-form label (see "Tool kind" below)
+    additional_properties={"team": "platform"},
 )
 async def get_weather(
     location: Annotated[str, Field(description="City name, e.g. 'Seattle'.")],
 ) -> str:
-    ...
+    return f"{location}: sunny"
 ```
 
-`@tool` accepts the full set of `FunctionTool` options — see the FunctionTool section below for the rest.
+The full signature is `tool(func=None, *, name=None, description=None, schema=None, approval_mode=None, kind=None, max_invocations=None, max_invocation_exceptions=None, additional_properties=None, result_parser=None)`.
 
 ## Explicit schemas
 
-Skip signature inference by passing `schema=`. Useful when you want to present a narrower or differently shaped schema to the model than the function exposes.
+Pass `schema=` to present a different schema from the one the signature implies, for example to add enum constraints or hide optional parameters. It takes a Pydantic model:
 
 ```python
+from typing import Annotated, Literal
+
 from pydantic import BaseModel, Field
+from agent_framework import tool
 
 
 class WeatherInput(BaseModel):
     location: Annotated[str, Field(description="City name")]
-    unit: Annotated[str, Field(description="celsius|fahrenheit")] = "celsius"
+    unit: Literal["celsius", "fahrenheit"] = "celsius"
 
 
 @tool(schema=WeatherInput)
 def get_weather(location: str, unit: str = "celsius") -> str:
+    """Get the weather."""
     return f"{location}: 22 {unit}"
 ```
 
-`schema=` also accepts a JSON schema dict (flat object with `properties`) for cases where you're assembling the schema elsewhere:
+or a JSON schema dict (an object schema with `properties`):
 
 ```python
+from agent_framework import tool
+
+
 @tool(
     name="get_weather",
+    description="Get the weather.",
     schema={
         "type": "object",
         "properties": {
@@ -98,67 +129,77 @@ def get_weather(location: str, unit: str = "celsius") -> str:
         "required": ["location"],
     },
 )
-def get_weather(location: str, unit: str = "celsius") -> str: ...
+def get_weather(location: str, unit: str = "celsius") -> str:
+    return f"{location}: 22 {unit}"
 ```
 
-## Runtime context — hidden parameters
+The function is still called with keyword arguments named after the schema's properties, so keep the two in step.
 
-Add a `FunctionInvocationContext` parameter anywhere in the signature to receive per-call state. It's hidden from the JSON schema the model sees.
+## Runtime context: hidden parameters
 
-```python
-from agent_framework import tool, FunctionInvocationContext
-
-
-@tool
-def get_user_orders(
-    status: Annotated[str, "pending|shipped|delivered"],
-    ctx: FunctionInvocationContext,
-) -> str:
-    user_id = ctx.kwargs.get("user_id")
-    session_id = ctx.session.session_id if ctx.session else "no-session"
-    # …run your query…
-    return f"{user_id} has 3 {status} orders"
-
-
-# kwargs forwarded from the outer agent.run(...) call:
-await agent.run(
-    "Where are my orders?",
-    function_invocation_kwargs={"user_id": "u-123"},
-)
-```
-
-### `FunctionInvocationContext` field reference
-
-All fields available inside a tool that declares a `FunctionInvocationContext` parameter:
-
-| Field | Type | What it carries |
-|---|---|---|
-| `function` | `FunctionTool` | The tool being invoked — read `function.name`, `function.kind`, etc. |
-| `arguments` | `BaseModel \| Mapping[str, Any]` | Already-validated call arguments (Pydantic model when a schema produced one). Mutate before `call_next()` to inject defaults. |
-| `session` | `AgentSession \| None` | The agent session for this run; read `session.state` for user/tenant context. |
-| `kwargs` | `Mapping[str, Any]` | Extra kwargs forwarded from `agent.run(..., function_invocation_kwargs={...})`. |
-| `metadata` | `dict[str, Any]` | Shared scratchpad across **all function middleware** in the same invocation — write here in one middleware, read in the next. |
-| `result` | `Any` | `None` before `call_next()`; holds the tool's return value afterwards. Override it to rewrite the result. |
-
-### `ctx.metadata` — sharing data between tool and middleware
-
-`metadata` travels with the context through the whole function middleware stack. A middleware can stamp values in; the tool (and later middlewares) can read them. A typical use: a request-scoped trace ID injected by a logging middleware and consumed inside the tool for structured logging.
+Add a parameter annotated `FunctionInvocationContext` anywhere in the signature to receive per-call state. It is left out of the schema the model sees.
 
 ```python
 import asyncio
 from typing import Annotated
-from agent_framework import (
-    Agent,
-    FunctionInvocationContext,
-    function_middleware,
-    tool,
-)
+
+from agent_framework import Agent, FunctionInvocationContext, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def get_user_orders(
+    status: Annotated[str, "pending, shipped or delivered"],
+    ctx: FunctionInvocationContext,
+) -> str:
+    """List the current user's orders with a given status."""
+    user_id = ctx.kwargs.get("user_id")
+    session_id = ctx.session.session_id if ctx.session else "no-session"
+    return f"{user_id} ({session_id}) has 3 {status} orders"
+
+
+async def main() -> None:
+    agent = Agent(client=OpenAIChatClient(), instructions="Answer order questions.", tools=[get_user_orders])
+    session = agent.create_session()
+    response = await agent.run(
+        "Where are my orders?",
+        session=session,
+        function_invocation_kwargs={"user_id": "u-123"},   # reaches ctx.kwargs, never the model
+    )
+    print(response.text)
+
+
+asyncio.run(main())
+```
+
+`function_invocation_kwargs` is the right channel for tenant IDs, auth tokens and trace IDs: the model cannot see or forge them.
+
+### `FunctionInvocationContext` fields
+
+| Field | Type | What it carries |
+|---|---|---|
+| `function` | `FunctionTool` | The tool being invoked: `function.name`, `function.kind`, `function.additional_properties`. |
+| `arguments` | `BaseModel \| Mapping[str, Any]` | The call arguments. In function middleware you may replace them before `call_next()`; they are validated again just before the function runs. |
+| `session` | `AgentSession \| None` | The session of the current run, if any. |
+| `kwargs` | `Mapping[str, Any]` | The `function_invocation_kwargs` passed to `run()`. |
+| `metadata` | `dict[str, Any]` | Scratch space shared by every function middleware in this one invocation, and visible to the tool. |
+| `result` | `Any` | `None` before `call_next()`; the tool's result afterwards. A middleware can overwrite it. |
+| `tools` | `list \| None` | The tools available in this run. |
+
+### Sharing data between middleware and the tool
+
+A function middleware can stamp a value into `context.metadata`, and the tool reads it from the same context object. Each invocation gets its own context, so nothing leaks between concurrent calls.
+
+```python
+import asyncio
+from typing import Annotated
+
+from agent_framework import Agent, FunctionInvocationContext, function_middleware, tool
 from agent_framework.openai import OpenAIChatClient
 
 
 @function_middleware
 async def stamp_trace_id(context: FunctionInvocationContext, call_next) -> None:
-    """Stamp a trace ID before the tool runs so the tool can log it."""
     context.metadata["trace_id"] = context.session.session_id if context.session else "no-session"
     await call_next()
 
@@ -168,8 +209,8 @@ async def fetch_report(
     report_id: Annotated[str, "The report identifier."],
     ctx: FunctionInvocationContext,
 ) -> str:
+    """Fetch a report by id."""
     trace = ctx.metadata.get("trace_id", "unknown")
-    # include trace_id in your structured logs, spans, or audit trail
     return f"[trace={trace}] Report {report_id}: revenue £42,000"
 
 
@@ -178,9 +219,8 @@ async def main() -> None:
         client=OpenAIChatClient(),
         instructions="You are a reporting assistant.",
         tools=[fetch_report],
-        middleware=[stamp_trace_id],   # agent-level middleware injects trace IDs
+        middleware=[stamp_trace_id],
     )
-
     session = agent.create_session(session_id="req-abc123")
     response = await agent.run("Show me the Q1 revenue report.", session=session)
     print(response.text)
@@ -189,367 +229,294 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-**Why metadata instead of globals?** Each invocation gets a fresh `FunctionInvocationContext`; metadata is isolated per call. No thread-safety concerns, no request-id bleeding between concurrent runs.
-
-### Accessing `ctx.function` for policy enforcement
-
-`context.function` exposes the full `FunctionTool` — name, kind, additional_properties. A function middleware can read these to enforce policies without hardcoding tool names:
+## Approval
 
 ```python
-from agent_framework import FunctionInvocationContext, MiddlewareTermination, function_middleware
+import os
+
+from agent_framework import tool
 
 
-@function_middleware
-async def block_mutating_without_approval(
-    context: FunctionInvocationContext, call_next
-) -> None:
-    if context.function.kind == "mutating":
-        approved = context.kwargs.get("approved") is True
-        if not approved:
-            raise MiddlewareTermination(
-                f"{context.function.name} is a mutating tool; pass approved=True to proceed."
-            )
-    await call_next()
-```
-
-`ctx.metadata` also flows from any function middleware in the pipeline — see the [Middleware page](./microsoft_agent_framework_python_middleware/) for the full middleware reference.
-
-## Approval gates
-
-```python
 @tool(approval_mode="always_require")
 def delete_file(path: str) -> str:
-    import os
+    """Delete a file."""
     os.remove(path)
     return f"deleted {path}"
 ```
 
-Per-tool gate values:
-
-- `"never_require"` (default) — always runs.
-- `"always_require"` — pauses and emits a `function_approval_request` event; caller approves via `event.data.to_function_approval_response(approved=True)`.
-
-See the [Human-in-the-loop page](./microsoft_agent_framework_python_hitl/#tool-approval) for the approval loop pattern.
-
-## Result parsing
-
-By default, the return value is `str(...)`-ed (or JSON-serialised for dataclasses and Pydantic models). Override with `result_parser=` to emit multi-part content, attach images, or trim long output.
-
-The framework uses a single unified `Content` class with classmethod constructors (`Content.from_text`, `Content.from_uri`, `Content.from_data`, `Content.from_error`, …). A result parser returns either a string or a `list[Content]`:
+`approval_mode` is `"never_require"` (the default) or `"always_require"`. When the model calls an approval-gated tool, the run stops before the tool executes and the response carries a `function_approval_request` in `response.user_input_requests`. Turn each request into an answer with `request.to_function_approval_response(approved=True | False)` and send it back as a user message **on the same session**:
 
 ```python
-from agent_framework import tool, Content
+import asyncio
+
+from agent_framework import Agent, Message, tool
+from agent_framework.openai import OpenAIChatClient
 
 
-def parse_weather_result(result: dict) -> list[Content]:
-    parts: list[Content] = [
-        Content.from_text(f"{result['temp']}°C — {result['summary']}")
-    ]
-    if icon_url := result.get("icon_url"):
-        parts.append(Content.from_uri(uri=icon_url, media_type="image/png"))
-    return parts
+@tool(approval_mode="always_require")
+def refund(order_id: str, amount: float) -> str:
+    """Refund an order."""
+    return f"refunded {amount} on {order_id}"
 
 
-@tool(result_parser=parse_weather_result)
-def get_weather(location: str) -> dict:
-    return {
-        "temp": 22,
-        "summary": "Sunny",
-        "icon_url": "https://cdn.example.com/weather/sunny.png",
-    }
+async def main() -> None:
+    agent = Agent(client=OpenAIChatClient(), instructions="Handle refunds.", tools=[refund])
+    session = agent.create_session()
+
+    response = await agent.run("Refund £20 on order A-17.", session=session)
+    while response.user_input_requests:
+        answers = []
+        for request in response.user_input_requests:
+            call = request.function_call
+            print(f"Approve {call.name}({call.arguments})?")
+            answers.append(request.to_function_approval_response(approved=True))
+        response = await agent.run(Message(role="user", contents=answers), session=session)
+
+    print(response.text)
+
+
+asyncio.run(main())
 ```
 
-Return a `str` to keep things simple — the framework wraps it in a single `Content.from_text(...)` for you. Return `list[Content]` only when you need multi-part output (image + caption, JSON + human-readable summary).
+The session matters: by default the framework only accepts an approval that matches a request it recorded in that session, so an approval fabricated in caller-supplied history cannot run a tool (`disable_approval_response_binding` in the tool-loop configuration below turns this off). Workflows, streaming and Agent-as-tool approvals are on the [human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval).
 
-### Trimming verbose tool output
+## What the model sees: result parsing and errors
 
-The model does not need the whole body of a 400-row SQL result — shrink it before the tokens land in context:
+Every result is converted to `list[Content]` before it goes back to the model. The default conversion:
+
+| Return value | Becomes |
+|---|---|
+| `str` | One text item. |
+| `None` | One empty text item. |
+| `Content`, or a list containing `Content` | Kept as is (non-`Content` items in the list are JSON-encoded). |
+| Pydantic model, dataclass, dict, list, number | JSON text. |
+
+### Custom result parsers
+
+`result_parser=` takes the raw return value and returns a `str` or a `list[Content]`. Use it to trim large results before they reach the context window, or to return several parts:
 
 ```python
 import json
-from agent_framework import tool, Content
+
+from agent_framework import Content, tool
 
 
-def top_n_preview(result: list[dict]) -> str:
-    head = result[:10]
-    summary = f"{len(result)} rows (showing first 10)\n"
-    return summary + json.dumps(head, default=str, indent=2)
+def top_ten(rows: list[dict]) -> str:
+    return f"{len(rows)} rows (first 10 shown)\n" + json.dumps(rows[:10], default=str)
 
 
-@tool(result_parser=top_n_preview)
+@tool(result_parser=top_ten)
 def run_query(sql: str) -> list[dict]:
-    return execute(sql)                # might return thousands of rows
+    """Run a read-only SQL query."""
+    return [{"id": i, "total": i * 10} for i in range(400)]
+
+
+def weather_parts(result: dict) -> list[Content]:
+    parts = [Content.from_text(f"{result['temp']}°C, {result['summary']}")]
+    if icon := result.get("icon_url"):
+        parts.append(Content.from_uri(icon, media_type="image/png"))
+    return parts
+
+
+@tool(result_parser=weather_parts)
+def get_weather(location: str) -> dict:
+    """Get the weather."""
+    return {"temp": 22, "summary": "Sunny", "icon_url": "https://cdn.example.com/sunny.png"}
 ```
 
-## Invocation limits
+The `Content` constructors you will use most in results:
 
-`max_invocations` caps the **lifetime** of a tool instance. For module-level tools in long-running servers, either:
+| Method | Signature | Use |
+|---|---|---|
+| `Content.from_text` | `(text)` | Text, JSON, summaries. |
+| `Content.from_uri` | `(uri, *, media_type=None)` | A remote image, PDF or audio file, or a `data:` URI. |
+| `Content.from_data` | `(data: bytes, media_type)` | Inline binary content. |
+| `Content.from_error` | `(*, message=None, error_code=None, error_details=None)` | A failure the model should reason about, without raising. |
 
-- Reset explicitly: `get_weather.invocation_count = 0`
-- Use per-request limits instead: set `client.function_invocation_configuration["max_function_calls"] = 3` at the client level (see [Per-request tool-loop caps](#per-request-tool-loop-caps) below).
+Whether a provider can pass images or files back to the model as a tool result depends on the provider's API; text always works.
 
-`max_invocation_exceptions` puts a ceiling on how many times a tool can error before the agent stops calling it — a simple circuit breaker.
+### `SKIP_PARSING`
 
-### Reading `invocation_count` for cheap dashboards
-
-Every `FunctionTool` increments a public `invocation_count` integer on each call. Sample it from middleware (or a periodic job) without holding any state of your own:
+`result_parser=SKIP_PARSING` makes `invoke()` return the function's raw value. You can also skip parsing for one direct call:
 
 ```python
-from agent_framework import Agent, tool
-from agent_framework.openai import OpenAIChatClient
+import asyncio
+
+from agent_framework import SKIP_PARSING, tool
+
+
+@tool(result_parser=SKIP_PARSING)
+def crunch(values: list[float]) -> dict:
+    """Summarise numbers."""
+    return {"mean": sum(values) / len(values)}
 
 
 @tool
-def fetch_inventory(sku: str) -> str:
-    return query_inventory(sku)
+def stats(values: list[float]) -> dict:
+    """Summarise numbers."""
+    return {"n": len(values)}
 
 
-agent = Agent(client=OpenAIChatClient(), tools=[fetch_inventory])
+async def main() -> None:
+    print(await crunch.invoke(arguments={"values": [1.0, 2.0]}))                     # {'mean': 1.5}
+    print(await stats.invoke(arguments={"values": [1.0]}, skip_parsing=True))       # {'n': 1}
+    print((await stats.invoke(arguments={"values": [1.0]}))[0].text)                 # '{"n": 1}'
 
-# After a batch of runs:
-print(f"fetch_inventory called {fetch_inventory.invocation_count} times")
-fetch_inventory.invocation_count = 0    # reset for the next reporting window
+
+asyncio.run(main())
 ```
 
-Combine with `max_invocations=N` to cap **per-process** spend on expensive tools (e.g. paid third-party APIs) without setting a per-request `FunctionInvocationConfiguration`.
+This is for code that calls tools itself (a harness, a code-execution sandbox, tests). A tool the agent calls still needs a result the model can read.
 
-### Per-request tool-loop caps
+### Errors
 
-`FunctionInvocationConfiguration` is a `TypedDict` that configures the tool execution loop. Apply it at the **chat-client level** to set defaults for every run on that client, or override per-agent with `default_options`:
+If a tool raises, the loop catches the exception and sends the model a function result that says **only** `Error: Function failed.`, and logs a warning. The exception text is withheld because it can contain secrets, paths or stack details. You have three options:
 
-```python
-from agent_framework import Agent
-from agent_framework.openai import OpenAIChatClient
-
-# Configure at the client level — applies to every agent using this client
-client = OpenAIChatClient()
-client.function_invocation_configuration["max_iterations"] = 5
-client.function_invocation_configuration["max_function_calls"] = 20
-client.function_invocation_configuration["max_consecutive_errors_per_request"] = 3
-client.function_invocation_configuration["terminate_on_unknown_calls"] = True
-client.function_invocation_configuration["include_detailed_errors"] = False
-
-agent = Agent(client=client, instructions="You are a research assistant.")
-await agent.run("Research the order pipeline")
-```
-
-All `FunctionInvocationConfiguration` keys (all optional, verified against `agent-framework` %%version=agent-framework%%):
-
-| Key | Type | Default | Effect |
-|---|---|---|---|
-| `enabled` | `bool` | `True` | Master switch for the tool loop; set `False` to disable all tool calling |
-| `max_iterations` | `int` | `40` | Max LLM roundtrips per request before the loop is aborted |
-| `max_function_calls` | `int \| None` | `None` | Max total tool executions per request (best-effort — see note) |
-| `max_consecutive_errors_per_request` | `int` | `3` | Halt after N consecutive tool errors to prevent runaway loops |
-| `terminate_on_unknown_calls` | `bool` | `False` | Raise `ToolException` if the model calls an unregistered tool |
-| `include_detailed_errors` | `bool` | `False` | Include stack traces in tool error messages sent back to the model |
-| `additional_tools` | `Sequence[FunctionTool]` | `[]` | Extra tools executed when called but **not** advertised in the model's schema |
-
-`max_function_calls` is a **best-effort** limit — it's checked *after* each batch of parallel calls completes. A single iteration that emits 20 parallel calls will run all 20 even if the limit is 10; the next iteration then bails out. Combine with `max_iterations` to bound worst-case wall time.
-
-## Tool classification — `kind`
-
-`kind` is a free-form string the framework propagates to provider adapters and observability layers. The first-party providers use it to decide how each tool is rendered to the model — for example, OpenAI's Responses API may surface `kind="hosted"` tools as a different shape than ordinary function tools. Use the same string to filter tools in your own dashboards or middleware:
+- Return an explanatory string (or `Content.from_error(message=...)`) for errors the model should act on, such as "Unknown timezone; use an IANA name".
+- Set `include_detailed_errors=True` in the tool-loop configuration (below) to append the exception text to the error result. Only do this when the exception text is safe to show the model.
+- Raise `MiddlewareFailure` from function middleware when an enforcement check fails and the whole run must stop; ordinary exceptions never stop the run.
 
 ```python
 from agent_framework import tool
 
 
-@tool(kind="readonly", additional_properties={"team": "platform", "owner": "search"})
-def search_kb(query: str) -> str:
-    """Read-only access to the internal knowledge base."""
-    ...
-
-
-@tool(kind="mutating", additional_properties={"team": "platform", "requires_audit": True})
-def archive_ticket(ticket_id: str) -> str:
-    """Move the ticket to long-term storage."""
-    ...
+@tool
+def divide(a: float, b: float) -> str:
+    """Divide a by b."""
+    if b == 0:
+        return "Cannot divide by zero. Ask the user for a non-zero divisor."
+    return str(a / b)
 ```
 
-Read both fields from middleware to enforce policy:
+After `max_consecutive_errors_per_request` failures in a row (default 3) the loop stops calling tools for that request. For transient failures, wrap the call in a retrying function middleware ([Middleware → retrying a failed tool call](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
+
+## Invocation limits
+
+`max_invocations=N` caps the **lifetime** of the tool instance: once it has run N times, further calls raise `ToolException` (which the model sees as a failed call). Calls already requested in the same batch still complete. The counter lives on the instance and is never reset automatically, so for module-level tools in a long-running server either reset it yourself or use a per-request limit (`max_function_calls`, below).
+
+`max_invocation_exceptions=N` does the same for failures: after N exceptions the tool stops being called.
+
+Both counters are public:
 
 ```python
-from agent_framework import FunctionMiddleware, MiddlewareTermination
+from agent_framework import tool
 
 
-class ReadOnlyGuard(FunctionMiddleware):
-    """Block mutating tools unless the caller passed approval=True."""
+@tool(max_invocations=1000)
+def fetch_inventory(sku: str) -> str:
+    """Look up stock for a SKU."""
+    return f"{sku}: 12 in stock"
 
-    async def process(self, context, call_next) -> None:
-        kind = context.function.kind
-        approved = context.kwargs.get("approval") is True
-        if kind == "mutating" and not approved:
-            raise MiddlewareTermination(
-                f"{context.function.name} is mutating; approval=True required",
-            )
+
+# Later, in a periodic job:
+print(fetch_inventory.invocation_count, fetch_inventory.invocation_exception_count)
+fetch_inventory.invocation_count = 0     # start a new reporting window
+```
+
+## Configuring the tool loop
+
+The loop that sends tool results back to the model and asks again is configured per chat client with a `FunctionInvocationConfiguration` (a `TypedDict`). Pass it to the client constructor, or change keys on `client.function_invocation_configuration` afterwards. Every agent using that client gets the same settings.
+
+```python
+import asyncio
+
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+
+client = OpenAIChatClient(
+    function_invocation_configuration={
+        "max_iterations": 5,          # model round trips per run
+        "max_function_calls": 20,     # total tool executions per run
+        "max_duration_seconds": 60.0,
+    }
+)
+client.function_invocation_configuration["terminate_on_unknown_calls"] = True
+
+
+async def main() -> None:
+    agent = Agent(client=client, instructions="You are a research assistant.")
+    print((await agent.run("Research the order pipeline")).text)
+
+
+asyncio.run(main())
+```
+
+| Key | Default | Effect |
+|---|---|---|
+| `enabled` | `True` | Master switch. `False` leaves function calls in the response for you to handle. |
+| `max_iterations` | `40` | Maximum model round trips in one run. |
+| `max_function_calls` | `None` | Maximum tool executions in one run. When reached, tools are withdrawn and the model is asked for a text answer. |
+| `max_duration_seconds` | `None` | Wall-clock budget for the loop, including time spent waiting for approvals; same graceful stop. |
+| `max_consecutive_errors_per_request` | `3` | Stop calling tools after this many failures in a row. |
+| `terminate_on_unknown_calls` | `False` | Raise instead of returning an error result when the model calls a tool that does not exist. |
+| `include_detailed_errors` | `False` | Append the exception text to error results sent to the model. |
+| `allow_concurrent_invocation` | `True` | Run several calls from one model response concurrently. `False` runs them in order. |
+| `additional_tools` | `[]` | Tools that can be executed if called but are not advertised to the model. |
+| `disable_approval_response_binding` | `False` | Accept approval responses that do not match a request recorded in the session. Leave it off unless you enforce the same check elsewhere. |
+
+`max_function_calls` and `max_duration_seconds` are checked after each batch of parallel calls, so one response asking for 20 calls runs all 20 even if the limit is 10.
+
+## Tool kind and metadata
+
+`kind` is an optional classification string, and `additional_properties` a free-form dict. The framework does not interpret either, with one exception: `kind="shell"` marks a shell tool, which the OpenAI and Anthropic clients send as their native shell tool (see `client.get_shell_tool(...)`). Any other value is yours to use, typically in function middleware:
+
+```python
+from agent_framework import FunctionInvocationContext, FunctionMiddleware, MiddlewareTermination, tool
+
+
+@tool(kind="readonly", additional_properties={"owner": "search"})
+def search_kb(query: str) -> str:
+    """Search the knowledge base."""
+    return "3 articles"
+
+
+@tool(kind="mutating", additional_properties={"requires_audit": True})
+def archive_ticket(ticket_id: str) -> str:
+    """Move a ticket to long-term storage."""
+    return f"archived {ticket_id}"
+
+
+class MutatingGuard(FunctionMiddleware):
+    """Refuse mutating tools unless the caller passed approved=True in function_invocation_kwargs."""
+
+    async def process(self, context: FunctionInvocationContext, call_next) -> None:
+        if context.function.kind == "mutating" and context.kwargs.get("approved") is not True:
+            raise MiddlewareTermination(f"{context.function.name} needs approval")
         await call_next()
 ```
 
-`additional_properties` is just a `dict[str, Any]` — drop anything in there that travels with the tool: cost class, owning team, downstream rate limit headers, audit category. The framework never inspects the contents; it's a slot for your own metadata so you don't have to maintain a parallel registry.
+`MiddlewareTermination` raised from function middleware ends the tool loop gracefully: the run returns what it has so far. To fail the run with an exception instead, raise `MiddlewareFailure`. The [middleware page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) covers both.
 
-## Declaration-only tools
+## Constructing `FunctionTool` directly
 
-Define a tool the model can *reason about* but don't implement it — useful for client-side rendering, where the actual execution happens in a frontend:
-
-```python
-from agent_framework import FunctionTool
-
-request_user_location = FunctionTool(
-    name="request_user_location",
-    description="Ask the user to share their GPS location.",
-    func=None,                         # no implementation in Python
-    input_model={                      # tell the model what args to produce
-        "type": "object",
-        "properties": {"reason": {"type": "string"}},
-        "required": ["reason"],
-    },
-)
-```
-
-The model will emit a function call; you intercept it and handle it in your UI layer instead of letting the framework auto-invoke.
-
-## `FunctionTool` direct construction
-
-Equivalent to `@tool`, but useful when you're building tools dynamically (e.g. from a database of available APIs):
-
-```python
-from agent_framework import FunctionTool
-
-
-def fetch(endpoint: str) -> str:
-    ...
-
-
-fetcher = FunctionTool(
-    name="fetch",
-    description="HTTP GET an internal endpoint",
-    func=fetch,
-    approval_mode="always_require",
-    max_invocations=100,
-)
-
-agent = Agent(client=OpenAIChatClient(), tools=[fetcher])
-```
-
-### Full constructor reference
-
-All parameters accepted by `FunctionTool.__init__` (and equivalently by `@tool(...)`):
+`FunctionTool` takes the same options as the decorator, all keyword-only, with the schema passed as `input_model=`:
 
 ```text
-FunctionTool(
-    *,                                       # every argument is keyword-only
-    name: str,                               # tool name sent to the model
-    description: str = "",                   # tool description in the schema
-    approval_mode: ApprovalMode | None = None,   # "always_require" | "never_require"; None = never
-    kind: str | None = None,                 # free-form classification label, e.g. "readonly"
-    max_invocations: int | None = None,      # raise ToolException after N successful calls
-    max_invocation_exceptions: int | None = None,  # raise ToolException after N errors
-    additional_properties: dict | None = None,     # custom metadata (e.g. FIDES source_integrity)
-    func: Callable | None = None,            # None = declaration-only (model sees the tool; no auto-invoke)
-    input_model: type[BaseModel] | Mapping | None = None,  # override the inferred schema
-    result_parser: Callable[[Any], str | list[Content]] | None = None,  # how the return value is sent back
-)
+FunctionTool(*, name, description="", approval_mode=None, kind=None, max_invocations=None,
+             max_invocation_exceptions=None, additional_properties=None, func=None,
+             input_model=None, result_parser=None)
 ```
 
-| Parameter | Notes |
-|---|---|
-| `func=None` | Declaration-only tool — model emits the call, but the framework does not auto-invoke it. Use for client-side UI actions or when you want to intercept the call in middleware. |
-| `input_model=` | Pass a `BaseModel` subclass or a JSON schema dict. When omitted the schema is inferred from `func`'s type annotations. Required when `func` is `None`. |
-| `approval_mode="always_require"` | Every invocation raises `UserInputRequiredException` before executing — the caller must confirm via `agent.run(responses=...)`. |
-| `max_invocations=N` | The tool raises `ToolException` once it has been called successfully N times in the lifetime of this `FunctionTool` instance. Useful for rate-limiting expensive external calls. |
-| `max_invocation_exceptions=N` | Raises `ToolException` after N exceptions from the underlying callable, preventing runaway retry loops. |
-| `additional_properties=` | Free-form dict attached to `function.additional_properties` in middleware — useful for tagging tools with cost, tier, or routing metadata without modifying the schema. |
-
-Example — declaration-only tool with a custom schema:
+Use it when tools are generated at runtime, for example from a table of internal API endpoints:
 
 ```python
+import asyncio
+
 from agent_framework import Agent, FunctionTool
 from agent_framework.openai import OpenAIChatClient
 
-
-# The agent proposes a payment; your application intercepts and renders a confirmation UI.
-confirm_payment = FunctionTool(
-    name="confirm_payment",
-    description="Request the user to confirm a payment before it is processed.",
-    func=None,   # declaration-only — framework will NOT auto-invoke this
-    input_model={
-        "type": "object",
-        "properties": {
-            "amount":   {"type": "number",  "description": "Amount in USD"},
-            "merchant": {"type": "string",  "description": "Merchant name"},
-            "note":     {"type": "string",  "description": "Optional note for the user"},
-        },
-        "required": ["amount", "merchant"],
-    },
-    additional_properties={"ui_action": "payment_confirm"},   # read in middleware
-)
-
-agent = Agent(
-    client=OpenAIChatClient(),
-    instructions="You are a payment assistant. Use confirm_payment before processing any transaction.",
-    tools=[confirm_payment],
-)
-```
-
-Example — tagged tool with middleware cost policy:
-
-```python
-from agent_framework import Agent, FunctionTool, function_middleware, FunctionInvocationContext
-from agent_framework.openai import OpenAIChatClient
-
-
-def make_api_tool(name: str, cost_tier: str) -> FunctionTool:
-    async def call(**kwargs) -> str:
-        return f"Called {name} with {kwargs}"
-
-    return FunctionTool(
-        name=name,
-        description=f"Calls the {name} API",
-        func=call,
-        additional_properties={"cost_tier": cost_tier},
-    )
-
-
-@function_middleware
-async def cost_gate(ctx: FunctionInvocationContext, next):
-    tier = ctx.function.additional_properties.get("cost_tier", "free")
-    if tier == "expensive" and not ctx.session:
-        raise PermissionError(f"Tool {ctx.function.name!r} requires an authenticated session.")
-    return await next(ctx)
-
-
-cheap_tool     = make_api_tool("summarise", cost_tier="free")
-expensive_tool = make_api_tool("deep_analysis", cost_tier="expensive")
-
-agent = Agent(
-    client=OpenAIChatClient(),
-    tools=[cheap_tool, expensive_tool],
-    middleware=[cost_gate],
-)
-```
-
-### Generating tools from a spec
-
-Build tools at startup from a config table, a JSON spec, or an OpenAPI document — the same `FunctionTool` surface handles both the declaration and the callable:
-
-```python
-from agent_framework import FunctionTool, Agent
-from agent_framework.openai import OpenAIChatClient
-
 API_SPECS = [
-    {"name": "list_customers", "endpoint": "/customers", "description": "List all customers"},
-    {"name": "get_customer", "endpoint": "/customers/{id}", "description": "Fetch one customer"},
+    {"name": "list_customers", "endpoint": "/customers", "description": "List all customers."},
+    {"name": "get_customer", "endpoint": "/customers/{id}", "description": "Fetch one customer by id."},
 ]
 
 
 def make_tool(spec: dict) -> FunctionTool:
-    async def call(**kwargs) -> str:
-        # Late-bind the endpoint template to runtime args
-        url = spec["endpoint"].format(**kwargs)
-        return await http_get(url)
+    needs_id = "{id}" in spec["endpoint"]
 
-    call.__name__ = spec["name"]                     # important — drives schema naming
+    async def call(**kwargs) -> str:
+        url = spec["endpoint"].format(**kwargs)
+        return f"GET {url} -> 200"            # replace with a real HTTP call
 
     return FunctionTool(
         name=spec["name"],
@@ -557,152 +524,182 @@ def make_tool(spec: dict) -> FunctionTool:
         func=call,
         input_model={
             "type": "object",
-            "properties": {"id": {"type": "string"}},
-            "required": [] if "{id}" not in spec["endpoint"] else ["id"],
+            "properties": {"id": {"type": "string"}} if needs_id else {},
+            "required": ["id"] if needs_id else [],
         },
     )
 
 
-tools = [make_tool(s) for s in API_SPECS]
-agent = Agent(client=OpenAIChatClient(), tools=tools)
+async def main() -> None:
+    agent = Agent(client=OpenAIChatClient(), instructions="Use the API tools.", tools=[make_tool(s) for s in API_SPECS])
+    print((await agent.run("Show customer 42")).text)
+
+
+asyncio.run(main())
 ```
 
-This keeps the agent definition stable — you add a new row to `API_SPECS`, redeploy, and the model automatically sees the new tool.
+### Declaration-only tools
 
-## Passing tools to the agent
-
-Tools go on the constructor or on the run call. Run-level tools are additive for that one run.
+With `func=None` the model can call the tool but the framework cannot run it. The function call stays in the response for your application to handle, which suits actions carried out in a front end (asking for a location, rendering a confirmation dialog):
 
 ```python
-agent = Agent(client=OpenAIChatClient(), tools=[get_weather, search_web])
+from agent_framework import Agent, FunctionTool
+from agent_framework.openai import OpenAIChatClient
 
-# Run-level override/addition
-await agent.run("Find a Thai restaurant", tools=[search_restaurants])
+confirm_payment = FunctionTool(
+    name="confirm_payment",
+    description="Ask the user to confirm a payment before it is processed.",
+    func=None,
+    input_model={
+        "type": "object",
+        "properties": {
+            "amount": {"type": "number", "description": "Amount in GBP"},
+            "merchant": {"type": "string"},
+        },
+        "required": ["amount", "merchant"],
+    },
+)
+
+agent = Agent(
+    client=OpenAIChatClient(),
+    instructions="Use confirm_payment before processing any transaction.",
+    tools=[confirm_payment],
+)
+# After agent.run(...), look for function_call contents named "confirm_payment"
+# in response.messages, show the dialog, then send a function result back.
 ```
 
-Supported values: single tool, list of tools, or a mix of function tools, `MCPStdioTool`/`MCPStreamableHTTPTool`, provider-hosted tools (Bedrock Guardrails, Foundry toolbox), and raw `@tool`-decorated callables.
+Calling `invoke()` on a declaration-only tool raises `ToolException`.
 
-## Error handling
+## Passing tools to an agent
 
-Raise to signal failure — the framework surfaces the exception message to the model so it can recover:
+Tools go on the constructor (defaults for every run) or on `run()` (added for that run only):
 
 ```python
-@tool
-def divide(a: float, b: float) -> float:
-    if b == 0:
-        raise ValueError("Cannot divide by zero — please ask for a non-zero divisor.")
-    return a / b
+agent = Agent(client=OpenAIChatClient(), tools=[get_weather])
+await agent.run("Find a Thai restaurant near me", tools=[search_restaurants])
 ```
 
-For transient failures, add a `FunctionMiddleware` retry wrapper (see [Middleware → Retrying a failed tool call](./microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
+`tools=` accepts a single tool or a list mixing `@tool` functions, plain callables, `FunctionTool` instances, MCP tools (`MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`), provider-hosted tool descriptors and tool collections such as a Foundry toolbox, which is flattened into its tools.
 
-## Streaming tool outputs
+## Provider-hosted tools
 
-Chat clients that support rich function output can stream content as the tool runs. Use an async generator and return `ResponseStream`-compatible content — or more commonly, just return the final value and rely on the model's own streaming.
-
-## Composing agents — `as_tool()` and `as_mcp_server()`
-
-Every concrete agent (`Agent`, custom `BaseAgent` subclasses) can be turned into a tool that other agents call. There are two doors:
-
-- `agent.as_tool()` — wraps the agent in a `FunctionTool`. Other agents (in this process) call it like any other function.
-- `agent.as_mcp_server()` — wraps the agent in an MCP `Server` with one tool. Anything that speaks MCP can call it remotely.
-
-### `as_tool()` — supervisor / specialist composition
-
-Use this when the supervisor agent needs to delegate a narrow task to a specialist with its own instructions, model, or tool set:
+Some services run tools themselves: web search, code interpreter, file search, image generation, hosted MCP. The chat client builds the descriptor, and you pass it in `tools=` like any other tool:
 
 ```python
+import asyncio
+
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
 
-# Specialist agent — narrow job, narrow toolset
+async def main() -> None:
+    client = OpenAIChatClient()
+    agent = Agent(
+        client=client,
+        instructions="Use web search for anything recent and the code interpreter for arithmetic.",
+        tools=[
+            client.get_web_search_tool(search_context_size="low"),
+            client.get_code_interpreter_tool(),
+        ],
+    )
+    print((await agent.run("What is 2**64, and what was in today's tech news?")).text)
+
+
+asyncio.run(main())
+```
+
+Which factories a client has depends on the service:
+
+| Client | Hosted tool factories |
+|---|---|
+| `OpenAIChatClient` (Responses API) | `get_web_search_tool`, `get_code_interpreter_tool`, `get_file_search_tool`, `get_image_generation_tool`, `get_mcp_tool`, `get_shell_tool`, `get_computer_tool` |
+| `OpenAIChatCompletionClient` | `get_web_search_tool` |
+| `FoundryChatClient` | The OpenAI set plus `get_azure_ai_search_tool`, `get_bing_grounding_tool`, `get_bing_custom_search_tool`, `get_sharepoint_tool`, `get_fabric_tool`, `get_browser_automation_tool`, `get_memory_search_tool`, `get_a2a_tool` |
+| `AnthropicClient` | `get_web_search_tool`, `get_code_interpreter_tool`, `get_mcp_tool`, `get_shell_tool` |
+
+Code that should work with any client can check the `SupportsWebSearchTool`, `SupportsCodeInterpreterTool`, `SupportsFileSearchTool`, `SupportsImageGenerationTool`, `SupportsMCPTool` and `SupportsShellTool` protocols with `isinstance`. Hosted tools run on the provider's side, so your function middleware and approval settings do not see them; hosted MCP tools have their own `approval_mode=`.
+
+Amazon Bedrock Guardrails are not a tool: they are configured on `BedrockChatClient` through `BedrockGuardrailConfig` (see [model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/)).
+
+## Agents as tools: `as_tool()`
+
+`agent.as_tool()` wraps an agent in a `FunctionTool`, so a supervisor agent can delegate to a specialist with its own instructions, model and tools:
+
+```python
+import asyncio
+
+from agent_framework import Agent, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool
+def lookup_invoice(invoice_id: str) -> str:
+    """Look up an invoice."""
+    return f"{invoice_id}: £40.00, paid twice on 1 April"
+
+
 billing = Agent(
-    client=OpenAIChatClient(model="%%model=openai-small%%"),     # cheaper model for the specialist
+    client=OpenAIChatClient(model="%%model=openai-small%%"),
     name="billing_specialist",
     description="Resolves invoice, refund and subscription questions.",
-    instructions="Only answer billing questions. Refuse anything else politely.",
-    tools=[lookup_invoice, refund_charge],
+    instructions="Only answer billing questions.",
+    tools=[lookup_invoice],
 )
 
-# Supervisor agent — broad job, delegates via the wrapped specialist
 supervisor = Agent(
     client=OpenAIChatClient(model="%%model=openai%%"),
     name="customer_support",
-    instructions="Triage user questions. Delegate billing topics to the specialist tool.",
+    instructions="Triage user questions. Delegate billing topics to ask_billing.",
     tools=[
         billing.as_tool(
             name="ask_billing",
-            description="Delegate billing questions; returns the specialist's reply verbatim.",
+            description="Delegate a billing question; returns the specialist's answer.",
             arg_name="question",
             arg_description="The user's billing question, copied verbatim.",
-        ),
+        )
     ],
 )
 
-response = await supervisor.run("Why was I charged twice on April 1st?")
+
+async def main() -> None:
+    print((await supervisor.run("Why was I charged twice for invoice INV-9?")).text)
+
+
+asyncio.run(main())
 ```
 
-Tunable knobs (all keyword-only):
+| Argument | Default | Effect |
+|---|---|---|
+| `name` | the agent's `name`, sanitised | Tool name. A `ValueError` is raised if neither is set. |
+| `description` | the agent's `description` or `""` | Tool description; this is what the supervisor's model reads to decide when to delegate. |
+| `arg_name` | `"task"` | The single string parameter the model fills in. |
+| `arg_description` | `"Task for {tool_name}"` | Its description. |
+| `approval_mode` | `"never_require"` | `"always_require"` puts the delegation behind an approval. |
+| `stream_callback` | `None` | Sync or async callable that receives each `AgentResponseUpdate` from the specialist as it streams. |
+| `propagate_session` | `False` | Pass the supervisor's `AgentSession` into the specialist's run, so both share history and session state. |
 
-| Argument | Effect |
-|---|---|
-| `name` | Tool name surfaced to the model. Defaults to the agent's sanitised name. |
-| `description` | Tool description. Defaults to the agent's `description`. |
-| `arg_name` | Parameter the model fills with the task. Defaults to `"task"`. |
-| `arg_description` | Description of that parameter. Defaults to `"Task for {tool_name}"`. |
-| `approval_mode` | `"always_require"` to gate the delegation behind a HITL check. |
-| `stream_callback` | Async/sync callable invoked for each `AgentResponseUpdate` from the specialist's stream. |
-| `propagate_session` | When `True`, the supervisor's `AgentSession` is forwarded into the specialist's `run()` so they share history. Default `False`. |
-
-### Streaming the specialist's progress
-
-Hook `stream_callback` to surface intermediate updates from the specialist to your UI without changing the supervisor's contract:
+The supervisor's model sees only the specialist's final text. `stream_callback` is a side channel for showing progress:
 
 ```python
 async def on_specialist_update(update) -> None:
     if update.text:
-        await ws.send_text(update.text)        # forward partial output to the browser
+        print(update.text, end="", flush=True)     # or forward to a websocket
 
 
-supervisor = Agent(
-    client=OpenAIChatClient(),
-    name="supervisor",
-    tools=[
-        billing.as_tool(
-            name="ask_billing",
-            stream_callback=on_specialist_update,
-        ),
-    ],
-)
+billing_tool = billing.as_tool(name="ask_billing", stream_callback=on_specialist_update)
 ```
 
-The supervisor still sees a single string return value. The callback only side-channels the streamed tokens.
+With `propagate_session=True` the specialist runs on the supervisor's session, so it sees the turns that came before the delegation. Leave it off when the specialist should only see the task text, which is cheaper and keeps the specialist's context focused.
 
-### Sharing a session — `propagate_session=True`
+## Agents as MCP servers: `as_mcp_server()`
 
-By default, every delegated call starts a fresh conversation in the specialist. Flip `propagate_session=True` when you want the specialist to **see** the same conversation history as the supervisor (e.g. a multi-turn debugging assistant where a sub-agent should know what was already said):
-
-```python
-debugger = Agent(client=OpenAIChatClient(), name="debugger", instructions="…")
-
-supervisor = Agent(
-    client=OpenAIChatClient(),
-    name="supervisor",
-    tools=[debugger.as_tool(propagate_session=True)],
-)
-
-session = supervisor.create_session()
-await supervisor.run("My function returns None on Monday — here's the code.", session=session)
-await supervisor.run("Now find the bug.", session=session)
-# The debugger sees both turns when it gets called.
-```
-
-### `as_mcp_server()` — expose an agent over MCP
-
-Same wrapping, different transport. `as_mcp_server()` returns an `mcp.server.lowlevel.Server` that lists exactly one tool — the agent itself. Drop it into any MCP-compatible runner:
+`agent.as_mcp_server(server_name="Agent", version=None, instructions=None, lifespan=None)` returns an `mcp.server.lowlevel.Server` with exactly one tool: the agent, named after `agent.name`, taking a `task` string. Any MCP client, in any language, can then call the agent:
 
 ```python
+import asyncio
+
+from mcp.server.stdio import stdio_server
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
 
@@ -712,217 +709,32 @@ agent = Agent(
     description="Answers questions about our internal documentation.",
     instructions="Only answer using the indexed docs.",
 )
+server = agent.as_mcp_server(server_name="docs-mcp", version="1.0.0")
 
-server = agent.as_mcp_server(
-    server_name="docs-mcp",
-    version="1.0.0",
-    instructions="Use the docs_agent tool for any question about internal docs.",
-)
+
+async def main() -> None:
+    async with stdio_server() as (read_stream, write_stream):
+        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-Now any MCP client — Claude Desktop, an LLM IDE, or another `Agent` configured with `MCPStdioTool` / `MCPStreamableHTTPTool` — can drive your agent through the standard tool surface. This is the cleanest way to turn a single-purpose agent into a service consumable by **other** agents written in any language.
-
-> Requires the optional `mcp` dependency. `as_mcp_server()` raises `ModuleNotFoundError` with a friendly message if it's missing.
-
-## Tools that return rich content — `Content.from_*`
-
-When you opt into `result_parser`, the framework gives you a unified `Content` model with classmethods for every payload kind. A single tool can return text, JSON, errors, and binary data in one list — the agent and the chat client decide how to render each piece.
-
-```python
-from agent_framework import tool, Content
-
-
-def parse_inventory(payload: dict) -> list[Content]:
-    parts: list[Content] = []
-
-    # Human-readable summary
-    parts.append(Content.from_text(f"{payload['count']} items in stock"))
-
-    # Raw JSON for the model to reason about
-    parts.append(Content.from_text(payload["json_blob"]))
-
-    # An image from the warehouse camera
-    if image_url := payload.get("camera_url"):
-        parts.append(Content.from_uri(uri=image_url, media_type="image/jpeg"))
-
-    # Embedded binary (e.g. a small PDF report)
-    if pdf_bytes := payload.get("report_pdf"):
-        parts.append(Content.from_data(data=pdf_bytes, media_type="application/pdf"))
-
-    # Surface a soft error without raising
-    if payload.get("warning"):
-        parts.append(Content.from_error(message=payload["warning"]))
-
-    return parts
-
-
-@tool(result_parser=parse_inventory)
-def get_inventory(sku: str) -> dict:
-    return inventory_lookup(sku)
-```
-
-The four constructors you'll reach for:
-
-| Method | When | Carries |
-|---|---|---|
-| `Content.from_text` | Human-readable strings, JSON, summaries | `text` |
-| `Content.from_uri` | Remote images, PDFs, audio | `uri`, `media_type` |
-| `Content.from_data` | Inline binary (base64 internally) | `data`, `media_type` |
-| `Content.from_error` | Soft failures the model should reason about | `message`, optional `code` |
-
-Returning a single `str` is shorthand for `Content.from_text(...)`. Use the explicit list only when you need the multi-part shape.
-
-## Skipping result parsing — `SKIP_PARSING`
-
-The framework wraps every tool result in `list[Content]` by default. If you're piping the raw return value straight into another sandbox (e.g. a Python interpreter loop, a custom executor, or a reasoning harness), the wrapping is wasted work and lossy. Two ways to opt out:
-
-```python
-from agent_framework import tool, FunctionTool, SKIP_PARSING
-
-
-# Tool always returns raw value
-@tool(result_parser=SKIP_PARSING)
-def crunch_numbers(values: list[float]) -> dict:
-    return {"mean": sum(values) / len(values), "raw": values}
-
-
-# Or skip per-call without changing the tool definition
-result = await some_tool.invoke(arguments={"x": 1}, skip_parsing=True)
-# result is the raw return value, NOT list[Content]
-```
-
-`SKIP_PARSING` makes `invoke()` return whatever the wrapped function returned — a dict, a Pydantic model, a numpy array. Useful when an outer harness already understands the type and would only have to undo the `Content` wrapping.
-
-## `FunctionExecutor` and `@executor` — function-based workflow nodes
-
-`FunctionExecutor` and its `@executor` decorator let you embed plain Python functions directly into a `WorkflowBuilder` graph without subclassing `Executor`. Sync functions run in a thread pool via `asyncio.to_thread` automatically.
-
-### Pattern 1 — `@executor` decorator (simplest)
-
-```python
-from agent_framework import FunctionExecutor, WorkflowBuilder, executor, WorkflowContext
-
-# The decorated function IS the executor — its return value becomes the output message.
-@executor(id="upper_case")
-async def upper_case(text: str) -> None:
-    return text.upper()
-```
-
-### Pattern 2 — explicit `FunctionExecutor` constructor
-
-Use this when you want to wrap an existing function without modifying it (e.g. library code or a function shared between the agent pipeline and other call sites):
-
-```python
-def word_count(doc: str) -> str:
-    return str(len(doc.split()))
-
-counter = FunctionExecutor(word_count, id="word_counter")
-```
-
-### Pattern 3 — with `WorkflowContext` for `send_message` / `yield_output`
-
-Declare a `WorkflowContext` parameter to get access to `send_message` and `yield_output`. The framework detects the parameter by type and injects it automatically — it is not part of the JSON schema.
-
-```python
-@executor(id="splitter")
-async def splitter(text: str, ctx: WorkflowContext[str]) -> None:
-    for sentence in text.split("."):
-        if sentence.strip():
-            await ctx.send_message(sentence.strip())
-```
-
-### Wiring into a workflow
-
-All three executor forms are first-class `Executor` objects — pass them directly to `WorkflowBuilder`:
-
-```python
-import asyncio
-from agent_framework import FunctionExecutor, WorkflowBuilder, executor, WorkflowContext
-
-@executor(id="upper_case")
-async def upper_case(text: str) -> None:
-    return text.upper()
-
-def word_count(doc: str) -> str:
-    return str(len(doc.split()))
-
-counter = FunctionExecutor(word_count, id="word_counter")
-
-workflow = (
-    WorkflowBuilder(start_executor=upper_case)
-    .add_edge(upper_case, counter)
-    .build()
-)
-
-result = asyncio.run(workflow.run("hello world"))
-print(result.get_outputs())
-```
-
-> **Note:** Sync functions passed to `FunctionExecutor` (or `@executor`) are automatically run in a thread pool via `asyncio.to_thread`, so blocking I/O in the function body won't stall the event loop.
-
-## Workflow visualization with `WorkflowViz`
-
-`WorkflowViz` renders any built workflow to Mermaid, DOT, or raster/vector formats. Import it from `agent_framework` — no extra dependencies for Mermaid output.
-
-```python
-from agent_framework import WorkflowViz
-
-viz = WorkflowViz(workflow)
-
-# Mermaid diagram — paste directly into a Markdown fence or GitHub comment
-print(viz.to_mermaid())
-
-# DOT format — compatible with graphviz CLI and any DOT renderer
-print(viz.to_digraph())
-
-# Export to file (requires `pip install graphviz` and the dot binary)
-# viz.export(format="svg", filename="workflow.svg")
-# viz.export(format="png")
-# viz.export(format="dot", filename="workflow.dot")
-```
-
-### Full two-node example
-
-```python
-import asyncio
-from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowViz, executor
-
-@executor(id="upper_case")
-async def upper_case(text: str) -> None:
-    return text.upper()
-
-def word_count(doc: str) -> str:
-    return str(len(doc.split()))
-
-counter = FunctionExecutor(word_count, id="word_counter")
-
-workflow = (
-    WorkflowBuilder(start_executor=upper_case)
-    .add_edge(upper_case, counter)
-    .build()
-)
-
-# Visualise before running — useful in Jupyter notebooks or CI artefacts
-viz = WorkflowViz(workflow)
-print(viz.to_mermaid())
-# Output:
-# graph LR
-#   upper_case --> word_counter
-
-result = asyncio.run(workflow.run("hello world"))
-print(result.get_outputs())
-```
-
-Pass `include_internal_executors=True` to `WorkflowViz` when debugging routing — the diagram then includes the framework's auto-injected glue nodes that are normally hidden.
+The `mcp` package is installed with `agent-framework-core[all]` (and so with `agent-framework`); with a bare `agent-framework-core`, `as_mcp_server()` raises `ModuleNotFoundError` telling you to install it. Serving over streamable HTTP is shown in [recipe 16](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/#recipe-16--expose-an-agent-over-mcp).
 
 ## Patterns
 
-**One agent, many backends.** Keep tool signatures stable and swap implementations via DI. Register the same set with every agent.
+**Tenant-scoped data.** Pass `function_invocation_kwargs={"tenant_id": ...}` to `run()` and read `ctx.kwargs` in the tool. The tool's schema stays tenant-agnostic and the model cannot change the tenant.
 
-**Tenant-scoped data.** Pass `function_invocation_kwargs={"tenant_id": ...}` on `agent.run(...)` and read it from `FunctionInvocationContext.kwargs` — tools stay tenant-agnostic.
+**Dangerous operations.** `approval_mode="always_require"`, plus a function middleware that logs the proposed arguments, gives an audit trail of what was approved.
 
-**Dangerous operations.** `approval_mode="always_require"` + function middleware that logs proposed arguments gives you an approvals audit log.
+**Large results.** Use a `result_parser` to cut the result down before it is added to the conversation. Every later model call in the session pays for those tokens again.
 
-**Server-side tools vs client-side UI.** Use declaration-only `FunctionTool(func=None)` for UI rendering, real `@tool`-decorated functions for server-side actions — the model treats them identically.
+**Workflow steps are not tools.** Deterministic pipeline steps belong in a workflow (`@executor` functions in a `WorkflowBuilder` graph, or `@step` in a functional workflow); see the [comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#custom-executors) and [functional workflows](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_functional_workflows/).
 
-**Hosted tools.** When the provider exposes hosted tools (Bedrock Guardrails, Foundry toolbox, OpenAI file-search, web-search, code-interpreter) the chat client exposes `SupportsWebSearchTool`, `SupportsFileSearchTool`, `SupportsCodeInterpreterTool` protocols — pass provider-specific tool descriptors in the same `tools=[...]` list.
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected the error behaviour (the model sees "Error: Function failed." unless `include_detailed_errors=True`), the approval flow (no `responses=` argument on `Agent.run`), the meaning of `kind` (only `"shell"` is interpreted), `Content.from_error` parameters and the tool-loop configuration table (added `max_duration_seconds`, `allow_concurrent_invocation`, `disable_approval_response_binding`). Added sync-in-thread behaviour, the default result conversion table, provider-hosted tools and runnable examples throughout. Removed an invented "streaming tool outputs" section and the workflow executor and visualisation sections, which were wrong (return values of `@executor` functions are not sent downstream) and are covered on the comprehensive guide. |

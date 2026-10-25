@@ -68,6 +68,7 @@ for snapshot in graph.stream(
     print(f"step_count={snapshot['step_count']}")
 
 # Output:
+# step_count=0   (the input, before any node runs)
 # step_count=1   (after node_a)
 # step_count=2   (after node_b)
 ```
@@ -115,14 +116,14 @@ def call_model(state: ChatState) -> dict:
     response = model.invoke(state["messages"])
     return {"messages": [response]}
 
-builder = StateGraph(ChatState)
-builder.add_node("model", call_model)
-builder.add_edge(START, "model")
-builder.add_edge("model", END)
-graph = builder.compile()
+chat_builder = StateGraph(ChatState)
+chat_builder.add_node("model", call_model)
+chat_builder.add_edge(START, "model")
+chat_builder.add_edge("model", END)
+chat_graph = chat_builder.compile()
 
 async def stream_tokens():
-    async for chunk, metadata in graph.astream(
+    async for chunk, metadata in chat_graph.astream(
         {"messages": [{"role": "user", "content": "Write a haiku about graphs"}]},
         stream_mode="messages",
     ):
@@ -137,7 +138,7 @@ asyncio.run(stream_tokens())
 To stream only content chunks and skip metadata noise:
 
 ```python
-async for chunk, metadata in graph.astream(
+async for chunk, metadata in chat_graph.astream(
     {"messages": [{"role": "user", "content": "Write a haiku about graphs"}]},
     stream_mode="messages",
 ):
@@ -348,36 +349,41 @@ if interrupts:
 ## Graph Visualization
 
 ```python
-from IPython.display import Image, display
-
 # Mermaid diagram source (paste into mermaid.live)
 print(graph.get_graph().draw_mermaid())
 
-# Render as PNG in Jupyter / Colab
-display(Image(graph.get_graph().draw_mermaid_png()))
-
-# ASCII art for terminal debugging
+# ASCII art for terminal debugging (needs: pip install grandalf)
 print(graph.get_graph().draw_ascii())
+
+# PNG bytes; by default this calls the mermaid.ink web service
+png_bytes = graph.get_graph().draw_mermaid_png()
+# In Jupyter: from IPython.display import Image; Image(png_bytes)
 ```
 
-Example ASCII output for the three-node graph above:
+ASCII output for the `a` → `b` graph from Mode 1:
 
-```
-    ┌─────────────────────┐
-    │        START        │
-    └──────────┬──────────┘
-               │
-    ┌──────────▼──────────┐
-    │          a          │
-    └──────────┬──────────┘
-               │
-    ┌──────────▼──────────┐
-    │          b          │
-    └──────────┬──────────┘
-               │
-    ┌──────────▼──────────┐
-    │         END         │
-    └─────────────────────┘
+```text
++-----------+
+| __start__ |
++-----------+
+      *
+      *
+      *
+    +---+
+    | a |
+    +---+
+      *
+      *
+      *
+    +---+
+    | b |
+    +---+
+      *
+      *
+      *
+ +---------+
+ | __end__ |
+ +---------+
 ```
 
 For subgraphs, use `get_graph(xray=True)` to expand all nested nodes:
@@ -397,7 +403,7 @@ cfg = {"configurable": {"thread_id": "debug-session"}}
 list(graph_cp.stream({"messages": [], "step_count": 0}, cfg))
 
 state = graph_cp.get_state(cfg)
-print(f"next={state.next}")           # ('',) when done
+print(f"next={state.next}")           # () when the run has finished
 print(f"values={state.values}")
 print(f"interrupts={state.interrupts}")
 ```
@@ -469,7 +475,7 @@ asyncio.run(run_batch())
 
 ## Pydantic State and Auto-Coercion
 
-Since v1.1.x, `invoke()` automatically coerces a plain dict input into your Pydantic or dataclass state type:
+With a Pydantic model (or dataclass) as the state schema, `invoke()` takes a plain dict and validates it; nodes receive an instance of the model:
 
 ```python
 from pydantic import BaseModel
@@ -478,15 +484,24 @@ class TypedState(BaseModel):
     query: str
     result: str = ""
 
+def answer(state: TypedState) -> dict:
+    # state is a TypedState instance; return a dict of updates as usual
+    return {"result": f"Answer to {state.query!r}"}
+
 builder3 = StateGraph(TypedState)
-# ... nodes ...
+builder3.add_node("answer", answer)
+builder3.add_edge(START, "answer")
 graph3 = builder3.compile()
 
-# Pass a dict — auto-coerced to TypedState on entry
 result = graph3.invoke({"query": "What is LangGraph?"})
-# v1 invoke returns a dict; use version="v2" for a typed GraphOutput
-print(type(result))   # dict
+print(type(result))   # <class 'dict'>: the output is still a dict
+print(result)         # {'query': 'What is LangGraph?', 'result': "Answer to 'What is LangGraph?'"}
+
+# A missing required field fails validation before any node runs:
+# graph3.invoke({"qery": "typo"})  -> pydantic ValidationError
 ```
+
+Validation runs whenever a node's input is built from the state, not when a node returns. A node that writes `{"result": 123}` succeeds, and the `ValidationError` is raised when the next node is about to run.
 
 ---
 
@@ -626,9 +641,9 @@ from langgraph.stream.transformers import LifecyclePayload  # TypedDict
 #           saved and the run can be resumed later with the same thread_id;
 #           it is NOT a clean end-of-run.)
 #   namespace: list[str]       — path to the subgraph (e.g. ['inner_team:abc123'])
-#   graph_name: str | None     — compiled graph name if known (defaults to
-#                                "LangGraph" unless `name=...` is passed to
-#                                `StateGraph.compile()`)
+#   graph_name: str | None     — on "started" only: the name parsed from the
+#                                namespace segment, i.e. the parent's node name
+#                                ("inner_team" below), not the compile(name=...)
 #   trigger_call_id: str | None — parent-graph task_id in the child's namespace
 #                                segment (`node:task_id`, split by
 #                                `_parse_ns_segment`). It is the same id that
@@ -675,9 +690,7 @@ inner_graph = (
     .add_node("inner", inner_node)
     .add_edge(START, "inner")
     .add_edge("inner", END)
-    # Pass name= so `LifecyclePayload.graph_name` matches the value shown
-    # in the expected output below; without it the default is "LangGraph".
-    .compile(name="inner", checkpointer=True)   # inherit parent checkpointer
+    .compile()   # no checkpointer=True: see the note below
 )
 
 def outer_node(state: OuterState) -> dict:
@@ -703,13 +716,15 @@ with outer_graph.stream_events(
     # Lifecycle events tell you exactly when each subgraph starts and ends
     for event in run.lifecycle:
         print(f"[lifecycle] event={event.get('event')} ns={event.get('namespace')} graph={event.get('graph_name')}")
-# [lifecycle] event=started    ns=['inner_team:abc123'] graph=inner
-# [lifecycle] event=completed  ns=['inner_team:abc123'] graph=inner
+# [lifecycle] event=started ns=['inner_team:<task id>'] graph=inner_team
+# [lifecycle] event=completed ns=['inner_team:<task id>'] graph=None
 ```
+
+The transformer only emits `started` when the subgraph's namespace segment carries a `:task_id` suffix. A subgraph compiled with `checkpointer=True` runs under a stable namespace without one (`inner_team`), so in %%version=langgraph%% `run.lifecycle` yields **nothing** for it; `run.subgraphs` still discovers it.
 
 ### `SubgraphRunStream` — per-subgraph run handles
 
-When `run.subgraphs` is consumed, each item is a `SubgraphRunStream` — a `GraphRunStream` subclass that also carries `.path` (the subgraph's namespace tuple), `.graph_name`, and `.status` / `.error`. This lets you consume a nested subgraph's own `values`, `messages`, and `lifecycle` projections independently.
+When `run.subgraphs` is consumed, each item is a `SubgraphRunStream` — a `GraphRunStream` subclass that also carries `.path` (the subgraph's namespace tuple, such as `('inner_team:<task id>',)`), `.graph_name` (the parent's node name, `inner_team`), and `.status` (`"started"` while running, then `"completed"`, `"failed"`, …) / `.error`. This lets you consume a nested subgraph's own `values`, `messages`, and `lifecycle` projections independently.
 
 The snippet below reuses `outer_graph` and `cfg` from the `LifecyclePayload` example above:
 
@@ -798,6 +813,9 @@ Verified against **`langgraph==%%version=langgraph%%`** (module: `langgraph.grap
 
 ```python
 # langgraph.graph.ui (source-verified, langgraph %%version=langgraph%%)
+from typing import Any, Literal
+from typing_extensions import TypedDict
+
 class UIMessage(TypedDict):
     type: Literal["ui"]         # always "ui"
     id: str                     # unique identifier (UUID if not provided)
@@ -924,27 +942,52 @@ async def async_search_node(state: State) -> dict:
     return {"result": result}
 ```
 
-### Connecting to a React front-end (sketch)
+### Connecting to a React front-end
 
-`UIMessage.name` is the key the client uses to look up the component to render:
+The client side lives in the JavaScript SDK, `@langchain/langgraph-sdk`: `useStream` (from `@langchain/langgraph-sdk/react`) runs the graph on a LangGraph server (`langgraph dev` locally) and `LoadExternalComponent` (from `@langchain/langgraph-sdk/react-ui`) renders a `UIMessage`. `UIMessage.name` selects the component. Pass `components=` to render components bundled with your app; without it, `LoadExternalComponent` loads the component the server bundled from the `ui` entry in `langgraph.json`.
 
-```typescript
-// Pseudo-code: client receives UIMessage events from the stream
-const COMPONENTS = {
-  Spinner: SpinnerComponent,
-  ResultCard: ResultCardComponent,
-  ProgressBar: ProgressBarComponent,
+```tsx
+import { useStream } from "@langchain/langgraph-sdk/react";
+import {
+  LoadExternalComponent,
+  uiMessageReducer,
+  type UIMessage,
+  type RemoveUIMessage,
+} from "@langchain/langgraph-sdk/react-ui";
+import type { Message } from "@langchain/langgraph-sdk";
+
+type State = { messages?: Message[]; ui?: UIMessage[] };
+
+// Keyed by the `name` passed to push_ui_message on the Python side.
+const components = {
+  Spinner: ({ label }: { label?: string }) => <p>{label ?? "Working…"}</p>,
+  ResultCard: ({ content }: { content?: string }) => <article>{content}</article>,
 };
 
-for await (const event of graphStream) {
-  if (event.type === "ui") {
-    const Component = COMPONENTS[event.name];
-    if (Component) render(<Component key={event.id} {...event.props} />);
-  } else if (event.type === "remove-ui") {
-    removeRenderedComponent(event.id);
-  }
+export default function Chat() {
+  const thread = useStream<State, { CustomEventType: UIMessage | RemoveUIMessage }>({
+    apiUrl: "http://localhost:2024", // langgraph dev
+    assistantId: "agent",            // graph name in langgraph.json
+    onCustomEvent: (event, options) => {
+      // Apply push_ui_message / delete_ui_message events as they stream in.
+      options.mutate((prev) => ({ ui: uiMessageReducer(prev.ui ?? [], event) }));
+    },
+  });
+
+  return (
+    <div>
+      {thread.values.ui?.map((ui) => (
+        <LoadExternalComponent key={ui.id} stream={thread} message={ui} components={components} />
+      ))}
+      <button onClick={() => thread.submit({ messages: [{ type: "human", content: "Search" }] })}>
+        Search
+      </button>
+    </div>
+  );
 }
 ```
+
+This type-checks under `strict` against the `@langchain/langgraph-sdk` release that `@langchain/langgraph` %%version=@langchain/langgraph%% installs, with React 19. Keep the `State` fields optional: with a required field, `stream={thread}` fails to type-check against `LoadExternalComponent`'s prop type. `onCustomEvent` updates the UI as events arrive; once the run finishes, `thread.values.ui` holds the `ui` key from the graph's state, which `ui_message_reducer` maintained on the server.
 
 ### Quick Reference — UI streaming
 

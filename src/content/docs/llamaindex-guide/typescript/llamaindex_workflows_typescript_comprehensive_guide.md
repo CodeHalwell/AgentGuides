@@ -42,8 +42,8 @@ For LLM providers, install the matching scoped package:
 # OpenAI
 npm install @llamaindex/openai
 
-# Azure OpenAI
-npm install @llamaindex/azure-openai
+# Azure OpenAI (exports AzureOpenAI and AzureOpenAIEmbedding, plus Azure AI Search and Cosmos DB stores)
+npm install @llamaindex/azure
 
 # Anthropic
 npm install @llamaindex/anthropic

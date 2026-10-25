@@ -16,169 +16,92 @@ Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-che
 
 ## Advanced Pattern 1: Self-Correcting Agents with Reflection
 
+A second agent reviews the first one's output, and the review is fed back as a `ModelRetry` from an output validator. The writer revises its answer in the same run, with the reviewer's objections in front of it; the output retry budget caps the number of revision rounds.
+
 ```python
-"""
-Agent that reflects on its output and self-corrects before returning.
-Useful for ensuring quality without external validation.
-"""
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, ModelRetry, RunContext
 
-from pydantic_ai import Agent, RunContext, ModelRetry
-from pydantic import BaseModel
 
-class ReflectionResponse(BaseModel):
-    initial_response: str
-    reflection: str
-    corrected_response: str
-    confidence: float
+class Draft(BaseModel):
+    answer: str
+    sources: list[str] = Field(description='URLs or document titles the answer relies on')
 
-reflection_agent = Agent(
+
+class Critique(BaseModel):
+    acceptable: bool
+    problems: list[str] = Field(description='Concrete problems a reviewer would raise; empty if acceptable')
+
+
+writer = Agent(
     'openai:%%model=openai%%',
-    output_type=ReflectionResponse,
-    name='ReflectiveAgent'
+    output_type=Draft,
+    instructions='Answer the question accurately and list your sources.',
+    retries={'output': 2},     # up to two rounds of revision
+)
+critic = Agent(
+    'anthropic:%%model=anthropic%%',   # a different model family catches different mistakes
+    output_type=Critique,
+    instructions='Review the draft answer strictly. Reject unsupported claims and missing sources.',
 )
 
-@reflection_agent.tool
-async def reflect_and_correct(
-    ctx: RunContext,
-    initial_response: str
-) -> dict:
-    """
-    Self-correction loop:
-    1. Generate response
-    2. Reflect on quality
-    3. Correct if needed
-    4. Return final output
-    """
-    
-    # Use same agent for reflection (meta-reasoning)
-    reflection_prompt = f"""
-    Analyse this response for accuracy and quality:
-    "{initial_response}"
-    
-    Provide:
-    1. Assessment of correctness (score 0-1)
-    2. Any issues or improvements needed
-    3. A corrected version if needed
-    """
-    
-    return {
-        'assessment': 'Good response with minor improvements possible',
-        'corrected': initial_response + " (with additional context)"
-    }
 
-# Advanced: Multi-layer reflection
-async def multi_layer_reflection(query: str):
-    """Agent that reflects at multiple levels."""
-    
-    # Layer 1: Generate response
-    agent_1 = Agent('openai:%%model=openai%%', name='Generator')
-    result_1 = await agent_1.run(f"Generate: {query}")
-    
-    # Layer 2: Critique response
-    agent_2 = Agent('openai:%%model=openai%%', name='Critic')
-    result_2 = await agent_2.run(
-        f"Critique this: {result_1.output}"
+@writer.output_validator
+async def review(ctx: RunContext[None], draft: Draft) -> Draft:
+    verdict = await critic.run(
+        f'Question: {ctx.prompt}\n\nDraft answer: {draft.answer}\nSources: {draft.sources}',
+        usage=ctx.usage,          # count the critic's tokens in the same run's usage
     )
-    
-    # Layer 3: Synthesise improved response
-    agent_3 = Agent('openai:%%model=openai%%', name='Synthesizer')
-    result_3 = await agent_3.run(
-        f"Original: {result_1.output}\n"
-        f"Critique: {result_2.output}\n"
-        f"Synthesise an improved version"
-    )
-    
-    return result_3.output
+    if not verdict.output.acceptable:
+        raise ModelRetry('A reviewer rejected the draft:\n- ' + '\n- '.join(verdict.output.problems))
+    return draft
+
+
+result = writer.run_sync('When did the Python 2 line reach end of life?')
+print(result.output)
+print(result.usage.requests)   # writer and critic requests together
 ```
+
+If the critic still rejects the draft after the last retry, the run raises `UnexpectedModelBehavior`. Each round costs a writer request and a critic request, so reserve this for outputs where an error is expensive.
 
 ---
 
 ## Advanced Pattern 2: Hierarchical Agent Structures
 
+The usual way to build a coordinator with specialists is *agent delegation*: the coordinator gets one tool per specialist, and each tool runs the specialist agent. Passing `usage=ctx.usage` makes every specialist's requests count towards the coordinator's run, so one `UsageLimits` caps the whole tree.
+
 ```python
-"""
-Hierarchical multi-agent system with delegation and specialisation.
-Coordinator → Specialists → Tools
-"""
+from pydantic_ai import Agent, RunContext, UsageLimits
 
-from pydantic_ai import Agent, RunContext
-from dataclasses import dataclass
-from enum import Enum
+researcher = Agent('openai:%%model=openai%%', instructions='Find facts. Reply with short bullet points.')
+writer = Agent('anthropic:%%model=anthropic%%', instructions='Turn notes into a clear paragraph.')
 
-class TaskType(str, Enum):
-    ANALYSIS = "analysis"
-    WRITING = "writing"
-    CODING = "coding"
-    RESEARCH = "research"
+coordinator = Agent(
+    'openai:%%model=openai%%',
+    instructions='Use research for facts and write_up for prose, then reply with the final text.',
+)
 
-@dataclass
-class HierarchicalContext:
-    """Shared context through hierarchy."""
-    task_type: TaskType
-    depth_level: int  # For tracking recursion
-    max_depth: int
-    results_cache: dict
 
-class HierarchicalCoordinator:
-    """Manages agent hierarchy."""
-    
-    def __init__(self):
-        self.coordinator = Agent(
-            'openai:%%model=openai%%',
-            name='Coordinator',
-            instructions='Delegate tasks to specialists'
-        )
-        
-        self.specialists = {
-            TaskType.ANALYSIS: Agent('openai:%%model=openai%%', name='Analyst'),
-            TaskType.WRITING: Agent('anthropic:%%model=anthropic%%', name='Writer'),
-            TaskType.CODING: Agent('openai:%%model=openai%%', name='Coder'),
-            TaskType.RESEARCH: Agent('openai:%%model=openai%%', name='Researcher'),
-        }
-    
-    async def process(
-        self,
-        query: str,
-        task_type: TaskType,
-        context: HierarchicalContext
-    ) -> str:
-        """Process query through hierarchy."""
-        
-        # Check recursion depth
-        if context.depth_level >= context.max_depth:
-            return "Max depth reached"
-        
-        # Check cache
-        cache_key = f"{task_type}_{query}"
-        if cache_key in context.results_cache:
-            return context.results_cache[cache_key]
-        
-        # Get specialist
-        specialist = self.specialists.get(
-            task_type,
-            self.specialists[TaskType.ANALYSIS]
-        )
-        
-        # Process with specialist
-        result = await specialist.run(query)
-        
-        # Cache result
-        context.results_cache[cache_key] = result.output
-        
-        return result.output
+@coordinator.tool
+async def research(ctx: RunContext[None], topic: str) -> str:
+    """Ask the research specialist for facts about a topic."""
+    result = await researcher.run(topic, usage=ctx.usage)
+    return result.output
 
-# Usage
-async def hierarchical_workflow(query: str):
-    coordinator = HierarchicalCoordinator()
-    context = HierarchicalContext(
-        task_type=TaskType.ANALYSIS,
-        depth_level=0,
-        max_depth=3,
-        results_cache={}
-    )
-    
-    return await coordinator.process(query, TaskType.ANALYSIS, context)
+
+@coordinator.tool
+async def write_up(ctx: RunContext[None], notes: str) -> str:
+    """Ask the writing specialist to turn notes into prose."""
+    result = await writer.run(notes, usage=ctx.usage)
+    return result.output
+
+
+result = coordinator.run_sync('Explain why the sky is blue.', usage_limits=UsageLimits(request_limit=10))
+print(result.output)
+print(result.usage.requests)   # coordinator + specialists
 ```
+
+Each specialist keeps its own instructions, model and tools, and can itself delegate further. If the specialists need the coordinator's dependencies, pass `deps=ctx.deps` as well. When the order of steps is fixed rather than chosen by the model, plain Python (`await a.run(...)` then `await b.run(...)`) or a [graph](/pydanticai-guide/pydantic_ai_graph_support/) is simpler and cheaper than a coordinator.
 
 ---
 
@@ -263,9 +186,10 @@ Use semantic similarity for intelligent caching.
 Cache similar queries together to reduce API calls and costs.
 """
 
+import math
 from typing import Optional
-import numpy as np
-from pydantic_ai import Embedder
+
+from pydantic_ai import Agent, Embedder
 
 class SemanticCache:
     """Cache based on semantic similarity, not exact matches."""
@@ -286,11 +210,9 @@ class SemanticCache:
         vec2: list[float]
     ) -> float:
         """Calculate cosine similarity between vectors."""
-        
-        arr1 = np.array(vec1)
-        arr2 = np.array(vec2)
-        
-        return float(np.dot(arr1, arr2) / (np.linalg.norm(arr1) * np.linalg.norm(arr2)))
+        dot = sum(a * b for a, b in zip(vec1, vec2))
+        norm = math.sqrt(sum(a * a for a in vec1)) * math.sqrt(sum(b * b for b in vec2))
+        return dot / norm if norm else 0.0
     
     async def get(self, query: str) -> Optional[str]:
         """Get cached response if semantically similar."""
@@ -317,10 +239,9 @@ class SemanticCache:
 
 # Usage
 semantic_cache = SemanticCache(similarity_threshold=0.90)
+agent = Agent('openai:%%model=openai%%')   # build once, reuse for every request
 
 async def cached_agent_run(query: str):
-    from pydantic_ai import Agent
-    
     # Check semantic cache
     cached = await semantic_cache.get(query)
     if cached:
@@ -328,7 +249,6 @@ async def cached_agent_run(query: str):
         return cached
     
     # Run agent
-    agent = Agent('openai:%%model=openai%%')
     result = await agent.run(query)
     
     # Cache result
@@ -336,6 +256,8 @@ async def cached_agent_run(query: str):
     
     return result.output
 ```
+
+The linear scan is fine for a few thousand entries; beyond that, store the vectors in a vector database. Pick the threshold carefully: two questions can be close in embedding space and still need different answers ("refund policy for the UK" vs "for the US").
 
 ---
 
@@ -353,6 +275,18 @@ import asyncio
 
 class AdaptiveAgentOrchestrator:
     """Adaptively choose execution strategy."""
+
+    def __init__(self) -> None:
+        # end_strategy is fixed per agent, so build one agent per strategy, once
+        self.agents: dict[EndStrategy, Agent] = {
+            'early': Agent('openai:%%model=openai%%', end_strategy='early', instructions='Answer quickly and concisely.'),
+            'graceful': Agent('openai:%%model=openai%%', end_strategy='graceful', instructions='Use tools only if needed.'),
+            'exhaustive': Agent(
+                'openai:%%model=openai%%',
+                end_strategy='exhaustive',
+                instructions='Use all available tools to thoroughly answer.',
+            ),
+        }
     
     async def estimate_complexity(self, query: str) -> float:
         """Estimate query complexity (0-1)."""
@@ -378,24 +312,13 @@ class AdaptiveAgentOrchestrator:
         # tool call, output tools included.
         strategy: EndStrategy
         if complexity < 0.3:
-            # Simple query - stop as soon as a final output is available
-            strategy = 'early'
-            instructions = "Answer quickly and concisely."
+            strategy = 'early'        # simple query: stop as soon as a final output is available
         elif complexity < 0.7:
             strategy = 'graceful'
-            instructions = "Use tools only if needed."
         else:
-            # Complex query - run every tool call the model makes
-            strategy = 'exhaustive'
-            instructions = "Use all available tools to thoroughly answer."
+            strategy = 'exhaustive'   # complex query: run every tool call the model makes
         
-        agent = Agent(
-            'openai:%%model=openai%%',
-            end_strategy=strategy,
-            instructions=instructions
-        )
-        
-        result = await agent.run(query)
+        result = await self.agents[strategy].run(query)
         
         return result.output
 
@@ -425,7 +348,10 @@ Compose multiple agent operations into complex workflows.
 Functional programming approach to agent orchestration.
 """
 
+import asyncio
 from typing import Awaitable, Callable, TypeVar
+
+from pydantic_ai import Agent
 
 T = TypeVar('T')
 
@@ -470,24 +396,21 @@ class AgentComposer:
         return result
 
 # Usage
+researcher = Agent('openai:%%model=openai%%', name='Researcher')
+summariser = Agent('openai:%%model=openai%%', name='Summariser')
+translator = Agent('openai:%%model=openai%%', name='Translator')
+
+
 async def complex_workflow():
-    from pydantic_ai import Agent
-    
     # Define operations
     async def research(query: str) -> str:
-        agent = Agent('openai:%%model=openai%%', name='Researcher')
-        result = await agent.run(f"Research: {query}")
-        return result.output
+        return (await researcher.run(f"Research: {query}")).output
     
     async def summarise(content: str) -> str:
-        agent = Agent('openai:%%model=openai%%', name='Summariser')
-        result = await agent.run(f"Summarise: {content}")
-        return result.output
+        return (await summariser.run(f"Summarise: {content}")).output
     
     async def translate(text: str) -> str:
-        agent = Agent('openai:%%model=openai%%', name='Translator')
-        result = await agent.run(f"Translate to Spanish: {text}")
-        return result.output
+        return (await translator.run(f"Translate to Spanish: {text}")).output
     
     # Compose: research → summarise → translate
     composer = AgentComposer()
@@ -500,11 +423,16 @@ async def complex_workflow():
     )
     
     return final_result
+
+
+print(asyncio.run(complex_workflow()))
 ```
 
 ---
 
 ## Advanced Pattern 7: Agent Rate Limiting & Queue Management
+
+For a cap on concurrent requests, PydanticAI's own [`ConcurrencyLimiter`](/pydanticai-guide/pydantic_ai_concurrency/) (with `max_queued` for back-pressure) is enough. The queue below adds what it does not do: request-per-minute/hour budgets and priorities.
 
 ```python
 """
@@ -512,7 +440,7 @@ Manage agent requests with rate limiting and queue handling
 for production-grade reliability.
 """
 
-from asyncio import Queue, Semaphore
+from asyncio import PriorityQueue, Semaphore
 from datetime import datetime, timedelta
 from dataclasses import dataclass
 import time
@@ -522,7 +450,7 @@ class QueuedRequest:
     query: str
     user_id: str
     priority: int = 0
-    timestamp: float = None
+    timestamp: float | None = None
     
     def __post_init__(self):
         if self.timestamp is None:
@@ -541,7 +469,7 @@ class RateLimitedAgentQueue:
         max_per_minute: int = 60,
         max_per_hour: int = 1000
     ):
-        self.queue: Queue[QueuedRequest] = Queue()
+        self.queue: PriorityQueue[QueuedRequest] = PriorityQueue()   # uses QueuedRequest.__lt__
         self.semaphore = Semaphore(max_concurrent)
         
         self.max_per_minute = max_per_minute
@@ -695,6 +623,8 @@ agent_b = Agent(FunctionModel(call_custom_model), instructions='You are a helpfu
 
 ## Advanced Pattern 9: Agent Middleware System
 
+Inside an agent run, the [`Hooks`](/pydanticai-guide/pydantic_ai_hooks/) capability is the built-in middleware: `before_run`, `after_run`, `model_request`, `tool_execute` and the rest, attachable per agent or per run. The hand-written chain below sits *outside* `agent.run()`, which suits concerns that belong to your application rather than the agent (authentication of the caller, per-endpoint metrics) and wraps any async callable, agent or not.
+
 ```python
 """
 Middleware pattern for cross-cutting concerns like logging,
@@ -790,11 +720,12 @@ middlewares = [
 
 chain = MiddlewareChain(middlewares)
 
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%')
+
+
 async def run_with_middleware(query: str, user_id: str):
-    from pydantic_ai import Agent
-    
-    agent = Agent('openai:%%model=openai%%')
-    
     async def agent_func(q):
         result = await agent.run(q)
         return result.output
@@ -946,11 +877,25 @@ asyncio.run(run_with_model_override('Generate a haiku about Python.'))
 ### `AgentRun` properties
 
 ```python
-async with agent.iter('prompt') as run:
-    async for node in run:
-        pass
+import asyncio
 
-run.result           # AgentRunResult — available after the loop completes
-run.usage          # RunUsage — total tokens across all steps
-run.all_messages()   # list[ModelMessage] — full conversation
+from pydantic_ai import Agent
+
+agent = Agent('openai:%%model=openai%%')
+
+
+async def main():
+    async with agent.iter('prompt') as run:
+        async for node in run:
+            pass
+
+    print(run.result.output)        # AgentRunResult — available after the loop completes
+    print(run.usage)                # RunUsage — totals across all steps
+    print(len(run.all_messages()))  # list[ModelMessage] — the full conversation
+    print(run.run_id, run.conversation_id)
+
+
+asyncio.run(main())
 ```
+
+Inside the loop, `run.next_node` is the node about to run, `run.ctx` exposes the graph state and deps, and `run.cancel()` stops the run with `RunCancelled`.

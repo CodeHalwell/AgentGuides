@@ -155,7 +155,7 @@ adk deploy cloud_run \
      --min-instances 1
 ```
 
-- Everything after `--` goes to `gcloud run deploy`. ADK does not choose an authentication mode for you; without `--no-allow-unauthenticated` (or `--allow-unauthenticated`) gcloud asks interactively. Keep the service private unless it really is public.
+- Everything after `--` goes to `gcloud run deploy` (`--provider-args` does the same, one flag per use, and `--env KEY=value` sets environment variables). ADK does not choose an authentication mode for you; without `--no-allow-unauthenticated` (or `--allow-unauthenticated`) gcloud asks interactively. Keep the service private unless it really is public.
 - The image is built from source by Cloud Build and stored in Artifact Registry (the `cloud-run-source-deploy` repository in the region).
 - **Choose session storage.** With no `--session_service_uri`, Cloud Run gets in-memory sessions (the container's folder is not writable), so conversations are lost when an instance stops and are not shared between instances. Use a database URI (`postgresql+asyncpg://…`, `mysql+aiomysql://…`) or `agentengine://<resource>` to use Agent Platform Sessions. Artifacts default to in-memory too; `gs://bucket` stores them in Cloud Storage.
 - `--with_ui` also deploys the Dev UI. It is a development tool; leave it off in production.
@@ -190,7 +190,7 @@ adk deploy gke \
 
 `adk deploy gke` builds the image with Cloud Build, fetches cluster credentials, and applies a Deployment and Service. The Service is `ClusterIP` by default, so the agent is reachable only inside the cluster; `--service_type LoadBalancer` exposes a public IP, with no authentication in front of it, so put an authenticating gateway or Identity-Aware Proxy in front instead.
 
-The command tags the image as `gcr.io/PROJECT/SERVICE:TIMESTAMP`. Since Container Registry was shut down, `gcr.io` paths only work in projects that have `gcr.io` repositories in Artifact Registry. If yours does not, or if you need your own manifests (Workload Identity, resource limits, a `PodDisruptionBudget`), build the image yourself and push it to an Artifact Registry repository (`REGION-docker.pkg.dev/PROJECT/REPO/IMAGE`). The image ADK generates is simple: a `python:3.11-slim` base, your folder under `/app/agents`, `pip install google-adk` plus your `requirements.txt`, a non-root user, and `adk api_server` with the service URIs as its command. The generated files are deleted after each deploy.
+The command tags the image as `gcr.io/PROJECT/SERVICE:TIMESTAMP`. Since Container Registry was shut down, `gcr.io` paths only work in projects that have `gcr.io` repositories in Artifact Registry. If yours does not, or if you need your own manifests (Workload Identity, resource limits, a `PodDisruptionBudget`), build the image yourself and push it to an Artifact Registry repository (`REGION-docker.pkg.dev/PROJECT/REPO/IMAGE`). The image ADK generates is simple: a `python:3.11-slim` base, your folder under `/app/agents`, `pip install google-adk` plus your `requirements.txt`, a non-root user, the development-only `dev_server` module removed, and `adk api_server` with the service URIs as its command. The generated files are deleted after each deploy.
 
 ## Your own server
 
@@ -225,7 +225,8 @@ The `--*_service_uri` options (and the matching `get_fast_api_app` arguments) ch
 
 | Service | URI | Notes |
 |---|---|---|
-| Sessions | `postgresql+asyncpg://…`, `mysql+aiomysql://…`, `sqlite:///path.db` | `DatabaseSessionService`; needs `google-adk[db]` and the driver |
+| Sessions | `postgresql+asyncpg://…`, `mysql+aiomysql://…` | `DatabaseSessionService`; needs `google-adk[db]` and the async driver |
+| Sessions | `sqlite:///path.db` | `SqliteSessionService` (single process; no extra install) |
 | Sessions | `agentengine://<resource or id>` | Agent Platform Sessions; the default on Agent Engine |
 | Memory | `agentengine://<resource or id>` | Memory Bank; the default on Agent Engine |
 | Memory | `rag://<corpus>` | Vertex AI RAG memory |
@@ -246,7 +247,7 @@ Never put keys in `instruction` text or session state: both are sent to the mode
 
 - `--otel_to_cloud` (all deploy targets, `adk web`, `adk api_server`) exports OpenTelemetry traces, metrics and logs to Cloud Trace, Cloud Monitoring and Cloud Logging. Install `google-adk[gcp]` for the exporters when you run your own server.
 - ADK emits spans for each invocation, agent run, model call and tool call, and `gen_ai.client.*` metrics for token usage and latency.
-- In your own process, `google.adk.telemetry.setup.maybe_set_otel_providers()` with exporters from `google.adk.telemetry.google_cloud.get_gcp_exporters(enable_cloud_tracing=True, ...)` sets the same thing up by hand.
+- In your own process, `google.adk.telemetry.setup.maybe_set_otel_providers(otel_hooks_to_setup=[hooks])`, with `hooks = google.adk.telemetry.google_cloud.get_gcp_exporters(enable_cloud_tracing=True, enable_cloud_metrics=True, enable_cloud_logging=True)`, sets the same thing up by hand.
 
 For your own usage log, a runner plugin sees every model call across all agents:
 

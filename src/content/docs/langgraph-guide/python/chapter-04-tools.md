@@ -339,21 +339,25 @@ graph = builder.compile(store=memory_store)
 
 `ToolRuntime` is a dataclass that bundles *all* runtime context into a single parameter. When a tool declares `runtime: ToolRuntime`, `ToolNode` detects and injects it automatically — no `Annotated` wrapper needed. The parameter is invisible to the LLM.
 
-Verified against the installed source (`langgraph-prebuilt==%%version=langgraph-prebuilt%%`):
+Abridged from the installed source (`langgraph-prebuilt==%%version=langgraph-prebuilt%%`):
 
 ```text
 @dataclass
-class ToolRuntime(Generic[ContextT, StateT]):
-    state: StateT | None                       # full graph state dict
-    context: ContextT | None                   # typed context from context_schema
-    config: RunnableConfig | None              # LangChain runnable config
-    stream_writer: StreamWriter | None         # stream tokens mid-tool
+class ToolRuntime(_DirectlyInjectedToolArg, Generic[ContextT, StateT]):
+    state: StateT                              # graph state (dict, list or model)
+    context: ContextT                          # run context from context_schema (None if not passed)
+    config: RunnableConfig                     # LangChain runnable config
+    stream_writer: StreamWriter                # writes to stream_mode="custom"
     tool_call_id: str | None                   # ID of the triggering tool call
     store: BaseStore | None                    # store passed to compile(store=...)
-    tools: list[BaseTool]                      # all tools registered with ToolNode
+    tools: list[BaseTool] = field(default_factory=list)  # tools registered with the ToolNode
     execution_info: ExecutionInfo | None = None  # execution metadata
     server_info: ServerInfo | None = None        # Agent Server info (None outside the server)
+
+    def emit_output_delta(self, delta: Any) -> None: ...  # partial output on stream_mode="tools"
 ```
+
+`ToolRuntime` is exported from `langgraph.prebuilt` and re-exported as `langchain.tools.ToolRuntime`. When the run is not streamed with `"custom"` mode, `stream_writer` discards what you write, so calling it is always safe. `emit_output_delta()` sends a partial result on the `"tools"` stream mode and does nothing when that mode is not being streamed ([Streaming modes](/langgraph-guide/python/reference-streaming-modes/)).
 
 Use `ToolRuntime` when a single tool needs two or more of these values — it avoids stacking multiple `Annotated` parameters.
 
@@ -545,7 +549,9 @@ print(result["assigned_to"])  # "billing"
 
 `wrap_tool_call` (and its async twin `awrap_tool_call`) lets you intercept every tool call before and after execution. Receive a `ToolCallRequest` (with `.tool_call`, `.tool`, `.state`, `.runtime`) and a callable `execute` — add logging, auth checks, or argument transformations without modifying the tools themselves.
 
-**`ToolCallRequest.override()`** (in `langgraph-prebuilt` since 1.0.2) returns a new `ToolCallRequest` with specific fields replaced. Setting attributes directly on the instance is deprecated — always use `override()` for the immutable update pattern.
+**`ToolCallRequest.override()`** returns a new `ToolCallRequest` with `tool_call`, `tool` or `state` replaced. Setting attributes directly on the instance still works but emits a `DeprecationWarning`; use `override()` instead.
+
+The interceptor wraps the whole tool execution, including `ToolNode`'s own error handling. By the time `execute(request)` returns, an exception that `handle_tool_errors` catches has already become a `ToolMessage` with `status="error"`; only exceptions it does not catch reach your interceptor. `request.tool` is `None` when the model asked for a tool the node does not have, so an interceptor can answer those calls itself.
 
 ```python
 from typing import Callable
@@ -624,13 +630,13 @@ async def async_sanitize_interceptor(
 
 
 tool_node = ToolNode(
-    [my_tool],
-    wrap_tool_call=sanitize_interceptor,
-    awrap_tool_call=async_sanitize_interceptor,
+    [get_weather],
+    wrap_tool_call=sanitize_interceptor,         # used by invoke/stream
+    awrap_tool_call=async_sanitize_interceptor,  # used by ainvoke/astream
 )
 ```
 
-> **Note:** `wrap_tool_call` overrides are not serialised to checkpoints and are not re-applied on resume. Put any stateful side effects in graph nodes rather than interceptors.
+If you pass only `wrap_tool_call`, async runs fall back to it. The interceptor runs every time the tool node executes, including when the node is re-run on resume after an interrupt, so keep any side effects in it idempotent.
 
 ---
 
@@ -686,11 +692,11 @@ tool_node = ToolNode(
 
 ### Inspecting `ToolInvocationError` in an interceptor
 
-Combine `wrap_tool_call` with `ToolInvocationError` to audit argument errors before the fallback message is generated. The snippet below continues from the `book_flight` tool defined earlier in this section:
+Because `ToolNode` applies `handle_tool_errors` inside `execute()`, an interceptor only sees the exception if the node does not handle it. To log argument errors yourself, turn the node's handling off and build the `ToolMessage` in the interceptor. The snippet continues from the `book_flight` tool above:
 
 ```python
 from typing import Callable
-from langchain_core.messages import ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langgraph.prebuilt import ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest, ToolInvocationError
 from langgraph.types import Command
@@ -703,22 +709,39 @@ def audit_and_validate(
     try:
         return execute(request)
     except ToolInvocationError as exc:
-        # Log the bad call for observability
-        print(
-            f"[SCHEMA ERROR] tool={exc.tool_name} "
-            f"kwargs={exc.tool_kwargs} "
-            f"errors={exc.filtered_errors}"
+        print(f"[SCHEMA ERROR] tool={exc.tool_name} kwargs={exc.tool_kwargs} errors={exc.filtered_errors}")
+        # exc.message is the same text the default handler would have sent
+        return ToolMessage(
+            content=exc.message,
+            name=exc.tool_name,
+            tool_call_id=request.tool_call["id"],
+            status="error",
         )
-        # Re-raise so handle_tool_errors produces the standard ToolMessage
-        raise
 
 
 tool_node = ToolNode(
     [book_flight],
-    handle_tool_errors=True,
+    handle_tool_errors=False,          # let errors reach the interceptor
     wrap_tool_call=audit_and_validate,
 )
+
+# ToolNode needs a graph runtime, so run it inside a one-node graph.
+from langgraph.graph import StateGraph, MessagesState, START
+
+g = StateGraph(MessagesState)
+g.add_node("tools", tool_node)
+g.add_edge(START, "tools")
+graph = g.compile()
+
+# A call with a missing argument ("date"):
+bad_call = AIMessage(content="", tool_calls=[{
+    "name": "book_flight", "args": {"origin": "LHR", "destination": "JFK"}, "id": "call-1",
+}])
+out = graph.invoke({"messages": [bad_call]})
+print(out["messages"][-1].status)   # error
 ```
+
+Any other exception the tool raises also reaches the interceptor with `handle_tool_errors=False`; re-raise it if it should fail the run.
 
 > **When you see `ToolInvocationError`:** it almost always means the LLM hallucinated an argument name or passed the wrong type. Check the tool's docstring and Pydantic schema — `filtered_errors` points to exactly which fields caused the failure.
 

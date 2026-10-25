@@ -11,7 +11,8 @@
     "astro": "astro",
     "check:versions": "node scripts/check-versions.mjs",
     "check:latest": "node scripts/check-versions.mjs --latest",
-    "check:links": "node scripts/check-links.mjs && node scripts/check-built-links.mjs"
+    "check:links": "node scripts/check-links.mjs && node scripts/check-built-links.mjs",
+    "postinstall": "node scripts/patch-astro.mjs"
   },
   "dependencies": {
     "@astrojs/react": "^4.3.0",

@@ -67,6 +67,8 @@ Python 3.10 or later.
 pip install "mistralai==%%version=mistralai%%"
 # with RunContext, MCP clients and their dependencies:
 pip install "mistralai[agents]==%%version=mistralai%%"
+# only the official MCP client (connectors.mcp_client()), without RunContext's extras:
+pip install "mistralai[mcp]==%%version=mistralai%%"
 ```
 
 Import the client from `mistralai.client` (the top-level `mistralai` package is a namespace and exports nothing):
@@ -78,7 +80,7 @@ from mistralai.client import Mistral
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 ```
 
-`Mistral()` with no arguments resolves credentials in this order: an `Authorization` header you set yourself, an explicit `api_key`, the service-account token file named by `MISTRAL_SA_TOKEN_PATH`, then `MISTRAL_API_KEY`. If both `MISTRAL_SA_TOKEN_PATH` and `MISTRAL_API_KEY` are set, the token file wins.
+`Mistral()` with no arguments resolves credentials in this order: an `Authorization` header you set yourself, an explicit `api_key`, the service-account token file named by `MISTRAL_SA_TOKEN_PATH`, then `MISTRAL_API_KEY`. If both `MISTRAL_SA_TOKEN_PATH` and `MISTRAL_API_KEY` are set, the token file wins. An `api_key` passed to the constructor outranks both, so `Mistral(api_key=os.environ["MISTRAL_API_KEY"])`, as used in most examples, never reads a token file; call `Mistral()` with no key to get the order above. The token file is read on every request, and a missing or empty file raises `ServiceAccountTokenError`.
 
 Use the client as a context manager in scripts so its HTTP connections are closed:
 
@@ -105,7 +107,20 @@ Agents accept any chat model your workspace can use. Current general-purpose cho
 | Mistral Small 4 | `mistral-small-2603` | `mistral-small-latest` | 256k | Fast, cheap agents and routers |
 | Ministral 3 8B | `ministral-8b-2512` | — | 256k | Edge and high-volume classification |
 
-Aliases move when Mistral releases a new version, so pin the versioned API name (`mistral-medium-3-5`, `mistral-small-2603`) in production and use aliases in prototypes. `mistral-medium-2505` (Medium 3) and `mistral-medium-2508` (Medium 3.1) reached retirement on 31 August 2026; their replacement is Mistral Medium 3.5.
+API names and context windows come from the model pages on docs.mistral.ai (checked %%versions-checked%%). Those pages do not state which model each `-latest` alias currently points to, so treat the alias column as the usual convention and confirm it on your account (below). Aliases move when Mistral releases a new version, so pin the versioned API name (`mistral-medium-3-5`, `mistral-small-2603`) in production and use aliases in prototypes. `mistral-medium-2505` (Medium 3) and `mistral-medium-2508` (Medium 3.1) were deprecated on 22 May 2026 and retired on 31 August 2026; their replacement is Mistral Medium 3.5.
+
+Each model card returned by the API carries its `aliases`, `max_context_length` and, for models on their way out, `deprecation` and `deprecation_replacement_model`, so a deploy script can check what an alias resolves to:
+
+```python
+from mistralai.client import Mistral
+
+wanted = {"%%model=mistral%%", "%%model=mistral-small%%"}
+
+with Mistral() as client:
+    for card in client.models.list().data:
+        if card.id in wanted or wanted & set(card.aliases or []):
+            print(card.id, card.aliases, card.max_context_length, card.deprecation)
+```
 
 ---
 
@@ -120,7 +135,7 @@ from mistralai.client import Mistral
 client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
 
 agent = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="research-assistant",
     description="Answers questions using current information from the web.",
     instructions="Search before answering anything time-sensitive. Cite sources inline.",
@@ -186,7 +201,9 @@ for entry in response.outputs:
     print(entry.type)          # e.g. "tool.execution", then "message.output"
 ```
 
-`inputs` is a string or a list of entries such as `{"role": "user", "content": "..."}`. Without an agent, pass `model=` (and optionally `instructions=` and `tools=`) instead of `agent_id=`.
+`inputs` is a string or a list of entries such as `{"role": "user", "content": "..."}`. Without an agent, pass `model=` (and optionally `instructions=`, `tools=` and `completion_args=`) instead of `agent_id=`; the conversation then carries its own configuration and nothing is stored as an agent. Use this for ad-hoc work or while you are still iterating on a prompt, and move to a stored agent when several callers should share one definition and one version history. `agent_id` and `model` are alternatives: send one of them.
+
+`append()` also takes `completion_args=` to change sampling settings for one turn (for example a lower `temperature` or a `max_tokens` cap) without touching the agent.
 
 `outputs` can contain tool executions, function calls, handoffs and messages. The answer is in the last `message.output` entry, whose `content` is either a string or a list of chunks (text, tool references for citations, files). A helper used throughout these pages:
 
@@ -303,7 +320,7 @@ def get_order_status(order_id: str) -> dict:
     return {"order_id": order_id, "status": "shipped", "eta": "2026-10-24"}
 
 support = client.beta.agents.create(
-    model="mistral-small-latest",
+    model="%%model=mistral-small%%",
     name="order-support",
     instructions="Use get_order_status for any question about an order.",
     tools=[{
@@ -352,7 +369,7 @@ def get_order_status(order_id: str) -> dict:
 
 async def main() -> None:
     client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-    async with RunContext(model="mistral-small-latest") as run_ctx:
+    async with RunContext(model="%%model=mistral-small%%") as run_ctx:
         run_ctx.register_func(get_order_status)
         result = await client.beta.conversations.run_async(
             run_ctx=run_ctx,
@@ -365,7 +382,56 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`register_func(fn, requires_confirmation=True)` pauses the run with a `DeferredToolCallsException` so a human can approve the call; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/#3-human-approval-for-tool-calls). `RunContext(agent_id=...)` runs against a stored agent instead of a model.
+`register_func(fn, requires_confirmation=True)` pauses the run with a `DeferredToolCallsException` so a human can approve the call; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/#3-human-approval-for-tool-calls). `RunContext(agent_id=...)` runs against a stored agent instead of a model; `model` and `agent_id` cannot both be set.
+
+Behaviour to know before relying on it, all read from the installed SDK:
+
+- **There is no built-in turn limit.** `run_async()` keeps appending function results until the model answers without calling a function. A model that keeps calling tools keeps costing you; check `run_ctx.request_count` or run the manual loop above with a counter when that matters.
+- **A function that raises stops the run.** The exception is wrapped in `mistralai.extra.exceptions.RunException`. With `RunContext(..., continue_on_fn_error=True)` the error text (`Error while executing <name>: ...`) is sent back to the model as the function result instead, so it can retry or explain.
+- **Functions can be sync or `async def`.** Synchronous functions run on the event loop's thread, so a slow blocking call stalls other tasks; use an `async def` (or run blocking work in an executor) for I/O.
+- **Return values** are sent as strings: a `str` as is, anything else through `json.dumps`.
+- `result.entries` holds the input and output entries, `result.output_as_text` joins the assistant's messages, and `result.get_file(file_id)` returns generated files that were fetched during the run.
+
+`run_stream_async()` is the streaming form. It is a coroutine that returns an async generator, so `await` it first; it yields the same events as `start_stream()`, and the last item is the `RunResult`:
+
+```python
+import asyncio
+import os
+from mistralai.client import Mistral
+from mistralai.extra.run.context import RunContext
+from mistralai.extra.run.result import RunResult
+
+def lookup_price(sku: str) -> float:
+    """Return the unit price of a SKU in euros.
+
+    Args:
+        sku: Product code, e.g. SKU-1.
+    """
+    prices = {"SKU-1": 12.5}
+    return prices[sku]          # raises KeyError for an unknown SKU
+
+async def main() -> None:
+    client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
+    async with RunContext(model="%%model=mistral-small%%", continue_on_fn_error=True) as run_ctx:
+        run_ctx.register_func(lookup_price)
+        stream = await client.beta.conversations.run_stream_async(
+            run_ctx=run_ctx,
+            inputs="What do SKU-1 and SKU-9 cost?",
+            instructions="Use lookup_price for every SKU. Say so if a lookup fails.",
+        )
+        async for item in stream:
+            if isinstance(item, RunResult):          # the last item summarises the run
+                print("\nrequests made:", run_ctx.request_count)
+                print("conversation:", item.conversation_id)
+            elif item.data.type == "message.output.delta" and isinstance(item.data.content, str):
+                print(item.data.content, end="", flush=True)
+            elif item.data.type == "function.call.delta":
+                print(f"\n[calling {item.data.name}({item.data.arguments})]")
+
+asyncio.run(main())
+```
+
+Here the `SKU-9` lookup fails with a `KeyError`; because of `continue_on_fn_error=True` the model receives the error text and can say so, where without it the run would raise `RunException`.
 
 ---
 
@@ -375,18 +441,18 @@ An agent can hand the conversation to other agents listed in its `handoffs`:
 
 ```python
 billing = client.beta.agents.create(
-    model="mistral-small-latest", name="billing",
+    model="%%model=mistral-small%%", name="billing",
     description="Handles invoices, refunds and payment questions.",
     instructions="You resolve billing questions.",
 )
 tech = client.beta.agents.create(
-    model="mistral-medium-latest", name="tech-support",
+    model="%%model=mistral%%", name="tech-support",
     description="Handles technical problems with the product.",
     instructions="You troubleshoot technical issues step by step.",
     tools=[{"type": "web_search"}],
 )
 triage = client.beta.agents.create(
-    model="mistral-small-latest", name="triage",
+    model="%%model=mistral-small%%", name="triage",
     description="Routes customer requests.",
     instructions="Decide which specialist should answer and hand off. Do not answer yourself.",
     handoffs=[billing.id, tech.id],
@@ -421,7 +487,7 @@ class Ticket(BaseModel):
     summary: str
 
 classifier = client.beta.agents.create(
-    model="mistral-small-latest",
+    model="%%model=mistral-small%%",
     name="ticket-classifier",
     instructions="Classify the support ticket.",
     completion_args={"response_format": response_format_from_pydantic_model(Ticket)},
@@ -443,20 +509,44 @@ Attach Mistral's moderation models to an agent or a single conversation:
 from mistralai.client.models import GuardrailConfig, ModerationLlmv2Config
 
 safe = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="public-assistant",
     instructions="You are a helpful assistant for the public website.",
     guardrails=[GuardrailConfig(block_on_error=True, moderation_llm_v2=ModerationLlmv2Config())],
 )
 ```
 
-`ModerationLlmv2Config` uses `mistral-moderation-2603` (Mistral Moderation 2) and accepts `custom_category_thresholds`, `ignore_other_categories` and `action`. `ModerationLlmv1Config` uses the deprecated `mistral-moderation-2411`, which reached retirement on 30 June 2026; use v2. `block_on_error=True` rejects the request if moderation itself fails. Guardrail results are reported on `response.guardrails`.
+`ModerationLlmv2Config` uses `mistral-moderation-2603` (Mistral Moderation 2) and accepts `custom_category_thresholds`, `ignore_other_categories` and `action`. `ModerationLlmv1Config` uses the deprecated `mistral-moderation-2411`, which reached retirement on 30 June 2026; use v2. `block_on_error=True` makes the API return HTTP 403 and block the request when a server-side error occurs while moderating (the default, `False`, lets the request through). `action` is `"none"` or `"block"`. Guardrail results are reported on `response.guardrails`, a list of free-form dictionaries, so log them rather than relying on a fixed shape.
+
+To act on only some categories, give thresholds and ignore the rest. The categories are `sexual`, `hate_and_discrimination`, `violence_and_threats`, `dangerous`, `criminal`, `selfharm`, `health`, `financial`, `law`, `pii` and `jailbreaking`, each a float:
+
+```python
+from mistralai.client.models import GuardrailConfig, ModerationLlmv2Config
+from mistralai.client.models import ModerationLlmv2CategoryThresholds
+
+strict_on_pii = GuardrailConfig(
+    block_on_error=True,
+    moderation_llm_v2=ModerationLlmv2Config(
+        custom_category_thresholds=ModerationLlmv2CategoryThresholds(pii=0.5, jailbreaking=0.5),
+        ignore_other_categories=True,
+        action="block",
+    ),
+)
+
+response = client.beta.conversations.start(
+    model="%%model=mistral-small%%",
+    inputs="Summarise our refund policy.",
+    guardrails=[strict_on_pii],      # applies to this conversation only
+)
+```
+
+The SDK does not document how a score maps to a threshold; the values above are placeholders to tune against Mistral's moderation documentation and your own traffic.
 
 ---
 
 ## 12. Errors, retries and timeouts
 
-HTTP errors raise subclasses of `mistralai.client.errors.MistralError`, which carry `status_code`, `body` and the raw `httpx2` response. `HTTPValidationError` is raised for 422s and `SDKError` for other error statuses. `ResponseValidationError` means a response did not match the SDK's model (often an SDK that is older than the API), `NoResponseError` means no response arrived, and `ObservabilityError` comes from the observability endpoints.
+HTTP errors raise subclasses of `mistralai.client.errors.MistralError`, which carry `status_code`, `body`, `headers` (useful for `Retry-After`) and `raw_response`, the `httpx2` response. `HTTPValidationError` is raised for 422s and `SDKError` for other error statuses. `ResponseValidationError` means a response did not match the SDK's model (often an SDK that is older than the API), and `ObservabilityError` comes from the observability endpoints. `NoResponseError` (no response arrived) is the exception: it derives from `Exception`, not `MistralError`, so an `except MistralError` clause does not catch it. Transport failures such as timeouts surface as `httpx2` exceptions.
 
 ```python
 from mistralai.client import Mistral, errors
@@ -510,20 +600,20 @@ For streaming: `async with await client.beta.conversations.start_stream_async(..
 
 ## 14. Changes in SDK v3
 
-`mistralai` 3.0.0 (September 2026) kept imports and method names from v2 (`from mistralai.client import Mistral`, `client.beta.agents.create`, `client.beta.conversations.start`). What changed, from the upstream [migration guide](https://github.com/mistralai/client-python/blob/main/MIGRATION.md):
+`mistralai` 3.0.0 (28 September 2026) kept imports and method names from v2 (`from mistralai.client import Mistral`, `client.beta.agents.create`, `client.beta.conversations.start`). What changed, checked against the installed 3.x package (the upstream [migration guide](https://github.com/mistralai/client-python/blob/main/MIGRATION.md) is linked from the SDK's README):
 
 - **HTTP transport is `httpx2`.** Custom clients must be `httpx2.Client` / `httpx2.AsyncClient`; catch `httpx2` exceptions, not `httpx` ones.
 - **`mcp` 2.2.** The `agents` extra depends on `mcp>=2.2,<3`; MCP results use 2.x field names (`structured_content`, not `structuredContent`).
 - **Service-account tokens.** `MISTRAL_SA_TOKEN_PATH` is read automatically and takes precedence over `MISTRAL_API_KEY`.
 - **Built-in tools left chat completions.** `web_search`, `web_search_premium` and `code_interpreter` are no longer accepted by `chat.complete`, `chat.stream`, `agents.complete` or `agents.stream`; use Conversations or an agent.
 - **Connectors (beta).** `delete_user_credentials` / `delete_workspace_credentials` / `delete_organization_credentials` became `delete_credentials(..., consumer_scope=...)`; `list_tools()` lost `page`.
-- **Observability and workflow deployment** APIs changed shape (single pipeline `definition`; Mistral Cloud deployment backend).
+- **Other beta areas moved too** (observability, workflows). They are outside this guide; read the SDK's `MIGRATION.md` before upgrading code that uses them.
 
 Upgrading from v1 as well? v2 moved every import from `mistralai` to `mistralai.client`, and Azure/GCP clients to `mistralai.azure.client` / `mistralai.gcp.client`.
 
 ### Earlier history
 
-- **27 May 2025.** Mistral launched the Agents API as a beta: stored agents, server-side conversations (append, restart, streaming), built-in code execution, image generation, web search (with a premium news variant) and document libraries, handoffs, and MCP tool use. The launch material's "persistent memory" meant server-side conversation history, not a separate tool.
+- **27 May 2025.** Mistral launched the Agents API as a beta: stored agents, server-side conversations (append, restart, streaming), built-in code execution, image generation, web search (with a premium news variant) and document libraries, handoffs, and MCP tool use. The launch post lists "persistent memory across conversations" without describing a mechanism beyond stored, branchable conversation history; this guide treats it as that history, not as a separate tool.
 - **2025–2026.** `document_library` with `library_ids`; MCP `connector` tools with stored credentials and OAuth; `tool_configuration` (`include`, `exclude`, `requires_confirmation`); agent versions and aliases; guardrails; `handoff_execution`.
-- **March 2026.** Python SDK v2 moved imports to `mistralai.client` and renamed 42 request and response types.
-- **2026 model retirements.** `mistral-moderation-2411` retired on 30 June 2026 (replaced by `mistral-moderation-2603`); `mistral-medium-2505` and `mistral-medium-2508` retired on 31 August 2026 (replaced by `mistral-medium-3-5`).
+- **March 2026.** Python SDK 2.0.0 (10 March) moved imports to `mistralai.client` and the Azure and GCP clients to `mistralai.azure.client` and `mistralai.gcp.client`.
+- **2026 model retirements.** `mistral-moderation-2411` retired on 30 June 2026 (replaced by `mistral-moderation-2603`); `mistral-medium-2505` and `mistral-medium-2508` retired on 31 August 2026 (replaced by `mistral-medium-3-5`). Dates are from Mistral's model-deprecation table.

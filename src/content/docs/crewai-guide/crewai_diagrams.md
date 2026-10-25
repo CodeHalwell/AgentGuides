@@ -39,19 +39,20 @@ Reference: [Agent API](/crewai-guide/crewai_agent_api_python/), [Task API](/crew
 ```text
   task description + expected_output
   + context (earlier task outputs)
-  + recalled memory / knowledge chunks
+  + recalled memories (up to 5)
+  + knowledge chunks (after an LLM query rewrite)
               │
               ▼
       ┌──────────────┐   tool call    ┌──────────────┐
       │     LLM      │ ─────────────► │     tool     │
-      │              │ ◄───────────── │ (cached by   │
-      └──────────────┘  observation   │  default)    │
+      │              │ ◄───────────── │ (cached only │
+      └──────────────┘  observation   │  if opted in)│
               │                       └──────────────┘
               │ final answer           loop ends at the final answer,
               ▼                        max_iter or max_execution_time
       ┌──────────────┐
       │  guardrail   │── fails ──► reason sent back, task retried
-      └──────────────┘             (up to guardrail_max_retries)
+      └──────────────┘             (Task.guardrail; up to guardrail_max_retries)
               │ passes
               ▼
          TaskOutput (raw, pydantic, json_dict)
@@ -87,7 +88,8 @@ Async tasks (`async_execution=True`) that follow each other run together; the ne
 ```text
                  ┌──────────────────────────┐
   tasks ───────► │ Manager                  │  manager_llm (generic manager)
-                 │ plans, assigns, reviews  │  or manager_agent (your own)
+                 │ runs every task, using   │  or manager_agent (your own)
+                 │ delegation tools         │  TaskOutput.agent = manager's role
                  └──────────────────────────┘
                     │ delegate        ▲ result
           ┌─────────┴────────┬────────┴─────────┐
@@ -104,7 +106,9 @@ Async tasks (`async_execution=True`) that follow each other run together; the ne
         │
         │ gets two tools whose targets are the other agents in the crew
         ├──► "Delegate work to coworker"  ──► coworker runs a full sub-task
+        │    (delegate_work_to_coworker)       sees only the task + context it is given
         └──► "Ask question to coworker"   ──► coworker answers one question
+             (ask_question_to_coworker)
 ```
 
 ## A flow
@@ -148,14 +152,17 @@ Reference: [Flows](/crewai-guide/crewai_flows_guide/).
              ┌──────────────────────┼───────────────────────┐
              ▼                      ▼                       ▼
      mem.scope("/users/ada")   mem.slice(scopes=[...])   Crew(memory=mem)
-     read and write under      read-only view across     agents remember and
-     one path                  several paths             recall during tasks
+     read and write under      read-only view across     recalled into each task
+     one path                  several paths             prompt; search/save tools;
+                                                         results saved afterwards
                                     │
                                     ▼
-          remember()  ──► LLM infers scope, categories, importance;
-                          near-duplicates consolidated
+          remember()  ──► LLM infers whatever scope, categories, importance
+                          you leave out; near-duplicates consolidated
           recall()    ──► depth="shallow": embed + vector search
-                          depth="deep":    LLM plans sub-queries first
+                          depth="deep":    long queries (200+ chars) are split into
+                                           sub-queries by the LLM; low-confidence
+                                           results trigger one more LLM round
                           score = semantic · recency · importance weights
                                     │
                                     ▼

@@ -21,7 +21,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 </CardGrid>
 
 <Aside type="caution" title="Maintenance status">
-  Microsoft moved AutoGen to maintenance mode in October 2025 alongside the launch of **Microsoft Agent Framework**, its successor, and in October 2026 marked the repository archived and no longer maintained (no bug or security fixes), as the [upstream README](https://github.com/microsoft/autogen) states. The last release is 0.7.5 (September 2025). For new projects use the [Microsoft Agent Framework guide](/microsoft-agent-framework-guide/) or the [AG2 guide](/ag2-guide/).
+  Microsoft moved AutoGen to maintenance mode alongside the launch of **Microsoft Agent Framework**, its successor, and the repository is now archived and no longer maintained by Microsoft (no bug or security fixes, no support), as the [upstream README](https://github.com/microsoft/autogen) states. The last release is 0.7.5 (September 2025). For new projects use the [Microsoft Agent Framework guide](/microsoft-agent-framework-guide/) or the [AG2 guide](/ag2-guide/).
 </Aside>
 
 ## How the two diverged
@@ -29,9 +29,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 - **2023–2024** — AutoGen 0.2 (`pyautogen`, `import autogen`) is developed at Microsoft Research.
 - **November 2024** — AutoGen's original creators fork the 0.2 line as **AG2** under the `ag2ai` organisation, keeping the `import autogen` API. Microsoft continues `microsoft/autogen` independently.
 - **January 2025** — Microsoft ships **AutoGen 0.4**, a ground-up rewrite split into `autogen-core`, `autogen-agentchat` and `autogen-ext` (imports `autogen_agentchat`, `autogen_core`, `autogen_ext`). It is not compatible with 0.2 or AG2.
-- **October 2025** — Microsoft announces Agent Framework and puts AutoGen into maintenance mode; 0.7.5 is the final release.
+- **September 2025** — 0.7.5, the final release, is published (30 September). Around the same time Microsoft introduces Agent Framework as the successor and puts AutoGen into maintenance mode.
 - **July 2026** — AG2 1.0 replaces the Classic API in the `ag2` package; Classic continues separately as `autogen` in maintenance mode.
-- **October 2026** — `microsoft/autogen` is marked archived.
+- **Later** — `microsoft/autogen` is marked archived. (The upstream README gives no date.)
 
 The `pyautogen` name on PyPI now installs Microsoft's `autogen-agentchat`; the `autogen` name installs AG2 Classic. Pin explicitly.
 
@@ -52,6 +52,7 @@ The `pyautogen` name on PyPI now installs Microsoft's `autogen-agentchat`; the `
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | autogen-agentchat 0.7.5 | Audit against 0.7.5. Removed unverifiable archive and maintenance-mode dates (the upstream README gives none); the 0.7.5 date (30 September 2025) is from PyPI. Added offline testing with `ReplayChatCompletionClient` and a Core publish/subscribe example to the AgentChat reference. |
 | 2026-10-21 | autogen-agentchat 0.7.5 | AG2 Classic pages moved to the AG2 guide (`/ag2-guide/classic/`); this guide now covers Microsoft AutoGen only. |
 | 2026-10-21 | autogen-agentchat 0.7.5 | Added a .NET page. Rewritten to separate Microsoft AutoGen from AG2 (the earlier text wrongly said Microsoft AutoGen had been rebranded as AG2). Added maintenance/archived status and a timeline; new Microsoft AutoGen reference page verified against 0.7.5. |
 | 2026-04-21 | AG2 | Parent index redesigned as language/flavour selector. |

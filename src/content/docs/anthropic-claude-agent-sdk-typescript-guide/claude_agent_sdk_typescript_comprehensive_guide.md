@@ -20,16 +20,17 @@ The Python package has its own guide: [Claude Agent SDK (Python)](/anthropic-cla
 5. [Tools integration](#tools-integration)
 6. [Permissions](#permissions)
 7. [Hooks](#hooks)
-8. [User input and approvals](#user-input-and-approvals)
-9. [Multi-agent systems](#multi-agent-systems)
-10. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-11. [Structured output](#structured-output)
-12. [Session management](#session-management)
-13. [Thinking and effort](#thinking-and-effort)
-14. [File checkpointing](#file-checkpointing)
-15. [Limits, cost and context](#limits-cost-and-context)
-16. [Errors and cancellation](#errors-and-cancellation)
-17. [API reference](#api-reference)
+8. [Skills, slash commands and plugins](#skills-slash-commands-and-plugins)
+9. [User input and approvals](#user-input-and-approvals)
+10. [Multi-agent systems](#multi-agent-systems)
+11. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+12. [Structured output](#structured-output)
+13. [Session management](#session-management)
+14. [Thinking and effort](#thinking-and-effort)
+15. [File checkpointing](#file-checkpointing)
+16. [Limits, cost and context](#limits-cost-and-context)
+17. [Errors and cancellation](#errors-and-cancellation)
+18. [API reference](#api-reference)
 
 ---
 
@@ -492,6 +493,144 @@ export const options: Options = {
 ```
 
 Common output fields: `continue` (set `false` to stop), `stopReason`, `systemMessage`, `decision`, `reason`, and `hookSpecificOutput`. For `PreToolUse`, `permissionDecision` is `'allow' | 'deny' | 'ask' | 'defer'` and `updatedInput` rewrites the input; for `PostToolUse`, `additionalContext` adds text for the model and `updatedToolOutput` replaces the tool's output before the model sees it (see [Middleware](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/#redacting-tool-output)). All matchers for an event run concurrently.
+
+
+### Hook patterns
+
+The hooks above only observe or deny. These three change what the agent does: they rewrite a tool's input, screen and enrich prompts, and push back when the agent tries to finish early. Narrow `input` with `hook_event_name` and TypeScript gives you the right fields for each event. They type-check under `tsc --strict`.
+
+```typescript
+import type { HookCallback, Options } from '@anthropic-ai/claude-agent-sdk';
+
+const SECRET = /(api[_-]?key|token|password)\s*[=:]\s*\S+/i;
+
+const addDryRun: HookCallback = async (input) => {
+  if (input.hook_event_name !== 'PreToolUse') return {};
+  const toolInput = input.tool_input as { command?: string };
+  const command = toolInput.command ?? '';
+  if (command.startsWith('terraform apply')) {
+    return {
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        permissionDecision: 'allow',
+        updatedInput: { ...toolInput, command: command.replace('apply', 'plan') },
+        additionalContext: 'apply was downgraded to plan; ask the user before applying.',
+      },
+    };
+  }
+  return {};
+};
+
+const screenPrompt: HookCallback = async (input) => {
+  if (input.hook_event_name !== 'UserPromptSubmit') return {};
+  if (SECRET.test(input.prompt)) {
+    return { decision: 'block', reason: 'Remove credentials from the prompt and try again.' };
+  }
+  return {
+    hookSpecificOutput: {
+      hookEventName: 'UserPromptSubmit',
+      additionalContext: 'Current ticket: PAY-142 (refund rounding).',
+    },
+  };
+};
+
+const requireTests: HookCallback = async (input) => {
+  if (input.hook_event_name !== 'Stop') return {};
+  if (input.stop_hook_active) return {};
+  if (!(input.last_assistant_message ?? '').includes('vitest')) {
+    return { decision: 'block', reason: 'Run vitest and report the result before finishing.' };
+  }
+  return {};
+};
+
+export const options: Options = {
+  allowedTools: ['Read', 'Edit', 'Bash'],
+  hooks: {
+    PreToolUse: [{ matcher: 'Bash', hooks: [addDryRun] }],
+    UserPromptSubmit: [{ hooks: [screenPrompt] }],
+    Stop: [{ hooks: [requireTests] }],
+  },
+};
+```
+
+- `PreToolUse` with `updatedInput` changes the arguments the tool receives. The model is not told unless you also set `additionalContext`.
+- `UserPromptSubmit` can block a prompt (`decision: 'block'`) or add context.
+- `Stop` fires when the agent is about to finish. `decision: 'block'` with a `reason` keeps the loop going with that reason as feedback. `stop_hook_active` is true when the agent is already continuing because of a previous block, so check it or the hook can keep objecting indefinitely.
+- `decision` is only for blocking. To allow or deny a tool call, use `permissionDecision` inside `hookSpecificOutput`.
+- `includeHookEvents: true` adds hook lifecycle messages (`hook_started`, `hook_progress`, `hook_response`) to the stream, which helps when a hook does not seem to fire.
+
+
+---
+
+## Skills, slash commands and plugins
+
+Skills live on disk rather than in code. A skill is a directory with a `SKILL.md` whose frontmatter `description` tells the model when to use it; there is no API for registering one programmatically (subagents can be defined in `agents`).
+
+```text
+.claude/skills/security-check/SKILL.md
+---
+name: security-check
+description: Run a security vulnerability scan
+---
+Analyse the codebase for SQL injection, XSS, exposed credentials and insecure configuration.
+```
+
+- `settingSources` decides where skills, `.claude/commands/` files and `CLAUDE.md` are read from. Omitted, it loads user, project and local sources. If you set it, keep `'project'` for `<cwd>/.claude/skills/` (and parent directories up to the repository root) and `'user'` for `~/.claude/skills/`. `settingSources: []` finds no skills.
+- `skills` scopes which discovered skills the model may invoke: `'all'`, a list of names (the directory name, or `plugin:skill` for a plugin's skill), or `[]` for none. Wildcards such as `'docs:*'` are rejected. If you also pass `tools`, include `'Skill'` in it.
+
+```typescript
+import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
+
+const options: Options = {
+  cwd: '/srv/repos/payments',            // .claude/skills/ here or in a parent directory
+  settingSources: ['user', 'project'],
+  skills: ['security-check'],
+  allowedTools: ['Read', 'Grep', 'Glob'],
+  maxTurns: 10,
+};
+
+for await (const message of query({ prompt: 'Check this project for security issues', options })) {
+  if (message.type === 'system' && message.subtype === 'init') {
+    console.log('skills:', message.skills);
+    console.log('commands:', message.slash_commands);
+    console.log('plugins:', message.plugins.map((p) => p.name));
+  } else if (message.type === 'result' && message.subtype === 'success') {
+    console.log(message.result);
+  }
+}
+
+export const withPlugin: Options = {
+  plugins: [{ type: 'local', path: './plugins/payments-tools' }],
+  skills: ['payments-tools:reconcile'],
+};
+```
+
+The `skills` list in the `init` message holds user-invocable skills only; a skill with `user-invocable: false` still loads for the model but is not listed.
+
+**Slash commands.** A prompt that starts with `/<name>` dispatches a command: a built-in such as `/compact` or `/clear`, a bundled skill, one of your user-invocable skills, or a Markdown file in `.claude/commands/`. Dispatch does not depend on the `skills` list. A name that matches nothing is not an error: the text goes to the model as an ordinary prompt with a note that the command did not run. Use `verbatimPrompts: true` (0.3.280+) when a prompt may contain untrusted text, so neither `/command` nor `@file` is interpreted. Commands that act on history need history, so in TypeScript send them as a later message in a streaming-input query (or with `resume`):
+
+```typescript
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+
+const user = (text: string): SDKUserMessage => ({
+  type: 'user', message: { role: 'user', content: text }, parent_tool_use_id: null,
+});
+
+async function* turns(): AsyncGenerator<SDKUserMessage> {
+  yield user('Explain what this project does.');
+  yield user('/compact');                  // needs history to summarise
+}
+
+for await (const message of query({ prompt: turns(), options: { maxTurns: 5 } })) {
+  if (message.type === 'system' && message.subtype === 'compact_boundary') {
+    console.log('compacted from', message.compact_metadata.pre_tokens, 'tokens, trigger:', message.compact_metadata.trigger);
+  }
+}
+```
+
+**Plugins.** A plugin bundles skills, commands, agents, hooks and MCP servers in a folder. `plugins: [{ type: 'local', path }]` (shown above) loads one; plugin skills are namespaced `plugin:skill`. The `init` message lists loaded plugins in `plugins`.
+
+These snippets were type-checked with `tsc --strict`. Running them needs a real Claude Code process and skills on disk, so they were not run against a model; the behaviour described is from the SDK type definitions and the official skills documentation.
 
 ---
 

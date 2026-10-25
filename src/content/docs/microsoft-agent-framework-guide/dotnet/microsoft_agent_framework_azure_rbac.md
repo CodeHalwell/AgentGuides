@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Azure RBAC"
+  order: 86
 ---
 
 With managed identity there are no keys to rotate: the agent's host (App Service, Container Apps, Functions, AKS workload identity, or a Foundry project) has an identity, and `DefaultAzureCredential` / `ManagedIdentityCredential` obtains tokens for it. What remains is giving that identity the smallest set of roles it needs. The same assignments apply to Python services.

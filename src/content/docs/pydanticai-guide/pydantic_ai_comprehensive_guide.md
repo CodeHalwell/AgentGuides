@@ -136,7 +136,7 @@ agent_complete = Agent(
 )
 ```
 
-`instructions=` is the recommended way to give the model its brief. Unlike `system_prompt=`, instructions are not stored in the message history, so a later run with a different agent re-applies its own instructions rather than inheriting the old ones.
+`instructions=` is the recommended way to give the model its brief. Each request carries the instructions of the agent making it: they are recorded on `ModelRequest.instructions` for inspection, but they are not replayed from `message_history`, so a later run with a different agent sends its own instructions rather than inheriting the old ones. `system_prompt=` text, by contrast, is stored as a `SystemPromptPart` in the history and travels with it.
 
 ### RunContext
 
@@ -321,7 +321,7 @@ except UsageLimitExceeded as exc:
     print(f'Run aborted: {exc}')
 ```
 
-`ModelSettings` keys that a provider does not support are ignored with an `UnsupportedSettingWarning`. Cost limits, timeouts and the other production guards are on the [production page](/pydanticai-guide/pydantic_ai_production_guide/#limits-tokens-cost-time).
+Most `ModelSettings` keys a model does not support (`temperature`, `seed`, …) are ignored silently, so one settings dict works across providers. The settings whose absence changes what a request guarantees — `timeout`, `max_retries`, `stop_sequences`, `parallel_tool_calls=False`, `extra_headers` and `extra_body` — emit an `UnsupportedSettingWarning` instead; turn it into an error with `warnings.filterwarnings('error', category=UnsupportedSettingWarning)`. Cost limits, timeouts and the other production guards are on the [production page](/pydanticai-guide/pydantic_ai_production_guide/#limits-tokens-cost-time).
 
 ## Simple agents
 
@@ -857,7 +857,7 @@ In tests, pass fake dependencies the same way, or replace them for a block of co
 
 ## Upgrading from V1
 
-PydanticAI 2.0.0 (June 2026) collected the breaking changes V1's stability promise held back. Most were announced by deprecation warnings on 1.100.0+, so the smooth path is: upgrade to the last 1.x, clear every `PydanticAIDeprecationWarning`, then move to 2.x. The changes most likely to affect code written from older guides:
+PydanticAI 2.0.0 (June 2026) collected the breaking changes V1's stability promise held back. Most were announced by `PydanticAIDeprecationWarning`s from 1.95.0 onwards, so the smooth path is: upgrade to the last 1.x, clear every `PydanticAIDeprecationWarning`, then move to 2.x. The changes most likely to affect code written from older guides:
 
 | V1 | V2 |
 |---|---|
@@ -947,9 +947,9 @@ agent = Agent('openai:%%model=openai%%', end_strategy='early', retries={'tools':
 | `agent.to_web()`, `agent.to_cli()` | Chat web app, terminal chat ([integrations](/pydanticai-guide/pydantic_ai_integrations/#built-in-chat-ui-and-cli)) |
 | `Agent.from_spec(...)`, `Agent.from_file(path)` | Build an agent from a YAML/JSON `AgentSpec` |
 
-The run methods share these keyword arguments: `message_history`, `deps`, `instructions` (appended for this run), `model`, `model_settings`, `output_type`, `usage_limits`, `usage`, `timeout`, `cancellation_token`, `metadata`, `retries`, `toolsets`, `capabilities`, `deferred_tool_results` and `conversation_id`.
+The run methods share these keyword arguments: `message_history` or `conversation` (a whole `Conversation`, see below), `deps`, `instructions` (appended for this run), `model`, `model_settings`, `output_type`, `usage_limits`, `usage`, `timeout`, `cancellation_token`, `metadata`, `retries`, `toolsets`, `capabilities`, `deferred_tool_results`, `conversation_id` and `run_id`; `run`, `run_sync`, `run_stream` and `run_stream_sync` also take a per-run `event_stream_handler`.
 
-`AgentRunResult` exposes `output`, `usage` (a property), `response` (the final `ModelResponse`), `run_id`, `conversation_id`, `metadata`, and `all_messages()` / `new_messages()` with `_json()` variants for storage ([message history](/pydanticai-guide/pydantic_ai_message_history/)).
+`AgentRunResult` exposes `output`, `usage` (a property), `response` (the final `ModelResponse`), `run_id`, `conversation_id`, `metadata`, `conversation` (messages, usage, conversation ID and pending deferred calls in one object, ready to pass back as `conversation=`), and `all_messages()` / `new_messages()` with `_json()` variants for storage ([message history](/pydanticai-guide/pydantic_ai_message_history/#conversation--carry-the-whole-conversation-not-just-the-messages)).
 
 ### Iterating a run
 
@@ -980,7 +980,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`async for` skips the capabilities' node hooks; drive the run with `node = await run.next(node)` when hooks must fire on every step.
+`async for` yields each node before it runs and advances through `run.next()`, so capability hooks fire exactly as they do for `agent.run()`. Call `node = await run.next(node)` yourself when you want to inspect or replace a node before it executes, or stop early by breaking out of the loop.
 
 ### Agents from a spec
 
@@ -1064,7 +1064,7 @@ Capabilities bundle behaviour (hooks, instructions, tools, settings) and attach 
 | `SelectModel`, `ResolveModelId` | `pydantic_ai.capabilities` | [Choosing the model per step](#choosing-the-model-per-step) |
 | `RaiseContentFilterError`, `UseThreadExecutor`, `Caching`, `LocalWorkspace` | `pydantic_ai.capabilities` | [upstream capabilities docs](https://pydantic.dev/docs/ai/capabilities/overview/) |
 | `TemporalDurability`, `DBOSDurability`, `PrefectDurability` | `pydantic_ai.durable_exec.<engine>` | [Durable execution](/pydanticai-guide/pydantic_ai_durable_execution/) |
-| `OnlineEvaluation` | `pydantic_evals` | [Evals](/pydanticai-guide/pydantic_ai_evals/#7-online-evaluation--sampling-production-traffic) |
+| `OnlineEvaluation` | `pydantic_evals.online_capability` | [Evals](/pydanticai-guide/pydantic_ai_evals/#8-online-evaluation--sampling-production-traffic) |
 
 ### Output, messages and streaming
 
@@ -1092,13 +1092,19 @@ AgentRunError (RuntimeError)
 ├── UsageLimitExceeded
 ├── ConcurrencyLimitExceeded
 ├── RunCancelled
-│   └── RunTimedOut
+│   └── RunTimedOut (also a TimeoutError)
+├── HookTimeoutError (also a TimeoutError)
 ├── UnexpectedModelBehavior
 │   ├── ContentFilterError
 │   └── IncompleteToolCall
 └── ModelAPIError
-    ├── ModelHTTPError (status_code, body, headers, retry_after)
-    └── connection, timeout, rate-limit, quota, overload and server-error subclasses
+    ├── ModelHTTPError (status_code, model_name, body, headers, retry_after)
+    ├── ModelConnectionError
+    │   └── ModelTimeoutError
+    ├── ModelRequestTimeout
+    └── ModelRateLimitError, ModelQuotaExceededError, ModelServerError,
+        ModelContextWindowExceededError, ModelUnavailableError (└── ModelOverloadedError)
+        — when one comes from an HTTP response it is also a ModelHTTPError
 UserError (RuntimeError)          — a programming mistake, raised before or during a run
 FallbackExceptionGroup            — every model in a FallbackModel failed
 ModelRetry, ToolFailed            — raised by your code to steer the model
@@ -1200,6 +1206,7 @@ The framework's own history is in the [upstream changelog](https://pydantic.dev/
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Re-audited against pydantic-ai %%version=pydantic-ai%%: corrected the instructions-versus-history note, `UnsupportedSettingWarning` scope, the start of V2 deprecation warnings (1.95.0), `agent.iter()` hook behaviour and the `OnlineEvaluation` module; added `Conversation` to the run reference and fuller exception tree. |
 | 2026-10-21 | Rewritten. The 4,700-line class reference (much of it private internals and repeats of topic pages) replaced by an [Agent reference](#agent-reference) and an [API map](#api-map) that links to the topic pages. Corrected the `end_strategy` default (`'graceful'`), the `AgentRetries` keys, the removed `MCPServer*` classes and the native-tool support table; fixed the tutorial examples (`instructions=` per run, `stream_output()` for structured streaming, `min_length=`, imports). |
 | 2026-08-21 | Class & API Reference section added, consolidating the earlier per-class pages. |
 | 2025-11 | First edition (1.x). |

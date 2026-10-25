@@ -30,10 +30,10 @@ sidebar:
 13. [OpenAPI Agent](#openapi-agent)
 14. [Observability with Cloud Trace](#observability-with-cloud-trace)
 15. [Multi-Model Agent System](#multi-model-agent-system)
-16. [Self-Healing API Agent with `ReflectAndRetryToolPlugin`](#recipe-13--self-healing-api-agent-with-reflectandretrytoolplugin)
-17. [Few-Shot Agent with Dynamic Example Provider](#recipe-14--few-shot-agent-with-dynamic-example-provider)
-18. [Tool Environment Simulation for CI Testing](#recipe-15--tool-environment-simulation-for-ci-testing)
-19. [Code Analysis Agent with `VertexAiCodeExecutor`](#recipe-16--code-analysis-agent-with-vertexaicodeexecutor)
+16. [Self-Healing API Agent with `ReflectAndRetryToolPlugin`](#self-healing-api-agent-with-reflectandretrytoolplugin)
+17. [Few-Shot Agent with Dynamic Example Provider](#few-shot-agent-with-dynamic-example-provider)
+18. [Tool Environment Simulation for CI Testing](#tool-environment-simulation-for-ci-testing)
+19. [Code Analysis Agent with `AgentEngineSandboxCodeExecutor`](#code-analysis-agent-with-agentenginesandboxcodeexecutor)
 
 See also [Best Practices for Recipes](#best-practices-for-recipes).
 
@@ -41,7 +41,7 @@ See also [Best Practices for Recipes](#best-practices-for-recipes).
 
 ## Basic Chat Assistant
 
-A simple but effective chat assistant for general conversation.
+A chat assistant for general conversation.
 
 ```python
 from google.adk.agents import LlmAgent
@@ -130,7 +130,7 @@ async def chat_loop():
 
 ## Web Research Agent
 
-An agent that conducts comprehensive web research on topics.
+An agent that researches a topic on the web and writes up what it finds.
 
 The three agents run in order as a `Workflow` chain; each one receives the previous agent's output.
 
@@ -446,7 +446,7 @@ async def handle_support_request(customer_issue: str, customer_id: str) -> dict:
 
 ## Content Generation Pipeline
 
-A sophisticated content generation system.
+A staged content generation pipeline.
 
 The stages run in order as a `Workflow` chain; each one receives the previous stage's output.
 
@@ -589,7 +589,7 @@ async def generate_content(request: ContentRequest) -> dict:
 
 ## Code Review Agent
 
-An intelligent code review system.
+A code review system with several specialist reviewers.
 
 The reviewers run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines the results.
 
@@ -981,7 +981,7 @@ Provide:
 
 An agent that monitors system health.
 
-The reviewers run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines the results.
+The monitors run in parallel as a `Workflow` fan-out; a `JoinNode` waits for all of them and a function node combines their reports.
 
 ```python
 from google.adk.agents import LlmAgent
@@ -1375,8 +1375,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-logger.info(f"Agent called with query: {query[:200]}")
-logger.info(f"Agent response length: {len(response)} chars")
+
+def log_turn(query: str, response: str) -> None:
+    logger.info("Agent called with query: %s", query[:200])
+    logger.info("Agent response length: %d chars", len(response))
 ```
 
 ### 3. Input Validation
@@ -1401,7 +1403,7 @@ from google.adk.sessions import InMemorySessionService, DatabaseSessionService
 session_service = InMemorySessionService()
 
 # Staging / production — sessions persisted to a database
-# Requires: pip install aiosqlite
+# Requires: pip install "google-adk[db]" (SQLAlchemy); aiosqlite is already a dependency of google-adk
 session_service = DatabaseSessionService(db_url="sqlite+aiosqlite:///./adk.db")
 
 # GCP production — sessions managed by Vertex AI
@@ -1560,7 +1562,7 @@ from google.adk.telemetry.google_cloud import get_gcp_exporters
 from google.adk.telemetry.setup import maybe_set_otel_providers
 from google.genai import types
 
-# Prerequisite: pip install opentelemetry-exporter-gcp-trace
+# Prerequisite: pip install "google-adk[gcp]" (the Cloud Trace, Monitoring and Logging exporters)
 
 agent = LlmAgent(
     name="traced_agent",
@@ -1609,7 +1611,7 @@ async def chat(session_id: str, body: dict):
     return {"reply": reply}
 ```
 
-Every `run_async` call emits an `adk.invocation` root span with child spans for each agent, model call, and tool. Spans are visible in the Google Cloud Trace console under your project.
+Every `run_async` call emits an `invocation` root span with `invoke_agent <name>`, `call_llm`, `generate_content <model>` and `execute_tool <name>` spans beneath it. Spans are visible in the Google Cloud Trace console under your project.
 
 ---
 
@@ -1700,7 +1702,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 13 — Self-Healing API Agent with `ReflectAndRetryToolPlugin`
+## Self-Healing API Agent with `ReflectAndRetryToolPlugin`
 
 An agent that automatically retries failed tool calls using structured reflection guidance, including detecting soft failures returned as error dicts.
 
@@ -1772,7 +1774,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 14 — Few-Shot Agent with Dynamic Example Provider
+## Few-Shot Agent with Dynamic Example Provider
 
 An agent that injects domain-specific few-shot examples based on the user's query, improving accuracy without increasing the base system prompt size.
 
@@ -1858,7 +1860,7 @@ asyncio.run(main())
 
 ---
 
-## Recipe 15 — Tool Environment Simulation for CI Testing
+## Tool Environment Simulation for CI Testing
 
 A complete CI-safe test harness that mocks all external tool calls without any real network access, supporting both deterministic injection and LLM-generated mocks.
 
@@ -1979,21 +1981,20 @@ asyncio.run(main())
 
 ---
 
-## Recipe 16 — Code Analysis Agent with `VertexAiCodeExecutor`
+## Code Analysis Agent with `AgentEngineSandboxCodeExecutor`
 
-A stateful data analysis agent that executes Python across multiple turns, retaining variables between turns for interactive data exploration.
+A data analysis agent that writes Python and runs it in a Vertex AI Agent Engine sandbox, outside your process. (Earlier versions of this recipe used `VertexAiCodeExecutor`, which is deprecated; see [Agents](/google-adk-guide/python/agents/#vertexaicodeexecutor--deprecated).) The executor creates one sandbox per session and reuses it on later turns, keeping its name in session state under `sandbox_name`.
 
 ```python
 import asyncio
 from google.adk.agents import LlmAgent
+from google.adk.code_executors import AgentEngineSandboxCodeExecutor
 from google.adk.runners import InMemoryRunner
-from google.adk.code_executors.vertex_ai_code_executor import VertexAiCodeExecutor
 
-executor = VertexAiCodeExecutor(
-    stateful=True,           # variables persist across turns
-    optimize_data_file=True, # CSV attachments auto-extracted
-    error_retry_attempts=2,
-    timeout_seconds=30,
+executor = AgentEngineSandboxCodeExecutor(
+    # An existing Agent Engine; a sandbox is created under it for each session.
+    agent_engine_resource_name="projects/my-project/locations/us-central1/reasoningEngines/123",
+    error_retry_attempts=2,   # consecutive code errors tolerated before giving up
 )
 
 agent = LlmAgent(
@@ -2002,8 +2003,7 @@ agent = LlmAgent(
     instruction=(
         "You are an interactive data analyst. "
         "Execute Python code to answer user questions about data. "
-        "Show your work — write code, execute it, and explain the output. "
-        "Variables defined in earlier turns are still available."
+        "Show your work: write code, execute it, and explain the output."
     ),
     code_executor=executor,
 )
@@ -2015,10 +2015,10 @@ async def main():
     )
 
     conversation = [
-        "Load this dataset: data = {'month': ['Jan','Feb','Mar','Apr','May'], "
-        "'sales': [12000, 15000, 11000, 18000, 22000]}. Convert to a pandas DataFrame.",
+        "Here is a dataset: data = {'month': ['Jan','Feb','Mar','Apr','May'], "
+        "'sales': [12000, 15000, 11000, 18000, 22000]}. Load it into a pandas DataFrame.",
         "Calculate the month-over-month growth rate for each month.",
-        "Which month had the highest growth rate? Plot sales as a line chart.",
+        "Which month had the highest growth rate?",
     ]
 
     for turn in conversation:
@@ -2031,6 +2031,8 @@ async def main():
 
 asyncio.run(main())
 ```
+
+This needs Google Cloud credentials and an Agent Engine you can create sandboxes in. Pass `sandbox_resource_name` instead to use one fixed sandbox; that sandbox is then shared by every session, so do not do it for agents that serve several users.
 
 ---
 

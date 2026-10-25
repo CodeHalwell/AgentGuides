@@ -853,11 +853,12 @@ for i in range(20):
 # Hide all tools until tool search surfaces them
 hidden = DeferredLoadingToolset(big_library)
 
-# ToolSearch capability adds a search_tools function tool that discovers deferred tools
+# Tool search is added automatically when deferred tools exist; ToolSearch() is only
+# needed to choose the strategy or the number of results (max_results, default 10)
 agent = Agent(
     'openai:%%model=openai%%',
     toolsets=[hidden],
-    capabilities=[ToolSearch()],  # enables the search_tools built-in
+    capabilities=[ToolSearch(max_results=5)],
 )
 result = agent.run_sync('Run operation 5 on the dataset.')
 print(result.output)
@@ -951,13 +952,17 @@ from pydantic_ai import Agent
 
 sub = Agent('openai:%%model=openai-small%%', name='citations')
 
-@sub.tool_plain
-def lookup_citation(key: str) -> str: ...
 
-parent = Agent('openai:%%model=openai%%', toolsets=[sub.toolset])
+@sub.tool_plain
+def lookup_citation(key: str) -> str:
+    """Return the full reference for a citation key."""
+    return f'{key}: Smith, J. (2024). An Example. Journal of Examples.'
+
+
+parent = Agent('openai:%%model=openai%%', toolsets=sub.toolsets)   # the parent model now sees lookup_citation
 ```
 
-Every `Agent` exposes a `.toolset` (an internal `FunctionToolset`) for reuse.
+`agent.toolsets` lists every toolset registered on the agent, including the function toolset that holds its `@agent.tool` functions (output tools are not included). Note that `agent.toolset` (singular) is the `@agent.toolset` decorator for dynamic toolsets, not a toolset.
 
 ### Dynamic toolsets — `@agent.toolset`
 
@@ -1007,7 +1012,8 @@ def today() -> str:
 
 # MCPToolset replaced V1's MCPServerStdio / MCPServerSSE / MCPServerStreamableHTTP.
 # It accepts a URL, a script path, a FastMCP server or client, or a transport.
-server = MCPToolset(StdioTransport('uv', args=['run', 'mcp-run-python', 'stdio']))
+# mcp-run-python runs code in a Pyodide sandbox and needs Deno installed.
+server = MCPToolset(StdioTransport('uvx', args=['mcp-run-python', 'stdio']), init_timeout=60)
 agent = Agent('openai:%%model=openai%%',
               toolsets=[local_tools, PrefixedToolset(server, prefix='mcp')])
 

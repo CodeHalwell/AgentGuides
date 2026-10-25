@@ -272,13 +272,12 @@ if __name__ == "__main__":
     serve_a2a(StrandsA2AExecutor(agent))
 ```
 
-Deploy with the AgentCore CLI:
+Deploy with the AgentCore CLI. The `a2a-python-strands` template creates a Strands agent that speaks A2A, and the runtime is registered with `protocol: A2A` (port 9000). To serve your own code, such as the `serve_a2a` file above, use `agentcore add runtime --name researcher --language python --protocol A2A` and put the file in `app/researcher/` as `main.py`:
 
 ```bash
-agentcore create --project-name A2AProject --name ResearchAgent \
-  --language Python --framework Strands --model-provider Bedrock --memory none --protocol A2A
+agentcore create --name A2AProject --template a2a-python-strands
 cd A2AProject
-agentcore dev      # local test with the agent inspector
+agentcore dev      # run locally; --mode browser opens the Agent Inspector
 agentcore deploy
 ```
 

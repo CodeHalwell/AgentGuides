@@ -19,7 +19,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     ```
   </Card>
   <Card title="Version" icon="information">
-    **`@mistralai/mistralai` %%version=@mistralai/mistralai%%** · Node.js 20+, Bun, Deno or browsers · checked %%versions-checked%%
+    **`@mistralai/mistralai` %%version=@mistralai/mistralai%%** · Node.js (active LTS), Bun, Deno or browsers · checked %%versions-checked%%
   </Card>
   <Card title="Best for" icon="puzzle">
     Node services, serverless functions and front-end back ends that want Mistral-hosted agents and state.
@@ -38,7 +38,7 @@ import { Mistral } from "@mistralai/mistralai";
 const client = new Mistral({ apiKey: process.env["MISTRAL_API_KEY"] ?? "" });
 
 const agent = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "assistant",
   instructions: "You are a helpful assistant. Search the web for anything time-sensitive.",
   tools: [{ type: "web_search" }],
@@ -94,4 +94,5 @@ Concepts that do not depend on the language — which models to use, how handoff
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | %%version=@mistralai/mistralai%% | Re-checked all 37 TypeScript blocks with `tsc --strict` and ran them against a mock server. Noted that an explicit `apiKey` (even an empty string) outranks `MISTRAL_SA_TOKEN_PATH`; replaced the unsupported "Node.js 20+" claim; model IDs in code now come from the shared model roles. |
 | 2026-10-21 | %%version=@mistralai/mistralai%% | First TypeScript edition. All examples type-checked with `tsc --strict` and request shapes validated against the SDK's Zod schemas. |

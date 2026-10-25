@@ -244,7 +244,7 @@ class ResilientAgent:
         return str(response.message.content)
 ```
 
-`ServiceResponseException` is what the OpenAI connectors raise for failed calls. Retrying a whole agent turn re-sends the conversation, so keep the retry count low and make tools idempotent.
+`ServiceResponseException` is what the OpenAI connectors raise for any failed call, including permanent ones such as a bad request or an invalid key, so this retry also repeats errors that cannot succeed. The `openai` client has already retried 429 and 5xx responses by then (two retries by default); keep this layer for cases the client does not cover, and keep the count low. Retrying a whole agent turn re-sends the conversation, so keep the retry count low and make tools idempotent.
 
 ---
 
@@ -292,6 +292,7 @@ The lambda is translated into each store's native filter syntax; only simple com
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 1.45.0 | Retry recipe: `ServiceResponseException` also covers permanent errors. |
 | 2026-10-21 | 1.45.0 | Rewritten against current APIs and run against a stub chat service (tool calls through a tool-calling stub). Extra dependencies stated. |
 
 **[Back to Python overview](/semantic-kernel-guide/python/)**

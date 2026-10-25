@@ -5,9 +5,10 @@ framework: "langgraph"
 language: "python"
 sidebar:
   label: "Recipes"
+  order: 50
 ---
 
-Checked against `langgraph` %%version=langgraph%% and `langchain` %%version=langchain%% (%%versions-checked%%). Each recipe is a complete program unless it says otherwise. Recipes 1–6 share the setup block below; the later recipes define their own imports.
+Checked against `langgraph` %%version=langgraph%% and `langchain` %%version=langchain%% (%%versions-checked%%). Each recipe is a complete program unless it says otherwise. Recipes 1–6 share the setup block below; the later recipes define their own imports. Examples were run with a stub chat model, so they show the control flow; answers from a real model will differ.
 
 Retry, timeout and cache policies are not repeated here; see [Node policies](/langgraph-guide/python/reference-state-graph/#node-policies).
 
@@ -466,185 +467,120 @@ print(f"Assigned to: {result['assigned_to']}")
 
 ## Recipe 3: Research Agent with Parallel Data Sources
 
-Gather information from multiple sources in parallel:
+Generate a few queries, search three kinds of source for each query in parallel, then write one report with citations. Each (source, query) pair is its own `Send` task, so nine searches run in the same super-step; the `results` key has an `operator.add` reducer so their writes combine.
+
+The search function uses [Tavily](https://tavily.com) (`pip install tavily-python`, `TAVILY_API_KEY`): `topic="news"` for news, and `include_domains` to restrict "academic" searches to paper sites. Without a key it returns placeholder results, so the graph also runs offline.
 
 ```python
+import os
+from pydantic import BaseModel
 from langgraph.types import Send
-from datetime import datetime
 
-class ResearchState(TypedDict):
+
+class Queries(BaseModel):
+    queries: list[str]
+
+
+class ResearchState(TypedDict, total=False):
     topic: str
     research_queries: list[str]
-    web_results: list[dict]
-    academic_results: list[dict]
-    news_results: list[dict]
+    results: Annotated[list[dict], operator.add]   # every search task appends here
     synthesized_report: str
     citations: list[dict]
 
+
+class SearchTask(TypedDict):
+    source: str      # "web" | "academic" | "news"
+    query: str
+
+
+def search(source: str, query: str, max_results: int = 3) -> list[dict]:
+    """Return [{"title", "url", "content"}] for one source."""
+    if not os.getenv("TAVILY_API_KEY"):
+        url = f"https://example.com/{source}?q={query.replace(' ', '+')}"
+        return [{"title": f"{source} result for {query}", "url": url, "content": "placeholder"}]
+    from tavily import TavilyClient
+    client = TavilyClient(api_key=os.environ["TAVILY_API_KEY"])
+    kwargs: dict = {"max_results": max_results}
+    if source == "news":
+        kwargs["topic"] = "news"
+    elif source == "academic":
+        kwargs["include_domains"] = ["arxiv.org", "semanticscholar.org", "acm.org"]
+    response = client.search(query, **kwargs)
+    return [{"title": r["title"], "url": r["url"], "content": r["content"]} for r in response["results"]]
+
+
 def generate_queries(state: ResearchState) -> dict:
-    """Generate search queries from topic."""
-    
-    prompt = f"""
-    Topic: {state['topic']}
-    
-    Generate 3 different search queries to thoroughly research this topic:
-    1. General overview
-    2. Recent developments
-    3. Expert perspectives
-    
-    Return as JSON array of queries.
-    """
-    
-    response = model.invoke(prompt)
+    """Ask the model for three queries; fall back to the topic itself."""
     try:
-        queries = json.loads(response.content)
-    except json.JSONDecodeError:            # models sometimes wrap JSON in prose
+        planned = model.with_structured_output(Queries).invoke(
+            f"Write three web search queries to research: {state['topic']}. "
+            "One for an overview, one for recent developments, one for expert opinion."
+        )
+        queries = planned.queries[:3] or [state["topic"]]
+    except Exception:                      # model refused or returned bad JSON
         queries = [state["topic"]]
     return {"research_queries": queries}
 
-def parallel_search(state: ResearchState) -> list[Send]:
-    """Create parallel search tasks."""
-    
+
+def fan_out(state: ResearchState) -> list[Send]:
     return [
-        Send("web_search", {"query": q}) for q in state["research_queries"]
-    ] + [
-        Send("academic_search", {"query": q}) for q in state["research_queries"]
-    ] + [
-        Send("news_search", {"query": q}) for q in state["research_queries"]
+        Send("search_source", {"source": source, "query": q})
+        for q in state["research_queries"]
+        for source in ("web", "academic", "news")
     ]
 
-def web_search(state: ResearchState) -> dict:
-    """Search general web."""
-    
-    from tavily import Client
-    
-    client = Client(api_key=os.getenv("TAVILY_API_KEY"))
-    
-    results = client.search(
-        query=state.get("query", state["topic"]),
-        include_answer=True
-    )
-    
-    return {
-        "web_results": results["results"][:5]  # Top 5
-    }
 
-def academic_search(state: ResearchState) -> dict:
-    """Search academic sources."""
-    
-    # Use academic API or service
-    results = semantic_scholar_search(
-        query=state.get("query", state["topic"]),
-        limit=5
-    )
-    
-    return {"academic_results": results}
+def search_source(task: SearchTask) -> dict:
+    hits = search(task["source"], task["query"])
+    return {"results": [{**h, "source": task["source"], "query": task["query"]} for h in hits]}
 
-def news_search(state: ResearchState) -> dict:
-    """Search recent news."""
-    
-    # Use news API
-    from newsapi import NewsApiClient
-    
-    newsapi = NewsApiClient(api_key=os.getenv("NEWS_API_KEY"))
-    
-    results = newsapi.get_everything(
-        q=state.get("query", state["topic"]),
-        sort_by="recency",
-        language="en"
-    )
-    
-    return {"news_results": results["articles"][:5]}
 
 def synthesize_report(state: ResearchState) -> dict:
-    """Synthesize all research into report."""
-    
-    web_summary = "\n".join([
-        f"- {r['title']}: {r['snippet']}"
-        for r in state["web_results"][:3]
-    ])
-    
-    academic_summary = "\n".join([
-        f"- {r.get('title', 'Unknown')}"
-        for r in state["academic_results"][:3]
-    ])
-    
-    news_summary = "\n".join([
-        f"- {r['title']} ({r['publishedAt'][:10]})"
-        for r in state["news_results"][:3]
-    ])
-    
-    synthesis_prompt = f"""
-    Topic: {state['topic']}
-    
-    Web search results:
-    {web_summary}
-    
-    Academic research:
-    {academic_summary}
-    
-    Recent news:
-    {news_summary}
-    
-    Write a comprehensive research report synthesizing these sources.
-    Include:
-    1. Overview
-    2. Key findings
-    3. Recent developments
-    4. Expert insights
-    5. Implications
-    """
-    
-    response = model.invoke(synthesis_prompt)
-    
-    # Compile citations
-    citations = []
-    for source_list in [state["web_results"], state["academic_results"], state["news_results"]]:
-        for source in source_list[:3]:
-            citations.append({
-                "title": source.get("title", "Unknown"),
-                "url": source.get("link") or source.get("url"),
-                "date": source.get("publishedAt", "Unknown")[:10]
-            })
-    
-    return {
-        "synthesized_report": response.content,
-        "citations": citations
-    }
+    by_source: dict[str, list[dict]] = {}
+    for r in state["results"]:
+        by_source.setdefault(r["source"], []).append(r)
+    sections = "\n\n".join(
+        f"{source.title()} results:\n" + "\n".join(f"- {r['title']}: {r['content'][:200]}" for r in hits[:5])
+        for source, hits in by_source.items()
+    )
+    response = model.invoke(
+        f"Topic: {state['topic']}\n\n{sections}\n\n"
+        "Write a short research report: overview, key findings, recent developments, open questions. "
+        "Cite sources by title."
+    )
+    seen, citations = set(), []
+    for r in state["results"]:
+        if r["url"] not in seen:
+            seen.add(r["url"])
+            citations.append({"title": r["title"], "url": r["url"], "source": r["source"]})
+    return {"synthesized_report": response.content, "citations": citations}
 
-# Build research graph
-research_builder = StateGraph(ResearchState)
-research_builder.add_node("generate_queries", generate_queries)
-research_builder.add_node("web_search", web_search)
-research_builder.add_node("academic_search", academic_search)
-research_builder.add_node("news_search", news_search)
-research_builder.add_node("synthesize", synthesize_report)
 
-research_builder.add_edge(START, "generate_queries")
-
-# Parallel search
-research_builder.add_conditional_edges(
-    "generate_queries",
-    lambda _: ["web_search", "academic_search", "news_search"],
-    ["web_search", "academic_search", "news_search"]
+research_graph = (
+    StateGraph(ResearchState)
+    .add_node("generate_queries", generate_queries)
+    .add_node("search_source", search_source)
+    .add_node("synthesize", synthesize_report)
+    .add_edge(START, "generate_queries")
+    .add_conditional_edges("generate_queries", fan_out, ["search_source"])
+    .add_edge("search_source", "synthesize")      # runs once, after all nine searches
+    .add_edge("synthesize", END)
+    .compile()
 )
 
-# Gather and synthesize
-research_builder.add_edge("web_search", "synthesize")
-research_builder.add_edge("academic_search", "synthesize")
-research_builder.add_edge("news_search", "synthesize")
-research_builder.add_edge("synthesize", END)
-
-research_graph = research_builder.compile()
-
-# Usage
-result = research_graph.invoke({"topic": "AI safety 2024"})
-
-print(result["synthesized_report"])
-print("\nCitations:")
+result = research_graph.invoke({"topic": "AI safety evaluations"})
+print(len(result["results"]), "search hits")
+print(result["synthesized_report"][:500])
 for i, cite in enumerate(result["citations"][:5], 1):
-    print(f"{i}. {cite['title']} ({cite['date']})")
+    print(f"{i}. [{cite['source']}] {cite['title']} {cite['url']}")
 ```
+
+Notes:
+
+- `search_source` receives only its `SearchTask` payload, not the whole state. That keeps the parallel tasks independent; everything they need is in the `Send`.
+- A failing search fails the run, because an `error_handler` does not catch failures in parallel tasks. Wrap the call in `try`/`except` inside `search_source` and return an error entry if partial results are acceptable.
+- To cap concurrent API calls, pass `{"max_concurrency": 3}` in the config.
 
 ---
 
@@ -654,6 +590,7 @@ Autonomous agent that reasons and acts:
 
 
 ```python
+import uuid
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.tools import tool
 
@@ -924,168 +861,101 @@ else:
 
 ## Recipe 6: Conversation with Long-term Memory
 
-Maintain user context across multiple conversations:
+Keep a per-user profile and searchable memories in a store, so a new conversation (a new `thread_id`) can use what earlier ones learned. The checkpointer keeps each thread's messages; the store keeps what outlives a thread.
 
+Nodes reach the store through `runtime.store` (`InjectedStore` is for tools run by `ToolNode`, not for nodes). The example uses `InMemoryStore` with a toy embedding so it runs anywhere; in production pass `AsyncPostgresStore` (or `SqliteStore`) with a real embedding model to `compile(store=...)` and nothing else changes.
 
 ```python
-from datetime import datetime
+import asyncio
+import uuid
+from datetime import datetime, timezone
 
-class ConversationState(TypedDict):
+from langgraph.runtime import Runtime
+from langgraph.store.memory import InMemoryStore
+
+
+def toy_embed(texts: list[str]) -> list[list[float]]:
+    """Deterministic stand-in for an embedding model (replace in production)."""
+    return [[len(t) / 100.0, sum(map(ord, t)) % 97 / 97.0] for t in texts]
+
+
+store = InMemoryStore(index={"dims": 2, "embed": toy_embed, "fields": ["content"]})
+
+
+class ConversationState(TypedDict, total=False):
     user_id: str
-    message: str
-    conversation_history: Annotated[list, add_messages]
+    messages: Annotated[list, add_messages]
     user_profile: dict
-    relevant_memories: list[dict]
-    response: str
+    relevant_memories: list[str]
 
-async def fetch_user_profile(
-    state: ConversationState,
-    store: Annotated[AsyncPostgresStore, InjectedStore]
-) -> dict:
-    """Fetch user profile from long-term store."""
-    
-    user_id = state["user_id"]
-    namespace = ("users", user_id)
-    
-    profile_item = await store.aget(namespace, "profile")
-    profile = profile_item.value if profile_item else {
-        "name": "User",
-        "preferences": {},
-        "interests": [],
-        "conversation_count": 0
-    }
-    
-    return {"user_profile": profile}
 
-async def retrieve_memories(
-    state: ConversationState,
-    store: Annotated[AsyncPostgresStore, InjectedStore]
-) -> dict:
-    """Retrieve relevant memories from long-term store."""
-    
+async def load_context(state: ConversationState, runtime: Runtime) -> dict:
     user_id = state["user_id"]
-    current_message = state["message"]
-    
-    # Semantic search for relevant memories
-    namespace = ("users", user_id, "memories")
-    
-    memories = await store.asearch(
-        namespace,  # namespace prefix is positional-only
-        query=current_message,
-        limit=5
+    profile_item = await runtime.store.aget(("users", user_id), "profile")
+    profile = profile_item.value if profile_item else {"name": user_id, "conversation_count": 0}
+    hits = await runtime.store.asearch(
+        ("users", user_id, "memories"), query=state["messages"][-1].content, limit=3
     )
-    
-    return {
-        "relevant_memories": [m.value for m in memories]
-    }
+    return {"user_profile": profile, "relevant_memories": [h.value["content"] for h in hits]}
 
-def build_context(state: ConversationState) -> dict:
-    """Build conversational context from memories and profile."""
-    
+
+async def chat(state: ConversationState) -> dict:
     profile = state["user_profile"]
-    memories = state["relevant_memories"]
-    
-    context_parts = [
-        f"User: {profile.get('name', 'User')}",
-        f"Interests: {', '.join(profile.get('interests', []))}",
-    ]
-    
-    if memories:
-        context_parts.append("Relevant context from past conversations:")
-        for mem in memories:
-            context_parts.append(f"- {mem.get('content', '')}")
-    
-    return "\n".join(context_parts)
-
-def chat_node(state: ConversationState) -> dict:
-    """Generate response using context."""
-    
-    context = build_context(state)
-    
-    system_prompt = f"""
-    You are a helpful assistant with knowledge of the user's history and preferences.
-    
-    User Context:
-    {context}
-    
-    Be personalized and reference relevant past context when appropriate.
-    """
-    
-    messages = state["conversation_history"] + [
-        {"role": "user", "content": state["message"]}
-    ]
-    
-    response = model.invoke([{"role": "system", "content": system_prompt}, *messages])
-    
-    return {
-        "response": response.content,
-        "conversation_history": [{"role": "assistant", "content": response.content}]
-    }
-
-async def save_memory(
-    state: ConversationState,
-    store: Annotated[AsyncPostgresStore, InjectedStore]
-) -> dict:
-    """Save conversation to long-term memory."""
-    
-    user_id = state["user_id"]
-    namespace = ("users", user_id, "memories")
-    
-    memory_entry = {
-        "timestamp": datetime.now().isoformat(),
-        "user_message": state["message"],
-        "assistant_response": state["response"],
-        "content": f"User: {state['message']}\nAssistant: {state['response']}"
-    }
-    
-    memory_id = f"mem-{uuid.uuid4().hex[:8]}"
-    
-    await store.aput(
-        namespace,
-        memory_id,
-        memory_entry,
-        index=["content"]  # Index for semantic search
+    memories = "\n".join(f"- {m}" for m in state.get("relevant_memories", [])) or "- none yet"
+    system = (
+        f"You are a helpful assistant talking to {profile['name']} "
+        f"(conversation #{profile['conversation_count'] + 1}).\n"
+        f"Relevant notes from earlier conversations:\n{memories}"
     )
-    
-    # Update conversation count
-    profile_namespace = ("users", user_id)
-    profile = await store.aget(profile_namespace, "profile")
-    profile_data = profile.value if profile else {}
-    profile_data["conversation_count"] = profile_data.get("conversation_count", 0) + 1
-    profile_data["last_conversation"] = datetime.now().isoformat()
-    
-    await store.aput(profile_namespace, "profile", profile_data)
-    
+    response = await model.ainvoke([{"role": "system", "content": system}, *state["messages"]])
+    return {"messages": [response]}
+
+
+async def save_memory(state: ConversationState, runtime: Runtime) -> dict:
+    user_id = state["user_id"]
+    user_msg, reply = state["messages"][-2].content, state["messages"][-1].content
+    await runtime.store.aput(
+        ("users", user_id, "memories"),
+        f"mem-{uuid.uuid4().hex[:8]}",
+        {"content": f"User said: {user_msg} | Assistant said: {reply}",
+         "at": datetime.now(timezone.utc).isoformat()},
+    )
+    profile = {**state["user_profile"], "conversation_count": state["user_profile"]["conversation_count"] + 1}
+    await runtime.store.aput(("users", user_id), "profile", profile)
     return {}
 
-# Build conversational graph with memory
-conv_builder = StateGraph(ConversationState)
-conv_builder.add_node("fetch_profile", fetch_user_profile)
-conv_builder.add_node("retrieve_memories", retrieve_memories)
-conv_builder.add_node("chat", chat_node)
-conv_builder.add_node("save_memory", save_memory)
 
-conv_builder.add_edge(START, "fetch_profile")
-conv_builder.add_edge("fetch_profile", "retrieve_memories")
-conv_builder.add_edge("retrieve_memories", "chat")
-conv_builder.add_edge("chat", "save_memory")
-conv_builder.add_edge("save_memory", END)
-
-conversation_graph = conv_builder.compile(
-    store=store  # Pass long-term store
+conversation_graph = (
+    StateGraph(ConversationState)
+    .add_node("load_context", load_context)
+    .add_node("chat", chat)
+    .add_node("save_memory", save_memory)
+    .add_edge(START, "load_context")
+    .add_edge("load_context", "chat")
+    .add_edge("chat", "save_memory")
+    .add_edge("save_memory", END)
+    .compile(checkpointer=InMemorySaver(), store=store)
 )
 
-# Usage
-config = {"configurable": {"thread_id": "user-alice"}}
 
-result = conversation_graph.invoke({
-    "user_id": "alice",
-    "message": "What was I asking about last time?"
-}, config=config)
+async def main() -> None:
+    # Two separate conversations (threads) for the same user.
+    for thread, text in [("conv-1", "I'm planning a trip to Kyoto in April."),
+                         ("conv-2", "What was I planning?")]:
+        result = await conversation_graph.ainvoke(
+            {"user_id": "alice", "messages": [{"role": "user", "content": text}]},
+            {"configurable": {"thread_id": thread}},
+        )
+        print(thread, "memories used:", result["relevant_memories"])
 
-print(result["response"])
+    profile = await store.aget(("users", "alice"), "profile")
+    print(profile.value)   # {'name': 'alice', 'conversation_count': 2}
+
+
+asyncio.run(main())
 ```
 
+The second conversation starts with an empty message history but finds the first conversation's note through the store. For production memory, summarise what is worth keeping (with a model call, or in a background job) rather than storing every exchange verbatim.
 
 ---
 
@@ -2408,9 +2278,9 @@ print(f"All labels accumulated: {result['all_labels']}")
 
 ---
 
-## Recipe 19: `NamedBarrierValue` — fan-in that waits for named contributors
+## Recipe 19: Fan-in that waits for named validators
 
-`NamedBarrierValue` blocks a node from running until every named token has been written. This is stronger than a standard fan-in edge because it is declared in the state schema and enforced by the channel runtime, not by graph topology alone.
+Three validators run in parallel and `process` must run only after all three have passed. The waiting is done by a **barrier edge**, `add_edge(["schema_check", "auth_check", "quota_check"], "process")`, which `StateGraph` implements with a `NamedBarrierValue` channel. The `validation_barrier` state key is optional extra checking: declared with `NamedBarrierValue`, it rejects any token not in `REQUIRED_VALIDATORS`. On its own, a state key does not decide when nodes run ([Channels reference](/langgraph-guide/python/reference-channels/#namedbarriervalue)). A validator that raises fails the whole run, which is what a gateway wants here.
 
 ```python
 from typing import Annotated
@@ -2427,7 +2297,7 @@ class APIGatewayState(TypedDict):
     request_body: dict
     user_id: str
 
-    # The node that reads this field cannot proceed until all three tokens arrive
+    # Validates the tokens the validators write (an unknown token raises InvalidUpdateError)
     validation_barrier: Annotated[str, NamedBarrierValue(str, REQUIRED_VALIDATORS)]
 
     response_status: int
@@ -2486,10 +2356,9 @@ graph.add_node("process", process_request)
 graph.add_conditional_edges(
     START, dispatch_validators, ["schema_check", "auth_check", "quota_check"]
 )
-# All three must complete before "process" runs
-graph.add_edge("schema_check", "process")
-graph.add_edge("auth_check", "process")
-graph.add_edge("quota_check", "process")
+# Barrier edge: "process" runs once, after all three validators have finished,
+# even if one of them later grows into several steps.
+graph.add_edge(["schema_check", "auth_check", "quota_check"], "process")
 graph.add_edge("process", END)
 
 app = graph.compile()
@@ -2945,10 +2814,10 @@ asyncio.run(main())
 ```
 
 **Key points:**
-- `run.tool_calls` exists only on the `GraphRunStream` returned by `stream_events(..., version="v3")` (async: `await graph.astream_events(..., version="v3")`), and only when `ToolCallTransformer` is registered — via `compile(transformers=[...])` or `stream_events(..., transformers=[...])`. The v3 protocol is marked experimental in 1.2.11.
+- `run.tool_calls` exists only on the `GraphRunStream` returned by `stream_events(..., version="v3")` (async: `await graph.astream_events(..., version="v3")`), and only when `ToolCallTransformer` is registered — via `compile(transformers=[...])` or `stream_events(..., transformers=[...])`. The v3 protocol is still marked experimental in %%version=langgraph%%.
 - Plain `graph.stream(..., stream_mode="tools")` (alone or in a list such as `["updates", "tools"]`) always yields raw event dicts (`{"event": "tool-started" | "tool-output-delta" | "tool-finished" | "tool-error", ...}`), whether or not a transformer is registered.
 - `ToolCallStream` `__iter__` / `__aiter__` (or `.output_deltas`) iterates delta chunks emitted by `ToolRuntime.emit_output_delta(...)` inside the tool.
-- `ToolCallStream.output` is the value the tool returned; it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
+- `ToolCallStream.output` is the tool result as the `ToolMessage` content string (a tool returning `42` gives `'42'`); it and `.completed` are set once `tool-finished` or `tool-error` fires, so drain the deltas first.
 
 ---
 

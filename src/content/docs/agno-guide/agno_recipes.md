@@ -134,7 +134,7 @@ for ref in run.references or []:
 
 ## Research and write, with a review loop
 
-A workflow that searches two sources in parallel (recent news through `WebSearchTools`, background through `WikipediaTools`; `pip install ddgs wikipedia`), drafts, and loops on review until the reviewer approves or three rounds pass. Short inputs skip research. Each round after the first gives the writer the notes, its previous draft and the reviewer's feedback, so it revises rather than starting again.
+A workflow that searches two sources in parallel (recent news through `WebSearchTools`, background through `WikipediaTools`; `pip install ddgs wikipedia`), drafts, and loops on review until the reviewer approves or three rounds pass. Short inputs (two words or fewer) skip research, and the writer then works from the topic alone. Each round after the first gives the writer the notes, its previous draft and the reviewer's feedback, so it revises rather than starting again.
 
 ```python
 from typing import List
@@ -174,11 +174,13 @@ def review(si: StepInput) -> StepOutput:
 
 
 def revision_brief(si: StepInput) -> StepOutput:
-    # Becomes the writer's input for the next round (forward_iteration_output=True)
+    # Becomes the writer's input for the next round (forward_iteration_output=True).
+    # Look steps up by name: from round two, previous_step_content is not reliably this
+    # round's review (in testing it held round one's brief).
     return StepOutput(content=(
         f"{si.get_step_content('notes')}\n\n"
         f"Previous draft:\n{si.get_step_content('write')}\n\n"
-        f"Reviewer feedback:\n{si.previous_step_content}"
+        f"Reviewer feedback:\n{si.get_step_content('review')}"
     ))
 
 
@@ -221,7 +223,7 @@ print(drafts[-1] if drafts else None)   # the latest draft
 
 ## Front desk: classify, then route
 
-A small, cheap model classifies the message into a schema; the triage result decides which specialist team handles it, so routing is testable without a model.
+A small, cheap model classifies the message into a schema; the triage result decides which specialist agent handles it, so routing is testable without a model. Each specialist has a tool for the data its department owns, so it can look things up rather than guess.
 
 ```python
 from typing import Literal
@@ -243,9 +245,27 @@ classifier = Agent(
     output_schema=Triage,
     instructions="Classify the customer message.",
 )
+
+
+def list_charges(customer_id: str) -> str:
+    """List a customer's recent charges.
+
+    Args:
+        customer_id: The customer's id, e.g. cust-9.
+    """
+    return "2026-10-01 GBP 12.00 Pro plan\n2026-10-01 GBP 12.00 Pro plan"   # replace with your billing system
+
+
+def service_status() -> str:
+    """Report the current status of the product's services."""
+    return "API: operational. Dashboard: degraded (investigating)."   # replace with your status page
+
+
 specialists = {
-    "billing": Agent(name="Billing", model=OpenAIResponses(id="%%model=openai%%"), instructions="Resolve billing questions."),
-    "technical": Agent(name="Technical", model=OpenAIResponses(id="%%model=openai%%"), instructions="Resolve technical problems."),
+    "billing": Agent(name="Billing", model=OpenAIResponses(id="%%model=openai%%"), tools=[list_charges],
+                     instructions="Resolve billing questions. Check the customer's charges before answering."),
+    "technical": Agent(name="Technical", model=OpenAIResponses(id="%%model=openai%%"), tools=[service_status],
+                       instructions="Resolve technical problems. Check the service status first."),
     "other": Agent(name="General", model=OpenAIResponses(id="%%model=openai-small%%"), instructions="Help or redirect politely."),
 }
 
@@ -254,7 +274,8 @@ def front_desk(message: str, user_id: str) -> str:
     triage: Triage = classifier.run(message).content
     agent = specialists[triage.department]
     prefix = "[URGENT] " if triage.urgent else ""
-    return prefix + str(agent.run(message, user_id=user_id).content)
+    # The specialist's tools take a customer id, so say who is asking
+    return prefix + str(agent.run(f"Customer {user_id} writes: {message}", user_id=user_id).content)
 
 
 print(front_desk("I was charged twice for my subscription", user_id="cust-9"))

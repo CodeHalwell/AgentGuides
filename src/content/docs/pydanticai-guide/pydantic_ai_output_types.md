@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Output Types & Validators"
-description: "Typed outputs with ToolOutput, NativeOutput, PromptedOutput, TextOutput, StructuredDict, multi-type unions, and agent.output_validator."
+description: "Typed outputs with ToolOutput, NativeOutput, PromptedOutput, TextOutput, StructuredDict, output functions, Choices, BoolCriteria, multi-type unions and agent.output_validator."
 framework: "pydanticai"
 language: "python"
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-checked%%) — source modules: `pydantic_ai.output`, `pydantic_ai.agent`.
 
-The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. PydanticAI ships five "marker" wrappers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput`, `StructuredDict` — plus a plain type / union shortcut. The right one depends on what the model natively supports.
+The `output_type` argument on `Agent` (or on a `run*` call) drives how the model returns structured data. It accepts a plain type or union, a list of types, a function (an *output function*), or one of the mode markers — `ToolOutput`, `NativeOutput`, `PromptedOutput`, `TextOutput` — and the schema helpers `StructuredDict` and `Choices`. Which marker is right depends on what the model natively supports.
 
 ## Minimal runnable example
 
@@ -30,7 +30,7 @@ print(type(result.output))
 #> <class '__main__.Answer'>
 ```
 
-Passing a bare type is a shortcut. PydanticAI will pick the right `OutputMode` based on the model's profile (`ModelProfile.default_structured_output_mode`). To override, wrap the type in one of the marker classes below.
+Passing a bare type is a shortcut. The model's profile decides the mode (`ModelProfile['default_structured_output_mode']`), which is `'tool'` for almost every provider: the model is given an output tool whose arguments are your type's JSON schema. One exception is built in: when forcing a tool call would stop a thinking model from thinking, and the model supports JSON-schema output, `'native'` is used instead. To choose the mode yourself, wrap the type in one of the marker classes below.
 
 ## Output mode comparison
 
@@ -39,7 +39,7 @@ Passing a bare type is a shortcut. PydanticAI will pick the right `OutputMode` b
 | bare type      | Auto-picks `tool` / `native` / `prompted` from the model profile. | Default — you don't care which mechanism is used.             |
 | `ToolOutput`   | Model emits a structured "output tool" call that PydanticAI validates. | You want to name the tool, set `strict`, or use multi-type unions on models that lack native JSON schema. |
 | `NativeOutput` | Uses the provider's native structured-outputs API (e.g. OpenAI `response_format=json_schema`). | Model supports native JSON schema and you want maximum fidelity. |
-| `PromptedOutput` | Injects a JSON schema into the system prompt and parses text. | Provider has no native structured outputs (local / older models). |
+| `PromptedOutput` | Puts the JSON schema in the instructions and parses the reply text. | Provider has no native structured outputs (local / older models). |
 | `TextOutput`   | Passes the model's plain text through a function.     | You want a custom parser (splitter, regex, domain extractor).   |
 | `StructuredDict` | Returns `dict[str, Any]` with a runtime-attached JSON schema. | Schema is built at runtime (user-defined form, DB-driven). |
 
@@ -79,7 +79,7 @@ Arguments (`output.py`):
 | `name` | `str \| None` | `None` | Tool name sent to the model; auto-derived if unset |
 | `description` | `str \| None` | `None` | Overrides the type's docstring as the tool description |
 | `max_retries` | `int \| None` | `None` | Output-tool-specific retry budget; overrides the agent-level output budget (`Agent(retries={'output': N})`) |
-| `strict` | `bool \| None` | `None` | Forwarded to providers that support strict JSON schema (OpenAI, Anthropic, Google) |
+| `strict` | `bool \| None` | `None` | Forwarded to providers that support strict tool schemas (OpenAI, Anthropic, Google, Bedrock among them); ignored elsewhere |
 | `sequential` | `bool` | `False` | Act as a barrier — run alone, not overlapping with other tool calls (only meaningful under `end_strategy='exhaustive'`) |
 
 ### `ToolOutput.max_retries` — per-output retry budgets
@@ -178,7 +178,7 @@ asyncio.run(main())
 
 ## `NativeOutput` — provider-native JSON schema
 
-Uses the provider's own structured-output mechanism (e.g. OpenAI's `response_format=json_schema`). This guarantees the model cannot deviate from the schema and avoids the extra tool-call round-trip of `ToolOutput`.
+Uses the provider's own structured-output mechanism (e.g. OpenAI's `response_format=json_schema`). The answer arrives as the response text rather than as a tool call, and providers that enforce the schema (OpenAI with `strict`, for example) constrain decoding to it. Pydantic still validates the result, and a validation failure is sent back as a retry like any other.
 
 ```python
 from pydantic import BaseModel
@@ -214,7 +214,7 @@ print(repr(result.output))
 
 ### `NativeOutput` with `strict=True`
 
-OpenAI's strict mode rejects schemas that include `anyOf` without a discriminator. Use a `Literal` discriminator field when strict is required:
+`strict=True` asks the provider to enforce the schema exactly. Strict mode accepts a narrower JSON Schema subset (on OpenAI, every property must be required and `additionalProperties` false, which PydanticAI's schema transformer arranges where it can). For a list of types, PydanticAI already wraps each member as `{"kind": "<TypeName>", "data": {...}}` under a `result` key, so the union is tagged for you; a `Literal` field of your own is only needed if your code wants the tag on the returned object:
 
 ```python
 from typing import Literal
@@ -239,11 +239,19 @@ agent = Agent(
 
 ### `NativeOutput` without schema injection (`template=False`)
 
-When your model profile already injects a JSON schema into the system prompt, pass `template=False` to avoid duplication:
+Some models need the schema repeated in the prompt even in native mode, and their profile supplies a default template for it. `template=False` turns that prompt off; a string replaces it (`{schema}` is substituted):
 
 ```python
+from pydantic import BaseModel
 from pydantic_ai import Agent, NativeOutput
 
+
+class Vehicle(BaseModel):
+    name: str
+    wheels: int
+
+
+# The ollama: prefix needs OLLAMA_BASE_URL, e.g. http://localhost:11434/v1
 agent = Agent(
     'ollama:llama3.2',
     output_type=NativeOutput(Vehicle, template=False),
@@ -257,14 +265,26 @@ Arguments (`pydantic_ai.output.NativeOutput`):
 - `strict` — forwarded to providers supporting strict JSON schema (OpenAI).
 - `template` — overrides the schema-injection template; pass `False` to skip.
 
-Availability by provider: OpenAI, Google, Anthropic (via tool adapter), Mistral, Groq. Older/local providers usually fall through to `PromptedOutput`.
+Native output needs a model whose profile sets `supports_json_schema_output`: OpenAI, Gemini, recent Anthropic models, Groq, Bedrock, Ollama and several OpenAI-compatible providers do. On any other model the request fails with `UserError('Native structured output is not supported by this model.')` — there is no silent fallback, so use `PromptedOutput` (or plain `ToolOutput`) there.
 
 ## `PromptedOutput` — schema-in-prompt fallback
 
 Works with any model that produces text. The schema is embedded in the prompt and the returned text is parsed.
 
 ```python
+from pydantic import BaseModel
 from pydantic_ai import Agent, PromptedOutput
+
+
+class Fruit(BaseModel):
+    name: str
+    color: str
+
+
+class Vehicle(BaseModel):
+    name: str
+    wheels: int
+
 
 agent = Agent(
     'ollama:llama3.1',
@@ -317,6 +337,130 @@ print(result.output)
 
 `StructuredDict` returns a `dict[str, Any]` subclass with the schema baked in — use it when the schema is data, not a declared Python type.
 
+## Output functions — let the model call your function to finish
+
+`output_type` can be a function. The model "returns" by calling it as an output tool, with arguments built from the function's signature and docstring; whatever the function returns becomes `result.output`. This is the place for the last step of a run that needs code: looking something up, writing a record, or rejecting the model's answer with `ModelRetry` so it tries again with feedback.
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, ModelRetry, RunContext
+
+INVENTORY = {'A-1': 12, 'B-2': 0}
+
+
+class Reservation(BaseModel):
+    sku: str
+    quantity: int
+
+
+def reserve_stock(ctx: RunContext[None], sku: str, quantity: int) -> Reservation:
+    """Reserve stock for the customer's order.
+
+    Args:
+        sku: Product code, for example 'A-1'.
+        quantity: Number of units to reserve.
+    """
+    available = INVENTORY.get(sku)
+    if available is None:
+        raise ModelRetry(f'Unknown SKU {sku!r}; valid codes are {sorted(INVENTORY)}.')
+    if quantity > available:
+        raise ModelRetry(f'Only {available} units of {sku} are available.')
+    INVENTORY[sku] = available - quantity
+    return Reservation(sku=sku, quantity=quantity)
+
+
+agent = Agent('openai:%%model=openai%%', output_type=reserve_stock)
+result = agent.run_sync('Reserve two A-1 please.')
+print(repr(result.output))
+#> Reservation(sku='A-1', quantity=2)
+```
+
+The `RunContext` parameter is optional; drop it when the function does not need deps. Output functions can be `async`, can be mixed with types in a list (`output_type=[reserve_stock, Refusal]`), and can be wrapped in `ToolOutput`, `NativeOutput` or `PromptedOutput` to control the mode. Because the function runs when the model calls it, keep side effects idempotent: a later validation failure can make the model call it again.
+
+## `Choices` — pick one of a set known at run time
+
+For a fixed set of options, a `Literal` or an `Enum` is the right output type. When the set only exists at run time (the open tickets for this customer, the actions available on screen), `Choices(...)` builds the type for you. Give a list of keys, or a mapping from key to description so the model can tell the options apart:
+
+```python
+from pydantic_ai import Agent, Choice, Choices
+
+open_tickets = ['T-101', 'T-102', 'T-107']   # loaded for this customer
+TicketId = Choices(open_tickets, name='ticket', description='The ticket this message is about.')
+
+agent = Agent('openai:%%model=openai%%', output_type=TicketId)
+print(agent.run_sync('Any update on the printer ticket?').output)
+#> T-102
+
+Intent = Choices(
+    {
+        'refund': 'The customer wants their money back.',
+        'replace': 'The customer wants a working unit instead.',
+        'escalate': Choice('Nobody on this tier can resolve it.', value=3),   # resolves to 3
+    },
+    name='customer_intent',
+)
+intent_agent = Agent('openai:%%model=openai%%', output_type=Intent)
+```
+
+The result is the chosen key, or the `value=` of a `Choice` when one is given. A callable `value` is called when the model picks it, which turns the set into a menu of actions; such a set can only be an agent's `output_type`. Like `StructuredDict`, `Choices` returns a type, so it also works as a field of a Pydantic model or a tool parameter.
+
+## Describing enum members and booleans
+
+Field descriptions reach the model through the JSON schema. Two helpers extend that to the values themselves:
+
+- `UseEnumMemberDocstrings`, mixed into an `Enum`, sends each member's docstring as its description.
+- `BoolCriteria(true=..., false=...)` inside `Annotated[bool, ...]` says what each answer means; the field stays a plain `bool`.
+
+```python
+from enum import Enum
+from typing import Annotated
+
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent, BoolCriteria, UseEnumMemberDocstrings
+
+
+class Urgency(UseEnumMemberDocstrings, str, Enum):
+    LOW = 'low'
+    """Can wait until next week."""
+    HIGH = 'high'
+    """The customer is blocked right now."""
+
+
+class Triage(BaseModel):
+    urgency: Urgency
+    refunded: Annotated[
+        bool, BoolCriteria(true='Money was returned to the customer.', false='No refund was issued.')
+    ] = Field(description='Was a refund issued?')
+
+
+agent = Agent('openai:%%model=openai%%', output_type=Triage)
+result = agent.run_sync('We have sent the 40 pounds back to your card; the printer can wait.')
+print(result.output)
+#> urgency=<Urgency.LOW: 'low'> refunded=True
+```
+
+Both produce an `anyOf` of `const` values, each with its description, in the schema the model sees.
+
+## Allowing "no output" with `None`
+
+Add `None` to the output list (or use `Contact | None`) when "nothing found" is a legitimate answer. In tool mode the model gets a separate `final_result_None` tool, so declining is an explicit choice rather than an empty object:
+
+```python
+from pydantic import BaseModel
+from pydantic_ai import Agent
+
+
+class Contact(BaseModel):
+    name: str
+    email: str
+
+
+agent = Agent('openai:%%model=openai%%', output_type=[Contact, None])
+result = agent.run_sync('Extract the contact: "Thanks for the update, see you Monday."')
+print(result.output)
+#> None
+```
+
 ## Output validators — `@agent.output_validator`
 
 Run arbitrary code after the model produces an output, potentially asking the model to retry.
@@ -348,10 +492,10 @@ See the [streaming guide](/pydanticai-guide/pydantic_ai_streaming/). `StreamedRu
 ## Gotchas
 
 - **Union of bare types**: `output_type=[Fruit, Vehicle]` works but you lose per-type tool naming. Use `ToolOutput(...)` per branch when the model gets confused about which to emit.
-- **`strict=True`** (OpenAI): the model rejects any schema with `anyOf`/`oneOf` at the root without a discriminator. If you see "strict mode schema rejected" errors, drop `strict` or use `PromptedOutput`.
-- **`NativeOutput` on older OpenAI models** (pre-`gpt-4o-2024-08-06`): silently falls back to prompted mode; check `result.response.model_name` and the raw messages if you need to confirm.
+- **`strict=True`**: strict mode supports only part of JSON Schema. If the provider rejects your schema, simplify the type (no open-ended `dict`, no recursive models) or drop `strict`.
+- **`NativeOutput` on a model without JSON-schema output** raises `UserError` before any request is sent. It does not fall back to prompted mode; choose `PromptedOutput` explicitly for such models.
 - **`TextOutput` and tools**: function tools emitted alongside the final text still run under the default `end_strategy='graceful'` (since 2.0); only `'early'` would skip them.
-- **`output_type` on `run()`**: the per-run override is only allowed when the agent has no `output_validator` — the validator's type wouldn't match.
+- **`output_type` on `run()`**: the per-run override raises a `UserError` ("Cannot set a custom run output_type when the agent has output validators") if the agent has an `output_validator`, because the validator's type would not match.
 
 ## Patterns
 
@@ -360,6 +504,7 @@ See the [streaming guide](/pydanticai-guide/pydantic_ai_streaming/). `StreamedRu
 ```python
 from typing import Literal
 from pydantic import BaseModel
+from pydantic_ai import Agent
 
 class Search(BaseModel):
     kind: Literal['search']
@@ -377,10 +522,22 @@ PydanticAI generates a tagged union schema; the `kind` literal gives the model a
 ### 2. Retry with a more specific constraint
 
 ```python
+from pydantic import BaseModel
+from pydantic_ai import Agent, ModelRetry, RunContext
+
+
+class Answer(BaseModel):
+    value: int
+    reasoning: str
+
+
+agent = Agent('openai:%%model=openai%%', output_type=Answer)
+
+
 @agent.output_validator
 async def must_contain_sources(ctx: RunContext[object], out: Answer) -> Answer:
-    if not out.reasoning:
-        raise ModelRetry('Include a `reasoning` field citing at least one source.')
+    if 'source' not in out.reasoning.lower():
+        raise ModelRetry('Make `reasoning` cite at least one source, e.g. "Source: ...".')
     return out
 ```
 
@@ -388,6 +545,8 @@ async def must_contain_sources(ctx: RunContext[object], out: Answer) -> Answer:
 
 ```python
 from datetime import date
+
+from pydantic_ai import Agent, TextOutput
 
 def parse_iso_date(text: str) -> date:
     return date.fromisoformat(text.strip())
@@ -400,20 +559,42 @@ agent = Agent('openai:%%model=openai%%', output_type=TextOutput(parse_iso_date))
 Use a Pydantic model whose schema contains both the structured and the prose fields; don't try to mix `TextOutput` and `ToolOutput` on the same run.
 
 ```python
+from pydantic import BaseModel, Field
+from pydantic_ai import Agent
+
+
 class Report(BaseModel):
-    summary: str
+    summary: str = Field(description='Two or three sentences of prose for the reader.')
     findings: list[str]
-    confidence: float
+    confidence: float = Field(ge=0, le=1)
+
+
+agent = Agent('openai:%%model=openai%%', output_type=Report)
 ```
 
 ### 5. Runtime-built form with `StructuredDict`
 
 ```python
-def build_form_schema(fields: list[dict]) -> type:
-    schema = {'type': 'object', 'properties': {f['name']: f['schema'] for f in fields}}
+from typing import Any
+
+from pydantic_ai import Agent, StructuredDict
+
+
+def build_form_schema(fields: list[dict[str, Any]]) -> type[dict[str, Any]]:
+    schema = {
+        'type': 'object',
+        'properties': {f['name']: f['schema'] for f in fields},
+        'required': [f['name'] for f in fields if f.get('required')],
+    }
     return StructuredDict(schema, name='form_response')
 
+
+user_fields = [   # e.g. loaded from the form builder's database
+    {'name': 'full_name', 'schema': {'type': 'string'}, 'required': True},
+    {'name': 'age', 'schema': {'type': 'integer', 'minimum': 0}},
+]
 agent = Agent('openai:%%model=openai%%', output_type=build_form_schema(user_fields))
+print(agent.run_sync('I am Ada Lovelace, 36 years old.').output)
 ```
 
 ## Advanced `NativeOutput` patterns
@@ -629,4 +810,5 @@ asyncio.run(main())
 - `@agent.output_validator` decorator — `pydantic_ai.Agent.output_validator`
 - `OutputSpec` type alias — `pydantic_ai.output`
 - `TextOutputFunc` — `pydantic_ai.output` — `Callable[[str], T] | Callable[[RunContext, str], T]`
+- `Choices`, `Choice`, `BoolCriteria` — `pydantic_ai.output` (re-exported from `pydantic_ai`); `UseEnumMemberDocstrings` — `pydantic_ai`
 - Defining an agent, including its output, as data — see [Agents from a spec](/pydanticai-guide/pydantic_ai_comprehensive_guide/#agents-from-a-spec) in the comprehensive guide

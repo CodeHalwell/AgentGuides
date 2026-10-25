@@ -8,7 +8,7 @@ sidebar:
   order: 70
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; the Vertex AI and Cloud Storage examples need a Google Cloud project and were not run.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 
@@ -49,13 +49,21 @@ runner = Runner(
 | `add_memory(*, app_name, user_id, memories, custom_metadata=None)` | Write explicit `MemoryEntry` items directly |
 | `search_memory(*, app_name, user_id, query)` | Semantic / keyword search — returns `SearchMemoryResponse` |
 
-Not every service implements every method — `InMemoryMemoryService` supports search via word-set matching; Vertex services delegate to GCP APIs.
+Not every service implements every method; the unsupported ones raise `NotImplementedError`:
+
+| Service | `add_session_to_memory` | `add_events_to_memory` | `add_memory` | Search |
+|---|---|---|---|---|
+| `InMemoryMemoryService` | yes | yes | no | word overlap |
+| `SqliteMemoryService` | yes | yes | no | SQLite full-text search (FTS5) when available, else word matching |
+| `VertexAiMemoryBankService` | yes | yes | yes | semantic, server-side |
+| `VertexAiRagMemoryService` | yes | no | no | vector similarity |
 
 ### Implementations
 
 | Service | Storage | Search | Extra setup |
 |---|---|---|---|
 | `InMemoryMemoryService()` | Python dict, keyed by `(app_name, user_id)` | Case-insensitive word overlap | None |
+| `SqliteMemoryService(db_path, *, fts="auto", max_event_bytes=262144, max_results=50)` | Local SQLite file (2.11.0) | Full-text search | None; call `close()` on shutdown |
 | `VertexAiMemoryBankService(project, location, agent_engine_id, *, express_mode_api_key=None, credentials=None)` | GCP Agent Engine Memory Bank | Semantic (Vertex-side) | Enable Agent Engine in your GCP project; pass the engine's numeric ID (not the full resource path) |
 | `VertexAiRagMemoryService(rag_corpus, similarity_top_k=None, vector_distance_threshold=10)` | Vertex AI RAG corpus | Vector similarity | Create a RAG corpus in advance; format `projects/.../ragCorpora/{id}` or just the id |
 
@@ -108,7 +116,8 @@ await runner.memory_service.add_events_to_memory(
     events=session.events[-2:],
 )
 
-# Or explicit facts — content must be a types.Content object, not a string
+# Or explicit facts (VertexAiMemoryBankService only; the in-memory and SQLite
+# services raise NotImplementedError). content must be a types.Content.
 from google.adk.memory.memory_entry import MemoryEntry
 from google.genai import types
 await runner.memory_service.add_memory(
@@ -123,7 +132,48 @@ await runner.memory_service.add_memory(
 
 **Ingest once per conversation, not per turn.** `Runner` never ingests automatically, and an `after_agent_callback` fires after every turn. With `VertexAiRagMemoryService` this matters most: each `add_session_to_memory()` uploads the whole transcript as a new RAG file, so per-turn calls fill the corpus with duplicates. Call it from whatever ends a conversation in your app (an explicit "end chat", an idle timeout).
 
-`VertexAiMemoryBankService.add_events_to_memory` uses `memories.ingest_events` by default; it switches to `memories.generate` if `custom_metadata` includes Vertex-specific keys (`ttl`, `revision_ttl`, `metadata`, `wait_for_completion`). See `vertex_ai_memory_bank_service.py`.
+`VertexAiMemoryBankService.add_events_to_memory` uses `memories.ingest_events` by default; it switches to `memories.generate` if `custom_metadata` includes a key only that API supports, such as `ttl`, `revision_ttl`, `metadata` or `wait_for_completion`.
+
+### Persistent local memory: `SqliteMemoryService`
+
+For a single-process deployment or local development that should remember across restarts, `SqliteMemoryService` (2.11.0) keeps memories in a SQLite file. The CLI's `--memory_service_uri sqlite:///memory.db` selects it too.
+
+```python
+import asyncio
+
+from google.adk.agents import LlmAgent
+from google.adk.memory import SqliteMemoryService
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.adk.tools import load_memory
+
+agent = LlmAgent(
+    name="assistant",
+    model="%%model=gemini%%",
+    instruction="Use load_memory when the user refers to earlier conversations.",
+    tools=[load_memory],
+)
+
+
+async def main():
+    memory = SqliteMemoryService("memory.db")      # full-text search when SQLite has FTS5
+    sessions = InMemorySessionService()
+    runner = Runner(app_name="mem_app", agent=agent, session_service=sessions,
+                    memory_service=memory, auto_create_session=True)
+
+    await runner.run_debug("Our office moves to Leeds in March.", user_id="u1", session_id="s1", quiet=True)
+    await memory.add_session_to_memory(
+        await sessions.get_session(app_name="mem_app", user_id="u1", session_id="s1")
+    )
+
+    found = await memory.search_memory(app_name="mem_app", user_id="u1", query="office move")
+    for entry in found.memories:
+        print(entry.author, "->", entry.content.parts[0].text)
+    await memory.close()
+
+
+asyncio.run(main())
+```
 
 ## MemoryEntry
 
@@ -159,16 +209,16 @@ entry = MemoryEntry(
 
 ### Scoping rules
 
-- `session_id=<id>` — session-scoped artifact. Lost when the session is deleted.
-- `session_id=None` — user-scoped artifact. Lives across sessions.
-- `filename="user:foo.pdf"` — explicit user scope even inside a session (filename prefix convention; see `file_artifact_service.py`).
+- `session_id=<id>` — session-scoped artifact.
+- `filename="user:foo.pdf"` — user-scoped: visible from every session of that user. This is the portable way to share a file across sessions.
+- `session_id=None` without the `user:` prefix behaves differently per service: `FileArtifactService` treats it as user-scoped, while `InMemoryArtifactService` and `GcsArtifactService` raise `InputValidationError: Session ID must be provided for session-scoped artifacts`.
 
 ### Implementations
 
 | Service | Storage | Notes |
 |---|---|---|
 | `InMemoryArtifactService()` | Python dict; keeps full blobs in memory | Dev/testing |
-| `FileArtifactService(root_dir)` | Local filesystem under `root_dir/` | Versions stored as `artifacts/<session>/<filename>/v<N>`; metadata JSON alongside. **Not thread-safe** — concurrent saves to the same artifact can race (no lock between version enumeration and `mkdir`); use GCS or a single-writer process in production |
+| `FileArtifactService(root_dir)` | Local filesystem under `root_dir/` | Versions stored as `apps/<app>/users/<user>/sessions/<session>/artifacts/<filename>/versions/<N>/<filename>` (user-scoped: `apps/<app>/users/<user>/artifacts/...`), with a `metadata.json` beside each. No locking — concurrent saves to the same artifact can race; use GCS or a single-writer process in production |
 | `GcsArtifactService(bucket_name, **kwargs)` | Google Cloud Storage bucket | `kwargs` forwarded to `google.cloud.storage.Client` |
 
 ```python
@@ -240,22 +290,26 @@ report_tool = FunctionTool(func=make_report)
 
 Inside a callback/tool:
 
-- `tool_context.save_artifact(filename, artifact, *, custom_metadata=None)` — returns the new version int.
-- `tool_context.load_artifact(filename, *, version=None)` — returns `types.Part` or `None`.
+- `tool_context.save_artifact(filename, artifact, custom_metadata=None)` — returns the new version int.
+- `tool_context.load_artifact(filename, version=None)` — returns `types.Part` or `None`.
 - `tool_context.list_artifacts()` — returns a list of filenames in scope.
 - `tool_context.get_artifact_version(filename, version=None)` — returns metadata only.
 
 ### The `load_artifacts` tool
 
-`load_artifacts` is a singleton `FunctionTool` the model can call to fetch an artifact by name and have its content injected as a `types.Part`. Include it in `tools=[load_artifacts]` when the agent should reference past files.
+`load_artifacts` is a ready-made `LoadArtifactsTool` instance the model can call to fetch an artifact by name and have its content injected as a `types.Part`. Include it in `tools=[load_artifacts]` when the agent should reference past files.
 
 ## ArtifactVersion
 
 ```python
+# The model as defined in google.adk.artifacts.base_artifact_service
+from typing import Any, Optional
+from pydantic import BaseModel
+
 class ArtifactVersion(BaseModel):
     version: int
     canonical_uri: str
-    custom_metadata: dict
+    custom_metadata: dict[str, Any]
     create_time: float        # unix seconds
     mime_type: Optional[str]
 ```
@@ -271,7 +325,7 @@ Append a plugin that overrides `after_run_callback` and calls `memory_service.ad
 Use `custom_metadata={"ttl": ...}` on `add_events_to_memory` with `VertexAiMemoryBankService` to auto-expire short-lived memories (e.g. session-specific preferences that shouldn't leak to future users).
 
 ### 3 — User-scoped long-term file cache
-Save with `session_id=None` (or `filename="user:history.json"`). The artifact survives session deletion and is available to every future session of the same user.
+Save with `filename="user:history.json"`. The artifact is available to every future session of the same user.
 
 ### 4 — Versioned reports
 Each run saves a new version of `report.pdf`. The UI lists `list_artifact_versions(...)` with timestamps so a reviewer can diff outputs turn-by-turn.

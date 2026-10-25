@@ -96,7 +96,7 @@ for (const nodeResult of result.results) {
 }
 ```
 
-`sources` names the entry nodes (otherwise nodes with no incoming edges are used, which a loop back to `collect` would hide). `result` is a `MultiAgentResult`: `status` (`COMPLETED`, `FAILED`, `CANCELLED` or `INTERRUPTED`, from the `Status` constant), `results` (one `NodeResult` per execution, with `nodeId`, `status`, `content`, `duration`, `usage`, `error`), `content` (the final output), `usage` and `duration`. A node can also be a `Swarm` or another `Graph`.
+`sources` names the entry nodes (otherwise nodes with no incoming edges are used, which a loop back to `collect` would hide). If the loop never passes, `maxSteps` ends it by making `invoke()` throw (`steps=<10> | max steps reached`), so wrap a looping graph in `try`/`catch`; a graph with no `maxSteps` or `timeout` logs a warning that execution is unbounded. `result` is a `MultiAgentResult`: `status` (`COMPLETED`, `FAILED`, `CANCELLED` or `INTERRUPTED`, from the `Status` constant), `results` (one `NodeResult` per execution, with `nodeId`, `status`, `content`, `duration`, `usage`, `error`), `content` (the final output), `usage` and `duration`. A node can also be a `Swarm` or another `Graph`.
 
 ## Swarm
 
@@ -240,4 +240,5 @@ console.log(local.tools.map((t) => t.name))
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | %%version=@strands-agents/sdk%% | Audit against the installed packages. Documented that a looping graph throws when `maxSteps` is reached. |
 | 2026-10-24 | 1.22.0 | New page, from the multi-agent section of the TypeScript Strands page in the Amazon Bedrock guide. Adds the unbounded-defaults warning, conditional edges and loops, result fields, swarm step-limit behaviour, orchestrator streaming and hooks, and the A2A server and client. |

@@ -231,6 +231,48 @@ Returning several steps runs them in order. A Router with `human_review=HumanRev
 
 `Steps(name=..., steps=[...])` groups steps so they can be used as one unit inside a `Condition`, `Loop` or `Router`. A `Workflow` can be a step of another workflow (`Step(workflow=inner)` or the bare workflow in the list).
 
+A team can be a step, and `Steps` lets a `Condition` run a short sequence rather than one step. Here a panel reviews only longer requests, and a function stamps the panel's answer:
+
+```python
+from agno.agent import Agent
+from agno.models.openai import OpenAIResponses
+from agno.team import Team
+from agno.workflow import Condition, Step, Steps, StepInput, StepOutput, Workflow
+
+model = OpenAIResponses(id="%%model=openai%%")
+panel = Team(
+    name="Panel",
+    model=model,
+    members=[Agent(name="Legal", role="Checks legal risk", model=model),
+             Agent(name="Finance", role="Checks cost", model=model)],
+)
+
+
+def is_long(si: StepInput) -> bool:
+    return len(str(si.input).split()) > 3
+
+
+def stamp(si: StepInput) -> StepOutput:
+    return StepOutput(content=f"[reviewed] {si.previous_step_content}")
+
+
+review = Workflow(
+    name="Review",
+    steps=[
+        Condition(
+            name="long_only",
+            evaluator=is_long,
+            steps=[Steps(name="deep_review", steps=[Step(name="panel", team=panel), Step(name="stamp", executor=stamp)])],
+        )
+    ],
+)
+run = review.run("Approve the new supplier contract for next year")
+print(run.content)   # [reviewed] <the panel's answer>
+print(review.run("Approve it").content)   # Condition long_only not met - skipped 1 steps
+```
+
+The skipped `Condition` still produces a step result whose content is that "not met" message, so a later step that reads `previous_step_content` receives it. Test for it, or give the `Condition` an `else_steps` branch that passes the input through.
+
 For logic that does not fit the primitives, `steps` can be a single function that receives the workflow and a `WorkflowExecutionInput` and returns the result. You call agents yourself inside it:
 
 ```python
@@ -322,7 +364,7 @@ run = wf.continue_run(run)
 print(run.status, run.content)                       # RunStatus.completed Published
 ```
 
-With `OnReject.cancel` a rejection ends the run with status `CANCELLED`. `OnReject.skip` (the default for most primitives) skips the step; `OnReject.else_branch` (the default for `Condition`) runs `else_steps`.
+With `OnReject.cancel` a rejection ends the run with status `CANCELLED`. `OnReject.skip` (the default for most primitives) skips the step; `OnReject.else_branch` (the default for `Condition`) runs `else_steps`; `OnReject.retry` runs the rejected step again (the source docstring says optionally with the reviewer's feedback; this was not exercised).
 
 User input works the same way. The `@pause` decorator puts the review on a function:
 
@@ -348,7 +390,7 @@ req.set_user_input(region="eu-west-2")
 print(wf.continue_run(run).content)   # Provisioned in eu-west-2
 ```
 
-Other `HumanReview` fields: `requires_output_review` (pause after the step so a person can approve or `edit()` its output), `requires_iteration_review` (loops), `allow_multiple_selections` (routers; resolve with `req.select("a", "b")`), `on_error` (`OnError.fail`, `skip` or `pause`), `max_retries`, `timeout` with `on_timeout` (`OnTimeout.cancel`, `skip` or `approve`). A requirement reports what it needs through `needs_confirmation`, `needs_user_input`, `needs_output_review` and `needs_route_selection`.
+Other `HumanReview` fields: `requires_output_review` (pause after the step so a person can approve or `edit()` its output), `requires_iteration_review` (loops), `allow_multiple_selections` (routers; resolve with `req.select("a", "b")`), `on_error` (`OnError.fail`, `skip` (the default) or `pause`), `max_retries` (default 3), `timeout` with `on_timeout` (`OnTimeout.cancel`, `skip` or `approve`). A requirement reports what it needs through `needs_confirmation`, `needs_user_input`, `needs_output_review` and `needs_route_selection`.
 
 Agent and team steps whose tools pause (confirmation, user input, external execution) pause the workflow too. The step requirement then has `needs_executor_resolution == True`, and its `executor_requirements` holds the agent's requirements as plain dicts. Turn them back into `RunRequirement` objects, resolve them, put them back and continue:
 

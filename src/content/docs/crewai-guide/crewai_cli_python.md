@@ -45,7 +45,7 @@ uv tool install crewai
 | `crewai run` | Run the project — crew or flow, whichever `pyproject.toml` declares. |
 | `crewai install` | Sync dependencies (wraps uv). |
 | `crewai update` | Update the project's `pyproject.toml` to use uv. |
-| `crewai train -n 5 -f trained.pkl` | Kick off `main:train`. |
+| `crewai train -n 5 -f trained.pkl` | Kick off `main:train`: run the crew with human feedback on every task, then distil the feedback (see [Training mode](#training-mode)). |
 | `crewai test -n 3 -m %%model=openai-small%%` | Kick off `main:test` (eval; OpenAI models only). |
 | `crewai eval` | Grade the last traced run through CrewAI AMP; `--models a,b` compares models on a deployment. |
 | `crewai replay -t <task_id>` | Re-run starting from a specific task. |
@@ -56,7 +56,7 @@ uv tool install crewai
 | `crewai checkpoint` | TUI browser for saved checkpoints. |
 | `crewai checkpoint list/info/resume/diff/prune` | Scripted checkpoint ops. |
 | `crewai flow kickoff` | Run the flow (equivalent to `crewai run` in a flow project). |
-| `crewai flow plot` | Render the flow graph. |
+| `crewai flow plot` | Render the flow graph to an HTML file and open it in the browser. |
 | `crewai flow add-crew <name>` | Embed a crew in the flow. |
 | `crewai triggers list/run <app>/<trigger>` | Platform triggers. |
 | `crewai tool install/publish <handle>` | Tool Repository (platform). `tool create` is deprecated in favour of `crewai create tool`. |
@@ -78,12 +78,12 @@ my_crew/
 ├── pyproject.toml
 ├── README.md
 ├── AGENTS.md                   # also CLAUDE.md / CURSOR.md / GEMINI.md for coding assistants
-├── knowledge/                  # drop PDFs/CSVs/etc here — resolved by KnowledgeSource(file_paths=...)
+├── knowledge/                  # file sources given as strings are read from here (starts with user_preference.txt)
 └── src/my_crew/
     ├── __init__.py
     ├── main.py                 # entry points: run / train / replay / test
     ├── crew.py                 # @CrewBase with @agent / @task / @crew decorators
-    ├── tools/                  # custom @tool functions
+    ├── tools/                  # custom_tool.py: a BaseTool example
     └── config/
         ├── agents.yaml         # agent roles, goals, backstories
         └── tasks.yaml          # task descriptions, expected outputs
@@ -101,7 +101,7 @@ researcher:
     You're a seasoned researcher with a knack for finding relevant sources.
 ```
 
-Each top-level key is a role name referenced from `crew.py`.
+Each top-level key is a name referenced from `crew.py` (`self.agents_config["researcher"]`). The scaffold also defines a second agent, `reporting_analyst`, in the same file. The role, goal and backstory text may contain `{topic}`-style placeholders filled from `kickoff(inputs=...)`.
 
 ### `tasks.yaml`
 
@@ -138,12 +138,14 @@ class MyCrew:
 
     @task
     def reporting_task(self) -> Task:
-        return Task(config=self.tasks_config["reporting_task"])
+        return Task(config=self.tasks_config["reporting_task"], output_file="report.md")
 
     @crew
     def crew(self) -> Crew:
         return Crew(agents=self.agents, tasks=self.tasks, process=Process.sequential, verbose=True)
 ```
+
+`@CrewBase` loads `config/agents.yaml` and `config/tasks.yaml` into `self.agents_config` and `self.tasks_config`, collects the `@agent` and `@task` methods into `self.agents` and `self.tasks` in definition order, and `@crew` returns the `Crew`. We ran the scaffold from `crewai create crew --classic` against a scripted model: both tasks ran in order, the second saw the first's output as context, and `report.md` was written by the `output_file` on `reporting_task`. The agents in the scaffold set no `llm`, so they use the default model unless you add `llm=` or set `MODEL`.
 
 ### `main.py`
 
@@ -167,7 +169,7 @@ def test():
     MyCrew().crew().test(n_iterations=int(sys.argv[1]), eval_llm=sys.argv[2], inputs=INPUTS)
 ```
 
-`pyproject.toml` wires these to console scripts so `crewai run`, `crewai train 5 data.pkl`, etc. work out of the box.
+The generated `main.py` also has a `run_with_trigger()` function. `pyproject.toml` wires these to console scripts (`run_crew`, `train`, `replay`, `test`, `run_with_trigger`, plus one named after the project), so `crewai run`, `crewai train`, etc. work out of the box.
 
 ## Training mode
 
@@ -175,13 +177,14 @@ def test():
 crewai train -n 5 -f trained_agents_data.pkl
 ```
 
-Calls `Crew.train(n_iterations=5, filename=...)`:
+Training is **human-in-the-loop**, not an automatic scorer. `Crew.train(n_iterations, filename, inputs)` (the second argument is required; the scaffolded `train()` reads `-n` and `-f` from the command line):
 
-1. Runs the crew `n` times on the supplied `inputs`.
-2. Each task's output is scored by an LLM evaluator (`CrewEvaluator`).
-3. Results are serialised to the `.pkl` — your `Agent`s load them to bias future runs.
+1. Copies the crew and turns on `human_input=True` for every task and `allow_delegation=False` for every agent.
+2. Runs the copy `n` times with your `inputs`. After each task the console asks you for feedback on the output. The agent revises its answer, and the initial output, your feedback and the improved output are stored per agent in an intermediate `training_data.pkl`.
+3. When the iterations finish, an LLM evaluator (`TaskEvaluator.evaluate_training_data`) condenses each agent's feedback into a list of suggestions, a 0 to 10 quality score and a summary, and saves them under the agent's `role` in the file you named.
+4. If anything fails, both pickle files are cleared.
 
-Under the hood CrewAI persists per-agent suggestions; running the crew after training with `training=True` pulls them in.
+To use the result, point the crew at the file. At run time each agent appends `You MUST follow these instructions:` and its suggestions to its task prompt. The file is chosen in this order: `Crew(trained_agents_file="path.pkl")`, the `CREWAI_TRAINED_AGENTS_FILE` environment variable, then `trained_agents_data.pkl` in the working directory. `crewai run -f path.pkl`, `crewai test -f` and `crewai replay -f` set the environment variable for you. Suggestions are keyed by agent `role`, so renaming a role orphans its training data.
 
 ## Testing mode
 
@@ -194,10 +197,11 @@ Calls `Crew.test(n_iterations=3, eval_llm=...)` with the model you pass — runs
 ## Replay
 
 ```bash
+crewai log-tasks-outputs        # list the task ids from the last kickoff
 crewai replay -t <task_id>
 ```
 
-Reuses the last `.crewai/task_outputs` store — the crew re-runs **starting from the named task**, reusing outputs from earlier steps. Useful when only a later task failed.
+`replay` re-runs the crew **starting from the named task** and reuses the stored outputs of earlier tasks as context. The outputs come from the latest kickoff, saved by every `Crew.kickoff()` in `latest_kickoff_task_outputs.db` inside CrewAI's per-user data directory (`$CREWAI_STORAGE_DIR` if set). We replayed a two-task crew from its second task: one model call, with the first task's stored output in the prompt. The id is looked up in the stored outputs, so a freshly built crew with the same tasks can replay an id printed by an earlier process. Only the most recent kickoff is kept. `crewai reset-memories -k` clears it.
 
 ## Reset memories
 
@@ -209,7 +213,7 @@ crewai reset-memories -k        # cached kickoff outputs
 crewai reset-memories -a        # all of the above
 ```
 
-The legacy `--long`, `--short`, `--entities` flags are accepted with a deprecation warning that says "all memory is now unified."
+The legacy `--long`, `--short`, `--entities` flags are accepted (they do not appear in `--help`) and print a deprecation warning that says "all memory is now unified." Each flag resets only what the crew in the current project has configured: `-m` on a crew without memory enabled fails with "Memory memory system is not initialized".
 
 ## Checkpoints
 
@@ -229,7 +233,7 @@ crewai checkpoint prune --keep 20 --older-than 30d --dry-run
 ```bash
 crewai create flow my_flow
 crewai run                         # run the flow (`crewai flow kickoff` still works)
-crewai flow plot                   # writes crewai_flow.html
+crewai flow plot                   # builds the HTML graph and opens it in your browser
 crewai flow add-crew research      # embed a crew scaffold inside the flow project
 ```
 
@@ -245,7 +249,7 @@ crewai deploy logs -u <uuid>
 crewai deploy remove -u <uuid>
 ```
 
-`crewai deploy validate` runs the same pre-flight checks as `create`/`push` without contacting the platform — handy in CI.
+`crewai deploy validate` runs the same pre-flight checks as `create`/`push` without contacting the platform — handy in CI. In 1.15.28 it looks for `src/<package>/main.py` with a `Flow` subclass in flow projects, so a **declarative** flow project (`crewai create flow --declarative`, which has `flow.yaml` and no `main.py`) fails with `missing_flow_main` and `no_flow_subclass`. `crewai run` works for those projects; validation and deploy checks do not accept them yet.
 
 ## Tool Repository
 

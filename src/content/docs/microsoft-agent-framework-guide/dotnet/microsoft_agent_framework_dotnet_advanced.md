@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Advanced patterns"
+  order: 40
 ---
 
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%; every C# block compiles against that release. Deployment, resilience and security are on the [production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/).
@@ -51,7 +52,7 @@ Either kind is an ordinary `AIAgent`: sessions, streaming, middleware, workflows
 
 ### Classic Persistent Agents
 
-Projects that still use the Azure AI Agents service (`Azure.AI.Agents.Persistent`, server-side threads and runs) can bring those agents in with `Microsoft.Agents.AI.AzureAI.Persistent` (preview). Prefer the Foundry package for new work.
+Projects that still use the Azure AI Agents service (`Azure.AI.Agents.Persistent`, server-side threads and runs) can bring those agents in with `Microsoft.Agents.AI.AzureAI.Persistent` (preview). Microsoft Learn lists Agents (classic) as deprecated, with retirement on 31 March 2027, and the classic service does not take models later than GPT-5, so use the Foundry package for new work.
 
 ```bash
 dotnet add package Microsoft.Agents.AI.AzureAI.Persistent --prerelease
@@ -67,7 +68,7 @@ var client = new PersistentAgentsClient(
 
 // Create the server-side agent and wrap it; use client.GetAIAgentAsync(agentId) for an existing one.
 AIAgent agent = await client.CreateAIAgentAsync(
-    model: "%%model=openai-small%%",
+    model: Environment.GetEnvironmentVariable("MODEL_DEPLOYMENT_NAME")!,   // a model the classic service supports
     name: "writer",
     instructions: "You are a helpful writing assistant.");
 

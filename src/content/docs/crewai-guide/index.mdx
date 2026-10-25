@@ -90,6 +90,21 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Production" href="/crewai-guide/crewai_production_guide/" description="Event listeners, tracing, hooks, checkpoints, testing, deployment." />
 </CardGrid>
 
+## Behaviours that differ from what you might expect
+
+These were found by tracing what agents and tasks actually receive, and each is covered where it applies.
+
+- `Agent(guardrail=...)` only applies to `Agent.kickoff()`. In a crew, use `Task.guardrail` ([Agent API](/crewai-guide/crewai_agent_api_python/#guardrails)).
+- `Task(response_model=...)` leaves `TaskOutput.pydantic` empty; use `output_pydantic` for a parsed result ([Task API](/crewai-guide/crewai_task_api_python/#structured-output-three-fields-one-answer)).
+- Task outputs reach later tasks as context text, not as `{variables}` ([Task API](/crewai-guide/crewai_task_api_python/#context-and-task-chaining)).
+- In a hierarchical crew the manager runs every task, and `{placeholders}` are not interpolated into a `manager_agent`'s own text ([Multi-agent patterns](/crewai-guide/crewai_advanced_multi_agent_python/#manager-led-crews)).
+- Tool-result caching is opt-in at the crew or agent level ([Tools](/crewai-guide/crewai_tools_python/#caching)).
+- `step_callback` sees tool steps only on the text (ReAct) path; with native function calling it fires once with the final answer ([Agent API](/crewai-guide/crewai_agent_api_python/#callbacks-and-observability)).
+- String knowledge paths are always resolved under `knowledge/`, and each task with knowledge makes an extra LLM call ([Knowledge](/crewai-guide/crewai_knowledge_python/)).
+- `Task(input_files=...)` needs `crewai[file-processing]` and `File(...)` objects ([Task API](/crewai-guide/crewai_task_api_python/#file-inputs)).
+- `Memory.forget(scope=..., older_than=...)` deleted newer records in 1.15.28 ([Memory](/crewai-guide/crewai_memory_python/#forget-and-update)).
+- `crewai train` asks you for feedback on every task ([CLI](/crewai-guide/crewai_cli_python/#training-mode)).
+
 ## What's new in the 1.15 line (June–October 2026)
 
 - **JSON-first scaffolds** — `crewai create crew` now runs an interactive wizard and writes `crew.jsonc` + `agents/*.jsonc`. Pass `--classic` for the Python/YAML `@CrewBase` layout this guide uses. Tools, skills and templates are scaffolded through the same command (`crewai create tool|skill|template`); the older `crewai tool create` / `crewai template add` forms are deprecated.
@@ -155,6 +170,7 @@ Ready? **[Start Zero → Hero Step 1 →](/crewai-guide/crewai_comprehensive_gui
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-10-25 | 1.15.28 | Deep-dive audit: re-ran every page's examples, traced what agents and tasks receive, and corrected the Agent, Task, Memory, Knowledge, Tools, LLM, CLI, Production, Multi-agent, Recipes and Diagrams pages (agent-level guardrails, `response_model`, task context, hierarchical manager behaviour, tool caching and failure policy, `step_callback`, knowledge paths and `input_files`, memory in crews, `forget`, training, replay). Added a local MCP example, a `ToolFailure` section, an offline Memory example and `PlanningConfig` fields. | Claude |
 | 2026-10-21 | 1.15.28 | Rewrote the Flows, Production, Recipes, Diagrams, Multi-agent and Comprehensive pages against 1.15.28 (structured flow state, routers that pass 1.15's definition checks, `and_`/`or_`, `@persist`, `@human_feedback`, conversational and declarative flows; event listeners, OpenTelemetry, hooks, checkpoints, offline tests with a stub LLM, `crewai deploy validate`). Fixed reference-page errors (embedder `model_name`, `aadd` on custom knowledge sources, MCP filter signature, guardrail return values, default task context, `CrewOutput.to_dict`, Qdrant Edge extra). Links made root-absolute. | Claude |
 | 2026-10-21 | 1.15.28 | Re-verified the whole guide against 1.15.28 in a clean venv (imports, constructor keywords, CLI `--help`). Current-version mentions now come from the shared versions file. Documented JSON-first scaffolds, `crewai eval`, `crewai_cli` split, new Agent fields and defaults, Memory default embedder change; fixed `memory_tools_for` → `create_memory_tools`, `A2AClientConfig(endpoint=...)`, `crewai_tools` imports; removed the fabricated `crewai.amp` examples. | Claude |
 | 2026-05-29 | 1.14.6 | Version bumped 1.14.5 → 1.14.6; "What's new" heading updated to v1.14.6; v1.14.6 bullet added; comprehensive guide header updated; revision history entry added. `Agent`, `Task`, `Crew`, `Process`, `Flow` verified against installed `crewai==1.14.6` (`.routine-envs/check-0529-crewai`); no `DeprecationWarning` emissions. | Claude routine |

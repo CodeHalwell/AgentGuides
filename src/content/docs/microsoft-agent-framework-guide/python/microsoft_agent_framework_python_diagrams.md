@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Diagrams"
+  order: 95
 ---
 
 This document provides visual references for the architecture, data flow, and deployment topology of Python-based agent systems.
@@ -33,7 +34,7 @@ graph TD
         Tools --> AzureAI[Azure AI Services]
     end
     
-    AgentA --> LLM[LLM Service (OpenAI)]
+    AgentA --> LLM["LLM Service (OpenAI)"]
     Memory --> VectorDB[Vector Database]
 ```
 
@@ -111,7 +112,7 @@ graph TD
     FrontDoor --> ACAEnv[Azure Container Apps Environment]
     
     subgraph "ACA Environment (VNet)"
-        Ingress[Ingress Controller] --> Service[Python Agent Service (Gunicorn)]
+        Ingress[Ingress Controller] --> Service["Python Agent Service (Gunicorn)"]
         
         Service -->|Scale Out| Replica1[Replica 1]
         Service -->|Scale Out| Replica2[Replica 2]
@@ -120,7 +121,7 @@ graph TD
     
     Replica1 --> KeyVault[Azure Key Vault]
     Replica1 --> OpenAI[Azure OpenAI]
-    Replica1 --> Cosmos[Cosmos DB (Memory)]
+    Replica1 --> Cosmos["Cosmos DB (Memory)"]
     
     KEDA[KEDA Scaler] -->|Monitors| Service
     KEDA -.->|Metrics| AzureMonitor[Azure Monitor]
@@ -196,7 +197,7 @@ viz.export(format="svg", filename="workflow-debug.svg", include_internal_executo
 
 `include_internal_executors=False` (default) hides the framework's plumbing nodes (start dispatchers, conversation marshalling) so the diagram matches what you wrote in the builder. Flip to `True` when you're debugging why a message isn't reaching its target.
 
-`WorkflowViz` is marked release-candidate (`ReleaseCandidateFeature.WORKFLOW_VIZ`); using it emits a `FeatureStageWarning` once per process. Silence it with `warnings.filterwarnings("ignore", category=FeatureStageWarning)` if you regenerate diagrams in CI.
+`WorkflowViz` is a stable API: it carries no feature stage and emits no `FeatureStageWarning`.
 
 ### Sub-workflow rendering
 
@@ -208,7 +209,7 @@ Every orchestration builder (`SequentialBuilder`, `ConcurrentBuilder`, `HandoffB
 
 ```python
 from agent_framework import WorkflowViz
-from agent_framework_orchestrations import (
+from agent_framework.orchestrations import (
     ConcurrentBuilder,
     HandoffBuilder,
     SequentialBuilder,
@@ -222,7 +223,8 @@ print(WorkflowViz(sequential).to_mermaid())
 concurrent = ConcurrentBuilder(participants=[researcher, analyst, writer]).build()
 print(WorkflowViz(concurrent).to_mermaid())
 
-# Handoff — mesh between specialists, dispatcher node owns the user
+# Handoff — mesh between specialists. HandoffBuilder.build() raises unless every
+# participant was created with Agent(..., require_per_service_call_history_persistence=True).
 handoff = (
     HandoffBuilder(participants=[triage, billing, technical])
     .add_handoff(triage, [billing, technical])
@@ -241,14 +243,9 @@ Render diagrams during CI so PR reviewers can see how the topology changed witho
 ```python
 # scripts/render_workflow_diagrams.py
 from pathlib import Path
-import warnings
 from agent_framework import WorkflowViz
-from agent_framework._feature_stage import FeatureStageWarning
 
 from myapp.workflows import build_research_workflow, build_support_workflow
-
-# Suppress the once-per-process feature-stage warning so CI logs stay clean.
-warnings.filterwarnings("ignore", category=FeatureStageWarning)
 
 OUT = Path("docs/workflows")
 OUT.mkdir(parents=True, exist_ok=True)
@@ -277,14 +274,22 @@ Wire the script into your release pipeline; commit the `.mmd` files and let your
 from agent_framework import FanInEdgeGroup, FanOutEdgeGroup, SwitchCaseEdgeGroup
 
 for group in workflow.edge_groups:
-    if isinstance(group, FanOutEdgeGroup):
-        print(f"fan-out from {group.source_id} → {group.target_ids}")
-    elif isinstance(group, FanInEdgeGroup):
-        print(f"fan-in {group.source_ids} → {group.target_id}")
-    elif isinstance(group, SwitchCaseEdgeGroup):
+    sources, targets = group.source_executor_ids, group.target_executor_ids
+    if isinstance(group, SwitchCaseEdgeGroup):  # check before FanOutEdgeGroup: it is a subclass
         for case in group.cases:
-            print(f"{group.source_id} -[case]-> {case.target_id}")
+            print(f"{sources[0]} -[case]-> {case.target_id}")
+    elif isinstance(group, FanOutEdgeGroup):
+        print(f"fan-out from {sources[0]} → {targets}")
+    elif isinstance(group, FanInEdgeGroup):
+        print(f"fan-in {sources} → {targets[0]}")
+    else:  # SingleEdgeGroup, InternalEdgeGroup
+        print(f"{group.type}: {sources} → {targets}")
 ```
 
 Pair with `workflow.executors` (a dict keyed by executor id) to enrich each node with type info, descriptions, or input/output type annotations from `executor.input_types`.
 
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-25 | 1.22.0 | `WorkflowViz` is stable and emits no feature-stage warning (the `ReleaseCandidateFeature.WORKFLOW_VIZ` member does not exist). Fixed the edge-group inspection example (groups expose `source_executor_ids` / `target_executor_ids`, not `source_id` / `target_ids` on every type), the orchestrations import path and the handoff prerequisite, and quoted Mermaid labels that contain parentheses. |

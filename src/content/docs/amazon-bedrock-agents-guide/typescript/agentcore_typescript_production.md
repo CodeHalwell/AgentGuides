@@ -10,7 +10,7 @@ sidebar:
 
 AgentCore Runtime runs Node.js agents in the same session-isolated microVMs as Python ones. There are two ways to ship one: the **AgentCore CLI** (`@aws/agentcore`), which scaffolds the project, builds it and deploys it with CDK; or **by hand** with the AWS SDK for JavaScript control-plane client, as either a container image in ECR or a zipped code bundle on the managed `NODE_22` runtime.
 
-> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore-ts%%, `@strands-agents/sdk` %%version=@strands-agents/sdk%% and the AgentCore CLI (`@aws/agentcore`) %%version=@aws/agentcore%% (checked %%versions-checked%%). TypeScript examples compile under `tsc --strict`; the CLI commands were checked against its `--help` output and generated project.
+> **Verified against:** `bedrock-agentcore` %%version=bedrock-agentcore-ts%%, `@strands-agents/sdk` %%version=@strands-agents/sdk%% and the AgentCore CLI (`@aws/agentcore`) %%version=@aws/agentcore%% (checked %%versions-checked%%). TypeScript examples compile under `tsc --strict`; the CLI commands were checked against its `--help` output and a generated project.
 
 The server code itself is covered in [Runtime: BedrockAgentCoreApp](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/#runtime-bedrockagentcoreapp). The Python equivalents of the deployment steps are in the [AgentCore guide](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#getting-started) and the [production guide](/amazon-bedrock-agents-guide/python/bedrock_agents_production_guide/).
 
@@ -42,23 +42,31 @@ Whatever the packaging, the process must:
 
 ## Option 1: the AgentCore CLI
 
-The CLI is an npm package and supports TypeScript projects with the Strands or Vercel AI SDK frameworks.
+The CLI is an npm package (Node.js 20.12 or later). It can scaffold a TypeScript agent from a template, or register your own code as a runtime.
 
 ```bash
 npm install -g @aws/agentcore
 
-agentcore create --name OrderSupport \
-  --language TypeScript --framework Strands \
-  --model-provider Bedrock --memory none
+agentcore create --name OrderSupport --template agent-typescript-strands
 cd OrderSupport
 
 agentcore dev                                   # local server with hot reload (tsx watch)
-agentcore dev --stream "What can you do?"       # in a second terminal: prompt the running dev server
+agentcore invoke --local --runtime agent --payload '{"prompt": "What can you do?"}'   # in a second terminal
 agentcore deploy                                # CDK deploy to your AWS account
-agentcore invoke "Where is order ORD-7?"        # call the deployed runtime
+agentcore invoke --runtime agent --payload '{"prompt": "Where is order ORD-7?", "actorId": "user-123"}'
 ```
 
-The generated project's own README suggests `agentcore invoke --dev` for local calls, but `invoke` has no `--dev` option in the current CLI; `agentcore dev "<prompt>"` is the working form.
+`agentcore create --help` lists the TypeScript templates: `agent-typescript-strands` (Strands, with AgentCore Memory) and `agent-typescript-vercel` (Vercel AI SDK on Bedrock). Run `agentcore create` with no flags to choose a different model provider (Anthropic, OpenAI, an OpenAI-compatible endpoint or Gemini); the wizard keeps an API key in `agentcore/.env.local` and provisions it as an AgentCore Identity credential on deploy.
+
+To use code you already have, create an empty project and register a runtime:
+
+```bash
+agentcore create --name OrderSupport
+cd OrderSupport
+agentcore add runtime --name agent --language typescript
+```
+
+`add runtime` writes no code. It creates `app/agent/` with a `README.md` and `AGENTS.md` that state what the folder must provide: a `main.ts` entry (TypeScript is always bundled from `main.ts`), a `package.json`, and a server that follows the Runtime contract (the `BedrockAgentCoreApp` examples in the [AgentCore SDK guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/#runtime-bedrockagentcoreapp) do). `engines.node` in `package.json` constrains the managed runtime version. `--protocol` selects `HTTP` (the default), `MCP`, `A2A` or `AGUI`.
 
 The generated project looks like this:
 
@@ -69,10 +77,10 @@ OrderSupport/
 │   ├── aws-targets.json      # account and Region to deploy to
 │   ├── .env.local            # local-only secrets for agentcore dev
 │   └── cdk/                  # generated CDK app
-└── app/OrderSupport/
+└── app/agent/
     ├── main.ts               # BedrockAgentCoreApp + Strands agent (streams text deltas)
     ├── model/load.ts         # model provider setup
-    ├── mcp_client/client.ts  # example MCP client
+    ├── memory/memory.ts      # AgentCore Memory stores for Strands
     ├── package.json
     └── tsconfig.json
 ```
@@ -81,30 +89,32 @@ The runtime entry in `agentcore/agentcore.json` records how the agent is built:
 
 ```json
 {
-  "name": "OrderSupport",
+  "name": "agent",
   "build": "CodeZip",
+  "modelProvider": "Bedrock",
   "entrypoint": "main.js",
-  "codeLocation": "app/OrderSupport/",
+  "codeLocation": "app/agent",
   "runtimeVersion": "NODE_22",
-  "networkMode": "PUBLIC",
   "protocol": "HTTP"
 }
 ```
 
-`CodeZip` (the default) has the CLI install dependencies, run `npm run build` and upload the bundle to the managed Node.js runtime; `--build Container` generates a Dockerfile instead and builds an arm64 image. Other useful `create` flags are `--protocol` (`HTTP`, `MCP`, `A2A`, `AGUI`), `--memory shortTerm` or `longAndShortTerm`, and `--network-mode VPC` with `--subnets` and `--security-groups`.
+`CodeZip` (the default) has the CLI install dependencies, bundle the code and upload it to the managed Node.js runtime; adding a `Dockerfile` to the folder switches the runtime to a container build. Network mode, lifecycle limits, the request-header allowlist and the authorizer are options of `agentcore add runtime` (`--network-mode VPC` with `--network-config`, `--lifecycle-configuration`, `--request-header-allowlist`, `--authorizer-type CUSTOM_JWT`).
+
+The template also declares an AgentCore Memory resource, `agentMemory`, and the generated `memory/memory.ts` reads its ID from `MEMORY_AGENTMEMORY_ID`, which the CLI injects on deploy. Do not hard-code it.
 
 Two things to change in the generated code before you ship it:
 
-1. **Pin the model.** The template's `model/load.ts` sets an older Claude model ID. Set the one you want, for example `new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic%%' })`.
-2. **Check the dependency ranges.** The template's `package.json` uses caret ranges with low minimums (for example `bedrock-agentcore` `^0.3.0`, which does not admit 0.4.x). Set them to the versions you tested, such as `bedrock-agentcore@%%version=bedrock-agentcore-ts%%` and `@strands-agents/sdk@%%version=@strands-agents/sdk%%`, and commit the lock file.
+1. **Know which model it uses.** The template's `model/load.ts` sets `global.anthropic.claude-sonnet-5-5`, a global cross-Region inference profile. Choose the profile you want (for example `new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic%%' })` to keep inference in US Regions) and enable model access in the deployment Region.
+2. **Check the dependency ranges.** The template's `package.json` pins old minor versions with tilde ranges (for example `bedrock-agentcore` `~0.3.0` and `@strands-agents/sdk` `~1.5.0`), which do not admit newer releases. Set them to the versions you tested, such as `bedrock-agentcore@%%version=bedrock-agentcore-ts%%` and `@strands-agents/sdk@%%version=@strands-agents/sdk%%`, and commit the lock file. The template imports the memory helper from `bedrock-agentcore/experimental/memory/strands`; in newer SDK releases the path is `bedrock-agentcore/memory/strands`.
 
-Resources are added to the project and deployed together. For example, `agentcore add memory` declares an AgentCore Memory resource; on deploy the CLI grants the runtime access and injects the memory ID as `MEMORY_<NAME>_ID`. `agentcore add credential` and `agentcore add gateway` work the same way. After any `add` or `remove`, run `agentcore deploy` again. `agentcore logs`, `agentcore traces list` and `agentcore status` cover day-two operations.
+More resources are added to the project and deployed together. For example, `agentcore add memory` declares an AgentCore Memory resource; on deploy the CLI grants the runtime access and injects the memory ID as `MEMORY_<NAME>_ID`. `agentcore add credentials api-key|oauth` and `agentcore add gateway` work the same way. After any `add` or `remove`, run `agentcore deploy` again. `agentcore logs runtime`, `agentcore traces runtime list` and `agentcore status` cover day-two operations. A project created with a 0.x CLI is converted with `agentcore migrate`.
 
 ---
 
 ## Option 2: container image
 
-A container gives you full control over the Node.js version and system packages. This Dockerfile follows the one the CLI generates for TypeScript projects, with a compile step added:
+A container gives you full control over the Node.js version and system packages. This Dockerfile is a starting point for a Node.js agent that compiles TypeScript at build time. (With the CLI, adding a `Dockerfile` to a runtime's folder switches it to a container build.)
 
 ```dockerfile
 FROM --platform=linux/arm64 public.ecr.aws/docker/library/node:22-slim
@@ -282,4 +292,5 @@ Callers need `bedrock-agentcore:InvokeAgentRuntime` on the runtime (and its endp
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | `bedrock-agentcore` 0.4.6 · AgentCore CLI 1.0.0 | CLI section rewritten for CLI 1.0: templates, `add runtime`, template defaults and dependency ranges. |
 | 2026-10-21 | `bedrock-agentcore` 0.4.6 · AgentCore CLI 0.31.1 | New page. |

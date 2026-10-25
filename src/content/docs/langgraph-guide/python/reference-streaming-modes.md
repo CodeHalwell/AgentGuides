@@ -46,12 +46,13 @@ graph = (
 )
 
 cfg = {"configurable": {"thread_id": "t"}}
+inp = {"x": 0}   # the shorter snippets below reuse graph, cfg and inp
 
-for chunk in graph.stream({"x": 0}, cfg, stream_mode="updates"):
+for chunk in graph.stream(inp, cfg, stream_mode="updates"):
     print(chunk)
 # {'step': {'x': 1}}
 
-for part in graph.stream({"x": 0}, cfg, stream_mode="updates", version="v2"):
+for part in graph.stream(inp, cfg, stream_mode="updates", version="v2"):
     # part is a typed StreamPart dict
     print(part["type"], part["ns"], part["data"])
 # updates () {'step': {'x': 1}}
@@ -283,6 +284,8 @@ for part in graph.stream({"count": 0, "message": ""}, cfg, stream_mode="values",
     if part["interrupts"]:
         print("pending interrupts:", part["interrupts"])
 # values ()
+# state: {'count': 0, 'message': ''}       <- the input, before any node runs
+# values ()
 # state: {'count': 1, 'message': 'step 1'}
 ```
 
@@ -439,7 +442,7 @@ for chunk in graph.stream(inputs, stream_mode="messages", version="v2"):
 
 ### `"custom"`
 
-Write arbitrary values from inside a node using `get_stream_writer()` (preferred, context-var based) or by declaring `stream_writer: StreamWriter` as a node parameter (injection-based).
+Write arbitrary values from inside a node using `get_stream_writer()` (preferred, context-var based) or by declaring a parameter named **`writer`** annotated `StreamWriter` (injection-based). Injection is by that name: a parameter called `stream_writer` is not filled in, and the node fails with `TypeError: ... missing 1 required positional argument: 'stream_writer'`.
 
 #### `StreamWriter` type
 
@@ -448,7 +451,7 @@ Write arbitrary values from inside a node using `get_stream_writer()` (preferred
 StreamWriter = Callable[[Any], None]
 ```
 
-LangGraph always injects a `StreamWriter` into nodes that declare it as a parameter, but the callable is a no-op unless `stream_mode="custom"` (or a list containing `"custom"`) is active. This means you can safely leave `stream_writer` calls in production code without performance impact when not streaming.
+LangGraph injects a `StreamWriter` into nodes that declare a `writer` parameter, but the callable is a no-op unless `stream_mode="custom"` (or a list containing `"custom"`) is active. This means you can safely leave `stream_writer` calls in production code without performance impact when not streaming.
 
 #### Method 1: `get_stream_writer()` (recommended)
 
@@ -507,10 +510,10 @@ Node generate_joke updated: {'joke': 'Why did the ice cream go to school? To get
 from langgraph.types import StreamWriter
 
 
-def my_node(state: State, stream_writer: StreamWriter) -> dict:
-    stream_writer({"progress": "Step 1 complete"})
+def my_node(state: State, writer: StreamWriter) -> dict:   # must be named `writer`
+    writer({"progress": "Step 1 complete"})
     # ... do work ...
-    stream_writer({"progress": "Step 2 complete"})
+    writer({"progress": "Step 2 complete"})
     return {"result": "done"}
 ```
 
@@ -585,8 +588,7 @@ Emits a `CheckpointPayload` each time a checkpoint is created:
         "source": "loop",      # "input" | "loop" | "update"
         "step": 1,
         "parents": {},
-        "run_id": "...",
-        "writes": {...},       # channel writes at this step
+        "run_id": "...",       # present when the config carries a run_id
     },
     "values": {<state>},       # full state at this checkpoint
     "next": ["writer"],        # nodes scheduled to run next
@@ -810,7 +812,7 @@ with graph.stream_events(
 | `tool_name` | `str` | Name of the tool being executed. |
 | `input` | `dict \| None` | The tool's input arguments (from the `tool-started` event). |
 | `output_deltas` | `StreamChannel[Any]` | Channel of incremental output chunks. Iterate sync or async. |
-| `output` | `Any` | Final output from the `tool-finished` event — for `ToolNode`, the `ToolMessage`. `None` until complete. |
+| `output` | `Any` | Final output. For a `ToolNode` tool this is the tool's content (the string `'42'` in the example), not the `ToolMessage` that the raw `tool-finished` event carries. `None` until complete. |
 | `error` | `str \| None` | Error message from `tool-error`. `None` on success. |
 | `completed` | `bool` | `True` once a terminal event has been seen. |
 
@@ -863,7 +865,7 @@ On `invoke` / `stream`, set `durability="sync" | "async" | "exit"` to trade chec
 graph.stream(inp, cfg, stream_mode="updates", durability="sync")
 ```
 
-With `durability="exit"` you will not see `"checkpoints"` events per step — only at the very end.
+`durability` changes when checkpoints are written, not what is streamed: with `durability="exit"` the `"checkpoints"` mode still emits one event per step (checked against %%version=langgraph%%), but only the final checkpoint is persisted.
 
 ## `ainvoke` / `astream`
 
@@ -956,7 +958,7 @@ async for part in graph.astream(inp, cfg, stream_mode="checkpoints", version="v2
         "run_id": cp["metadata"]["run_id"],
         "step": cp["metadata"]["step"],
         "next": cp["next"],
-        "updated": cp["metadata"].get("writes"),
+        "values": cp["values"],
     })
 ```
 
@@ -1008,11 +1010,11 @@ When building reusable graph components that should not depend on `get_stream_wr
 from langgraph.types import StreamWriter
 
 
-def reusable_node(state: State, stream_writer: StreamWriter) -> dict:
+def reusable_node(state: State, writer: StreamWriter) -> dict:
     """Works whether called inside a graph stream or directly in tests."""
-    stream_writer({"event": "started"})
+    writer({"event": "started"})
     result = do_work(state)
-    stream_writer({"event": "finished", "output": result})
+    writer({"event": "finished", "output": result})
     return {"output": result}
 ```
 
@@ -1020,22 +1022,22 @@ In unit tests, pass a no-op or a list-appending collector:
 
 ```python
 events: list = []
-reusable_node({"x": 1}, stream_writer=events.append)
+reusable_node({"x": 1}, writer=events.append)
 assert events == [{"event": "started"}, {"event": "finished", "output": ...}]
 ```
 
 ## Gotchas
 
-- **Default stream mode is `"updates"`.** Passing `stream_mode=None` inherits from the graph's own default (which is `"updates"` for root graphs and `"values"` when invoked as a subgraph step).
+- **Default stream mode is `"updates"` for `stream()` on a `StateGraph`.** `invoke()` uses `"values"` internally, which is why it returns the final state.
 - **`"checkpoints"` needs a checkpointer.** Without one you get no events, not an error.
 - **`stream_mode="messages"` requires callbacks.** If you construct LLMs outside LangGraph and hand back messages manually, you won't see tokens. Use the LangChain `ChatModel` interface inside a node so callbacks fire.
 - **v2 is opt-in per call.** There is no global switch. Always pass `version="v2"` if you want typed output; otherwise you get the legacy shape.
 - **`print_mode=` is separate from `stream_mode=`.** `print_mode` prints to stdout for debugging and does not change what `stream()` yields.
 - **`subgraphs=True` changes the tuple shape.** With a single mode you get `(ns, data)`; with a list of modes you get `(ns, mode, data)`. With `version="v2"` this collapses because `ns` is always part of the `StreamPart`.
 - **The `"__interrupt__"` key only appears in `"updates"` v1 mode.** For `"values"` v2, interrupts live in `part["interrupts"]`.
-- **`stream_writer` calls are lost outside `"custom"` mode.** That's intentional — but if you expected to see them, add `"custom"` to `stream_mode`.
+- **Writer calls are lost outside `"custom"` mode.** That's intentional — but if you expected to see them, add `"custom"` to `stream_mode`.
 - **`print_mode` is additive.** Passing `print_mode="updates"` both prints updates **and** keeps whatever your `stream_mode` emits to the iterator.
-- **`get_stream_writer()` requires Python 3.11+ in async contexts.** In async nodes on Python 3.10 and below, declare `stream_writer: StreamWriter` as a parameter instead.
+- **`get_stream_writer()` requires Python 3.11+ in async contexts.** In async nodes on Python 3.10, declare a `writer: StreamWriter` parameter instead.
 - **v2 multi-mode no longer yields `(mode, data)` tuples.** When using a list of modes with `version="v2"`, every chunk is a `StreamPart` dict — use `chunk["type"]` instead of unpacking a tuple.
 - **`"debug"` is a superset of `"checkpoints"` + `"tasks"`.** Using `"debug"` alone in development is equivalent to receiving both, wrapped with step/timestamp context.
 
@@ -1043,7 +1045,7 @@ assert events == [{"event": "started"}, {"event": "finished", "output": ...}]
 
 | Version | Change |
 |---|---|
-| 1.1 | `version="v2"` on `stream`/`astream` yields typed `StreamPart` dicts; `invoke`/`ainvoke` with `version="v2"` return `GraphOutput`. `GraphOutput[key]` indexing raises `DeprecationWarning`. With v2, multi-mode lists yield `StreamPart` dicts (not `(mode, data)` tuples). |
-| 1.0 | `stream_mode="tasks"` split from `"debug"`; `"checkpoints"` added as its own mode. `StreamMode` literal type (`"values" \| "updates" \| "checkpoints" \| "tasks" \| "debug" \| "messages" \| "custom"`) stabilized in `langgraph.types`. |
-| 0.6 | `interrupt_before` / `interrupt_after` on `invoke`/`stream` accept `"*"` for all nodes. |
-| 0.5 | `checkpoint_during=False` deprecated in favor of `durability="exit"`. |
+| 1.2.0 | Experimental `stream_events(version="v3")` and the `"tools"` stream mode (`ToolCallTransformer` ships in `langgraph-prebuilt` 1.1.0). |
+| 1.1.0 | `version="v2"` on `stream`/`astream` yields typed `StreamPart` dicts; `invoke`/`ainvoke` with `version="v2"` return `GraphOutput`. `GraphOutput[key]` indexing warns. With v2, multi-mode lists yield `StreamPart` dicts (not `(mode, data)` tuples). |
+| 0.6 | `durability=` added; `checkpoint_during=` deprecated in its favour. |
+| 0.5 | `"checkpoints"` and `"tasks"` stream modes added. |

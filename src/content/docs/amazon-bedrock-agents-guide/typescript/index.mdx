@@ -74,7 +74,7 @@ curl -s -X POST http://localhost:8080/invocations \
   -d '{"prompt": "What is the weather in Leeds?"}'
 ```
 
-Deploy it with the AgentCore CLI (`agentcore create --name MyAgent --language TypeScript --framework Strands --model-provider Bedrock --memory none`, then `agentcore deploy`); see the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
+Deploy it with the AgentCore CLI (`agentcore create --name MyAgent --template agent-typescript-strands`, then `agentcore deploy`); see the [production page](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_production/).
 
 ## Key concepts
 
@@ -115,4 +115,5 @@ Deploy it with the AgentCore CLI (`agentcore create --name MyAgent --language Ty
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-24 | Strands TS 1.21.0 · AgentCore TS 0.4.6 · AgentCore CLI 1.0.0 | Deployment instructions updated for CLI 1.0 (`--template`, `add runtime`). |
 | 2026-10-21 | Strands TS 1.21.0 · AgentCore TS 0.4.6 | New TypeScript section: overview, Strands guide, AgentCore guide and deployment page, all examples compiled with `tsc --strict`. |

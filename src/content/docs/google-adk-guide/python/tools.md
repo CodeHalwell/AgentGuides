@@ -8,7 +8,7 @@ sidebar:
   order: 40
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; toolsets that call Google Cloud or third-party APIs were checked for construction only.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -42,7 +42,7 @@ Everything in `google.adk.tools` is lazy-loaded (`tools/__init__.py`):
 
 | Name | Kind | Import note |
 |---|---|---|
-| `BaseTool`, `BaseToolset` | Abstract | Subclass for custom tools |
+| `BaseTool` | Abstract | Subclass for custom tools (`BaseToolset` is imported from `google.adk.tools.base_toolset`) |
 | `FunctionTool` | Class | Wraps a callable |
 | `LongRunningFunctionTool` | Class | Wraps an async long-running callable |
 | `AgentTool` | Class | Wraps a `BaseAgent` as a tool |
@@ -144,6 +144,8 @@ async def save_and_return(
 
 **Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py`).
 
+**Exceptions are not caught.** An exception raised inside a tool function ends the run with that exception, unless an `on_tool_error_callback` or `ReflectAndRetryToolPlugin` handles it. For failures the model should see and work around (not found, invalid input), return a dict such as `{"error": "order Z9 not found"}` instead. (ADK for TypeScript differs here: it catches the error and sends it to the model.)
+
 **Argument validation (2.10.0+, opt-in).** With the experimental `FUNCTION_TOOL_ARG_VALIDATION` feature on, `FunctionTool` validates and coerces arguments against the type hints before calling, so `{"base": "3"}` becomes `base=3` for an `int` parameter, and a value that can't be coerced goes back to the model as an error it can correct:
 
 ```python
@@ -209,7 +211,7 @@ The key contract: the function **returns immediately** with a `{"status": "pendi
 | Aspect | `FunctionTool` | `LongRunningFunctionTool` |
 |---|---|---|
 | `is_long_running` flag | `False` | `True` |
-| Declaration description | Unchanged | "`[LONG RUNNING TOOL]` …do not call again if pending" appended |
+| Declaration description | Unchanged | "NOTE: This is a long-running operation. Do not call this tool again if it has already returned some intermediate or pending status." appended |
 | Return value | Anything JSON-serialisable | Same — **must** return immediately; typically `{"status": "pending", "job_id": ...}` |
 | Follow-up tool needed? | No | Yes (companion poll/status tool reads from `tool_context.state`) |
 
@@ -443,7 +445,7 @@ calendar_tool = AuthenticatedFunctionTool(func=read_calendar, auth_config=SHARED
 
 ## ExecuteBashTool and BashToolPolicy
 
-`ExecuteBashTool` (experimental, `@experimental(FeatureName.SKILL_TOOLSET)`) lets an agent run shell commands in a sandboxed workspace. It always requests user confirmation before executing.
+`ExecuteBashTool` lets an agent run shell commands with the working directory set to a workspace folder. It always requests user confirmation before executing, and the policy below limits what it will run; it is not a sandbox (see the security notes).
 
 Source: `tools/bash_tool.py`.
 
@@ -508,10 +510,6 @@ from google.adk.apps import App
 from google.adk.runners import InMemoryRunner
 from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
 from google.genai import types
-
-# Enable the experimental flag first
-import os
-os.environ["GOOGLE_ADK_ALLOW_FEATURES"] = "skill_toolset"
 
 policy = BashToolPolicy(
     allowed_command_prefixes=("ls", "cat", "echo", "python3 -c"),
@@ -783,7 +781,7 @@ scheme, cred = token_to_scheme_credential(
     name="X-API-Key",
     credential_value="my-secret-api-key",
 )
-toolset = OpenAPIToolset(spec_dict=spec, auth_scheme=scheme, auth_credential=cred)
+toolset = OpenAPIToolset(spec_dict=spec_dict, auth_scheme=scheme, auth_credential=cred)
 
 # ── Bearer token (OAuth2 token already obtained) ───────────────────────────────
 scheme, cred = token_to_scheme_credential(
@@ -802,7 +800,7 @@ scheme, cred = service_account_dict_to_scheme_credential(
     config=sa_dict,
     scopes=["https://www.googleapis.com/auth/cloud-platform"],
 )
-toolset = OpenAPIToolset(spec_dict=spec, auth_scheme=scheme, auth_credential=cred)
+toolset = OpenAPIToolset(spec_dict=spec_dict, auth_scheme=scheme, auth_credential=cred)
 
 # ── OpenID Connect via discovery URL ──────────────────────────────────────────
 scheme, cred = openid_url_to_scheme_credential(
@@ -828,7 +826,7 @@ def add_tenant_header(ctx: ReadonlyContext) -> dict[str, str]:
     }
 
 toolset = OpenAPIToolset(
-    spec_dict=spec,
+    spec_dict=spec_dict,
     header_provider=add_tenant_header,
 )
 ```
@@ -840,19 +838,19 @@ import ssl
 
 # Trust a custom CA bundle (e.g. corporate TLS-intercepting proxy)
 toolset = OpenAPIToolset(
-    spec_dict=spec,
+    spec_dict=spec_dict,
     ssl_verify="/etc/ssl/corp-ca-bundle.pem",  # path to PEM CA file
 )
 
 # Or pass an ssl.SSLContext for full control
 ctx = ssl.create_default_context()
 ctx.load_verify_locations("/etc/ssl/corp-ca.pem")
-toolset = OpenAPIToolset(spec_dict=spec, ssl_verify=ctx)
+toolset = OpenAPIToolset(spec_dict=spec_dict, ssl_verify=ctx)
 ```
 
 ### `APIHubToolset`
 
-`APIHubToolset` fetches specs from Google Cloud API Hub and wraps them as `OpenAPIToolset` instances. Requires `google-adk[extensions]`.
+`APIHubToolset` fetches specs from Google Cloud API Hub and wraps them as `OpenAPIToolset` instances. It needs no extra install, but it does need credentials for API Hub: an `access_token`, a `service_account_json` string, or Application Default Credentials.
 
 ```python
 from google.adk.tools import APIHubToolset
@@ -1216,10 +1214,12 @@ async def list_reports(tool_context: ToolContext) -> list[str]:
 
 ### Memory (from tools)
 
-All three memory methods require a `memory_service` to be configured on the `Runner`.
+These methods require a `memory_service` on the `Runner`, and `add_memory` also needs a service that supports direct writes (`VertexAiMemoryBankService`; the in-memory and SQLite services raise `NotImplementedError`).
 
 ```python
+from google.genai import types
 from google.adk.memory.memory_entry import MemoryEntry
+from google.adk.tools.tool_context import ToolContext
 
 async def remember_preference(pref: str, tool_context: ToolContext) -> dict:
     """Explicitly store a user preference in long-term memory.
@@ -1229,8 +1229,8 @@ async def remember_preference(pref: str, tool_context: ToolContext) -> dict:
     Returns:
       A dict with `ok: true`.
     """
-    await tool_context.add_memory(
-        memories=[MemoryEntry(content=pref)],
+    await tool_context.add_memory(   # VertexAiMemoryBankService only; others raise NotImplementedError
+        memories=[MemoryEntry(content=types.Content(role="user", parts=[types.Part(text=pref)]))],
     )
     return {"ok": True}
 
@@ -1348,9 +1348,9 @@ Available on `ReadonlyContext`: `user_content`, `invocation_id`, `agent_name`, `
 
 ## BigQueryToolset (experimental)
 
-> **Minimum version:** `google.adk.integrations.bigquery` was introduced after 2.7.1 — use **google-adk ≥ 2.9.0** for the imports shown below. On 2.7.x and earlier, the module path is `google.adk.tools.bigquery` (deprecated compatibility shim).
+> **Import path:** use `google.adk.integrations.bigquery`. The older `google.adk.tools.bigquery` still works in %%version=google-adk%% but emits a `DeprecationWarning`.
 
-`BigQueryToolset` lets an agent query BigQuery datasets, list tables, inspect schemas, and run SQL. Requires `pip install google-cloud-bigquery`.
+`BigQueryToolset` lets an agent query BigQuery: `list_dataset_ids`, `get_dataset_info`, `list_table_ids`, `get_table_info`, `get_job_info`, `execute_sql`, `search_catalog`, plus the analysis tools `ask_data_insights`, `forecast`, `detect_anomalies` and `analyze_contribution`. Requires `google-cloud-bigquery` (in the `gcp` extra).
 
 ```python
 from google.adk.integrations.bigquery import BigQueryToolset
@@ -1442,7 +1442,7 @@ Failures come back as `{"status": "ERROR", ...}`. `tool_filter=None` exposes all
 
 ## SpannerToolset (experimental)
 
-`SpannerToolset` exposes Cloud Spanner schema inspection and SQL execution. Provides `spanner_list_table_names`, `spanner_get_table_schema`, `spanner_execute_sql`, `spanner_similarity_search`, and more. Requires `pip install google-cloud-spanner`.
+`SpannerToolset` exposes Cloud Spanner schema inspection and SQL execution: `list_table_names`, `get_table_schema`, `list_table_indexes`, `list_table_index_columns`, `list_named_schemas`, `execute_sql` and `similarity_search`. Requires `google-cloud-spanner` (in the `gcp` extra).
 
 ```python
 from google.adk.tools.spanner.spanner_toolset import SpannerToolset
@@ -1467,11 +1467,11 @@ agent = LlmAgent(
 )
 ```
 
-The schema tools are always present. `spanner_execute_sql` and `spanner_similarity_search` are added only while `Capabilities.DATA_READ` is in `SpannerToolSettings.capabilities` (the default), and `spanner_vector_store_similarity_search` needs `vector_store_settings=SpannerVectorStoreSettings(...)` (table, content and embedding columns, vector length and the Vertex AI embedding model). `database_role` runs queries under a fine-grained access role. `SpannerAdminToolset` (same package) manages instances and databases; give it to an agent only if it should be able to change them.
+The schema tools are always present. `execute_sql` and `similarity_search` are added only while `Capabilities.DATA_READ` is in `SpannerToolSettings.capabilities` (the default), and `vector_store_similarity_search` needs `vector_store_settings=SpannerVectorStoreSettings(...)` (table, content and embedding columns, vector length and the Vertex AI embedding model). `database_role` runs queries under a fine-grained access role. `SpannerAdminToolset` (same package) manages instances and databases; give it to an agent only if it should be able to change them.
 
-## SkillToolset (experimental)
+## SkillToolset
 
-`SkillToolset` is an experimental feature that adds a skills system to an `LlmAgent`. A "skill" is a folder containing a `SKILL.md` instruction file (with optional `references/`, `assets/`, `scripts/` subfolders). The toolset dynamically exposes tools for the model to discover, load, and execute those skills.
+`SkillToolset` adds a skills system to an `LlmAgent`. A "skill" is a folder containing a `SKILL.md` instruction file (with optional `references/`, `assets/`, `scripts/` subfolders). The toolset dynamically exposes tools for the model to discover, load, and execute those skills.
 
 ```python
 from google.adk.tools.skill_toolset import SkillToolset
@@ -1578,7 +1578,7 @@ class InMemorySkillRegistry(SkillRegistry):
 toolset = SkillToolset(registry=InMemorySkillRegistry([python_skill]))   # adds search_skills
 ```
 
-> **Experimental**: `SkillToolset` is decorated with `@experimental(FeatureName.SKILL_TOOLSET)`. Its API may change in future releases. Suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
+`SkillToolset` itself is no longer experimental in %%version=google-adk%% (its feature flag is marked stable and on by default); skill lifecycles and snake_case names, above, still are. Suppress the warnings from experimental features with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
 
 ## Agent transfer
 
@@ -1706,9 +1706,9 @@ Spin up `McpToolset` at runtime (e.g. per-tenant filesystem); pass `tool_name_pr
 
 ## Gotchas
 
-- Since ADK 2.3.0, `output_schema=` and `tools=` can be used together on an `LlmAgent` — tools run during the thought loop and the schema is enforced only on the final reply.
+- `output_schema=` and `tools=` can be used together on an `LlmAgent`: tools run during the turn and the schema applies only to the final reply.
 - `tool_context` is injected by parameter name (`tool_context`) **or** type (`ToolContext`). Any other parameter of type `ToolContext` would also be treated as the context slot.
-- `FunctionTool` treats the first sentence of the docstring as the tool description. Keep it focused — the model obeys it.
+- `FunctionTool` sends the whole docstring (summary, `Args:` and `Returns:` sections) as the tool description. Keep it focused — the model reads every word.
 - Built-in Gemini tools (`google_search`, `url_context`, `google_maps_grounding`) cannot coexist freely. ADK tries to wrap them, but if you hit `400 INVALID_ARGUMENT` try `bypass_multi_tools_limit=True` where available.
 - `LongRunningFunctionTool` is just a `FunctionTool` with `is_long_running=True`. The model is separately instructed not to re-call it while pending.
 - Mutating `tool_context.state` with a reserved prefix (`app:`, `user:`, `temp:`) changes scope — see [runner-and-sessions](/google-adk-guide/python/runner-and-sessions/).

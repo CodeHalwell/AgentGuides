@@ -48,7 +48,7 @@ Agents form a tree: a top-level supervisor delegates to department supervisors, 
 └────────┘      └────────┘      └────────┘      └────────┘
 ```
 
-**Implementation with Bedrock Agents.** Build bottom-up: collaborators must be prepared and aliased before they can be associated with a supervisor (by alias ARN), and a supervisor can have up to 10 collaborators.
+**Implementation with Bedrock Agents.** Build bottom-up: collaborators must be prepared and aliased before they can be associated with a supervisor (by alias ARN), and the supervisor must be saved before you associate collaborators with it.
 
 ```python
 import boto3
@@ -119,7 +119,7 @@ class HierarchicalAgentSystem:
         return global_sup
 ```
 
-Check the current [multi-agent collaboration documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-multi-agent-collaboration.html) for collaborator limits and nesting rules before designing deep hierarchies; flatter trees are also faster and cheaper.
+Check the current [multi-agent collaboration documentation](https://docs.aws.amazon.com/bedrock/latest/userguide/agents-multi-agent-collaboration.html) and the service quotas for collaborator limits and nesting rules before designing deep hierarchies; flatter trees are also faster and cheaper. AWS also states that multi-agent collaboration has no direct equivalent in the managed harness: its migration guidance suggests exposing agents as MCP tools (the supervisor pattern) or writing multi-agent code on Runtime.
 
 **The same hierarchy in Strands** is a few lines, because agents can be tools of other agents:
 

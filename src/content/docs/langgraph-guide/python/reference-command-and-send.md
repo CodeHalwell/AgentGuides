@@ -58,11 +58,12 @@ builder.add_edge(START, "planner")
 
 graph = builder.compile()
 print(graph.invoke({"messages": [], "next": ""}))
+# {'messages': ['draft v1', 'critique', 'draft v1'], 'next': 'write'}
 ```
 
 Notes:
 
-- No `add_edge` from `planner` to `writer` / `critic` / `END` — the node returns `Command(goto=...)`. Declare `destinations={"writer", "critic"}` on `add_node` only for diagram purposes.
+- No `add_edge` from `planner` to `writer` / `critic` / `END` — the node returns `Command(goto=...)`. Declaring `destinations=("writer", "critic", END)` on `add_node` adds the same edges to the diagram.
 - Type-hinting the return as `Command[Literal["writer", "critic", "__end__"]]` keeps the Mermaid visualization accurate.
 
 ## `Command` in full
@@ -102,7 +103,7 @@ Command(goto=[Send("w", {"i": i}) for i in xs])  # fan-out with Sends
 Special values:
 
 - `END` → terminate this execution path.
-- A node name not in the graph raises `ValueError` at runtime.
+- A node name not in the graph does **not** raise: in %%version=langgraph%% the write is dropped with a logged warning (`wrote to unknown channel branch:to:<name>, ignoring it`) and that path simply ends. Declaring the targets with `destinations=` or a `Command[Literal[...]]` return type makes `compile()` check them.
 - Mixing `Send` and plain names in the same list is allowed.
 
 ### `resume`
@@ -130,7 +131,7 @@ From inside a subgraph node, this routes the command to the **parent** graph —
 class Send:
     node: str
     arg:  Any
-    timeout: TimeoutPolicy | None   # added in 1.2.x
+    timeout: TimeoutPolicy | None   # added in 1.2.0
 
     def __init__(
         self,
@@ -152,7 +153,7 @@ class Send:
 
 The receiving node runs with the provided `arg` as its state snapshot for this task. The node is a concrete named node; the sent state can be any subset of the node's input schema.
 
-Equality is structural (`node` + `arg` + `timeout`), and `Send` is hashable.
+Equality is structural (`node` + `arg` + `timeout`). `hash(Send(...))` hashes the `arg` too, so a `Send` whose `arg` is a dict is not hashable (`TypeError`); keep `Send`s in lists, not sets.
 
 ### Per-task timeout on `Send`
 
@@ -231,19 +232,18 @@ Semantics:
 - First execution inside a node raises a `GraphInterrupt` containing an `Interrupt(value, id)`. The graph pauses; the `Interrupt` shows up in `StateSnapshot.interrupts` and in the `__interrupt__` key emitted on `stream_mode="updates"`.
 - The client resumes with `graph.invoke(Command(resume="42"), cfg)`. The node **re-runs from the top**, this time `interrupt(...)` returns `"42"`.
 - Multiple `interrupt()` calls in one node are matched by order in the current task. Resume values scope to the task, not the graph.
-- A checkpointer is **required**. Without one, `interrupt()` raises with no way to resume.
+- A checkpointer is **required** to resume. Without one, `invoke` stops at the interrupt and returns the state with an `__interrupt__` key, and `Command(resume=...)` then raises `RuntimeError: Cannot use Command(resume=...) without checkpointer`.
 
-Resume by id when a node has several interrupts:
+Resume by id when several tasks are paused at once (for example, parallel nodes that each call `interrupt()`):
 
 ```python
 from langgraph.types import Command
 cfg = {"configurable": {"thread_id": "t"}}
-# From the streaming output, you saw:
-# __interrupt__ = (Interrupt(value=..., id='abc'), Interrupt(value=..., id='def'))
-graph.invoke(Command(resume={"abc": "yes", "def": "no"}), cfg)
+pending = graph.get_state(cfg).interrupts          # one Interrupt per paused task
+graph.invoke(Command(resume={i.id: "yes" for i in pending}), cfg)
 ```
 
-When one node calls `interrupt()` several times, the graph pauses at each call in turn, so in practice you resume one id at a time: read `graph.get_state(cfg).interrupts[0].id`, resume it, and the next interrupt surfaces with its own id.
+With more than one interrupt pending, a non-mapping resume value raises `RuntimeError: When there are multiple pending interrupts, you must specify the interrupt id when resuming.` The id identifies the task, so when one node calls `interrupt()` several times every call reports the same id; the graph pauses at each call in turn and you resume them in order. [Chapter 7](/langgraph-guide/python/chapter-07-human-in-the-loop/#example-3-resume-by-interrupt-id) has a runnable example.
 
 > Checkpoint history is not a complete interrupt audit log. Repeated `interrupt()` calls in one node reuse the same task slot, so `get_state_history()` only shows the interrupts each snapshot retained. If you need every interrupt that ever fired, record the `__interrupt__` events as you stream.
 
@@ -339,8 +339,7 @@ def dispatch(state: dict) -> list[Send]:
 
 builder.add_node("score", score_fn)
 builder.add_conditional_edges("dispatch", dispatch)
-builder.add_edge("score", "aggregate")
-builder.add_edge(["dispatch", "score"], "aggregate")   # barrier wait
+builder.add_edge("score", "aggregate")   # aggregate runs once, after every score task in the step
 ```
 
 `score` runs once per item with its own state snapshot. Use a reducer on the downstream channel (e.g., `Annotated[list, operator.add]`) so results concatenate.
@@ -556,6 +555,8 @@ parent.add_node("supervisor", supervisor, destinations=["researcher", "writer", 
 parent.add_node("researcher", researcher)
 parent.add_node("writer", writer)
 parent.add_edge(START, "supervisor")
+parent.add_edge("researcher", "supervisor")   # report back after each subgraph finishes
+parent.add_edge("writer", "supervisor")
 
 graph = parent.compile(checkpointer=InMemorySaver())
 cfg = {"configurable": {"thread_id": "multi-1"}}
@@ -673,12 +674,12 @@ graph.invoke({
 
 ## Gotchas
 
-- **`Command(goto="name")` bypasses explicit edges.** A node that returns a Command will follow the command's goto even if you called `add_edge("node", "next")`. Pick one style per node.
+- **`Command(goto="name")` adds to explicit edges; it does not replace them.** A node with `add_edge("node", "next")` that returns `Command(goto="other")` runs both `other` and `next` in the next step. Pick one style per node.
 - **`Command.goto` does not accept `str` for subgraph namespaces.** Always use a plain node name at the current graph level; cross-graph jumps use `graph=Command.PARENT`.
 - **The type parameter on `Command[Literal[...]]` is for the visualizer.** It doesn't narrow to runtime errors.
 - **`Send(node, arg)` ignores the main state.** `arg` *is* the snapshot for the target node's run. If you need context, stuff it into `arg`.
-- **Equality compares `arg` too.** Two `Send("x", {...})` with unhashable dicts are hashable at the `Send` level but raise if you stick them in a set without care — dict compares structurally, hash uses tuple of `(node, arg)`.
-- **A node that returns `Command(graph=Command.PARENT)` outside a subgraph raises.** Only valid when the node runs inside a compiled subgraph used by a parent.
+- **`Send` with a dict `arg` is unhashable.** Equality compares `arg` structurally, and `hash()` hashes `(node, arg, timeout)`, so putting such a `Send` in a set raises `TypeError`.
+- **A node that returns `Command(graph=Command.PARENT)` outside a subgraph raises `ParentCommand`.** Only valid when the node runs inside a compiled subgraph used by a parent.
 - **`update=` in a `Command` still goes through reducers.** Use `Overwrite(...)` in the `update` values if you need to replace a reducing channel.
 - **Resuming an interrupt re-runs the node from the top.** Make side effects idempotent or put them in `@task`s.
 
@@ -686,7 +687,7 @@ graph.invoke({
 
 | Version | Change |
 |---|---|
-| 1.0 | `Command` is the canonical way for a node/tool to return control-flow intent. Returning a dict still works for pure state updates. |
-| 0.6 | `Interrupt.ns`, `Interrupt.when`, `Interrupt.resumable` removed. `Interrupt.interrupt_id` deprecated in favor of `Interrupt.id`. |
-| 0.4 | `Interrupt.id` introduced as a property, supporting resume-by-id via `Command(resume={id: value})`. |
-| 0.2.24 | `RetryPolicy`, `CachePolicy`, `Interrupt` first exported from `langgraph.types`. |
+| 1.2.0 | `Send(..., timeout=...)`. |
+| 0.6 | `Interrupt.ns`, `Interrupt.when`, `Interrupt.resumable` removed; `Interrupt.id` added and `Interrupt.interrupt_id` deprecated in its favour. |
+| 0.4 | `Interrupt.interrupt_id` property added. |
+| 0.2.24 | `Interrupt` added. |

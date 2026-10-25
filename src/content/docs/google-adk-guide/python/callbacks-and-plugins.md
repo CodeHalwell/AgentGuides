@@ -8,7 +8,7 @@ sidebar:
   order: 60
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/agents/llm_agent.py`, `google/adk/plugins/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini.
 
 Callbacks and plugins are the two interception surfaces in ADK. **Callbacks** are configured per-agent. **Plugins** are configured per-runner and apply globally. Plugins run **before** agent callbacks at each hook point and short-circuit the chain if any one returns a non-`None` value (`plugins/base_plugin.py`).
 
@@ -48,10 +48,10 @@ Set these as fields on `LlmAgent` (or `BaseAgent` for agent-level hooks). Each a
 | `after_model_callback` | `(callback_context, llm_response)` | `LlmResponse` → replace response; `None` → proceed |
 | `on_model_error_callback` | `(callback_context, llm_request, error)` | `LlmResponse` → swallow the error; `None` → re-raise |
 | `before_tool_callback` | `(tool, args, tool_context)` | `dict` → skip the tool, use dict as result; `None` → proceed |
-| `after_tool_callback` | `(tool, args, tool_context, result)` | `dict` → replace result; `None` → proceed |
+| `after_tool_callback` | `(tool, args, tool_context, tool_response)` | `dict` → replace result; `None` → proceed |
 | `on_tool_error_callback` | `(tool, args, tool_context, error)` | `dict` → swallow the error; `None` → re-raise |
 
-All callbacks may be sync or async.
+All callbacks may be sync or async. ADK passes the arguments by the names in the table, and falls back to passing them positionally in that order when your function uses other parameter names, so `def check(tool, tool_args, ctx)` also works.
 
 ```python
 async def inject_context(callback_context, llm_request):
@@ -67,17 +67,9 @@ agent = LlmAgent(
 
 ### `CallbackContext` and `ToolContext` — both are `Context`
 
-In google-adk 2.x, `CallbackContext` and `ToolContext` are **both type aliases for `Context`** (verified in `agents/callback_context.py` and `tools/tool_context.py`):
+In google-adk 2.x, `CallbackContext` (in `google.adk.agents.callback_context`) and `ToolContext` (in `google.adk.tools.tool_context`) are both aliases of `google.adk.agents.context.Context`: `CallbackContext is Context` and `ToolContext is Context` are both true.
 
-```python
-# agents/callback_context.py
-CallbackContext = Context
-
-# tools/tool_context.py
-ToolContext = Context
-```
-
-This means every callback — whether agent-level, model-level, or tool-level — receives the same `Context` object with access to the full surface: `state`, `agent_name`, `invocation_id`, `session`, `function_call_id`, artifact helpers, and workflow APIs (`route`, `interrupt`, `run_node`). **Note:** `request_credential()` and `request_confirmation()` are tool-only operations — calling them from an agent-level or model-level callback (where `function_call_id` is `None`) raises `ValueError`.
+This means every callback — whether agent-level, model-level, or tool-level — receives the same `Context` object with access to the full surface: `state`, `agent_name`, `invocation_id`, `session`, `function_call_id`, artifact and memory helpers, and the workflow APIs (`route`, `run_node`, `resume_inputs`). **Note:** `request_credential()` and `request_confirmation()` are tool-only operations — calling them from an agent-level or model-level callback (where `function_call_id` is `None`) raises `ValueError`.
 
 ```python
 from google.adk.agents import LlmAgent
@@ -346,7 +338,7 @@ from google.adk.plugins import LoggingPlugin
 
 app = App(
     name="my_app",
-    root_agent=my_agent,
+    root_agent=agent,                           # the assistant agent from the previous example
     plugins=[AuditPlugin(), LoggingPlugin()],  # AuditPlugin runs first
 )
 ```
@@ -440,13 +432,17 @@ class JsonLoggingPlugin(LoggingPlugin):
 
 ### `DebugLoggingPlugin`
 
-Per-invocation verbose dump — full LLM prompts, responses, and tool I/O. Use in dev only; it writes large payloads.
+Writes a verbose YAML record of each invocation (full LLM requests and responses, tool calls and results, and, by default, the session state and system instruction) to `adk_debug.yaml`. Use it in development only: the file grows quickly and contains everything the user and model said.
 
 ```python
 from google.adk.plugins import DebugLoggingPlugin
 from google.adk.apps import App
 
-app = App(name="dev", root_agent=agent, plugins=[DebugLoggingPlugin()])
+app = App(
+    name="dev",
+    root_agent=agent,
+    plugins=[DebugLoggingPlugin(output_path="debug/adk_debug.yaml", include_session_state=False)],
+)
 ```
 
 ### `ReflectAndRetryToolPlugin` (experimental)
@@ -515,7 +511,7 @@ async def dynamic_instruction(ctx: ReadonlyContext) -> str:
     tenant = ctx.state.get("app:tenant_name", "default")
     return f"You represent {tenant}. Always greet with the company name."
 
-plugin = GlobalInstructionPlugin(instruction=dynamic_instruction)
+plugin = GlobalInstructionPlugin(global_instruction=dynamic_instruction)
 ```
 
 ### `SaveFilesAsArtifactsPlugin`
@@ -601,7 +597,7 @@ The plugin only trims the outgoing request; the stored session is untouched. Pai
 
 ### `MultimodalToolResultsPlugin`
 
-Handles tool responses that contain multimodal parts (images, audio clips, etc.). Without this plugin, binary tool results are dropped. With it, they are preserved as `inline_data` parts in the LLM response.
+Lets a function tool return `types.Part` objects directly. You no longer need it for media: by default ADK moves image and audio parts a tool returns into the function response itself. What the plugin still handles is parts that field cannot carry, such as a text `Part`; the ADK source describes it as transitional, to be removed once those are handled directly.
 
 ```python
 from google.adk.plugins.multimodal_tool_results_plugin import MultimodalToolResultsPlugin
@@ -660,7 +656,7 @@ app = App(
 
 ## Terminating an invocation from a callback
 
-Any callback that has access to `invocation_context` (plugins, agent callbacks) can set `invocation_context.end_invocation = True` to abort the current invocation after the running step completes. This is the correct way to perform hard termination — as opposed to returning a canned `LlmResponse` which only skips the current LLM call.
+Code that holds the invocation context can set `invocation_context.end_invocation = True` to stop the current invocation after the running step completes. Plugins' run-level hooks (`on_user_message_callback`, `before_run_callback`, `on_event_callback`) receive it as `invocation_context`. Model, tool and agent callbacks get a `Context`, whose public `get_invocation_context()` returns a copy, so setting the flag there has no effect; the example below reaches the real one through the private `_invocation_context` attribute, which works in %%version=google-adk%% but may change. This is the correct way to perform hard termination — as opposed to returning a canned `LlmResponse` which only skips the current LLM call.
 
 ```python
 from typing import Any, Optional

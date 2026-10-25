@@ -12,6 +12,8 @@ sidebar:
 
 Knowledge is a read-mostly vector store attached to an `Agent` or `Crew`. Unlike [Memory](/crewai-guide/crewai_memory_python/) it's populated ahead of time and isn't automatically written to during a run.
 
+How a task uses it (we traced the prompts with a scripted model): before the agent starts a task, it sends the task text to its own LLM with an instruction to rewrite it as a query for a vector database. That query is run against the agent's knowledge (and the crew's), and the matching chunks are appended to the task prompt as `Additional Information: ...`. So knowledge costs one extra model call per task, and the quality of the rewritten query decides what is retrieved. Chunks scoring below `score_threshold` (0.6 by default) are dropped, which means a vague question can retrieve nothing.
+
 ## Minimal runnable example
 
 ```python
@@ -65,7 +67,7 @@ Common fields on every source:
 | `chunk_size` | `int` | `4000` | Character size per chunk. |
 | `chunk_overlap` | `int` | `200` | Overlap between chunks. |
 | `metadata` | `dict` | `{}` | Currently unused but preserved on the source. |
-| `collection_name` | `str \| None` | `None` | Explicit collection name. Defaults to the agent `role`. |
+| `collection_name` | `str \| None` | `None` | Explicit collection name. Agent knowledge defaults to the agent `role`; crew knowledge uses `"crew"`. |
 
 File sources additionally accept `file_paths=[...]`. The singular `file_path` still works but is deprecated.
 
@@ -91,7 +93,14 @@ jsons = JSONKnowledgeSource(file_paths=["config/routes.json"])
 texts = TextFileKnowledgeSource(file_paths=["README.md"])
 ```
 
-Paths are resolved relative to `knowledge/` in the project root unless absolute — CrewAI will look there first.
+File paths given as **strings** are always looked up under `knowledge/` in the working directory: `"contracts/2024.pdf"` means `knowledge/contracts/2024.pdf`, and an absolute string such as `"/data/2024.pdf"` becomes `knowledge//data/2024.pdf` and fails with `FileNotFoundError`. To read a file from anywhere else, pass a `pathlib.Path`, which is used as it is:
+
+```python
+from pathlib import Path
+from crewai.knowledge.source.text_file_knowledge_source import TextFileKnowledgeSource
+
+notes = TextFileKnowledgeSource(file_paths=[Path("/data/handbook.txt")])
+```
 
 ## Excel source
 
@@ -275,8 +284,9 @@ Docling treats URLs and local paths the same as long as the format is supported.
 
 ## Gotchas
 
-- **`knowledge/` is the default root.** Relative paths are resolved there; absolute paths work everywhere.
-- **Embedder needed.** Either pass `embedder=` on the agent/crew, or set `OPENAI_API_KEY` for the default.
+- **`knowledge/` is the root for string paths.** Every string path is resolved there, absolute ones included. Use `pathlib.Path` for files elsewhere.
+- **Embedder needed.** Either pass `embedder=` on the agent/crew, or set `OPENAI_API_KEY` for the default. An agent's sources are indexed at kickoff, so a missing key fails there before any task runs. A crew's `knowledge_sources` are indexed when the `Crew` is built, and a failure there is logged as a warning rather than raised.
+- **One extra LLM call per task** for the query rewrite, on the agent's own model.
 - **`PDFKnowledgeSource` uses pdfplumber**, not the Docling path. If you need tables/images extracted, use `CrewDoclingSource`.
 - **Chunking is naive by default** — a sliding window over characters. Override `_chunk_text` in a subclass if you need sentence-aware splits.
 - **`file_path` is deprecated.** Always use `file_paths=[...]`, even for a single file.

@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Production guide"
+  order: 85
 ---
 
 This page is about the parts of running an agent in production that are specific to Agent Framework. General container, networking and CI/CD setup is not repeated here; Microsoft's [Azure Container Apps documentation](https://learn.microsoft.com/azure/container-apps/) covers it.
@@ -70,7 +71,7 @@ Each agent becomes a durable entity whose conversation state is stored by Durabl
 
 ### Your own service
 
-Build one agent per process at start-up, keep a session per conversation in a shared history provider (Redis or Cosmos DB when you run more than one replica), and close the chat client at shutdown. Section 10 below has the FastAPI pattern, per-tenant scoping, timeouts, concurrency limits and health checks.
+Build one agent per process at start-up, keep a session per conversation in a shared history provider (Redis or Cosmos DB when you run more than one replica), and close the agent at shutdown (`await agent.close()`, or `async with agent:`), which closes the MCP connections it opened. Section 10 below has the FastAPI pattern, per-tenant scoping, timeouts, concurrency limits and health checks.
 
 ## 2. Observability
 
@@ -99,9 +100,10 @@ Treat tool output, retrieved documents and MCP results as untrusted. Agent Frame
    from agent_framework import Agent
    from agent_framework.foundry import FoundryChatClient
    from agent_framework.security import SecureAgentConfig
+   from azure.identity import DefaultAzureCredential
 
    agent = Agent(
-       client=FoundryChatClient(),
+       client=FoundryChatClient(credential=DefaultAzureCredential()),   # endpoint and model from FOUNDRY_* env vars
        instructions="You triage inbound email.",
        tools=[read_inbox, send_reply],
        context_providers=[
@@ -161,11 +163,12 @@ Before pushing to ACA, smoke-test the agent against a real model using `agent-fr
 from agent_framework import Agent
 from agent_framework.devui import serve
 from agent_framework.foundry import FoundryChatClient
+from azure.identity import DefaultAzureCredential
 
 
 def build_agent() -> Agent:
     return Agent(
-        client=FoundryChatClient(),                    # picks up FOUNDRY_PROJECT_ENDPOINT / FOUNDRY_MODEL
+        client=FoundryChatClient(credential=DefaultAzureCredential()),   # endpoint and model from FOUNDRY_* env vars
         instructions="You are an internal support agent.",
     )
 
@@ -180,13 +183,14 @@ if __name__ == "__main__":
     )
 ```
 
-Hardening before sharing the URL with a teammate:
+Authentication and exposure:
 
-- Use `mode="user"` instead of the default `"developer"` — generic error messages, admin endpoints disabled.
-- `auth_enabled=True` enforces a Bearer token on every request. Pass `DEVUI_AUTH_TOKEN` in the environment to keep the same token across restarts; otherwise the server auto-generates one and prints it on startup.
-- Network-exposing the server (`host="0.0.0.0"`) without auth raises a loud startup warning — DevUI is a development harness, not a production runtime.
+- Bearer-token auth on the `/v1/*` API is **on by default** (`auth_enabled=True`). Set `DEVUI_AUTH_TOKEN` (or pass `auth_token=`) to keep the same token across restarts; on a loopback host without one, the server generates a token and logs it at start-up.
+- `auth_enabled=False` (CLI: `--no-auth`) is only allowed on loopback hosts. Binding to a network address such as `host="0.0.0.0"` without a token raises `ValueError` at start-up.
+- Use `mode="user"` instead of the default `"developer"` before showing it to others: generic error messages and restricted APIs.
+- DevUI is a development harness, not a production runtime.
 
-For directory-style discovery (one folder per agent), use `serve(entities_dir="./agents", ...)` or run `devui ./agents --port 8080 --auth` from the CLI.
+For directory-style discovery (one folder per agent), use `serve(entities_dir="./agents", ...)` or run `devui ./agents --port 8080` from the CLI (`--auth-token`, `--mode user` and `--no-auth` are the related flags).
 
 ---
 
@@ -209,7 +213,7 @@ from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
 
 project = AIProjectClient(
-    endpoint="https://corp-foundry.services.ai.azure.com",
+    endpoint="https://corp-foundry.services.ai.azure.com/api/projects/support",
     credential=DefaultAzureCredential(),
 )
 
@@ -225,15 +229,17 @@ All three clients implement the same `SupportsChatGetResponse` protocol, so you 
 
 ### Reuse one `Agent` per process
 
-`Agent` is cheap to call but moderately expensive to construct (chat client, middleware pipelines, context provider registration). Build one at startup and pass it through dependency injection:
+Build the agent (and its chat client, which holds the HTTP connection pool) once at start-up and pass it through dependency injection:
 
 ```python
 # app.py
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
-from agent_framework import Agent, InMemoryHistoryProvider
-from agent_framework.foundry import FoundryChatClient
 
+from azure.identity.aio import DefaultAzureCredential
+from fastapi import Depends, FastAPI
+from agent_framework import Agent
+from agent_framework.foundry import FoundryChatClient
+from agent_framework.redis import RedisHistoryProvider
 
 _agent: Agent | None = None
 
@@ -241,13 +247,15 @@ _agent: Agent | None = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global _agent
-    _agent = Agent(
-        client=FoundryChatClient(),
-        instructions="You are the customer-support agent.",
-        context_providers=[InMemoryHistoryProvider()],
-    )
-    yield
-    # Nothing to dispose — the chat client cleans up its httpx pools on GC.
+    async with DefaultAzureCredential() as credential:
+        _agent = Agent(
+            client=FoundryChatClient(credential=credential),
+            instructions="You are the customer-support agent.",
+            context_providers=[RedisHistoryProvider(redis_url="redis://redis:6379", application_id="support")],
+            default_options={"store": False},     # history lives in Redis, not in the Foundry service
+        )
+        async with _agent:                        # closes MCP connections on shutdown
+            yield
 
 
 app = FastAPI(lifespan=lifespan)
@@ -259,11 +267,13 @@ def get_agent() -> Agent:
 
 
 @app.post("/chat")
-async def chat(message: str, agent: Agent = Depends(get_agent)):
-    return await agent.run(message)
+async def chat(conversation_id: str, message: str, agent: Agent = Depends(get_agent)) -> dict:
+    session = agent.create_session(session_id=conversation_id)   # authorise access to this id first
+    response = await agent.run(message, session=session)
+    return {"reply": response.text}
 ```
 
-Per-request state (conversation history, user context) lives in the `AgentSession`, not the agent — create a session per user/conversation and pass `session=` on each `agent.run(...)`.
+Per-request state (conversation history, user context) lives in the `AgentSession` and the history provider, not the agent. Return `response.text` (or your own model) rather than the `AgentResponse` object, which is not a Pydantic model.
 
 ### Per-tenant scoping
 
@@ -320,7 +330,9 @@ Front-line `OpenAIChatClient` / `FoundryChatClient` traffic is rate-limited by y
 
 ```python
 import asyncio
-from agent_framework import AgentMiddleware, AgentContext
+from agent_framework import Agent, AgentContext, AgentMiddleware
+from agent_framework.foundry import FoundryChatClient
+from azure.identity import DefaultAzureCredential
 
 
 class ConcurrencyLimit(AgentMiddleware):
@@ -333,7 +345,7 @@ class ConcurrencyLimit(AgentMiddleware):
 
 
 agent = Agent(
-    client=FoundryChatClient(),
+    client=FoundryChatClient(credential=DefaultAzureCredential()),
     instructions="…",
     middleware=[ConcurrencyLimit(max_concurrent=8)],
 )
@@ -356,7 +368,7 @@ If you genuinely need a readiness probe that proves the model deployment is reac
 
 ### Checkpoint hygiene
 
-`FileCheckpointStorage` and Cosmos / Redis backends accumulate over time. Add a scheduled task that prunes old checkpoints per workflow:
+`FileCheckpointStorage` and the Cosmos DB backend accumulate checkpoints over time. Add a scheduled task that prunes old checkpoints per workflow (`list_checkpoint_ids(workflow_name=...)` and `delete(checkpoint_id)` are part of the `CheckpointStorage` protocol):
 
 ```python
 async def prune_checkpoints(storage, *, workflow_name: str, keep: int = 50) -> int:
@@ -377,7 +389,11 @@ When the model API is degraded, fail fast rather than waiting for every request 
 ```python
 import asyncio
 import time
-from agent_framework import ChatMiddleware, ChatContext, MiddlewareTermination
+from agent_framework import ChatContext, ChatMiddleware
+
+
+class ModelUnavailable(Exception):
+    """Raised while the circuit is open; catch it around agent.run()."""
 
 
 class ModelCircuitBreaker(ChatMiddleware):
@@ -399,7 +415,7 @@ class ModelCircuitBreaker(ChatMiddleware):
     async def process(self, context: ChatContext, call_next) -> None:
         async with self._lock:
             if time.time() < self._open_until:
-                raise MiddlewareTermination("model unavailable — circuit open")
+                raise ModelUnavailable("model unavailable: circuit open")
 
         try:
             await call_next()
@@ -414,4 +430,10 @@ class ModelCircuitBreaker(ChatMiddleware):
                 self._fail_count = 0
 ```
 
-Pair with a retry middleware that catches `MiddlewareTermination("model unavailable...")` and routes to a fallback agent (or a static answer). Two layers, single circuit-breaker source of truth.
+The exception propagates out of `agent.run()`, so the request handler can catch `ModelUnavailable` and fall back to another agent or a static answer. Do not use `MiddlewareTermination` here: raised from chat middleware without a `context.result`, it makes `agent.run()` fail with an `AttributeError` in %%version=agent-framework%%. To answer without calling the model, set `context.result` to a `ChatResponse` and return instead.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Fixed `FoundryChatClient()` examples that omitted the required credential, the FastAPI example (returned a non-serialisable `AgentResponse`, no session, no shutdown), DevUI auth defaults (auth is on by default; network binds without a token fail), the project-endpoint format and the circuit breaker (`MiddlewareTermination` from chat middleware breaks the run). |

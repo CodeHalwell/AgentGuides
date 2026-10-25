@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Comprehensive guide"
+  order: 2
 ---
 
 **Version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep), checked %%versions-checked%%. Python 3.10+.
@@ -346,7 +347,7 @@ print(final.value.version)        # parsed on first access
 
 ## Sessions and history
 
-`AgentSession` is a `session_id` plus a `state` dict that context providers read and write. History is stored by a `HistoryProvider`. The agent adds an `InMemoryHistoryProvider` when you don't configure one, which keeps messages in `session.state` for the life of the process.
+`AgentSession` is a `session_id` plus a `state` dict that context providers read and write. Where the history goes when you configure nothing depends on the client: `OpenAIChatClient` (Responses API) and `FoundryChatClient` store the conversation on the service and keep only its id in `session.service_session_id`; every other client gets an automatic `InMemoryHistoryProvider`, which keeps the messages in `session.state`. Set `store=False` in the options to keep history local with a storing client, or configure a `HistoryProvider` yourself.
 
 | Need | Use |
 |---|---|
@@ -354,7 +355,7 @@ print(final.value.version)        # parsed on first access
 | Several processes share history | Redis (`agent-framework-redis`) or Cosmos DB (`agent-framework-azure-cosmos`) history providers |
 | Your own store (Postgres, S3, ...) | Subclass `HistoryProvider` and implement `get_messages` and `save_messages` |
 | Move a whole session between workers | `session.to_dict()` / `AgentSession.from_dict()`, or `FileSessionStore` |
-| Provider keeps the history (OpenAI Responses, Foundry) | Persist only `session_id` and `service_session_id` |
+| Provider keeps the history (OpenAI Responses, Foundry; the default for those clients) | Persist only `session_id` and `service_session_id` |
 
 All of these, plus write-only audit copies and `VectorStoreHistoryProvider`, are covered with examples on the [sessions page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/).
 
@@ -477,6 +478,27 @@ async def upper_case(
 ```
 
 If a custom executor sent a plain `str` to the next agent, that agent would see only the string; `AgentExecutorResponse.with_text()` keeps the full conversation attached.
+
+Two details of function executors catch people out. First, **the function's return value is ignored**: nothing reaches the next node unless you call `await ctx.send_message(...)`, and nothing becomes a workflow output unless you call `await ctx.yield_output(...)`. Second, both of those are coroutines, so an executor that emits anything must be an `async def`. Synchronous functions are accepted (they run in a worker thread through `asyncio.to_thread`), but they cannot await the context, so they suit only side-effect steps at the end of a branch. `FunctionExecutor(func, id=...)` wraps an existing function without decorating it:
+
+```python
+from typing_extensions import Never
+from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowContext, executor
+
+
+@executor(id="upper_case")
+async def upper_case(text: str, ctx: WorkflowContext[str]) -> None:
+    await ctx.send_message(text.upper())          # returning text.upper() would send nothing
+
+
+async def word_count(doc: str, ctx: WorkflowContext[Never, int]) -> None:
+    await ctx.yield_output(len(doc.split()))
+
+
+counter = FunctionExecutor(word_count, id="word_counter")
+workflow = WorkflowBuilder(start_executor=upper_case).add_edge(upper_case, counter).build()
+# (await workflow.run("hello world")).get_outputs() == [2]
+```
 
 For several input types or state that lasts across invocations, subclass `Executor` and mark methods with `@handler`. The runtime dispatches on the message type:
 
@@ -789,7 +811,7 @@ if latest:
     result = await workflow.run(checkpoint_id=latest.checkpoint_id)
 ```
 
-Inside an executor, `await ctx.request_info(payload, response_type=bool)` pauses the workflow, and a method decorated with `@response_handler` on the same executor receives the answer when the caller runs `workflow.run(responses={request_id: value})`. Combined with checkpointing, a person can answer hours later in a different process. Storage backends (in-memory, file, Redis, Cosmos DB, custom) are on the [checkpointing page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/); the request/response loop, tool approval and plan review are on the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/).
+Inside an executor, `await ctx.request_info(payload, response_type=bool)` pauses the workflow, and a method decorated with `@response_handler` on the same executor receives the answer when the caller runs `workflow.run(responses={request_id: value})`. Combined with checkpointing, a person can answer hours later in a different process. Storage backends (in-memory, file, Cosmos DB, custom) are on the [checkpointing page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/); the request/response loop, tool approval and plan review are on the [HITL page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/).
 
 ### A workflow as an agent
 
@@ -820,7 +842,7 @@ Pending `request_info` calls inside the workflow surface on the agent's response
 
 ### An agent as an MCP server
 
-`agent.as_mcp_server(server_name=..., version=..., instructions=..., lifespan=...)` returns an `mcp.server.lowlevel.Server` exposing the agent as one MCP tool (`<server_name>_run`). Connect it to any MCP transport:
+`agent.as_mcp_server(server_name=..., version=..., instructions=..., lifespan=...)` returns an `mcp.server.lowlevel.Server` exposing the agent as one MCP tool. The tool is named after the agent (`inventory-agent` below, or `UnnamedAgent` if the agent has no `name`) and takes a single `task` string. Connect the server to any MCP transport:
 
 ```python
 import asyncio

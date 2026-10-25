@@ -78,7 +78,7 @@ Ends the run: the final_answer(...)        Ends the run: a later step in which t
   call inside the code                       model calls the final_answer tool
 ```
 
-The CodeAgent can compare and answer in the same step because the comparison happens in code. The ToolCallingAgent needs another model call to read the two results and call `final_answer`. How many steps or tokens this saves depends on the task and the model: measure it with `result.token_usage` and `len(result.steps)`, as described in [When CodeAgent saves steps](/smolagents-guide/smolagents_comprehensive_guide/#when-codeagent-saves-steps).
+The CodeAgent can compare and answer in the same step because the comparison happens in code. The ToolCallingAgent needs another model call to read the two results and call `final_answer`. How many steps or tokens this saves depends on the task and the model: measure it with `result.token_usage` and the number of action steps, as described in [When CodeAgent saves steps](/smolagents-guide/smolagents_comprehensive_guide/#when-codeagent-saves-steps).
 
 ## A tool, end to end
 

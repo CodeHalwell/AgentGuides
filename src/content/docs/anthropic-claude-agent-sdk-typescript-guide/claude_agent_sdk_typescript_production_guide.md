@@ -246,7 +246,7 @@ Transcripts go to `$HOME/.claude/projects/`. Mount a volume there if sessions mu
 
 ### Kubernetes
 
-- Size replicas by concurrent runs, not requests per second; budget a few hundred MB of memory per concurrent run.
+- Size replicas by concurrent runs, not requests per second; each run is a separate Claude Code process, so measure the memory of one run under your own workload before setting container limits.
 - Mount `ANTHROPIC_API_KEY` from a `Secret`.
 - Use a read-only root filesystem with writable `emptyDir` volumes for the work directory and `$HOME`.
 - Set `terminationGracePeriodSeconds` above your longest expected run; on `SIGTERM` stop taking work and let in-flight runs finish or abort them.

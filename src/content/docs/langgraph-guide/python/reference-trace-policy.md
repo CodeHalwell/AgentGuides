@@ -361,13 +361,37 @@ omit_payload(value: Any) -> dict[str, Any]
 
 ---
 
+## `TracePolicy` on `create_agent` middleware
+
+`langchain` re-exports the same class (`langchain.agents.middleware.TracePolicy`, together with `omit_payload`). An `AgentMiddleware` subclass can set a `trace_policy` class attribute, which shapes the spans of its hooks (`before_*`/`after_*` nodes and the `wrap_model_call`/`wrap_tool_call` wrappers). `configure_trace_policy(policy)` sets a process-wide default for middleware that do not set their own (a middleware's own policy replaces it wholesale; pass `None` to clear it):
+
+```python
+from langchain.agents.middleware import (
+    AgentMiddleware, TracePolicy, configure_trace_policy, omit_payload,
+)
+
+
+class AuditMiddleware(AgentMiddleware):
+    # Keep the span and its timing, drop the conversation payload.
+    trace_policy = TracePolicy(process_inputs=omit_payload)
+
+    def before_model(self, state, runtime):
+        return None
+
+
+# Default for every other middleware's hook spans, set once at start-up.
+configure_trace_policy(TracePolicy(process_outputs=omit_payload))
+```
+
+The model's own messages are still recorded on the inner model-call span; this only changes the middleware hook spans.
+
 ## `TracePolicy` vs LangSmith client hide_inputs
 
 | Feature | `TracePolicy` | LangSmith `hide_inputs`/`hide_outputs` |
 |---|---|---|
 | Scope | Per-node, node's own span only | All runs and children |
 | Granularity | Field-level transform | All or nothing |
-| Requires LangSmith SDK | No | Yes |
+| Requires LangSmith tracing to have any effect | Yes | Yes |
 | Applies to child runs | No | Yes |
 | Selectively blank one field | Yes (`process_inputs`) | No |
 
@@ -387,6 +411,4 @@ omit_payload(value: Any) -> dict[str, Any]
 
 | Version | Change |
 |---|---|
-| 1.2.11 | `TracePolicy`, `omit_payload` production-stable |
-| 1.2.0 | (An earlier revision claimed `set_node_defaults(trace_policy=...)` support here; `set_node_defaults` has no `trace_policy` parameter.) |
-| 1.1.0 | `TracePolicy` first introduced |
+| 1.2.11 | `TracePolicy`, `omit_payload` and `add_node(..., trace_policy=...)` added (absent in 1.2.10) |

@@ -738,6 +738,10 @@ func main() {
 
 If you do not need a custom protocol, the ADK REST API (next section) already offers `/run_sse`.
 
+### Live (bidirectional) sessions
+
+For voice and video, `Runner.RunLive(ctx, userID, sessionID, agent.LiveRunConfig{...})` opens a session with a Gemini Live model and returns an `agent.LiveSession` for sending input plus an event iterator for the replies. The ADK repository's `examples/bidi` serves this over a WebSocket with the REST API's `RunLiveHandler` and a small browser page; start from it rather than wiring the protocol by hand, and check which Live model names your project can use.
+
 ---
 
 ## MCP and A2A
@@ -997,5 +1001,6 @@ ADK for Go does not ship BigQuery or Google Workspace toolsets (the Python kit d
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-24 | current | Added a note on live (bidirectional) sessions with `Runner.RunLive`. |
 | 2026-10-21 | current | Rewritten against the current release. Every recipe is now a program compiled with `go vet`; the earlier recipes used constructors and packages that do not exist in ADK for Go (`gemini.New`, `session.Store`, `tool.Schema`, a Firestore session service). |
 | April 2026 | 1.0.0 | Initial Go recipes. |
