@@ -3,7 +3,7 @@ title: "Microsoft Agent Framework (.NET) — Comprehensive Guide"
 sidebar:
   label: "Comprehensive guide"
   order: 2
-description: "Start here for Microsoft.Agents.AI in .NET: installation, configuration and DI, ChatClientAgent, structured output, the harness agent, evaluation, DevUI and Semantic Kernel interop, with a map of the topic pages for providers, tools, MCP, middleware, sessions and workflows."
+description: "Start here for Microsoft.Agents.AI in .NET: installation, configuration and DI, ChatClientAgent, structured output, agentic patterns, the harness agent and Semantic Kernel interop, with short summaries linking to the pages on providers, tools, MCP, middleware, sessions, workflows, orchestrations, hosting, observability and testing."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 ---
@@ -11,7 +11,7 @@ language: "dotnet"
 **Framework version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%; first written for the October 2025 preview). Every C# block on this page was compiled against that release.
 **Target platform:** .NET 8.0+ (the core packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
 
-This page is the starting point: what the framework is, how to install and configure it, how a `ChatClientAgent` works, structured output, and the pieces that have no page of their own (the harness agent, evaluation, DevUI, Semantic Kernel interop). Each major topic has its own page, linked from the short section here:
+This page is the starting point: what the framework is, how to install and configure it, how a `ChatClientAgent` works, structured output, and the pieces that have no page of their own (agentic patterns, the harness agent, Copilot Studio, Semantic Kernel interop). Each major topic has its own page, summarised in a short section here and linked:
 
 | Topic | Page |
 | --- | --- |
@@ -20,7 +20,12 @@ This page is the starting point: what the framework is, how to install and confi
 | MCP clients, hosted MCP, MCP servers | [MCP](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/) |
 | Agent, function and chat-client middleware, retries and errors | [Middleware](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/) |
 | Sessions, history, session stores, context providers, memory, compaction | [Sessions and memory](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/) |
-| Foundry agents, workflows as agents | [Advanced patterns](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/) |
+| Foundry agents, agents as chat clients and tools, workflows as agents | [Advanced patterns](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/) |
+| Executors, edges, request ports, checkpointing, sub-workflows, declarative workflows | [Workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/) |
+| Sequential, concurrent, group chat, handoff and Magentic orchestrations | [Orchestrations](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/) |
+| OpenAI-compatible, A2A and AG-UI endpoints, DevUI, SSE, Foundry hosted agents, Azure Functions | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/) |
+| OpenTelemetry traces, metrics and logs | [Observability](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/) |
+| Tests without a model, evaluation | [Testing and evaluation](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/) |
 
 ---
 
@@ -197,7 +202,7 @@ Register the `IChatClient` (and the `AzureOpenAIClient` behind it) once as a sin
 
 ### Execution models
 
-`RunAsync` takes a string, a `ChatMessage` or a list of messages, plus an optional `AgentSession` and `AgentRunOptions`, and returns an `AgentResponse` (`.Text`, `.Messages`, `.Usage`). `RunStreamingAsync` yields `AgentResponseUpdate`s as tokens arrive. `RunAsync<T>` returns structured output (below).
+`RunAsync` takes a string, a `ChatMessage` or a list of messages, plus an optional `AgentSession` and `AgentRunOptions`, and returns an `AgentResponse` (`.Text`, `.Messages`, `.Usage`). `RunStreamingAsync` yields `AgentResponseUpdate`s as tokens arrive; serving them over server-sent events is under [your own streaming endpoint](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#your-own-streaming-endpoint). `RunAsync<T>` returns structured output (below).
 
 ### Testing agents
 
@@ -207,57 +212,20 @@ Register the `IChatClient` (and the `AzureOpenAIClient` behind it) once as a sin
 
 ## Multi-Agent Systems
 
-Multi-agent orchestration lives in `Microsoft.Agents.AI.Workflows`.
+Multi-agent work lives in `Microsoft.Agents.AI.Workflows`, at two levels. `AgentWorkflowBuilder` assembles the prebuilt orchestrations from a list of agents, and `WorkflowBuilder` builds any graph you like from executors and agent nodes. Both produce an ordinary `Workflow`, which you run with `InProcessExecution`, stream, checkpoint, pause for human input, or wrap as an agent with `AsAIAgent()`.
 
-### Orchestration patterns
+| Pattern | Entry point | Covered on |
+| --- | --- | --- |
+| Sequential | `AgentWorkflowBuilder.BuildSequential(...)` | [Orchestrations: sequential](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#sequential) |
+| Concurrent | `AgentWorkflowBuilder.BuildConcurrent(...)` | [Orchestrations: concurrent](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#concurrent) |
+| Group chat | `AgentWorkflowBuilder.CreateGroupChatBuilderWith(managerFactory)` | [Orchestrations: group chat](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#group-chat) |
+| Handoff | `AgentWorkflowBuilder.CreateHandoffBuilderWith(initialAgent)` | [Orchestrations: handoff](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#handoff) |
+| Magentic | `AgentWorkflowBuilder.CreateMagenticBuilderWith(managerAgent)` | [Orchestrations: Magentic](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#magentic) |
+| Custom graph | `new WorkflowBuilder(start).AddEdge(...).Build()` | [Workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/) |
 
-| Pattern | API |
-| --- | --- |
-| Sequential: each agent adds to the conversation in turn | `AgentWorkflowBuilder.BuildSequential(a, b, c)` |
-| Concurrent: same input to all, results aggregated | `AgentWorkflowBuilder.BuildConcurrent(agents, aggregator)` |
-| Handoff: agents transfer control to each other | `AgentWorkflowBuilder.CreateHandoffBuilderWith(triage).WithHandoffs(...)` |
-| Group chat: a manager picks the next speaker | `AgentWorkflowBuilder.CreateGroupChatBuilderWith(agents => new RoundRobinGroupChatManager(agents, ...))` |
-| Magentic: a planner agent coordinates specialists | `AgentWorkflowBuilder.CreateMagenticBuilderWith(manager)` |
-| Custom graph | `new WorkflowBuilder(start).AddEdge(...)...Build()` |
-
-### Sequential workflow
-
-```csharp
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Workflows;
-using Microsoft.Extensions.AI;
-
-public class ResearchWorkflow(IChatClient chatClient)
-{
-    public async Task<string> RunAsync(string topic)
-    {
-        AIAgent researcher = new ChatClientAgent(chatClient,
-            instructions: "You are a research assistant. Find information on the topic.", name: "researcher");
-        AIAgent writer = new ChatClientAgent(chatClient,
-            instructions: "You are a content writer. Summarise the research above in one paragraph.", name: "writer");
-
-        Workflow workflow = AgentWorkflowBuilder.BuildSequential(researcher, writer);
-
-        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(
-            workflow, new List<ChatMessage> { new(ChatRole.User, $"Research the topic: {topic}") });
-        await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-
-        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
-        {
-            if (evt is WorkflowOutputEvent output && output.Is<List<ChatMessage>>(out var conversation))
-            {
-                return conversation.Last().Text;   // the writer's turn
-            }
-        }
-
-        return "";
-    }
-}
-```
+Agent nodes in .NET wait for a `TurnToken` before calling the model, so a run you start yourself needs `run.TrySendMessageAsync(new TurnToken(emitEvents: true))`; a workflow wrapped with `AsAIAgent()` sends it for you. The [orchestrations page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#choosing-a-pattern) explains when to use each pattern, and the [workflows page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/) covers executors, shared state, [request ports](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#human-input-with-request-ports) and [checkpointing](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#checkpointing).
 
 Don't share one `AgentSession` across two different agents to "pass context"; a session belongs to the agent that created it. Use a workflow, or pass the first agent's output into the second agent's input.
-
-Inside a workflow, executors share state through the workflow context (`QueueStateUpdateAsync`, `ReadStateAsync<T>`), and custom graphs are built with `WorkflowBuilder`, conditional edges and fan-out/fan-in. The [graph workflows and declarative agents page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) and the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#graph-based-workflows---net) cover custom graphs, checkpointing and human-in-the-loop request ports, and a workflow can itself be [exposed as an agent](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/#workflows-as-agents).
 
 ---
 
@@ -389,15 +357,15 @@ public static class PlanAndExecute
 }
 ```
 
-For long or open-ended plans, the Magentic orchestration (`AgentWorkflowBuilder.CreateMagenticBuilderWith(manager)`) does the planning, progress tracking and re-planning for you.
+For long or open-ended plans, the [Magentic orchestration](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#magentic) does the planning, progress tracking and re-planning for you.
 
 ### Routing
 
-A router classifies the request with structured output and dispatches to a specialist; see Recipe 5 in the [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-5-router-to-specialist-agents). When specialists need to pass the conversation back and forth, use the handoff builder.
+A router classifies the request with structured output and dispatches to a specialist; see Recipe 5 in the [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-5-router-to-specialist-agents). When specialists need to pass the conversation back and forth, use the [handoff orchestration](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/#handoff).
 
 ### Reflection
 
-A writer drafts, a critic reviews, the writer revises in its own session (so it remembers its draft).
+A writer drafts, a critic reviews, the writer revises in its own session (so it remembers its draft). Recipe 12 in the [recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-12-writer-and-critic-with-a-round-cap) runs the same loop as a workflow with a round cap.
 
 ```csharp
 using Microsoft.Agents.AI;
@@ -489,13 +457,13 @@ Setting `MaxContextWindowTokens` and `MaxOutputTokens` (both experimental, `MAAI
 
 ## Evaluation
 
-Evaluation is in the core package. `LocalEvaluator` runs cheap, deterministic checks (`EvalChecks.KeywordCheck`, `ToolCalledCheck`, `ToolCallArgsMatch`, `NonEmpty` and others, or your own with `FunctionEvaluator.Create`), `agent.EvaluateAsync(queries, evaluator)` runs the agent on each query and scores the results, and `AgentEvaluationResults` has assertion helpers (`AssertAllPassed`, `AssertScoreAtLeast`, ...) so the same code works as a unit test. Model-graded evaluators from `Microsoft.Extensions.AI.Evaluation` and Foundry's evaluators (`FoundryEvals`, in `Microsoft.Agents.AI.Foundry`) plug into the same calls. All of it, with workflow evaluation and running the suite in CI, is on the [testing and evaluation page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/#evaluating-with-localevaluator).
+Evaluation is in the core package. `LocalEvaluator` runs deterministic checks (`EvalChecks`, or your own through `FunctionEvaluator.Create`), `agent.EvaluateAsync(queries, evaluator)` runs the agent on each query and scores the replies, and the results have assertion helpers such as `AssertAllPassed`, so the same code serves as a unit test. Model-graded evaluators from `Microsoft.Extensions.AI.Evaluation` and Foundry's `FoundryEvals` plug into the same calls. The checks, model-graded evaluation, workflow evaluation and running the suite in CI are on the [testing and evaluation page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/#evaluating-with-localevaluator).
 
 ---
 
 ## Local testing with DevUI
 
-`Microsoft.Agents.AI.DevUI` (preview) adds a browser UI for chatting with your registered agents and workflows during development, on top of the OpenAI Responses and Conversations endpoints from `Microsoft.Agents.AI.Hosting.OpenAI`. It is a development tool; map it only in development. Set-up is on the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#devui).
+`Microsoft.Agents.AI.DevUI` (preview) is a browser UI for chatting with your registered agents and workflows during development, served from your own app with `AddDevUI()` and `MapDevUI()` on top of the OpenAI-compatible endpoints. Map it only in development; set-up and options are on the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#devui).
 
 ---
 
@@ -515,7 +483,7 @@ The integration runs in both directions:
 - **Azure AI Search** — retrieval through `TextSearchProvider`, `FoundryAITool.CreateAzureAISearchTool` or `HostedFileSearchTool`.
 - **Cosmos DB and Blob Storage** — chat history (`CosmosChatHistoryProvider`) and session stores (`AzureBlobAgentSessionStore`); see [sessions and memory](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/).
 - **Azure AI Content Safety** — call it from agent middleware; see the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#azure-ai-content-safety-integration).
-- **Application Insights** — `.AsBuilder().UseOpenTelemetry(...)` plus the Azure Monitor exporter.
+- **Application Insights** — `.AsBuilder().UseOpenTelemetry(...)` plus the Azure Monitor exporter; see [observability](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/#azure-monitor).
 
 ### Cost and governance
 
