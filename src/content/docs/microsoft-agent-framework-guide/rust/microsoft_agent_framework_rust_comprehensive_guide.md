@@ -773,7 +773,7 @@ The orchestration builders assemble a complete workflow from a list of agents. E
 | --- | --- |
 | `SequentialBuilder` | Each participant sees the conversation so far and appends its reply |
 | `ConcurrentBuilder` | Every participant answers the same input at once |
-| `GroupChatBuilder` | A manager (round-robin, a closure, or an agent) picks the next speaker each round |
+| `GroupChatBuilder` | A manager (round-robin by default, a closure, a `GroupChatManager` or an agent) picks the next speaker each round |
 | `HandoffBuilder` | Agents pass control by calling `handoff_to_<name>` tools |
 | `MagenticBuilder` | A manager plans, tracks progress in a ledger and assigns work |
 
