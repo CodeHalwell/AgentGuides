@@ -8,7 +8,7 @@ sidebar:
   order: 51
 ---
 
-Checked against `langgraph` %%version=langgraph%%, `langgraph-sdk` %%version=langgraph-sdk%%, `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%% and `langgraph-cli` 0.4.38 (%%versions-checked%%). The SDK and `RemoteGraph` examples were run against a local `langgraph dev` server. [Chapter 10](/langgraph-guide/python/chapter-10-production/) is the tutorial introduction to this page: checkpointer choice, durability, loop limits and testing are covered there.
+Checked against `langgraph` %%version=langgraph%%, `langgraph-sdk` %%version=langgraph-sdk%%, `langgraph-checkpoint-postgres` %%version=langgraph-checkpoint-postgres%% and `langgraph-cli` %%version=langgraph-cli%% (%%versions-checked%%). The SDK and `RemoteGraph` examples were run against a local `langgraph dev` server. [Chapter 10](/langgraph-guide/python/chapter-10-production/) is the tutorial introduction to this page: checkpointer choice, durability, loop limits and testing are covered there.
 
 ## Deployment options
 

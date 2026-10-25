@@ -10,7 +10,7 @@ sidebar:
 
 **What you'll learn:** what changes when a graph leaves your laptop: where state is stored, how often it is written, how runaway loops and flaky calls are contained, how to test without calling a model, and how to deploy with the `langgraph` CLI.
 
-Checked against `langgraph` %%version=langgraph%%, `langchain` %%version=langchain%% and `langgraph-cli` 0.4.38. **Time:** ~30 minutes.
+Checked against `langgraph` %%version=langgraph%%, `langchain` %%version=langchain%% and `langgraph-cli` %%version=langgraph-cli%%. **Time:** ~30 minutes.
 
 > The [production guide](/langgraph-guide/python/langgraph_production_guide/) is the deployment reference (`langgraph.json`, LangSmith Deployment, self-hosting). This chapter is the tutorial path to it.
 
