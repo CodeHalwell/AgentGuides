@@ -16,7 +16,7 @@ The trap with Classic is the package name. `ag2>=1.0` no longer contains the `au
 ```text
 # requirements.txt
 autogen[openai]>=%%version=autogen%%,<0.15
-# extras used on this page: docker, tracing, a2a, interop-langchain
+# extras used on this page: docker, tracing, a2a, diskcache, interop-langchain
 ```
 
 `autogen` and `ag2<1.0` both install the same `autogen` module and overwrite each other, so keep only one of them in an environment. See the [migration guide](/ag2-guide/classic/ag2_classic_migration_guide/) for the other package-name pitfalls.
@@ -66,7 +66,7 @@ test_order_lookup()
 
 ## Caching
 
-Classic can cache LLM responses by seed. Caching is off by default (`cache_seed=None`). Set `cache_seed=42` in `LLMConfig` to use an on-disk cache under `.cache/`, or pass an explicit `Cache` to the chat:
+Classic can cache LLM responses by seed. Caching is off by default (`cache_seed=None`). Set `cache_seed=42` in `LLMConfig` to use the legacy disk cache under `.cache/`, or pass an explicit `Cache` to the chat. `Cache.disk` needs the `diskcache` package (extra `autogen[diskcache]`). Without it, `autogen` logs a warning and falls back to an in-memory cache that disappears when the process ends. The warning also notes that `diskcache` has a published security advisory (CVE-2025-69872), so weigh that before enabling the extra; `Cache.redis` is the alternative for a persistent shared cache.
 
 ```python
 from autogen import Cache, ConversableAgent, LLMConfig
@@ -76,7 +76,7 @@ llm_config = LLMConfig({"api_type": "openai", "model": "%%model=openai-small%%"}
 assistant = ConversableAgent("assistant", llm_config=llm_config)
 user = ConversableAgent("user", human_input_mode="NEVER", llm_config=False)
 
-with TestAgent(assistant, ["Paris."]):                      # remove outside tests
+with TestAgent(assistant, ["Paris."]):                      # remove outside tests; without autogen[diskcache] this is an in-memory cache
     with Cache.disk(cache_seed=42, cache_path_root=".cache") as cache:
         result = user.initiate_chat(assistant, message="Capital of France?", max_turns=1, cache=cache, silent=True)
 print(result.summary)

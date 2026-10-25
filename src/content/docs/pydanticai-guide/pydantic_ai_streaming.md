@@ -178,7 +178,7 @@ You can also `await run.next(node)` to drive step by step, read `run.ctx.state` 
 
 ## `event_stream_handler=` — tap events without changing API shape
 
-Any of `run`, `run_sync`, `run_stream` or `iter` accept an `event_stream_handler: EventStreamHandler[Deps]` (`agent/abstract.py`), a callable `(RunContext, AsyncIterable[AgentStreamEvent]) -> Awaitable[None]` that fires with the event stream. The run's return type is unchanged. (Only the per-run argument survives in 2.0; the agent-level `Agent(event_stream_handler=...)` became `capabilities=[ProcessEventStream(...)]`.)
+`run`, `run_sync`, `run_stream` and `run_stream_sync` accept an `event_stream_handler: EventStreamHandler[Deps]` (`agent/abstract.py`), a callable `(RunContext, AsyncIterable[AgentStreamEvent]) -> Awaitable[None]` that fires with the event stream. The run's return type is unchanged. (Only the per-run argument survives in 2.0; the agent-level `Agent(event_stream_handler=...)` became `capabilities=[ProcessEventStream(...)]`.)
 
 ```python
 from collections import Counter

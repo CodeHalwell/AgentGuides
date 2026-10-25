@@ -7,7 +7,7 @@ sidebar:
   label: "Recipes"
 ---
 
-> **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. Every recipe was run with a stubbed model reply. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
+> **This page covers AG2 Classic** — the `import autogen` API from the AG2 community fork, published as `autogen` (and `ag2` up to 0.14), checked against `autogen` %%version=autogen%%. Every recipe was run end to end against a local OpenAI-compatible stub server in place of a real model, which checks the wiring (tool calls execute, chats end where they should) but not the quality of real model output. It is not Microsoft AutoGen 0.4+ (`autogen_agentchat`; see the [AgentChat & Core page](/autogen-guide/python/autogen_agentchat_guide/)), and it is not the current AG2 1.x API (see the [AG2 guide](/ag2-guide/)). Install with `pip install "autogen[openai]"`.
 
 ## Table of Contents
 
@@ -20,7 +20,7 @@ sidebar:
 7. [Recipe 7: Document Q&A System](#recipe-7-document-qa-system)
 8. [Recipe 8: Collaborative Learning System](#recipe-8-collaborative-learning-system)
 9. [Recipe 9: API Integration](#recipe-9-api-integration)
-10. [Recipe 10: Autonomous Task Scheduler](#recipe-10-autonomous-task-scheduler)
+10. [Recipe 10: Project Planning Pipeline](#recipe-10-project-planning-pipeline)
 
 ---
 
@@ -782,6 +782,8 @@ def document_qa_system():
         human_input_mode="NEVER",
         llm_config=False,
         code_execution_config=False,  # relays messages and runs registered tools only
+        # End the chat once the model answers in plain text instead of proposing a tool call.
+        is_termination_msg=lambda m: not m.get("tool_calls"),
     )
     
     # Register retrieval function
@@ -800,10 +802,14 @@ def answer_question(question: str) -> str:
     retriever, synthesiser, executor = document_qa_system()
     
     # Step 1: Retrieve documents
+    # The retriever proposes a tool call, the executor runs it, and the retriever
+    # then replies in plain text, which ends the chat (see is_termination_msg).
+    # max_turns is only a safety bound: with max_turns=1 the chat would stop on
+    # the unexecuted tool call.
     retrieval_response = executor.run(
         recipient=retriever,
         message=f"Find documents relevant to: {question}",
-        max_turns=1
+        max_turns=5
     )
     retrieval_response.process()
     
@@ -837,7 +843,7 @@ if __name__ == "__main__":
 
 ## Recipe 8: Collaborative Learning System
 
-Teachers and learners collaborating to teach concepts.
+A teacher agent and a learner agent hold a short tutoring conversation. The learner asks questions, the teacher explains, and `max_turns` bounds the exchange.
 
 **File: `learning_system.py`**
 
@@ -846,7 +852,6 @@ Teachers and learners collaborating to teach concepts.
 Collaborative Learning System: Teachers and learners
 - Teacher: Explains concepts
 - Learner: Asks questions
-- Mentor: Provides guidance
 """
 
 from autogen import ConversableAgent, LLMConfig
@@ -870,12 +875,6 @@ Your approach:
     learner = ConversableAgent(
         name="learner",
         system_message="You are an eager learner. Ask clarifying questions. Admit when you don't understand.",
-        llm_config=llm_config
-    )
-    
-    mentor = ConversableAgent(
-        name="mentor",
-        system_message="You guide the learning process. Suggest concepts to explore and provide hints when needed.",
         llm_config=llm_config
     )
     
@@ -957,6 +956,8 @@ def api_integration_example():
         human_input_mode="NEVER",
         llm_config=False,
         code_execution_config=False,  # relays messages and runs registered tools only
+        # End the chat once the model answers in plain text instead of proposing a tool call.
+        is_termination_msg=lambda m: not m.get("tool_calls"),
     )
     
     # Register API functions
@@ -974,33 +975,42 @@ def api_integration_example():
         description="Get currency exchange rate"
     )
     
-    # Get weather
-    response = executor.initiate_chat(
+    # Step 1: the caller proposes tool calls and the executor runs them. The chat
+    # ends when the caller answers in plain text; max_turns bounds a runaway loop.
+    fetched = executor.initiate_chat(
         api_caller,
         message="Get weather for London and Paris",
-        max_turns=3
+        max_turns=5,
+        summary_method="last_msg",
     )
-    
-    return response
+
+    # Step 2: a second agent analyses the fetched data.
+    analysed = executor.initiate_chat(
+        data_processor,
+        message=f"Compare these weather results in two sentences:\n{fetched.summary}",
+        max_turns=1,
+    )
+
+    return analysed.summary
 
 if __name__ == "__main__":
-    result = api_integration_example()
+    print(api_integration_example())
 ```
 
 ---
 
-## Recipe 10: Autonomous Task Scheduler
+## Recipe 10: Project Planning Pipeline
 
-Agent system that plans and executes tasks.
+Three agents plan a project in sequence: a task breakdown, a timeline, then a risk review. The agents only write text; nothing is executed.
 
-**File: `task_scheduler.py`**
+**File: `project_planning.py`**
 
 ```python
 """
-Autonomous Task Scheduler: Planning and executing tasks
+Project Planning Pipeline: breakdown, timeline and risk review
 - Planner: Creates task breakdown
 - Scheduler: Assigns timing
-- Executor: Carries out tasks
+- Reviewer: Lists risks and gaps in the plan
 """
 
 from autogen import ConversableAgent, initiate_chats, LLMConfig
@@ -1023,9 +1033,9 @@ def schedule_and_execute_project(project_description: str):
         llm_config=llm_config
     )
     
-    executor = ConversableAgent(
-        name="executor",
-        system_message="You confirm task execution and report progress.",
+    reviewer = ConversableAgent(
+        name="reviewer",
+        system_message="You review project plans and list the main risks and gaps.",
         llm_config=llm_config
     )
     
@@ -1054,11 +1064,11 @@ def schedule_and_execute_project(project_description: str):
         },
         {
             "sender": coordinator,
-            "recipient": executor,
-            "message": "Execute the scheduled tasks.",
+            "recipient": reviewer,
+            "message": "Review the plan and list the main risks and gaps.",
             "max_turns": 2,
             "summary_method": "reflection_with_llm",
-            "carryover": "Follow the timeline and task sequence."
+            "carryover": "Review the timeline and the task sequence."
         }
     ]
     
@@ -1068,7 +1078,7 @@ def schedule_and_execute_project(project_description: str):
         "project": project_description,
         "task_breakdown": results[0].summary,
         "timeline": results[1].summary,
-        "execution": results[2].summary,
+        "risk_review": results[2].summary,
         "timestamp": datetime.now().isoformat()
     }
 
@@ -1077,11 +1087,11 @@ if __name__ == "__main__":
         "Build a web application for task management with frontend, backend, and database"
     )
     
-    print("=== Project Execution Report ===")
+    print("=== Project Plan ===")
     print(f"Project: {project['project']}")
     print(f"\nTask Breakdown:\n{project['task_breakdown']}")
     print(f"\nTimeline:\n{project['timeline']}")
-    print(f"\nExecution Report:\n{project['execution']}")
+    print(f"\nRisk Review:\n{project['risk_review']}")
     print(f"\nTimestamp: {project['timestamp']}")
 ```
 
@@ -1092,7 +1102,14 @@ if __name__ == "__main__":
 **Setup:**
 ```bash
 pip install "autogen[openai]"   # AG2 Classic; not ag2>=1.0
-export OPENAI_API_KEY="sk-your-key"
+```
+
+The recipes load their model from a file called `OAI_CONFIG_LIST` in the working directory, a JSON list of entries. `LLMConfig.from_json(path="OAI_CONFIG_LIST")` reads it. Create it yourself, and keep it out of version control because it holds the key:
+
+```json
+[
+  {"api_type": "openai", "model": "%%model=openai-small%%", "api_key": "sk-your-key"}
+]
 ```
 
 **Run any recipe:**
@@ -1101,7 +1118,7 @@ python recipe_name.py
 ```
 
 **Customisation Tips:**
-- Replace `LLMConfig.from_json(path=...)` with an inline `LLMConfig({...})` that reads the key from the environment
+- Replace `LLMConfig.from_json(path=...)` with an inline `LLMConfig({"api_type": "openai", "model": "..."})`, which reads `OPENAI_API_KEY` from the environment
 - Adjust `max_round` (group chats) and `max_turns` (two-agent and sequential chats) to bound runs
 - Modify `system_message` to change agent behaviour
 - Add logging with `logging.basicConfig(level=logging.DEBUG)`

@@ -59,7 +59,7 @@ Things that do need changing:
 
 - **Config lists**: `{"config_list": [...]}` dicts still work, but `LLMConfig({...})` / `LLMConfig.from_json(path="OAI_CONFIG_LIST")` is the current form. `config_list_from_json` is no longer exported at the top of `autogen`; import it from `autogen.llm_config.config` if you still need it.
 - **Code executors**: pass an executor object (`LocalCommandLineCodeExecutor`, `DockerCommandLineCodeExecutor`) in `code_execution_config["executor"]`; combining `executor` with `work_dir` / `use_docker` keys raises `ValueError`. The plain `{"work_dir": ..., "use_docker": ...}` form without `executor` still works.
-- **Swarms**: `SwarmAgent` / `initiate_swarm_chat` moved to `autogen.agentchat.contrib.swarm_agent` in 0.13.0 and were **removed in 0.14.0**. Port them to group-chat patterns with handoffs (`autogen.agentchat.group.patterns`, `agent.handoffs`; see [Group-chat patterns and handoffs](/ag2-guide/classic/ag2_classic_comprehensive_guide/#group-chat-patterns-and-handoffs)), or pin `ag2==0.13.*` until you can.
+- **Swarms**: `SwarmAgent` / `initiate_swarm_chat` lived in `autogen.agentchat.contrib.swarm_agent` up to `ag2` 0.13.x and were **removed in 0.14.0**. Port them to group-chat patterns with handoffs (`autogen.agentchat.group.patterns`, `agent.handoffs`; see [Group-chat patterns and handoffs](/ag2-guide/classic/ag2_classic_comprehensive_guide/#group-chat-patterns-and-handoffs)), or pin `ag2==0.13.*` until you can.
 - **Contrib modules** that depended on third-party libraries may need their extras (`autogen[retrievechat]`, `autogen[a2a]`, …).
 
 ## Path B: AG2 Classic → AG2 1.x
@@ -120,7 +120,7 @@ assistant = Agent(
 | Swarms, handoffs, nested chats | Channels on the Network; `agent.as_tool(...)` for sub-agents |
 | `LocalCommandLineCodeExecutor` / `DockerCommandLineCodeExecutor` | `SandboxCodeTool` / `SandboxShellTool` from `ag2.tools` with a `LocalEnvironment` (trusted code), `DockerEnvironment` or `DaytonaEnvironment` |
 | `autogen.testing.TestAgent` | `ag2.testing.TestConfig` |
-| `autogen.beta.*` (0.11–0.14 preview) | Same names, imported from `ag2` |
+| `autogen.beta.*` (preview in `ag2` 0.11.4–0.14) | Same names, imported from `ag2` |
 
 `CodeExecutionTool` and `ShellTool` in `ag2.tools` are different: they are provider-hosted tools that run code in the model provider's own sandbox (for example OpenAI's container), not on your machine, so they are not drop-in replacements for Classic executors.
 

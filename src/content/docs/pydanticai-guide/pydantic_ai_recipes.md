@@ -18,16 +18,17 @@ Verified against **pydantic-ai %%version=pydantic-ai%%** (checked %%versions-che
 
 ```python
 """
-Production-ready customer support agent that:
-- Accesses customer database
-- Tracks conversation history
-- Validates inputs and outputs
-- Handles errors gracefully
+Customer support agent that:
+- Reads the customer database through tools and dynamic instructions
+- Carries the conversation between turns with `Conversation`
+- Validates its structured output and asks the model to retry when it falls short
 """
 
 from dataclasses import dataclass
+from typing import Literal
+
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext, ModelRetry
+from pydantic_ai import Agent, Conversation, RunContext, ModelRetry
 import asyncio
 import sqlite3
 from datetime import datetime
@@ -59,13 +60,12 @@ def init_database():
 class SupportDependencies:
     db_connection: sqlite3.Connection
     customer_id: int
-    conversation_history: list[dict]
 
 # Output models
 class SupportResponse(BaseModel):
     """Structured support response."""
     solution: str = Field(..., description="Detailed solution to customer's problem")
-    category: str = Field(..., pattern='^(technical|billing|general|escalation)$')
+    category: Literal['technical', 'billing', 'general', 'escalation']
     confidence: float = Field(..., ge=0.0, le=1.0)
     next_steps: list[str] = Field(..., description="Recommended next steps")
 
@@ -77,8 +77,8 @@ support_agent = Agent(
     name='CustomerSupportAgent'
 )
 
-# System prompt with dynamic context
-@support_agent.system_prompt
+# Instructions with dynamic context (re-evaluated on every run)
+@support_agent.instructions
 async def customer_context(ctx: RunContext[SupportDependencies]) -> str:
     """Fetch customer context and build system prompt."""
     
@@ -101,7 +101,6 @@ Customer Profile:
 - Name: {name}
 - Email: {email}
 - Account Status: {status}
-- Conversation History: {len(ctx.deps.conversation_history)} messages
 
 Guidelines:
 1. Be empathetic and professional
@@ -160,46 +159,37 @@ async def validate_response(
     return output
 
 # Main execution
-async def handle_customer_issue(customer_id: int, issue: str):
-    """Handle a customer support issue."""
-    
-    conn = init_database()
-    
-    deps = SupportDependencies(
-        db_connection=conn,
-        customer_id=customer_id,
-        conversation_history=[]
+async def handle_customer_issue(
+    conn: sqlite3.Connection, customer_id: int, issue: str, conversation: Conversation | None = None
+) -> tuple[SupportResponse, Conversation]:
+    """Handle one customer message; pass the returned conversation back in for the next one."""
+    result = await support_agent.run(
+        issue,
+        deps=SupportDependencies(db_connection=conn, customer_id=customer_id),
+        conversation=conversation,
     )
-    
+    return result.output, result.conversation
+
+
+async def main():
+    conn = init_database()
     try:
-        result = await support_agent.run(
-            issue,
-            deps=deps
-        )
-        
-        # Store in conversation history
-        deps.conversation_history.append({
-            'customer_id': customer_id,
-            'issue': issue,
-            'response': result.output,
-            'timestamp': datetime.now().isoformat()
-        })
-        
-        return result.output
-    
+        response, conversation = await handle_customer_issue(conn, 1, 'I was charged twice for my last purchase!')
+        print(f"Solution: {response.solution}")
+        print(f"Category: {response.category}")
+
+        # Follow-up in the same conversation: the model sees the earlier exchange
+        response, conversation = await handle_customer_issue(conn, 1, 'How long will the refund take?', conversation)
+        print(f"Follow-up: {response.solution}")
     finally:
         conn.close()
 
-# Usage
+
 if __name__ == '__main__':
-    response = asyncio.run(handle_customer_issue(
-        customer_id=1,
-        issue="I was charged twice for my last purchase!"
-    ))
-    
-    print(f"Solution: {response.solution}")
-    print(f"Category: {response.category}")
+    asyncio.run(main())
 ```
+
+In a web service, store `conversation` (via `ConversationTypeAdapter`) between requests instead of holding it in memory.
 
 ---
 
@@ -328,15 +318,15 @@ async def research_and_write_pipeline(topic: str) -> Article:
     
     context = SharedContext(topic=topic)
     
-    print("🔍 Research phase...")
+    print("Research phase...")
     research = await research_phase(context)
     print(f"Research complete. Found: {len(research)} characters")
     
-    print("✍️ Writing phase...")
+    print("Writing phase...")
     article = await writing_phase(context)
     print(f"Draft complete: {article.title}")
     
-    print("✏️ Editing phase...")
+    print("Editing phase...")
     edited = await editing_phase(context, article)
     print(f"Feedback: {edited.improvements}")
     
@@ -347,7 +337,7 @@ if __name__ == '__main__':
     article = asyncio.run(
         research_and_write_pipeline("Type Safety in Python")
     )
-    print(f"\n✅ Final Article: {article.title}")
+    print(f"\nFinal article: {article.title}")
 ```
 
 ---
@@ -357,12 +347,13 @@ if __name__ == '__main__':
 ```python
 """
 RAG pattern combining semantic search with LLM generation.
-Requires: pgvector, asyncpg
+Requires: PostgreSQL with the pgvector extension; pip install asyncpg pgvector
 """
 
 from pydantic_ai import Agent, Embedder, RunContext
 from dataclasses import dataclass
 import asyncpg
+from pgvector.asyncpg import register_vector
 from pydantic import BaseModel
 
 @dataclass
@@ -398,9 +389,9 @@ async def retrieve_documents(
     # Search for similar documents using pgvector
     async with ctx.deps.db_pool.acquire() as conn:
         rows = await conn.fetch('''
-            SELECT id, title, content, 1 - (embedding <=> $1) as similarity
+            SELECT id, title, content, 1 - (embedding <=> $1) AS similarity
             FROM documents
-            ORDER BY similarity DESC
+            ORDER BY embedding <=> $1   -- order by distance so a pgvector index can be used
             LIMIT $2
         ''', query_embedding, top_k)
     
@@ -428,7 +419,8 @@ async def rag_query(
 # Usage
 async def main():
     # Initialize database pool
-    pool = await asyncpg.create_pool('postgresql://localhost/documents')
+    # register_vector teaches asyncpg to send Python lists as pgvector values
+    pool = await asyncpg.create_pool('postgresql://localhost/documents', init=register_vector)
     embedder = Embedder('openai:text-embedding-3-small')   # see the Embeddings page for other providers
     
     try:
@@ -450,91 +442,78 @@ async def main():
 
 ## Recipe 4: Streaming Agent with Real-Time Response
 
+Two Server-Sent Events endpoints: one streams text deltas, the other streams partial structured output followed by the validated result. Each SSE message is a `data: <json>` line followed by a blank line, which is what the browser's `EventSource` expects.
+
 ```python
 """
 Real-time streaming agent for web frontends.
 Returns tokens as they arrive for immediate UI updates.
 """
 
+import json
+
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from pydantic_ai import Agent
-import asyncio
 
 app = FastAPI()
 agent = Agent('openai:%%model=openai%%')
 
-@app.post('/api/chat/stream')
+
+class Answer(BaseModel):
+    answer: str
+    follow_up_questions: list[str] = []   # a default lets partial answers stream before this arrives
+
+
+structured_agent = Agent('openai:%%model=openai%%', output_type=Answer)
+
+
+def sse(payload: dict) -> str:
+    return f'data: {json.dumps(payload)}\n\n'
+
+
+@app.get('/api/chat/stream')
 async def chat_stream(message: str):
-    """Stream agent response in real-time."""
-    
+    """Stream the reply text as it is generated."""
+
     async def stream_generator():
         async with agent.run_stream(message) as response:
-            # Stream text as it arrives
-            async for text in response.stream_text():
-                yield text.encode()
-                yield b'\n'  # Newline for client parsing
-    
-    return StreamingResponse(
-        stream_generator(),
-        media_type='text/event-stream'
-    )
+            async for delta in response.stream_text(delta=True):   # only the new text each time
+                yield sse({'type': 'text_delta', 'data': delta})
+        yield sse({'type': 'done'})
 
-@app.post('/api/chat/structured-stream')
+    return StreamingResponse(stream_generator(), media_type='text/event-stream')
+
+
+@app.get('/api/chat/structured-stream')
 async def structured_stream(message: str):
-    """Stream structured output with events."""
-    
-    from pydantic import BaseModel
-    import json
-    
-    class Response(BaseModel):
-        answer: str
-        metadata: dict
-    
-    structured_agent = Agent(
-        'openai:%%model=openai%%',
-        output_type=Response
-    )
-    
+    """Stream partial structured output, then the validated result."""
+
     async def event_stream():
         async with structured_agent.run_stream(message) as response:
-            # Stream partial text
-            async for text in response.stream_text():
-                event = {
-                    'type': 'text_delta',
-                    'data': text
-                }
-                yield f"data: {json.dumps(event)}\n\n".encode()
-            
-            # Stream final structured output
-            result = await response.result()
-            final_event = {
-                'type': 'final_result',
-                'data': result.output.model_dump()
-            }
-            yield f"data: {json.dumps(final_event)}\n\n".encode()
-    
-    return StreamingResponse(
-        event_stream(),
-        media_type='text/event-stream'
-    )
+            # stream_text() only works for text output; structured output streams with stream_output()
+            async for partial in response.stream_output():
+                yield sse({'type': 'partial', 'data': partial.model_dump()})
+            final = await response.get_output()   # runs output validators
+        yield sse({'type': 'final_result', 'data': final.model_dump()})
+
+    return StreamingResponse(event_stream(), media_type='text/event-stream')
+
 
 # Frontend JavaScript
 javascript_example = """
-// Connect to streaming endpoint
-const eventSource = new EventSource('/api/chat/stream?message=Hello');
-
-eventSource.onmessage = (event) => {
-    const text = event.data;
-    document.getElementById('response').textContent += text;
+const source = new EventSource('/api/chat/stream?message=' + encodeURIComponent('Hello'));
+source.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === 'text_delta') document.getElementById('response').textContent += msg.data;
+    if (msg.type === 'done') source.close();
 };
-
-eventSource.onerror = () => {
-    console.error('Stream error');
-    eventSource.close();
-};
+source.onerror = () => source.close();
 """
 ```
+
+`EventSource` can only make GET requests, hence the query parameter; use `fetch()` with a streamed body reader if you need POST. For the AG-UI and Vercel AI SDK protocols, use the [built-in adapters](/pydanticai-guide/pydantic_ai_integrations/#ui-protocols-and-front-ends) instead of a hand-rolled format.
 
 ---
 
@@ -543,7 +522,8 @@ eventSource.onerror = () => {
 ```python
 """
 Agent that maintains conversation memory across sessions.
-Uses PostgreSQL for persistence.
+Uses PostgreSQL for persistence; assumes a table
+user_memory(user_id, session_id, key, value, expires_at, updated_at) with UNIQUE (user_id, key).
 """
 
 from pydantic_ai import Agent, RunContext
@@ -577,7 +557,7 @@ async def store_memory(
             INSERT INTO user_memory (user_id, session_id, key, value, expires_at)
             VALUES ($1, $2, $3, $4, NOW() + INTERVAL '1 second' * $5)
             ON CONFLICT (user_id, key) DO UPDATE
-            SET value = $3, updated_at = NOW()
+            SET value = $4, expires_at = NOW() + INTERVAL '1 second' * $5, updated_at = NOW()
         ''', ctx.deps.user_id, ctx.deps.session_id, key, value, ttl)
     
     return True
@@ -606,9 +586,9 @@ async def recall_memory(
             
             return {row['key']: row['value'] for row in rows}
 
-@memory_agent.system_prompt
+@memory_agent.instructions   # re-evaluated on every run, so new memories appear next turn
 async def memory_aware_prompt(ctx: RunContext[MemoryDependencies]) -> str:
-    """Include user's memory in system prompt."""
+    """Include user's memory in the instructions."""
     
     memories = await recall_memory(ctx)
     
@@ -645,10 +625,13 @@ async def conversational_agent_with_memory(
 
 ```python
 """
-Production agent with sophisticated error handling and recovery.
+Retry a whole run when the provider fails or the model keeps producing invalid output.
+Retrying individual HTTP requests is better done by the provider SDK or a retrying
+transport (see the error handling page); this wrapper is the outer safety net.
 """
 
-from pydantic_ai import Agent, ModelRetry, RunContext
+from pydantic_ai import Agent
+from pydantic_ai.exceptions import ModelAPIError, UnexpectedModelBehavior
 from typing import Optional
 import asyncio
 from enum import Enum
@@ -689,7 +672,7 @@ class ResilientAgent:
                 result = await self.agent.run(prompt)
                 return result.output
             
-            except Exception as e:
+            except (ModelAPIError, UnexpectedModelBehavior) as e:   # not UserError: a bug won't fix itself
                 last_error = e
                 
                 if attempt < self.max_retries - 1:
@@ -774,6 +757,8 @@ Useful when you have many tasks but want to avoid hitting rate limits.
 """
 
 import asyncio
+from typing import Literal
+
 from pydantic import BaseModel
 from pydantic_ai import Agent, ConcurrencyLimiter, limit_model_concurrency
 from pydantic_ai.exceptions import ConcurrencyLimitExceeded
@@ -781,7 +766,7 @@ from pydantic_ai.exceptions import ConcurrencyLimitExceeded
 class ItemAnalysis(BaseModel):
     item_id: str
     category: str
-    sentiment: str  # positive | negative | neutral
+    sentiment: Literal['positive', 'negative', 'neutral']
     score: float
 
 # Shared limiter: max 5 parallel model calls, queue up to 15 more

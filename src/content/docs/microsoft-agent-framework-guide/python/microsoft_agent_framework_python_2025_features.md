@@ -75,7 +75,7 @@ Workflows support **checkpointing** via `FileCheckpointStorage` / `InMemoryCheck
 
 ## Declarative agents & workflows (YAML)
 
-`agent-framework-declarative` provides `AgentFactory` (single agent from YAML) and `WorkflowFactory` (multi-agent workflow from YAML). Actions are a Power-Fx-expression dialect — `SetVariable`, `InvokeAzureAgent`, `InvokeFunctionTool`, `If`, `Foreach`, `RepeatUntil`, `Question`, `Confirmation`, `SendActivity`, etc. Full reference: [Microsoft Learn — Declarative Workflows](https://learn.microsoft.com/agent-framework/workflows/declarative/).
+`agent-framework-declarative` provides `AgentFactory` (single agent from YAML) and `WorkflowFactory` (multi-agent workflow from YAML). Actions use Power Fx expressions — `SetVariable`, `InvokeAzureAgent`, `InvokeFunctionTool`, `If`, `ConditionGroup`, `Foreach`, `Question`, `RequestExternalInput`, `SendActivity` and others; the [supported list](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/#yaml-actions) is on the workflows page. Full reference: [Microsoft Learn — Declarative Workflows](https://learn.microsoft.com/agent-framework/workflows/declarative/).
 
 ### `AgentFactory` — load a single agent from YAML
 

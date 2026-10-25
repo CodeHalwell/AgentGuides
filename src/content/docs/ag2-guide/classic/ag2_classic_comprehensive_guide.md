@@ -388,7 +388,7 @@ print(last_agent.name, result.summary)
 - Pass `context_variables=ContextVariables(data={...})` to the pattern to share state. Tools that declare a `context_variables: ContextVariables` parameter receive it.
 
 :::caution[Swarms were removed in 0.14.0]
-`SwarmAgent`, `initiate_swarm_chat` and `register_hand_off` moved to `autogen.agentchat.contrib.swarm_agent` in 0.13.0 and were removed in 0.14.0; neither `ag2` 0.14 nor `autogen` %%version=autogen%% contains them. Port swarm code to the pattern API above (`register_hand_off(agent, [OnCondition(...)])` becomes `agent.handoffs.add_llm_conditions([...])`, `AfterWork(...)` becomes `agent.handoffs.set_after_work(...)`). If you cannot port yet, pin `ag2==0.13.*`.
+`SwarmAgent`, `initiate_swarm_chat` and `register_hand_off` lived in `autogen.agentchat.contrib.swarm_agent` (and were re-exported from `autogen.agentchat`) up to `ag2` 0.13.x, and were removed in 0.14.0; neither `ag2` 0.14 nor `autogen` %%version=autogen%% contains them. Port swarm code to the pattern API above (`register_hand_off(agent, [OnCondition(...)])` becomes `agent.handoffs.add_llm_conditions([...])`, `AfterWork(...)` becomes `agent.handoffs.set_after_work(...)`). If you cannot port yet, pin `ag2==0.13.*`.
 :::
 
 ## Nested chats
@@ -468,7 +468,7 @@ Pass it to the pattern (`DefaultPattern(..., context_variables=context)`) and ad
 - **A2A**: `autogen.a2a.A2aAgentServer` serves a Classic agent and `A2aRemoteAgent` wraps a remote one (extra `autogen[a2a]`). See [Serving an agent over A2A](/ag2-guide/classic/ag2_classic_production_guide/#serving-an-agent-over-a2a).
 - **MCP**: `await autogen.mcp.create_toolkit(session=...)` turns an MCP client session into a toolkit you register on agents (extra `autogen[mcp]`).
 - **Observability and cost**: `autogen.runtime_logging`, `autogen.opentelemetry` and `gather_usage_summary` are covered in the [production guide](/ag2-guide/classic/ag2_classic_production_guide/).
-- **`autogen.beta`**: from 0.11 Classic shipped a preview of the event-driven API. It became the top-level `ag2` package in AG2 1.0, so new work should use that directly. Code written against `autogen.beta` ports almost mechanically.
+- **`autogen.beta`**: from `ag2` 0.11.4 (March 2026) the package shipped a preview of the event-driven API. It became the top-level `ag2` package in AG2 1.0, so new work should use that directly. Code written against `autogen.beta` ports almost mechanically.
 
 ## Moving on from Classic
 

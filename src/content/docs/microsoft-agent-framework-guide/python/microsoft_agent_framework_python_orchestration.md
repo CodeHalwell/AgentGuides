@@ -399,7 +399,7 @@ result = await workflow.run(
 )
 ```
 
-Tools read these values through `FunctionInvocationContext.kwargs`, as they do for a plain agent (see [Tools → runtime context](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#runtime-context--hidden-parameters)).
+Tools read these values through `FunctionInvocationContext.kwargs`, as they do for a plain agent (see [Tools → runtime context](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/#runtime-context-hidden-parameters)).
 
 ### Cloning executors for graph reuse — `AgentExecutor.clone`
 

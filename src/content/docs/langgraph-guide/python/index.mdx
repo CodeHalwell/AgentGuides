@@ -103,7 +103,7 @@ Signatures and behaviour checked against `langgraph` %%version=langgraph%%, `lan
   - `durability=` is an argument to `invoke`/`stream`, not `compile()`, and interrupts work under every mode.
   - Node timeouts work only on `async` nodes; `compile()` rejects a sync node with a timeout.
   - `SqliteSaver.from_conn_string(...)` and `PostgresSaver.from_conn_string(...)` are context managers.
-  - `InMemoryStore` has no TTL support; use `PostgresStore` with a `ttl` config.
+  - `InMemoryStore` has no TTL support; use `SqliteStore` or `PostgresStore` with a `ttl` config.
   - "LangGraph Cloud" / "LangGraph Platform" is now LangSmith Deployment; the server is the Agent Server.
 </Aside>
 
@@ -145,6 +145,7 @@ Earlier history is in git.
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 1.2.16 | Full API audit against the installed packages: every block run with stub models, and version-history tables rebuilt from the released wheels. Corrected `ToolRuntime` and `ExecutionInfo` fields, managed-value limits, the `writer` parameter rule, `NamedBarrierValue` semantics, `RemoteGraph` stream shapes, v3 stream-event claims and the recursion-limit history. Added durable stores (`SqliteStore` and `PostgresStore`, TTL sweeps), `PostgresSaver.prune`, cache backends (`SqliteCache`, `RedisCache`), resume-by-id for parallel interrupts, `response_schema`, per-call HITL options, trace policy in middleware, a FastAPI service with an async Postgres saver, and a type-checked React `useStream` example. |
 | 2026-10-21 | 1.2.16 | Agent chapters moved to `create_agent` and middleware (Chapter 8 rewritten; `create_react_agent` documented as deprecated). The single-page comprehensive guide replaced by an API map that links to the chapters; retry/timeout/cache policies documented once, in the StateGraph reference. Chapter 10, the production guide and the performance page rewritten around LangGraph's own deployment, durability, checkpointer and testing features. Corrected: default recursion limit, `ToolNode` error-handling default, interrupt behaviour without a checkpointer, `InMemoryStore` TTL, `destinations=`, `durability` placement, error-handler signatures and routing, sync nodes with timeouts, `Send` from nodes. Removed the advanced-implementations page and merged the managed-values page into the runtime reference. |
 | 2026-10-19 | 1.2.16 | Version bump; more runnable examples for channels, `ToolNode`, `MessagesState` and `Runtime`. |
 | 2026-04-22 | 1.1.9 | Source-checked reference pages added. |

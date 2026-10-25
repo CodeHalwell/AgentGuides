@@ -8,7 +8,7 @@ sidebar:
   order: 78
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/evaluation/`), checked %%versions-checked%%. Examples work on 2.4.0 and later unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/evaluation/`), checked %%versions-checked%%.
 
 ADK ships a first-class evaluation framework built around three concepts: **`EvalCase`** (a single conversation to run), **`EvalSet`** (a collection of cases), and **`AgentEvaluator`** (the engine that runs cases against a live agent and scores the results). The framework integrates with `pytest` and supports custom metrics.
 
@@ -237,13 +237,21 @@ All defined in `evaluation/eval_metrics.py` as `PrebuiltMetrics`:
 | `response_match_score` | `BaseCriterion` | Lexical similarity between actual and expected final response |
 | `response_evaluation_score` | `LlmAsAJudgeCriterion` | LLM judge rating of response quality |
 | `final_response_match_v2` | `LlmAsAJudgeCriterion` | Semantic match using an LLM judge (v2, more robust) |
-| `safety_v1` | `BaseCriterion` | Safety / toxicity score |
+| `safety_v1` | `BaseCriterion` | Safety (harmlessness) score; uses the Vertex Gen AI Eval SDK, so needs `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION` |
 | `hallucinations_v1` | `HallucinationsCriterion` | Detects factual hallucinations |
 | `rubric_based_final_response_quality_v1` | `RubricsBasedCriterion` | Rubric-scored response quality |
 | `rubric_based_tool_use_quality_v1` | `RubricsBasedCriterion` | Rubric-scored tool selection |
 | `multi_turn_task_success_v1` | — | Whether a multi-turn task succeeded end-to-end |
 | `multi_turn_trajectory_quality_v1` | — | Quality of the full multi-turn trajectory |
 | `multi_turn_tool_use_quality_v1` | — | Tool use quality across all turns |
+| `rubric_based_multi_turn_trajectory_quality_v1` | `RubricsBasedCriterion` | The multi-turn trajectory scored against your rubrics by an LLM judge |
+| `per_turn_user_simulator_quality_v1` | `LlmBackedUserSimulatorCriterion` | Whether each simulated user message follows the conversation scenario |
+| `tool_call_count_v1` | — | Informational: tool calls per invocation, averaged over the case |
+| `inference_call_count_v1` | — | Informational: model calls per invocation |
+| `token_usage_v1` | — | Informational: tokens per invocation, with an input/output breakdown |
+| `invocation_duration_v1` | — | Informational: wall-clock seconds per invocation |
+
+The four efficiency metrics at the end are added to every eval automatically and appear in results and CSV output with the status `INFORMATIONAL`; they never pass or fail. Leave them out of `criteria`: naming one there gives it a threshold, which these metrics reject, so the metric errors and the run fails with "was not evaluated".
 
 ### `ToolTrajectoryCriterion` match types
 
@@ -263,7 +271,7 @@ ToolTrajectoryCriterion(threshold=1.0, match_type=ToolTrajectoryCriterion.MatchT
 
 ## `AgentEvaluator`
 
-The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (first documented for 2.3.0; re-checked against %%version=google-adk%%).
+The engine. All methods are `@staticmethod`. Defined in `evaluation/agent_evaluator.py` (re-checked against %%version=google-adk%%).
 
 ### `evaluate_eval_set` — programmatic, in-memory
 
@@ -521,7 +529,7 @@ asyncio.run(main())
 
 **What ends up on disk:**
 
-- `./eval_results/travel_bench_20260824.csv` — one row per (eval_case, metric, invocation). Columns include the eval_set_id, eval_id, metric name, score, threshold, and pass/fail flag. Written by `_write_results_to_csv` after all cases finish.
+- `./eval_results/travel_bench_20260824.csv` — one row per (eval case, metric, invocation), with the columns `eval_set_id, eval_id, metric_name, threshold, score, eval_status, prompt, expected_response, actual_response, expected_tool_calls, actual_tool_calls`. The file is appended to if it already exists (the header is written once), and writing it needs pandas (`pip install "google-adk[eval]"`).
 - `./eval_results/travel_bench/.adk/eval_history/<result_id>.evalset_result.json` — the persisted `EvalSetResult` written by `LocalEvalSetResultsManager`. The path is built as `<agents_dir>/<app_name>/.adk/eval_history/<result_id>.evalset_result.json` (see `_get_eval_history_dir` in `local_eval_set_results_manager.py`). This is what the ADK Web UI reads back when browsing historical runs.
 
 **Two hard rules from the source (verified in the docstring & body):**
@@ -529,7 +537,7 @@ asyncio.run(main())
 - `eval_config` is required — passing `None` raises `ValueError("`eval_config` is required.")`.
 - If you set `eval_set_results_manager` but leave `app_name` `None`, the same top-of-function check raises `ValueError("app_name is required when eval_set_results_manager is provided.")`.
 
-**Legacy `criteria=` shortcut.** Still accepted, still deprecated. Verified: `AgentEvaluator` auto-maps `criteria={metric: threshold}` → `EvalConfig(criteria={metric: BaseCriterion(threshold=threshold)})` and logs a `DeprecationWarning`. Migrate anything you own by constructing `EvalConfig` explicitly.
+**Legacy `criteria=` shortcut.** Still accepted, still deprecated. Verified: `AgentEvaluator` auto-maps `criteria={metric: threshold}` → `EvalConfig(criteria={metric: BaseCriterion(threshold=threshold)})` and logs a deprecation message through the `google_adk` logger (`logger.warning`, not a Python `DeprecationWarning`). Migrate anything you own by constructing `EvalConfig` explicitly.
 
 ## Saving eval results
 
@@ -564,38 +572,65 @@ results_manager = GcsEvalSetResultsManager(
 
 ## Custom metrics
 
+A custom metric is a function that ADK imports by dotted path. It is called with the `EvalMetric`, the actual invocations, the expected invocations (or `None`) and the `ConversationScenario` (or `None`), and returns an `EvaluationResult`; it may be `async`. ADK clears the threshold on the copy of `EvalMetric` it passes in, so the function sets the pass/fail status itself, and the threshold in `criteria` is then checked against `overall_score`.
+
 ```python
-from google.adk.evaluation.eval_config import EvalConfig, CustomMetricConfig
-from google.adk.agents.common_configs import CodeConfig
-
-# Implement the metric function in a discoverable module
 # my_package/metrics.py
-def my_length_metric(
-    actual_invocation,
-    expected_invocation,
-    criterion,
-) -> float:
-    """Returns 1.0 if the response is ≤ 100 chars, else 0.0."""
-    if not actual_invocation.final_response:
-        return 0.0
-    text = "".join(
-        p.text or ""
-        for p in actual_invocation.final_response.parts or []
-    )
-    return 1.0 if len(text) <= 100 else 0.0
+from typing import Optional
 
+from google.adk.evaluation.conversation_scenarios import ConversationScenario
+from google.adk.evaluation.eval_case import Invocation
+from google.adk.evaluation.eval_metrics import EvalMetric, EvalStatus
+from google.adk.evaluation.evaluator import EvaluationResult, PerInvocationResult
+
+MAX_CHARS = 100
+
+
+def response_brevity(
+    eval_metric: EvalMetric,
+    actual_invocations: list[Invocation],
+    expected_invocations: Optional[list[Invocation]],
+    conversation_scenario: Optional[ConversationScenario],
+) -> EvaluationResult:
+    """Scores 1.0 for each final response of at most MAX_CHARS characters."""
+    per_invocation = []
+    for actual in actual_invocations:
+        parts = actual.final_response.parts if actual.final_response else []
+        text = "".join(p.text or "" for p in parts or [])
+        score = 1.0 if len(text) <= MAX_CHARS else 0.0
+        per_invocation.append(
+            PerInvocationResult(
+                actual_invocation=actual,
+                score=score,
+                eval_status=EvalStatus.PASSED if score == 1.0 else EvalStatus.FAILED,
+            )
+        )
+    overall = sum(r.score for r in per_invocation) / max(len(per_invocation), 1)
+    return EvaluationResult(
+        overall_score=overall,
+        overall_eval_status=EvalStatus.PASSED if overall == 1.0 else EvalStatus.FAILED,
+        per_invocation_results=per_invocation,
+    )
+```
+
+Register it under a name in `custom_metrics` and give that name a threshold in `criteria`:
+
+```python
+from google.adk.agents.common_configs import CodeConfig
+from google.adk.evaluation.eval_config import CustomMetricConfig, EvalConfig
 
 config = EvalConfig(
-    criteria={
-        "response_brevity": 1.0,                     # threshold to pass
-    },
+    criteria={"response_brevity": 1.0},
     custom_metrics={
         "response_brevity": CustomMetricConfig(
-            code_config=CodeConfig(name="my_package.metrics.my_length_metric"),
+            code_config=CodeConfig(name="my_package.metrics.response_brevity"),
+            description="Final response is at most 100 characters.",
         ),
     },
 )
 ```
+
+With a stub model replying `42`, this metric passes; a 150-character reply fails with `response_brevity for my_package.agent Failed. Expected 1.0, but got 0.0.`
 
 ## Rubric-based evaluation
 
@@ -721,9 +756,9 @@ Set `agent_name="specialist_bot"` on `evaluate_eval_set` to evaluate a sub-agent
 ### 5 — End-to-end state assertion
 Populate `final_session_state={"order_confirmed": True}` in the `EvalCase`. ADK asserts the session state matches after the conversation completes. Combine with tool trajectory to verify both the path and the outcome.
 
-## Multi-turn evaluators (2.4.0)
+## Multi-turn evaluators
 
-Three Vertex AI–backed evaluators score entire conversations holistically, rather than scoring individual turn responses. All require either `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` (Vertex AI) or `GOOGLE_API_KEY` (AI Studio) in your environment.
+Three Vertex AI–backed evaluators score entire conversations holistically, rather than scoring individual turn responses. They delegate to the Vertex Gen AI Eval SDK, so they need a Google Cloud project: set `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. An AI Studio `GOOGLE_API_KEY` is not enough.
 
 | Class | `PrebuiltMetrics` key | What it scores |
 |---|---|---|
@@ -735,7 +770,7 @@ All three are **reference-free** — they do not need `final_response` or `inter
 
 ### `ConversationScenario`
 
-`ConversationScenario` describes the task the agent was meant to solve. The multi-turn evaluators use it to judge whether the agent succeeded. It lives in `google.adk.evaluation.conversation_scenarios` with two required fields: `starting_prompt` (the first user message) and `conversation_plan` (the evaluator's guide to what a successful conversation looks like).
+`ConversationScenario` describes the task the agent was meant to solve. The multi-turn evaluators use it to judge whether the agent succeeded. It lives in `google.adk.evaluation.conversation_scenarios` with two required fields, `starting_prompt` (the first user message) and `conversation_plan` (the evaluator's guide to what a successful conversation looks like), and an optional `user_persona` used by the simulated user.
 
 ```python
 from google.adk.evaluation.conversation_scenarios import ConversationScenario
@@ -749,7 +784,7 @@ scenario = ConversationScenario(
 )
 ```
 
-Attach it to an `EvalCase` using `conversation_scenario`. **Important:** `EvalCase` enforces an XOR constraint — you must set exactly one of `conversation` (static turns) or `conversation_scenario` (scenario-driven); setting both raises `ValueError`.
+Attach it to an `EvalCase` using `conversation_scenario`. **Important:** `EvalCase` enforces an XOR constraint — you must set exactly one of `conversation` (static turns) or `conversation_scenario` (scenario-driven). Setting both, or neither, fails validation (a pydantic `ValidationError`, which subclasses `ValueError`).
 
 ```python
 from google.adk.evaluation.eval_case import EvalCase
@@ -867,9 +902,9 @@ eval_config = EvalConfig(
 | Investigating agent reasoning path | `MULTI_TURN_TRAJECTORY_QUALITY_V1` (judges whether the path made sense) |
 | Tool selection across a dialogue | `MULTI_TURN_TOOL_USE_QUALITY_V1` (rubric over entire tool-call log) |
 
-## `ConversationGenerationConfig` and `ScenarioGenerator` (2.4.0)
+## `ConversationGenerationConfig` and `ScenarioGenerator`
 
-Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them. This is **synchronous** (not async). It requires either `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` (Vertex AI) or `GOOGLE_API_KEY` (AI Studio). The correct module path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
+Instead of writing `EvalCase` objects by hand, you can ask a Vertex AI model to generate them. This is **synchronous** (not async). It uses Vertex AI, so it requires `GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. The correct module path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
 
 `ConversationGenerationConfig` lives in `google.adk.evaluation.conversation_scenarios` with fields: `count` (required), `model_name` (required), `generation_instruction` (optional), `environment_context` (optional).
 
@@ -923,7 +958,7 @@ cases = [
 eval_set = EvalSet(eval_set_id="synthetic_travel_suite", eval_cases=cases)
 ```
 
-## `AppDetails` and `AgentDetails` (2.4.0)
+## `AppDetails` and `AgentDetails`
 
 `AppDetails` and `AgentDetails` capture a lightweight snapshot of the agent tree at eval time. Both live in `google.adk.evaluation.app_details`. `AppDetails` has a single field: `agent_details: dict[str, AgentDetails]`. `AgentDetails` has: `name: str`, `instructions: str`, `tool_declarations: list`.
 
@@ -957,7 +992,7 @@ snapshot = AppDetails(
 - `RESPONSE_EVALUATION_SCORE` is inherently unstable — the docstring in source says "this evaluation is not very stable". Treat it as a soft signal, not a hard gate.
 - Old `.test.json` files are accepted but emit a deprecation warning. Migrate to `EvalSet` JSON to suppress the warning.
 - `SessionInput.state` sets the **initial** session state before the first turn. Mutations during the conversation are not reflected back to `session_input`.
-- Multi-turn Vertex AI evaluators (`multi_turn_task_success_v1`, etc.) incur Vertex AI API calls per evaluation run. Cache results with `LocalEvalSetResultsManager` and avoid running them on every PR commit.
+- Multi-turn Vertex AI evaluators (`multi_turn_task_success_v1`, etc.) incur Vertex AI API calls per evaluation run. Keep the results with `LocalEvalSetResultsManager` so you can compare runs, and avoid running them on every PR commit.
 - `ScenarioGenerator.generate_scenarios()` is **synchronous** (source-verified: plain `def`, not `async def`). It takes `agent` and `config` as positional/keyword arguments. The correct import path is `google.adk.evaluation._vertex_ai_scenario_generation_facade`.
 - `ConversationScenario` fields are `starting_prompt` and `conversation_plan` (from `google.adk.evaluation.conversation_scenarios`), not `scenario_description`/`task_description`.
-- `EvalCase` enforces `conversation` XOR `conversation_scenario` — passing both raises `ValueError` at construction time.
+- `EvalCase` enforces `conversation` XOR `conversation_scenario`: passing both, or neither, fails validation at construction time.

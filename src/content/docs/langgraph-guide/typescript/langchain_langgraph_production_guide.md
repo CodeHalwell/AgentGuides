@@ -52,8 +52,8 @@ For long-term memory across threads, pass a store to `compile({ store })` (`InMe
 ## Durability, recursion limits and node policies
 
 - **`durability`** (`'sync' | 'async' | 'exit'`, passed to `invoke`/`stream`) controls when checkpoints are written: before the next step, in the background (the default), or only at the end. It has no effect without a checkpointer.
-- **`recursionLimit`** caps the number of super-steps. Set it explicitly on agent loops.
-- **Node policies** are options on `addNode`: `retryPolicy`, `timeout` (milliseconds, or a `TimeoutPolicy` with `runTimeout`/`idleTimeout`; a timeout raises `NodeTimeoutError`), `cachePolicy` (needs `compile({ cache })`) and `errorHandler` (runs after retries are exhausted and receives `{ node, error }`). `setNodeDefaults(...)` applies them to every node.
+- **`recursionLimit`** caps the number of super-steps (default 25; exceeding it throws `GraphRecursionError`). Set it explicitly on agent loops.
+- **Node policies** are options on `addNode`: `retryPolicy`, `timeout` (milliseconds, or a `TimeoutPolicy` with `runTimeout`/`idleTimeout`; a timeout raises `NodeTimeoutError`), `cachePolicy` (needs `compile({ cache })`) and `errorHandler` (runs after retries are exhausted and is called as `(state, nodeError, config)`, where `nodeError` has `node` and `error`). `setNodeDefaults(...)` applies them to every node.
 
 ```typescript
 import { Annotation, StateGraph, START, END, MemorySaver } from '@langchain/langgraph';

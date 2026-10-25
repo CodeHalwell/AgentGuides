@@ -70,9 +70,9 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 - **1.2.x (October 2026)** — current line. Additive: A2A servers on several replicas, push-notification URL validation and input media-type checks, `reasoning` option on `OpenAIResponsesConfig`, Firecrawl and Keenable search toolkits, Mistral live/speech configs, plus provider and knowledge-store fixes. No changes needed to 1.1 code on this site.
 - **1.1.x (September–October 2026)** — patch releases on top of 1.0.
-- **1.0.0 (27 July 2026)** — the protocol-driven framework (previously previewed as `autogen.beta` in 0.11–0.14) becomes the top-level `ag2` package. Classic agent classes, `GroupChat`, swarms and the `autogen` import name are removed from `ag2`; Classic continues in the [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic) repository.
+- **1.0.0 (27 July 2026)** — the protocol-driven framework (previously previewed as `autogen.beta` from 0.11.4 to 0.14) becomes the top-level `ag2` package. Classic agent classes, `GroupChat`, swarms and the `autogen` import name are removed from `ag2`; Classic continues in the [ag2ai/ag2-classic](https://github.com/ag2ai/ag2-classic) repository.
 - **0.14.0 (June 2026)** — last `ag2` release with the Classic `autogen.*` API; the swarm API (`autogen.agentchat.contrib.swarm_agent`) was removed.
-- **0.11–0.13 (spring 2026)** — `autogen.beta` event-driven preview; swarm functions moved under `autogen.agentchat.contrib.swarm_agent` in 0.13.0.
+- **0.11–0.13 (February–June 2026)** — from 0.11.4 (March), an `autogen.beta` event-driven preview alongside the Classic API, which still included swarms (`autogen.agentchat.contrib.swarm_agent`).
 
 ## Install, minimal example
 
@@ -108,6 +108,6 @@ Ready? **[Start with what changed in 1.0 →](./ag2_comprehensive_guide/#what-ch
 | 2026-10-21 | 1.2.1 | Retitled "AG2" (it is a fork, not a rename). AG2 Classic pages moved here from the AutoGen guide into `/ag2-guide/classic/`, with a single migration page. Added sections on dependency injection, code execution (local sandbox vs provider-hosted tools), multimodal input, middleware and observers, knowledge and compaction, sub-tasks and eval, and an OpenTelemetry/usage example in production. |
 | 2026-10-21 | 1.2.1 | Guide rewritten for the ag2 1.x API (`import ag2`); every example run offline with `ag2.testing.TestConfig` against 1.1.2 and re-run against 1.2.1 (1.1.2 → 1.2.1 changelog reviewed: additive only). Removed examples that never matched a released API (`ag2 init`/`ag2 ui` CLI, `QuickResearchTool`, `autogen.interop.A2AServer`, `Agent(system_message=...)` from `autogen`). Classic material condensed into a Classic/migration section verified against `autogen` 0.14.1. | Claude |
 | 2026-06-07 | 0.13.3 | Patch release; core Classic symbols verified. | Claude routine |
-| 2026-05-20 | 0.13.0 | Swarm API moved to `autogen.agentchat.contrib.swarm_agent`. | Claude routine |
+| 2026-05-20 | 0.13.0 | Swarm API listed under `autogen.agentchat.contrib.swarm_agent` (correction: it was already there from 0.11). | Claude routine |
 | 2026-04-21 | 0.11.5 | Index redesigned with Zero → Hero grid. | — |
 | November 2025 | 0.3.2 | Initial AG2 guide. | — |

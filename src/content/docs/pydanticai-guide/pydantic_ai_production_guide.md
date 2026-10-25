@@ -457,5 +457,6 @@ assert pass_rate is not None and pass_rate >= 0.5, f'eval pass rate fell to {pas
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Re-checked against pydantic-ai %%version=pydantic-ai%%; every example re-run offline. No corrections needed beyond a typo. |
 | 2026-10-21 | Rewritten around PydanticAI's own production features (instrumentation, limits, retries and fallback, concurrency, approvals, durability, testing and evals). Generic FastAPI, Docker, Kubernetes, Prometheus, Redis, nginx and Celery material removed. |
 | 2025-11 | First edition (1.x). |

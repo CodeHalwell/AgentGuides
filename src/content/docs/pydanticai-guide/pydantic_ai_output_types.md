@@ -495,7 +495,7 @@ See the [streaming guide](/pydanticai-guide/pydantic_ai_streaming/). `StreamedRu
 - **`strict=True`**: strict mode supports only part of JSON Schema. If the provider rejects your schema, simplify the type (no open-ended `dict`, no recursive models) or drop `strict`.
 - **`NativeOutput` on a model without JSON-schema output** raises `UserError` before any request is sent. It does not fall back to prompted mode; choose `PromptedOutput` explicitly for such models.
 - **`TextOutput` and tools**: function tools emitted alongside the final text still run under the default `end_strategy='graceful'` (since 2.0); only `'early'` would skip them.
-- **`output_type` on `run()`**: the per-run override raises `UserError('Cannot set a custom run `output_type` when the agent has output validators')` if the agent has an `output_validator`, because the validator's type would not match.
+- **`output_type` on `run()`**: the per-run override raises a `UserError` ("Cannot set a custom run output_type when the agent has output validators") if the agent has an `output_validator`, because the validator's type would not match.
 
 ## Patterns
 

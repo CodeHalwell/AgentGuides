@@ -418,7 +418,7 @@ class BatchedEmbeddingClient(BaseEmbeddingClient):
 
 ## Custom context provider — `ContextProvider`
 
-`ContextProvider` is the base class for anything that mutates the `SessionContext` before a run (injecting messages, tools, instructions, or middleware) or observes the response afterwards. The `SkillsProvider` from the [Skills page](./microsoft_agent_framework_python_skills/) is itself a `ContextProvider`. Roll your own when you have domain-specific context to attach.
+`ContextProvider` is the base class for anything that mutates the `SessionContext` before a run (injecting messages, tools, instructions, or middleware) or observes the response afterwards. The `SkillsProvider` from the [Skills page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) is itself a `ContextProvider`. Roll your own when you have domain-specific context to attach.
 
 ```python
 from typing import Any

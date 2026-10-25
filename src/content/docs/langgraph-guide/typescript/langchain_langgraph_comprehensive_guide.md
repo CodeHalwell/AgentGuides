@@ -3419,6 +3419,7 @@ The reducer must give the same result however the writes are batched (`reducer(r
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.2 | 2026-10-25 | "Recent features" section expanded with runnable `RunControl`/`GraphDrained` and `DeltaValue`/`MessagesDeltaValue` examples; per-node `tracePolicy` removed (not in any released version); `setNodeDefaults` placement clarified. |
 | 1.5.2 | 2026-10-21 | All examples now type-check under `strict`: builders are chained so node names are tracked, `addSequence` steps are typed, a subclassed tool that used `this` before `super()` replaced with a `tool()` factory, `config.writer` replaced with `getWriter()`, a duplicate `addNode` removed. Recommended `tsconfig` updated (ES2022, bundler resolution, `tsx`). `@langchain/community` (deprecated) removed. Hand-rolled hook, cache and memory frameworks cut in favour of middleware, `cachePolicy` and the Store. Interrupts, `Command`, `Send`, subgraphs, Functional API and time travel added on [their own page](/langgraph-guide/typescript/langgraph_control_flow_typescript/). |
 | 1.5.2 | 2026-10-21 | Replaced invented or removed APIs (`AgentExecutor`, `createOpenAIFunctionsAgent`, `@langgraphjs/toolkit`, `value_type` channels, `cache`/`cacheKey`/`cacheTTL`/`deferred` node options, `ZodOutputParser`) with real ones; fixed `tool()` argument order and `.stream()` chunk shapes. |
 | 1.3.0 | 2026-05-05 | `MessagesZodState`, `STREAM_EVENTS_V3_MODES`, `pushMessage`. |

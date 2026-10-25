@@ -947,9 +947,9 @@ agent = Agent('openai:%%model=openai%%', end_strategy='early', retries={'tools':
 | `agent.to_web()`, `agent.to_cli()` | Chat web app, terminal chat ([integrations](/pydanticai-guide/pydantic_ai_integrations/#built-in-chat-ui-and-cli)) |
 | `Agent.from_spec(...)`, `Agent.from_file(path)` | Build an agent from a YAML/JSON `AgentSpec` |
 
-The run methods share these keyword arguments: `message_history`, `deps`, `instructions` (appended for this run), `model`, `model_settings`, `output_type`, `usage_limits`, `usage`, `timeout`, `cancellation_token`, `metadata`, `retries`, `toolsets`, `capabilities`, `deferred_tool_results` and `conversation_id`.
+The run methods share these keyword arguments: `message_history` or `conversation` (a whole `Conversation`, see below), `deps`, `instructions` (appended for this run), `model`, `model_settings`, `output_type`, `usage_limits`, `usage`, `timeout`, `cancellation_token`, `metadata`, `retries`, `toolsets`, `capabilities`, `deferred_tool_results`, `conversation_id` and `run_id`; `run`, `run_sync`, `run_stream` and `run_stream_sync` also take a per-run `event_stream_handler`.
 
-`AgentRunResult` exposes `output`, `usage` (a property), `response` (the final `ModelResponse`), `run_id`, `conversation_id`, `metadata`, and `all_messages()` / `new_messages()` with `_json()` variants for storage ([message history](/pydanticai-guide/pydantic_ai_message_history/)).
+`AgentRunResult` exposes `output`, `usage` (a property), `response` (the final `ModelResponse`), `run_id`, `conversation_id`, `metadata`, `conversation` (messages, usage, conversation ID and pending deferred calls in one object, ready to pass back as `conversation=`), and `all_messages()` / `new_messages()` with `_json()` variants for storage ([message history](/pydanticai-guide/pydantic_ai_message_history/#conversation--carry-the-whole-conversation-not-just-the-messages)).
 
 ### Iterating a run
 
@@ -1206,6 +1206,7 @@ The framework's own history is in the [upstream changelog](https://pydantic.dev/
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Re-audited against pydantic-ai %%version=pydantic-ai%%: corrected the instructions-versus-history note, `UnsupportedSettingWarning` scope, the start of V2 deprecation warnings (1.95.0), `agent.iter()` hook behaviour and the `OnlineEvaluation` module; added `Conversation` to the run reference and fuller exception tree. |
 | 2026-10-21 | Rewritten. The 4,700-line class reference (much of it private internals and repeats of topic pages) replaced by an [Agent reference](#agent-reference) and an [API map](#api-map) that links to the topic pages. Corrected the `end_strategy` default (`'graceful'`), the `AgentRetries` keys, the removed `MCPServer*` classes and the native-tool support table; fixed the tutorial examples (`instructions=` per run, `stream_output()` for structured streaming, `min_length=`, imports). |
 | 2026-08-21 | Class & API Reference section added, consolidating the earlier per-class pages. |
 | 2025-11 | First edition (1.x). |
