@@ -29,11 +29,11 @@ A test project for .NET 10 with xUnit v3 runs on Microsoft.Testing.Platform. Ref
     <NoWarn>$(NoWarn);MAAI001;MEAI001;AIEVAL001</NoWarn>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="xunit.v3" Version="4.0.2" />
-    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.14" />
-    <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="1.20.1" />
-    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="10.11.0" />
-    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="10.11.0" />
+    <PackageReference Include="xunit.v3" Version="%%version=xunit.v3%%" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="%%version=Microsoft.AspNetCore.TestHost%%" />
+    <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="%%version=OpenTelemetry.Exporter.InMemory%%" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="%%version=Microsoft.Extensions.AI.Evaluation.Quality%%" />
+    <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="%%version=Microsoft.Extensions.AI.Evaluation.Reporting%%" />
     <!-- plus Microsoft.Agents.AI, .Workflows, .Hosting and .Hosting.OpenAI, as in the app under test -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
