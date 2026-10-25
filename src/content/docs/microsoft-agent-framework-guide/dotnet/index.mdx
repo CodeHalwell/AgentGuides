@@ -1,6 +1,6 @@
 ---
 title: "Microsoft Agent Framework (.NET)"
-description: "Unified .NET agent SDK (Microsoft.Agents.AI) — ChatClientAgent, multi-agent orchestration, MCP, A2A, Azure RBAC."
+description: "The .NET agent SDK (Microsoft.Agents.AI): ChatClientAgent and providers, tools, MCP, middleware, sessions and memory, graph workflows, multi-agent orchestrations, hosting over OpenAI, A2A and AG-UI, observability, testing and evaluation."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
@@ -10,7 +10,7 @@ sidebar:
 
 import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
-**Unified .NET SDK that merges Semantic Kernel and AutoGen** (generally available since 2 April 2026). Build C# agents with `ChatClientAgent`, orchestrate multi-agent workflows, integrate with Azure AI services via managed identity, and stream via SignalR or SSE.
+**The .NET SDK that succeeds Semantic Kernel's agent features and AutoGen** (generally available since 2 April 2026). Build C# agents with `ChatClientAgent` on any `IChatClient`, compose them in graph workflows and prebuilt orchestrations, serve them over OpenAI-compatible, A2A and AG-UI endpoints, and use Azure services through managed identity.
 
 <CardGrid>
   <Card title="Install" icon="rocket">
@@ -23,71 +23,119 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
     `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** (checked %%versions-checked%%) · .NET 8.0+, also .NET Standard 2.0 / .NET Framework 4.7.2
   </Card>
   <Card title="Best for" icon="puzzle">
-    Enterprise .NET agents, Azure-native deployments, RBAC, multi-agent orchestration.
+    Enterprise .NET agents, Azure-native deployments, ASP.NET Core hosting, multi-agent workflows.
   </Card>
 </CardGrid>
 
 <Aside type="caution" title="Migrating from the previews">
-  `ChatClientAgentOptions` has no `Instructions` property: pass instructions to the `ChatClientAgent` constructor or `AsAIAgent(...)`, or set `ChatOptions.Instructions`. The core packages (`Microsoft.Agents.AI`, `.OpenAI`, `.Workflows`, `.Harness`, `.Anthropic`, `.GitHub.Copilot`) are stable; hosting, Foundry, A2A, DevUI and Azure Functions packages still need `--prerelease`.
+  `ChatClientAgentOptions` has no `Instructions` property: pass instructions to the `ChatClientAgent` constructor or `AsAIAgent(...)`, or set `ChatOptions.Instructions`. The core packages (`Microsoft.Agents.AI`, `.OpenAI`, `.Workflows`, `.Harness`, `.Anthropic`, `.GitHub.Copilot`) are stable; hosting, Foundry, A2A, DevUI, MCP-extension and Azure Functions packages still need `--prerelease`.
 </Aside>
 
 ## Zero → Hero
 
 <CardGrid>
-  <LinkCard title="1 · Introduction" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#introduction" description="What the framework is · 10 min" />
-  <LinkCard title="2 · Core fundamentals" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#core-fundamentals" description="DI, IChatClient, configuration · 20 min" />
-  <LinkCard title="3 · Simple agents" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#simple-agents" description="ChatClientAgent, chat, async · 25 min" />
-  <LinkCard title="4 · Multi-agent systems" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#multi-agent-systems" description="Sequential, concurrent, handoff · 30 min" />
-  <LinkCard title="5 · Tools integration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tools-integration" description="Function tools, built-ins · 20 min" />
-  <LinkCard title="6 · Structured output" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#structured-output" description="Typed responses, validation · 15 min" />
-  <LinkCard title="7 · MCP" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#model-context-protocol-mcp" description="MCP client + server · 20 min" />
-  <LinkCard title="8 · Agentic patterns" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="Planning, routing, reflection · 20 min" />
-  <LinkCard title="9 · Memory systems" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" description="Sessions, Cosmos DB history, RAG · 20 min" />
-  <LinkCard title="10 · Azure AI integration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#azure-ai-integration" description="Azure OpenAI, Content Safety · 15 min" />
-  <LinkCard title="11 · Azure RBAC" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_azure_rbac/" description="Least-privilege roles for managed identity · 10 min" />
-  <LinkCard title="12 · Semantic Kernel bridge" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" description="SK plugin compat · 15 min" />
-  <LinkCard title="13 · Feature tour" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/" description="A2A, workflows, checkpoints, HITL, declarative agents · 25 min" />
-  <LinkCard title="14 · Harness, Anthropic, Copilot, evaluation" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#more-agent-types" description="HarnessAgent, Anthropic and GitHub Copilot agents, LocalEvaluator, DevUI · 25 min" />
-  <LinkCard title="15 · Advanced" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/" description="Foundry agents, agent middleware, workflows as agents · 20 min" />
-  <LinkCard title="16 · Streaming (SSE)" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_streaming_server_dotnet/" description=".NET streaming server · 20 min" />
-  <LinkCard title="17 · Production" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/" description="Foundry hosted agents, durable Functions, security, evaluation in CI · 30 min" />
+  <LinkCard title="1 · Introduction and set-up" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#introduction" description="What the framework is, installation, configuration, DI · 20 min" />
+  <LinkCard title="2 · Simple agents" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#simple-agents" description="AIAgent, ChatClientAgent, sessions, RunAsync and streaming · 15 min" />
+  <LinkCard title="3 · Providers" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/" description="OpenAI, Azure OpenAI, Foundry, Anthropic, any IChatClient, routing · 40 min" />
+  <LinkCard title="4 · Tools" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/" description="AIFunctionFactory, the tool loop, approvals, hosted, shell and CodeAct tools · 40 min" />
+  <LinkCard title="5 · Structured output" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#structured-output" description="Typed results from RunAsync and response formats · 10 min" />
+  <LinkCard title="6 · MCP" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/" description="MCP clients, approvals, auth, MCP tasks, MCP servers · 40 min" />
+  <LinkCard title="7 · Middleware" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/" description="Agent-run, function and chat-client middleware, retries · 35 min" />
+  <LinkCard title="8 · Sessions and memory" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/" description="AgentSession, history providers, context providers, compaction · 45 min" />
+  <LinkCard title="9 · Workflows" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/" description="Executors, edges, request ports, checkpoints, sub-workflows · 60 min" />
+  <LinkCard title="10 · Multi-agent orchestrations" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/" description="Sequential, concurrent, group chat, handoff, Magentic · 35 min" />
+  <LinkCard title="11 · Agentic patterns" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#agentic-patterns" description="Plan and execute, routing, reflection · 10 min" />
+  <LinkCard title="12 · Hosting" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/" description="AddAIAgent, OpenAI, A2A and AG-UI endpoints, DevUI, SSE, Foundry, Functions · 40 min" />
+  <LinkCard title="13 · Observability" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/" description="OpenTelemetry spans and metrics, logging, Azure Monitor · 20 min" />
+  <LinkCard title="14 · Testing and evaluation" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/" description="Scripted chat clients, workflow and endpoint tests, LocalEvaluator · 35 min" />
+  <LinkCard title="15 · Advanced patterns" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/" description="Agents as chat clients and tools, workflows as agents · 10 min" />
+  <LinkCard title="16 · Azure integration and RBAC" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_azure_rbac/" description="Least-privilege roles for managed identity · 10 min" />
+  <LinkCard title="17 · Production" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/" description="Hosts, scale-out, security, resilience, evaluation in CI · 20 min" />
 </CardGrid>
 
 ## Jump to a topic
 
 <CardGrid>
-  <LinkCard title="ChatClientAgent" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#simple-agents" />
-  <LinkCard title="Multi-agent orchestration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#multi-agent-systems" />
-  <LinkCard title="Tools integration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tools-integration" />
-  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#model-context-protocol-mcp" />
-  <LinkCard title="Memory systems" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#memory-systems" />
-  <LinkCard title="Context engineering" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#context-engineering" />
+  <LinkCard title="ChatClientAgent" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#chatclientagent" />
+  <LinkCard title="Tools integration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/" />
+  <LinkCard title="Tool approval" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#approvals" />
+  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/" />
+  <LinkCard title="Memory systems" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/" />
+  <LinkCard title="Context engineering" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#context-providers" />
+  <LinkCard title="Graph workflows" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/" />
+  <LinkCard title="Human input and checkpoints" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#human-input-with-request-ports" />
+  <LinkCard title="Multi-agent orchestration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/" />
+  <LinkCard title="Hosting and A2A" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/" />
+  <LinkCard title="Streaming (SSE)" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#your-own-streaming-endpoint" />
+  <LinkCard title="Observability" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/" />
+  <LinkCard title="Testing" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/" />
+  <LinkCard title="Evaluation" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/#evaluating-with-localevaluator" />
   <LinkCard title="Azure AI" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#azure-ai-integration" />
   <LinkCard title="Azure RBAC" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_azure_rbac/" />
   <LinkCard title="Copilot Studio" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#copilot-studio-integration" />
   <LinkCard title="Semantic Kernel integration" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#semantic-kernel-integration" />
-  <LinkCard title="Feature tour" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/" />
-  <LinkCard title="Streaming server" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_streaming_server_dotnet/" />
 </CardGrid>
 
-## Reference
+## All pages
+
+In sidebar order.
 
 <CardGrid>
-  <LinkCard title="Comprehensive (.NET)" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/" description="Single-page technical reference." />
-  <LinkCard title="Feature tour" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/" />
-  <LinkCard title="Advanced" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/" />
-  <LinkCard title="Azure RBAC" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_azure_rbac/" />
-  <LinkCard title="Recipes" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/" />
-  <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_diagrams/" />
-  <LinkCard title="Production guide" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/" />
-  <LinkCard title="Streaming server" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_streaming_server_dotnet/" />
+  <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/" description="Start here: installation, configuration and DI, ChatClientAgent, structured output, agentic patterns, the harness agent, Copilot Studio, Azure and Semantic Kernel, with a short summary of each topic page." />
+  <LinkCard title="Providers" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/" description="ChatClientAgent and its options, OpenAI Chat Completions and Responses, Azure OpenAI, Foundry, Anthropic, other IChatClients, GitHub Copilot, A2A and Copilot Studio agents, custom agents, routing and credentials." />
+  <LinkCard title="Tools" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/" description="AIFunctionFactory, parameter binding, the tool loop, tool errors, approvals and ToolApprovalAgent, agents as tools, run-time tools, hosted and Foundry tools, shell tools and CodeAct." />
+  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/" description="Stdio and Streamable HTTP clients, filtering and approving MCP tools, prompts, resources, auth, elicitation, MCP tasks and skills, hosted MCP, MCP servers." />
+  <LinkCard title="Middleware" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/" description="AIAgentBuilder and DelegatingAIAgent, function-invocation and chat-client middleware, ordering, retries, timeouts, AGENT-HOOKS." />
+  <LinkCard title="Sessions and memory" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/" description="AgentSession, saving and restoring, Cosmos DB, Valkey and custom history providers, session stores, context providers, retrieval, long-term memory, compaction." />
+  <LinkCard title="Advanced patterns" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/" description="The conversions to and from AIAgent: Foundry agents, wrapped agents, agents as chat clients, workflows as agents." />
+  <LinkCard title="Workflows" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/" description="Executors, edges, switch, fan-out and fan-in, shared state, events, request ports, checkpointing, sub-workflows, agents as nodes, declarative YAML workflows." />
+  <LinkCard title="Orchestrations" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/" description="AgentWorkflowBuilder: sequential, concurrent, group chat, handoff and Magentic, tool approval inside orchestrations, orchestrations as agents." />
+  <LinkCard title="Hosting" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/" description="AddAIAgent and AddWorkflow, OpenAI-compatible endpoints, A2A, AG-UI, DevUI, your own SSE endpoint, HITL over HTTP, session stores, Foundry hosted agents, durable Azure Functions." />
+  <LinkCard title="Observability" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/" description="UseOpenTelemetry, GenAI spans and metrics, workflow telemetry, logging, OTLP, Aspire and Azure Monitor, your own spans." />
+  <LinkCard title="Testing and evaluation" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/" description="A scripted IChatClient, agent, workflow and endpoint tests, telemetry assertions, LocalEvaluator, model-graded evaluation, CI." />
+  <LinkCard title="Recipes" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/" description="Compiled recipes: tools, routing, RAG, writer-critic loops, review panels, approval-gated handoff, bounded calls, map-reduce, ASP.NET Core, Azure Functions." />
+  <LinkCard title="Production guide" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/" description="Choosing a host, scale-out, securing endpoints, durable workflows, identity, prompt-injection defence, resilience, cost, a pre-deployment checklist." />
+  <LinkCard title="Feature tour" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/" description="A summary of the main features with links to their pages, plus declarative YAML agents, content-safety middleware and DI patterns." />
+  <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_diagrams/" description="Package layers, the agent run loop, workflow supersteps, orchestrations, tools, memory, hosting endpoints, Azure deployment." />
+  <LinkCard title="Streaming server" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_streaming_server_dotnet/" description="Pointers to the streaming examples on the hosting and workflows pages." />
+  <LinkCard title="Azure RBAC" href="/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_azure_rbac/" description="Least-privilege roles for Azure OpenAI, Foundry, Key Vault, Cosmos DB, Storage and AI Search." />
 </CardGrid>
 
 ## Packages
 
-- **Stable:** `Microsoft.Agents.AI` (agents, sessions, context providers, harness providers, evaluation), `Microsoft.Agents.AI.OpenAI`, `Microsoft.Agents.AI.Workflows`, `Microsoft.Agents.AI.Workflows.Declarative`, `Microsoft.Agents.AI.Harness`, `Microsoft.Agents.AI.Anthropic`, `Microsoft.Agents.AI.GitHub.Copilot`.
-- **Preview:** `Microsoft.Agents.AI.Foundry`, `.Foundry.Hosting`, `.Hosting` (and its OpenAI, A2A and AG-UI endpoints), `.A2A`, `.DevUI`, `.Hosting.AzureFunctions`, `.DurableTask`, `.CosmosNoSql`, `.CopilotStudio`, `.AzureAI.Persistent`.
-- **Other models** (Ollama, Bedrock, Gemini and so on) plug in through any `Microsoft.Extensions.AI` `IChatClient` implementation; there are no separate `Microsoft.Agents.AI.*` packages for them.
+The `Microsoft.Agents.AI.*` packages release together under the core's version number, except the durable ones; preview, alpha and release-candidate builds carry a suffix, so install them with `--prerelease`. Status as listed on NuGet on %%versions-checked%%.
+
+| Package | Status | What it adds | Covered on |
+| --- | --- | --- | --- |
+| `Microsoft.Agents.AI`, `.Abstractions` | stable | `AIAgent`, `ChatClientAgent`, sessions, context providers, compaction, evaluation | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#packages) |
+| `Microsoft.Agents.AI.OpenAI` | stable | `AsAIAgent()` on the OpenAI SDK's `ChatClient` and `ResponsesClient` | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#openai) |
+| `Microsoft.Agents.AI.Anthropic` | stable | `AsAIAgent()` on `AnthropicClient` | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#anthropic) |
+| `Microsoft.Agents.AI.GitHub.Copilot` | stable | `GitHubCopilotAgent` | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#github-copilot) |
+| `Microsoft.Agents.AI.Harness` | stable | `HarnessAgent` | [Comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#harnessagent) |
+| `Microsoft.Agents.AI.Workflows`, `.Workflows.Generators` | stable | Graph workflows and orchestrations; the `[MessageHandler]` source generator | [Workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/) |
+| `Microsoft.Agents.AI.Workflows.Declarative`, `.Workflows.Declarative.Mcp` | stable | YAML workflows; MCP servers inside them | [Workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#declarative-workflows) |
+| `Microsoft.Agents.AI.Declarative` | release candidate | YAML agents | [Feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#declarative-agents-with-net) |
+| `Microsoft.Agents.AI.Foundry` | preview | Foundry models and agents, `FoundryAITool`, Foundry memory and evaluators | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#microsoft-foundry) |
+| `Microsoft.Agents.AI.A2A` | preview | `A2AAgent` client | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#a2a) |
+| `Microsoft.Agents.AI.CopilotStudio` | preview | `CopilotStudioAgent` | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#copilot-studio) |
+| `Microsoft.Agents.AI.Mcp` | alpha | MCP tasks and MCP-served skills | [MCP](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/#long-running-mcp-tasks) |
+| `Microsoft.Agents.AI.CosmosNoSql` | preview | `CosmosChatHistoryProvider` | [Sessions and memory](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#cosmos-db) |
+| `Microsoft.Agents.AI.Valkey` | alpha | Valkey (Redis-compatible) history and search | [Sessions and memory](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#valkey-and-redis) |
+| `Microsoft.Agents.AI.Tools.Shell` | preview | Local and Docker shell tools | [Tools](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#shell-tools) |
+| `Microsoft.Agents.AI.LocalCodeAct`, `.Hyperlight` | preview | CodeAct in a local Python process or a Hyperlight micro-VM | [Tools](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#code-execution-codeact) |
+| `Microsoft.Agents.AI.AgentHooks` | alpha | AGENT-HOOKS policy interception | [Middleware](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/#agent-hooks-enforcement-alpha) |
+| `Microsoft.Agents.AI.Purview` | release candidate | Microsoft Purview DLP policies | [Production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/#prompt-injection-defence) |
+| `Microsoft.Agents.AI.Hosting`, `.Hosting.AspNetCore`, `.Hosting.AzureStorage` | preview | `AddAIAgent`, `AddWorkflow`, session stores, claims-based isolation | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#registering-agents-and-workflows) |
+| `Microsoft.Agents.AI.Hosting.OpenAI` | alpha | OpenAI Responses, Conversations and Chat Completions endpoints | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#openai-compatible-endpoints) |
+| `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` | preview | A2A server | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#a2a) |
+| `Microsoft.Agents.AI.Hosting.AGUI.AspNetCore` | preview | AG-UI server | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#ag-ui) |
+| `AGUI.Client` | stable, from the AG-UI project | AG-UI client (`AGUIChatClient`); replaces `Microsoft.Agents.AI.AGUI`, which is no longer updated | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#ag-ui) |
+| `Microsoft.Agents.AI.DevUI` | preview | Browser UI for development | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#devui) |
+| `Microsoft.Agents.AI.Foundry.Hosting` | preview | Your agent as a Foundry hosted agent | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#microsoft-foundry-hosted-agents) |
+| `Microsoft.Agents.AI.Hosting.AzureFunctions`, `.DurableTask` | preview, released separately | Durable agents and workflows; now built in the [agent-framework-durable-extension](https://github.com/microsoft/agent-framework-durable-extension) repository, on their own version line, separate from the core's | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#durable-agents-and-workflows-on-azure-functions) |
+| `Microsoft.Agents.AI.AzureAI.Persistent` | preview, obsolete | The classic Azure AI Agents service; every extension is marked `[Obsolete]`, use Foundry agents instead | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#classic-persistent-agents) |
+
+Other models (Ollama, Bedrock, Gemini and so on) plug in through any `Microsoft.Extensions.AI` `IChatClient` implementation; there are no separate `Microsoft.Agents.AI.*` packages for them. MCP clients and servers come from the official C# SDK, `ModelContextProtocol`.
 
 ## Install, minimal example
 
@@ -115,7 +163,7 @@ Console.WriteLine(response.Text);
 If you already have an `IChatClient` (from `Microsoft.Extensions.AI`), construct the agent directly: `new ChatClientAgent(chatClient, instructions: "...")`. Earlier previews used `AgentThread` / `GetNewThread()` and `CreateAIAgent(...)`; the GA names are `AgentSession` / `CreateSessionAsync()` and `AsAIAgent(...)`.
 
 <Aside type="note" title="Compiled against the current packages">
-  The comprehensive guide, recipes and feature tour were rewritten on %%versions-checked%% so that every C# example compiles against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% and its companion packages. The building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `WorkflowBuilder` / `AgentWorkflowBuilder` / `InProcessExecution` (workflows) and `MapA2AJsonRpc` (A2A hosting).
+  The C# examples on the .NET pages were compiled on %%versions-checked%% against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% and its companion packages. The building blocks are `ChatClientAgent` / `AsAIAgent`, `AgentSession`, `AIAgentBuilder`, `AddAIAgent` (hosting), `WorkflowBuilder` / `AgentWorkflowBuilder` / `InProcessExecution` (workflows) and `MapA2AJsonRpc` (A2A hosting).
 </Aside>
 
 Ready? **[Start Zero → Hero Step 1 →](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#introduction)**
@@ -126,6 +174,7 @@ Ready? **[Start Zero → Hero Step 1 →](/microsoft-agent-framework-guide/dotne
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 1.26.0 | Expanded the .NET guide from 9 to 19 pages: new providers, tools, MCP, middleware, sessions and memory, workflows, orchestrations, hosting, observability and testing-and-evaluation pages, each compiled against 1.26.0. The comprehensive guide now summarises those topics and links to them; the feature tour and streaming-server page point to their new homes. Index rebuilt: a page map in sidebar order, Zero → Hero and topic links repointed, and a package table checked on NuGet (adds `.Mcp`, `.Valkey`, `.Tools.Shell`, `.LocalCodeAct`, `.Hyperlight`, `.AgentHooks`, `.Purview`, `.Declarative`, `AGUI.Client` and the separately released durable packages; marks `.AzureAI.Persistent` obsolete). |
 | 2026-10-25 | 1.26.0 | Rebuilt the C# blocks against 1.26.0: 59 of 78 build on their own and the rest fail identically against 1.25.0 because they use types from neighbouring blocks or packages outside the test project (the GitHub Copilot block was not built). Production guide: custom `AgentSessionStore`s must now implement `DeleteSessionAsync`; added `MapAGUIServer` with a per-request agent selector. `DockerShellExecutorOptions.ExtraRunArgs` is now `UnsafeExtraRunArgs` (not used in this guide). |
 | 2026-10-25 | 1.25.0 | Re-compiled every C# block on the .NET and cross-language pages against 1.25.0 (75 of 77 build; the Semantic Kernel interop block builds with `Microsoft.SemanticKernel` 1.81.0 added; the GitHub Copilot block was not built). Noted the deprecation of the classic Persistent Agents service. Added sidebar order and root-absolute links. |
 | 2026-10-21 | 1.25.0 | Added `HarnessAgent`, Anthropic and GitHub Copilot agents, evaluation and DevUI to the comprehensive guide; rewrote the Azure RBAC, advanced and production pages (Foundry hosted agents, durable Azure Functions agents, prompt-injection defence, evaluation in CI). |
@@ -136,4 +185,4 @@ Ready? **[Start Zero → Hero Step 1 →](/microsoft-agent-framework-guide/dotne
 | 2026-04-02 | 1.0.0 | GA on NuGet. |
 | 2025-10-01 | 1.0.0-preview.251001.1 | First public preview on NuGet. |
 
-**Other languages:** [Python](/microsoft-agent-framework-guide/python/).
+**Other languages:** [Python](/microsoft-agent-framework-guide/python/), [Go](/microsoft-agent-framework-guide/go/).

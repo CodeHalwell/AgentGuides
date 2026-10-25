@@ -1,14 +1,14 @@
 ---
 title: "Microsoft Agent Framework (.NET) — Architecture Diagrams"
-description: "This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET."
+description: "Diagrams of the Microsoft Agent Framework for .NET: package layers, the ChatClientAgent run loop with sessions, workflow supersteps, orchestration patterns, tool calls, memory, hosting endpoints, Azure integration and deployment."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Diagrams"
-  order: 95
+  order: 18
 ---
 
-This document provides visual representations of the key architectural concepts, data flows, and interaction patterns within the Microsoft Agent Framework for .NET.
+Visual summaries of the main concepts of the Microsoft Agent Framework for .NET. The workflow and hosting diagrams at the end link to the pages that explain them.
 
 ---
 
@@ -25,13 +25,16 @@ graph TD
     end
 
     subgraph Agent Framework
-        B(Orchestration Layer<br/><i>Workflows, GroupChat</i>)
-        C(Agent Abstraction Layer<br/><i>AIAgent, ChatClientAgent, AgentSession</i>)
-        D(Core Components<br/><i>Tools, Memory, State</i>)
-        E(LLM & Integration Layer<br/><i>AzureOpenAI, Connectors</i>)
+        H(Hosting<br/><i>AddAIAgent, OpenAI / A2A / AG-UI endpoints</i>)
+        B(Workflows and orchestrations<br/><i>WorkflowBuilder, AgentWorkflowBuilder</i>)
+        C(Agents<br/><i>AIAgent, ChatClientAgent, AgentSession</i>)
+        D(Tools, context providers, middleware<br/><i>AIFunction, AIContextProvider, AIAgentBuilder</i>)
+        E(Model clients<br/><i>IChatClient: OpenAI, Azure OpenAI, Foundry, Anthropic, ...</i>)
     end
 
+    A --> H
     A --> B
+    H --> C
     B --> C
     C --> D
     D --> E
@@ -41,13 +44,13 @@ graph TD
 
 ## 2. Agent Lifecycle
 
-### State Machine for a `ChatClientAgent`
+### A `ChatClientAgent` run
 
-This diagram illustrates the lifecycle of a stateful `ChatClientAgent` as it processes messages within a thread.
+An agent is stateless; the conversation lives in an `AgentSession` that the caller keeps (or a session store keeps for it) between runs.
 
 ```mermaid
 graph TD
-    Start((Create Thread)) --> Idle
+    Start((CreateSessionAsync)) --> Idle
     Idle -- RunAsync(userInput) --> Processing
     
     subgraph Processing
@@ -61,7 +64,8 @@ graph TD
 
     Processing -- Returns AgentResponse --> Idle
     Idle -- "RunAsync(...)" --> Processing
-    Idle -- End of Session --> End((Thread Terminated))
+    Idle -- SerializeSessionAsync --> Stored((Session stored))
+    Stored -- DeserializeSessionAsync --> Idle
 ```
 
 ---
@@ -70,18 +74,18 @@ graph TD
 
 ### Sequential Workflow
 
-Agent A's output becomes the input for Agent B.
+Each agent receives the conversation so far and adds its reply (`AgentWorkflowBuilder.BuildSequential`); with `chainOnlyAgentResponses` it sees only the previous agent's reply. See the [orchestrations page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/).
 
 ```mermaid
 graph LR
     Input --> AgentA[Agent A<br/><i>e.g., Researcher</i>]
-    AgentA -- OutputA --> AgentB[Agent B<br/><i>e.g., Summarizer</i>]
+    AgentA -- OutputA --> AgentB[Agent B<br/><i>e.g., Summariser</i>]
     AgentB -- Final Output --> Result
 ```
 
-### Router (Broadcast) Pattern
+### Router Pattern
 
-A router agent delegates a task to the most appropriate specialist agent.
+A router classifies the request (structured output, or a switch edge in a workflow) and one specialist answers. For specialists that pass the conversation between themselves, use a handoff workflow instead.
 
 ```mermaid
 graph TD
@@ -133,7 +137,7 @@ graph TD
     end
 
     subgraph Memory Tiers
-        B(Short-Term Memory<br/><i>Current Conversation Thread</i>)
+        B(Short-Term Memory<br/><i>AgentSession: the current conversation</i>)
         C(Working Memory<br/><i>Recent Conversations, User Profile</i>)
         D(Long-Term Memory<br/><i>Vector DB for RAG, Knowledge Base</i>)
     end
@@ -164,8 +168,8 @@ graph TD
     end
 
     subgraph Data & State
-        E[Azure Cosmos DB<br/><i>Thread State, History</i>]
-        F[Azure SQL Database<br/><i>Relational Memory</i>]
+        E[Azure Cosmos DB / Blob Storage<br/><i>Sessions, history, checkpoints</i>]
+        F[Microsoft Foundry<br/><i>Hosted agents, evaluation</i>]
     end
 
     subgraph Observability
@@ -182,6 +186,7 @@ graph TD
     A --> G
     A --> H
     B --> D
+    A --> F
 ```
 
 ---
@@ -236,13 +241,13 @@ sequenceDiagram
     participant AgentAPI as Agent API
     participant AuthServer as Authentication Server
 
-    Client->>AuthServer: Request Token (username, password)
+    Client->>AuthServer: Sign in (OAuth 2.0 / Entra ID)
     AuthServer-->>Client: Returns JWT
 
     Client->>AgentAPI: Invoke Agent (with JWT in Header)
-    AgentAPI->>AgentAPI: Validate JWT
+    AgentAPI->>AgentAPI: Validate JWT (RequireAuthorization)
     alt Is Valid
-        AgentAPI->>AgentAPI: Process Request
+        AgentAPI->>AgentAPI: Isolation key from the sub claim, load that user's session
         AgentAPI-->>Client: Agent Response
     else Is Invalid
         AgentAPI-->>Client: 401 Unauthorized
@@ -260,9 +265,9 @@ This diagram traces a single user request through the entire system.
 ```mermaid
 graph TD
     A[User Request via API] --> B{Middleware<br/><i>Auth, Logging</i>}
-    B --> C{Agent Thread Manager}
-    C -- Get or Create Thread --> D[State Backend<br/><i>e.g., Cosmos DB</i>]
-    D -- Returns Thread State --> C
+    B --> C{Session store<br/><i>AgentSessionStore</i>}
+    C -- Get or create session --> D[State backend<br/><i>e.g. Azure Blob, Redis</i>]
+    D -- Returns session --> C
     C --> E{Agent Logic}
     E -- "Needs knowledge" --> F[Memory System<br/><i>e.g., Azure AI Search</i>]
     F -- "Returns relevant docs" --> E
@@ -272,8 +277,80 @@ graph TD
     G -- "Returns tool output" --> E
     E -- "LLM prompt with context" --> I[LLM Service<br/><i>Azure OpenAI</i>]
     I -- "LLM completion" --> E
-    E -- "Final response" --> J{Update Thread State}
+    E -- "Final response" --> J{Save session}
     J --> D
     E -- "Final response" --> K[Format Output]
     K --> A
+```
+
+---
+
+## 10. Workflow Supersteps
+
+### How a workflow run proceeds
+
+Messages sent during a superstep are delivered at the start of the next; executors that receive messages in the same superstep run concurrently, and a checkpoint can be taken at the end of each. See the [workflows page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/).
+
+```mermaid
+sequenceDiagram
+    participant Caller
+    participant Runner as InProcessExecution
+    participant A as Executor A
+    participant B as Executor B
+    participant C as Executor C
+    participant Port as RequestPort
+
+    Caller->>Runner: RunStreamingAsync(workflow, input, checkpoints)
+    Note over Runner: Superstep 0
+    Runner->>A: input
+    A-->>Runner: SendMessageAsync (fan-out)
+    Runner-->>Caller: SuperStepCompletedEvent (checkpoint)
+    Note over Runner: Superstep 1
+    par
+        Runner->>B: message
+    and
+        Runner->>C: message
+    end
+    B-->>Runner: QueueStateUpdateAsync, SendMessageAsync
+    C-->>Runner: SendMessageAsync
+    Note over Runner: Superstep 2
+    Runner->>Port: message
+    Port-->>Caller: RequestInfoEvent
+    Caller->>Runner: SendResponseAsync(response)
+    Note over Runner: Superstep 3
+    Runner->>A: response routed on
+    A-->>Caller: WorkflowOutputEvent
+```
+
+---
+
+## 11. Hosting Endpoints
+
+### One registration, several protocols
+
+Agents and workflows registered with `AddAIAgent` / `AddWorkflow` are keyed services; each `Map...` call exposes them in one protocol. See the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/).
+
+```mermaid
+graph LR
+    subgraph Clients
+        O[OpenAI SDK clients]
+        P[Agents on other frameworks]
+        U[CopilotKit / AG-UI front end]
+        D[Developer in a browser]
+    end
+
+    subgraph App[ASP.NET Core app]
+        R[MapOpenAIResponses / MapOpenAIChatCompletions]
+        A2[MapA2AJsonRpc / MapA2AHttpJson]
+        AG[MapAGUIServer]
+        DV[MapDevUI<br/><i>development only</i>]
+        K[(Keyed AIAgent services<br/>AddAIAgent, AddWorkflow.AddAsAIAgent)]
+        S[(Session store<br/>isolated per user)]
+    end
+
+    O --> R --> K
+    P --> A2 --> K
+    U --> AG --> K
+    D --> DV --> R
+    K --> S
 ```

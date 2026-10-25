@@ -12,6 +12,31 @@
       "version": "1.26.0",
       "guide": "microsoft-agent-framework-guide"
     },
+    "xunit.v3": {
+      "registry": "nuget",
+      "version": "4.0.2",
+      "guide": "microsoft-agent-framework-guide"
+    },
+    "Microsoft.AspNetCore.TestHost": {
+      "registry": "nuget",
+      "version": "10.0.14",
+      "guide": "microsoft-agent-framework-guide"
+    },
+    "OpenTelemetry.Exporter.InMemory": {
+      "registry": "nuget",
+      "version": "1.20.1",
+      "guide": "microsoft-agent-framework-guide"
+    },
+    "Microsoft.Extensions.AI.Evaluation.Quality": {
+      "registry": "nuget",
+      "version": "10.11.0",
+      "guide": "microsoft-agent-framework-guide"
+    },
+    "Microsoft.Extensions.AI.Evaluation.Reporting": {
+      "registry": "nuget",
+      "version": "10.11.0",
+      "guide": "microsoft-agent-framework-guide"
+    },
     "github.com/microsoft/agent-framework-go": {
       "registry": "go",
       "version": "0.2.0",

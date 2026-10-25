@@ -1,108 +1,59 @@
 ---
 title: "Microsoft Agent Framework (.NET) — Advanced Patterns"
-description: "Service-managed agents in Microsoft Foundry and the classic Persistent Agents service, agent middleware with AIAgentBuilder and DelegatingAIAgent, and workflows exposed as agents."
+description: "Workflows exposed as agents, agents exposed as chat clients and tools, and pointers to Foundry-defined agents and agent middleware in Microsoft.Agents.AI."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Advanced patterns"
-  order: 40
+  order: 8
 ---
 
 Checked against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% on %%versions-checked%%; every C# block compiles against that release. Deployment, resilience and security are on the [production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/).
 
-This page covers:
+Everything in the framework converts to and from `AIAgent`, which is what makes the pieces compose. This page collects the conversions:
 
-- Agents whose definition lives in Microsoft Foundry (`Microsoft.Agents.AI.Foundry`), and the older Persistent Agents service.
-- Wrapping any agent with your own behaviour (`AIAgentBuilder.Use`, `DelegatingAIAgent`).
-- Turning a workflow into an `AIAgent`.
+| From | To | How | Covered |
+| --- | --- | --- | --- |
+| An `IChatClient` or provider client | `AIAgent` | `AsAIAgent(...)`, `new ChatClientAgent(...)` | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/) |
+| A Foundry agent definition | `AIAgent` | `project.AsAIAgent(agentVersion)` → `FoundryAgent` | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#agents-defined-in-foundry) |
+| An `AIAgent` | A wrapped `AIAgent` | `agent.AsBuilder().Use(...)`, `DelegatingAIAgent` | [Middleware](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/#agent-run-middleware) |
+| An `AIAgent` | A tool | `agent.AsAIFunction()` | [Tools](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#agents-as-tools) |
+| An `AIAgent` | An MCP tool | `McpServerTool.Create(agent.AsAIFunction())` | [MCP](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/#an-agent-as-an-mcp-tool) |
+| An `AIAgent` | An `IChatClient` | `agent.AsIChatClient()` (experimental) | [below](#agents-as-chat-clients) |
+| A workflow | `AIAgent` | `workflow.AsAIAgent(...)` | [below](#workflows-as-agents) |
 
 ## Microsoft Foundry agents
 
-`Microsoft.Agents.AI.Foundry` (preview) adds `AsAIAgent` overloads to `AIProjectClient` (package `Azure.AI.Projects`). There are two kinds of agent:
-
-- **A model in your project, agent defined in code.** `AsAIAgent(model, instructions, ...)` returns a `ChatClientAgent` over the project's Responses endpoint. Instructions and tools stay in your code.
-- **An agent defined in Foundry.** `AsAIAgent(agentReference)` (or an agent endpoint, record or version) returns a `FoundryAgent` that runs the agent as configured in the Foundry portal, with its hosted tools.
-
-```bash
-dotnet add package Microsoft.Agents.AI.Foundry --prerelease
-dotnet add package Azure.Identity
-```
-
-```csharp
-using Azure.AI.Projects;
-using Azure.Identity;
-using Microsoft.Agents.AI;
-
-var project = new AIProjectClient(
-    new Uri(Environment.GetEnvironmentVariable("FOUNDRY_PROJECT_ENDPOINT")!),
-    new DefaultAzureCredential());
-
-// Agent defined in code, model deployed in the project.
-AIAgent writer = project.AsAIAgent(
-    model: "%%model=openai-small%%",
-    instructions: "You are a helpful writing assistant.",
-    name: "writer");
-
-AgentSession session = await writer.CreateSessionAsync();
-AgentResponse response = await writer.RunAsync("Draft a summary of LangGraph.", session);
-Console.WriteLine(response.Text);
-```
-
-Either kind is an ordinary `AIAgent`: sessions, streaming, middleware, workflows and hosting work unchanged. Foundry also offers evaluation (`FoundryEvals`, see [evaluation](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#evaluation)) and memory stores (`FoundryMemoryProvider`) through the same package. To run your own code *as* a Foundry hosted agent, see the [production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/#foundry-hosted-agents).
-
-### Classic Persistent Agents
-
-Projects that still use the Azure AI Agents service (`Azure.AI.Agents.Persistent`, server-side threads and runs) can bring those agents in with `Microsoft.Agents.AI.AzureAI.Persistent` (preview). Microsoft Learn lists Agents (classic) as deprecated, with retirement on 31 March 2027, and the classic service does not take models later than GPT-5, so use the Foundry package for new work.
-
-```bash
-dotnet add package Microsoft.Agents.AI.AzureAI.Persistent --prerelease
-```
-
-```csharp
-using Azure.AI.Agents.Persistent;
-using Azure.Identity;
-using Microsoft.Agents.AI;
-
-var client = new PersistentAgentsClient(
-    Environment.GetEnvironmentVariable("AZURE_AI_PROJECT_ENDPOINT")!, new DefaultAzureCredential());
-
-// Create the server-side agent and wrap it; use client.GetAIAgentAsync(agentId) for an existing one.
-AIAgent agent = await client.CreateAIAgentAsync(
-    model: Environment.GetEnvironmentVariable("MODEL_DEPLOYMENT_NAME")!,   // a model the classic service supports
-    name: "writer",
-    instructions: "You are a helpful writing assistant.");
-
-AgentSession session = await agent.CreateSessionAsync();   // backed by a service-side thread
-Console.WriteLine((await agent.RunAsync("Draft a summary of LangGraph.", session)).Text);
-```
+`Microsoft.Agents.AI.Foundry` (preview) gives you two kinds of agent from an `AIProjectClient`: a `ChatClientAgent` over a model in the project, with the agent defined in your code, and a `FoundryAgent` over an agent defined and versioned in Foundry with its hosted tools. Both, the server-side conversation options, hosted-agent sessions, and the deprecated classic Persistent Agents package, are covered on the [providers page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#microsoft-foundry). Foundry's hosted tools are on the [tools page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#foundry-tools), Foundry Memory on the [sessions and memory page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#foundry-memory), and running your own code *as* a Foundry hosted agent on the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#microsoft-foundry-hosted-agents).
 
 ## Wrapping agents with your own behaviour
 
-`agent.AsBuilder().Use(...)` adds agent-level middleware: a function that sees the messages, session and options of each run and decides whether and how to call the inner agent. Pass `runFunc` and `runStreamingFunc` separately, or one shared function that wraps both. This is the place for audit logging, input screening, per-tenant limits and caching.
+Agent-level middleware (`agent.AsBuilder().Use(...)` with run delegates, function-invocation callbacks, or a `DelegatingAIAgent` subclass) and chat-client middleware (`ChatClientBuilder.Use(...)`) are on the [middleware page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/), with ordering, streaming, short-circuiting, retries and error handling.
+
+## Agents as chat clients
+
+`agent.AsIChatClient()` (experimental `MAAI001`) presents an agent as an `IChatClient`, for libraries and frameworks that accept only chat clients. By default it accepts only a `ChatClientAgent` (or a decorator around one), because only then is the mapping from `ChatOptions` well defined. Pass a session to keep the agent's history across calls through the client; without one, each call stands alone and the caller sends the history. `allowNonChatClientAgents: true` wraps any agent (A2A, Copilot, a workflow agent), but then only `ChatOptions.ResponseFormat` reaches the agent; tools, instructions, temperature and the other options are silently ignored.
 
 ```csharp
-using System.Diagnostics;
+#pragma warning disable MAAI001
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
+using OpenAI;
 
-public static class TimingMiddleware
-{
-    public static AIAgent WithTiming(this AIAgent agent) =>
-        agent.AsBuilder()
-            .Use(
-                runFunc: async (messages, session, options, inner, ct) =>
-                {
-                    var stopwatch = Stopwatch.StartNew();
-                    AgentResponse response = await inner.RunAsync(messages, session, options, ct);
-                    Console.WriteLine($"{inner.Name}: {stopwatch.ElapsedMilliseconds} ms, {response.Usage?.TotalTokenCount} tokens");
-                    return response;
-                },
-                runStreamingFunc: null)
-            .Build();
-}
+AIAgent agent = new OpenAIClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!)
+    .GetChatClient("%%model=openai%%")
+    .AsIChatClient()
+    .AsAIAgent(instructions: "You answer in one sentence.", name: "one-liner");
+
+AgentSession session = await agent.CreateSessionAsync();
+IChatClient asClient = agent.AsIChatClient(session);   // history kept in the session
+
+ChatResponse first = await asClient.GetResponseAsync("What is HTTP?");
+ChatResponse second = await asClient.GetResponseAsync("And HTTPS?");
+Console.WriteLine(first.Text);
+Console.WriteLine(second.Text);
+Console.WriteLine($"conversation id reported to the caller: {second.ConversationId}");
 ```
-
-For something you want to unit-test or register in DI, derive from `DelegatingAIAgent` instead; the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#a-reusable-safety-wrapper) has a Content Safety wrapper written that way. Chat-level middleware (around each model call) goes on the `IChatClient` with `ChatClientBuilder.Use(...)`, and tool-level approval with `ApprovalRequiredAIFunction` (see [tool approval](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tool-approval)).
 
 ## Workflows as agents
 
