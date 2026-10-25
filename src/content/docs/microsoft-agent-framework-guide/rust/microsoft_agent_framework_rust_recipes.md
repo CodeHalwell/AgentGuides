@@ -1342,8 +1342,11 @@ impl ChatClient for FallbackChatClient {
         Err(last_error)
     }
 
+    // No default model: `Agent::builder` copies `model()` into the agent's
+    // options, and that would send the primary's model id to every fallback.
+    // Each provider uses the model it was built with.
     fn model(&self) -> Option<&str> {
-        self.providers.first().and_then(|p| p.client.model())
+        None
     }
 }
 
