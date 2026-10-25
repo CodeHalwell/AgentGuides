@@ -539,28 +539,30 @@ enum Outcome {
     Failed { source: String, error: String },
 }
 
-/// Inputs: the files named on the command line, or two samples.
-fn inputs() -> Vec<(String, String)> {
+/// Inputs: the files named on the command line, or two samples. A file that
+/// cannot be read stays in the list as an error, so it counts as a failure.
+fn inputs() -> Vec<(String, std::result::Result<String, String>)> {
     let files: Vec<String> = std::env::args().skip(1).collect();
     if files.is_empty() {
         return vec![
-            ("sample-1".into(), "ACME Tools Ltd\nInvoice INV-1042\nTotal due: £1,250.00\nPayable by 30 November 2026".into()),
-            ("sample-2".into(), "Northwind Traders — invoice no. 77-B. Amount: EUR 89.90. No due date.".into()),
+            ("sample-1".into(), Ok("ACME Tools Ltd\nInvoice INV-1042\nTotal due: £1,250.00\nPayable by 30 November 2026".into())),
+            ("sample-2".into(), Ok("Northwind Traders — invoice no. 77-B. Amount: EUR 89.90. No due date.".into())),
         ];
     }
     files
         .into_iter()
-        .filter_map(|path| match std::fs::read_to_string(&path) {
-            Ok(text) => Some((path, text)),
-            Err(e) => {
-                eprintln!("skipping {path}: {e}");
-                None
-            }
+        .map(|path| {
+            let text = std::fs::read_to_string(&path).map_err(|e| format!("could not read file: {e}"));
+            (path, text)
         })
         .collect()
 }
 
-async fn extract_one(agent: &Agent, source: String, text: String) -> Outcome {
+async fn extract_one(agent: &Agent, source: String, text: std::result::Result<String, String>) -> Outcome {
+    let text = match text {
+        Ok(text) => text,
+        Err(error) => return Outcome::Failed { source, error },
+    };
     let run = agent.run_once(format!("Extract the invoice fields from this document:\n\n{text}"));
     let outcome = match tokio::time::timeout(Duration::from_secs(60), run).await {
         Err(_) => Err("timed out after 60 s".to_string()),
