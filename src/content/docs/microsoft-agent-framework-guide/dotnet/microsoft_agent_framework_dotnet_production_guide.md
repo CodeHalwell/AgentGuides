@@ -89,7 +89,7 @@ Register one `IChatClient` and the agents as singletons, keep conversations in a
 
 A store of your own derives from `AgentSessionStore` (experimental, `MAAI001`) and overrides `GetSessionAsync`, `SaveSessionAsync` and, since 1.26.0, `DeleteSessionAsync`, which is abstract again: a custom store written for 1.25 no longer compiles until you add it. Deleting a session that does not exist should do nothing, as the built-in stores do.
 
-`MapAGUIServer` (in `Microsoft.Agents.AI.Hosting.AGUI.AspNetCore`) gained an overload in 1.26.0 that picks the agent per request, so one endpoint can serve several registered agents. Returning `null` answers 404 without loading any session state. Sessions are partitioned by the selected agent's `Name`, so it must be non-empty and distinct for agents that must not share sessions:
+`MapAGUIServer` (in `Microsoft.Agents.AI.Hosting.AGUI.AspNetCore`) has, since 1.26.0, an overload that picks the agent per request, so one endpoint can serve several registered agents. Returning `null` answers 404 without loading any session state. Sessions are partitioned by the selected agent's `Name`, so it must be non-empty and distinct for agents that must not share sessions:
 
 ```csharp
 using Microsoft.Agents.AI;

@@ -764,7 +764,7 @@ Setting `context.result` and raising `MiddlewareTermination` returns a synthetic
 
 ### Recipe 16 — Expose an agent over MCP
 
-`agent.as_mcp_server()` returns a low-level `mcp.server.lowlevel.Server` that hosts the agent as a single tool. Drop it into stdio for inter-process composition, or mount it over streamable HTTP as shown on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/#serving-over-http). It runs unchanged on MCP SDK 2.x (1.23.0 and later).
+`agent.as_mcp_server()` returns a low-level `mcp.server.lowlevel.Server` that hosts the agent as a single tool. Drop it into stdio for inter-process composition, or mount it over streamable HTTP as shown on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/#serving-over-http). It runs unchanged on MCP SDK 2.x, used since 1.23.0.
 
 ```python
 # mcp_server.py
