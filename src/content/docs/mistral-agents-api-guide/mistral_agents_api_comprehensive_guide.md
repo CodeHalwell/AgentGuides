@@ -634,7 +634,7 @@ Two smaller 3.4.0 changes sit outside this guide: `audio_agents.create()` now re
 
 ### Added in 3.5.0: `max` reasoning effort
 
-`mistralai` 3.5.0 (25 October 2026) adds one value, `"max"`, to the `ReasoningEffort` type. It is accepted wherever reasoning effort is: an agent's or a conversation's `completion_args`, and the `reasoning_effort=` argument of `chat.complete`, `chat.stream`, `agents.complete` and `agents.stream`. Nothing else in the SDK changed. The TypeScript client gained the same value in 3.3.0 (`completionArgs: { reasoningEffort: "max" }`).
+`mistralai` 3.5.0 (25 October 2026) added one value, `"max"`, to the `ReasoningEffort` type. It is accepted wherever reasoning effort is: an agent's or a conversation's `completion_args`, and the `reasoning_effort=` argument of `chat.complete`, `chat.stream`, `agents.complete` and `agents.stream`. Nothing else in the SDK changed. The TypeScript client gained the same value in 3.3.0 (`completionArgs: { reasoningEffort: "max" }`).
 
 ```python
 from mistralai.client import Mistral
