@@ -637,7 +637,17 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use agent_framework::prelude::*;
 use agent_framework::types::FunctionArguments;
 use async_trait::async_trait;
-use serde_json::json;
+use serde_json::{json, Value};
+
+/// Masks card numbers in every string inside a JSON value.
+fn redact_value(value: &mut Value) {
+    match value {
+        Value::String(s) => *s = s.replace("4111-1111", "[card]"),
+        Value::Array(items) => items.iter_mut().for_each(redact_value),
+        Value::Object(map) => map.values_mut().for_each(redact_value),
+        _ => {}
+    }
+}
 
 /// A decorator around the provider client. The agent puts its tool loop
 /// above this, so `get_response` runs once per model request.
@@ -656,10 +666,18 @@ impl<C: ChatClient> ChatClient for PerRequest<C> {
             return Err(Error::other(format!("model request budget of {} spent", self.max_requests)));
         }
         // Redact on every request, including the ones carrying tool results.
+        // Tool results travel as `Content::FunctionResult` with a JSON payload,
+        // so text alone is not enough.
         for message in &mut messages {
             for content in &mut message.contents {
-                if let Content::Text(text) = content {
-                    text.text = text.text.replace("4111-1111", "[card]");
+                match content {
+                    Content::Text(text) => text.text = text.text.replace("4111-1111", "[card]"),
+                    Content::FunctionResult(result) => {
+                        if let Some(value) = result.result.as_mut() {
+                            redact_value(value);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -687,7 +705,19 @@ impl ChatClient for Model {
     async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
         let results = messages.iter().filter(|m| m.role == Role::tool()).count();
         if results >= 2 {
-            return Ok(ChatResponse::from_text(format!("done; I saw: {}", messages[0].text())));
+            let tool_output: Vec<String> = messages
+                .iter()
+                .flat_map(|m| m.contents.iter())
+                .filter_map(|c| match c {
+                    Content::FunctionResult(r) => r.result.as_ref().map(|v| v.to_string()),
+                    _ => None,
+                })
+                .collect();
+            return Ok(ChatResponse::from_text(format!(
+                "done; I saw: {} / tools: {}",
+                messages[0].text(),
+                tool_output.join(", ")
+            )));
         }
         let call = FunctionCallContent::new(format!("c{results}"), "lookup", Some(FunctionArguments::Raw("{}".into())));
         Ok(ChatResponse {
@@ -702,7 +732,7 @@ impl ChatClient for Model {
 }
 
 fn agent(max_requests: usize) -> Agent {
-    let lookup = FunctionTool::new("lookup", "", json!({ "type": "object" }), |_| async { Ok(json!("ok")) });
+    let lookup = FunctionTool::new("lookup", "", json!({ "type": "object" }), |_| async { Ok(json!({ "card": "4111-1111", "status": "declined" })) });
     let client = PerRequest { inner: Model, max_requests, requests: AtomicUsize::new(0) };
     Agent::builder(client).tool(lookup.into_definition()).build()
 }
@@ -719,7 +749,7 @@ async fn main() -> Result<()> {
   request 1: 1 message(s)
   request 2: 3 message(s)
   request 3: 5 message(s)
-done; I saw: card [card] was declined
+done; I saw: card [card] was declined / tools: {"card":"[card]","status":"declined"}, {"card":"[card]","status":"declined"}
   request 1: 1 message(s)
   request 2: 3 message(s)
 Err(Other("model request budget of 2 spent"))
