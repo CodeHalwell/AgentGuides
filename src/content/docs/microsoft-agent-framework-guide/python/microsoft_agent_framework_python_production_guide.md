@@ -73,6 +73,41 @@ Each agent becomes a durable entity whose conversation state is stored by Durabl
 
 Build one agent per process at start-up, keep a session per conversation in a shared history provider (Redis or Cosmos DB when you run more than one replica), and close the agent at shutdown (`await agent.close()`, or `async with agent:`), which closes the MCP connections it opened. Section 10 below has the FastAPI pattern, per-tenant scoping, timeouts, concurrency limits and health checks.
 
+### AG-UI front ends
+
+`agent-framework-ag-ui` serves an agent or workflow to an [AG-UI](https://docs.ag-ui.com/) client (CopilotKit and others) as a FastAPI endpoint. Since 1.23.0, `add_agent_framework_fastapi_endpoint()` refuses to register an endpoint until you say how callers are separated, because that scope keys the endpoint's stored sessions, snapshots, workflow checkpoints and pending approvals. Pass exactly one of:
+
+- `authorization_scope_resolver=`: a FastAPI dependency that authenticates the request and returns a stable, non-empty id for the caller (user or tenant);
+- `single_user=True`: every caller is the same principal (a local tool, a demo);
+- `snapshot_scope_resolver=`: the older request-body resolver, kept for compatibility.
+
+Without one it raises `ValueError` ("AG-UI endpoint authorization must be explicit"); code that registered an endpoint with no scope on 1.22 fails at start-up on 1.23.
+
+```python
+from fastapi import FastAPI, Header, HTTPException
+
+from agent_framework import Agent
+from agent_framework.openai import OpenAIChatClient
+from agent_framework_ag_ui import add_agent_framework_fastapi_endpoint
+
+agent = Agent(client=OpenAIChatClient(), name="assistant", instructions="Be brief.")
+app = FastAPI()
+
+
+def caller_scope(authorization: str = Header()) -> str:
+    # Validate the token properly here; return a stable id for the caller.
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401)
+    return "user:" + authorization.removeprefix("Bearer ")
+
+
+add_agent_framework_fastapi_endpoint(app, agent, "/agent", authorization_scope_resolver=caller_scope)
+# Local development only:
+# add_agent_framework_fastapi_endpoint(app, agent, "/agent", single_user=True)
+```
+
+`dependencies=[Depends(...)]` still runs your authentication checks, but its return values do not set the scope; only the resolver does. The scope from `single_user=True` is random per registration, so it does not survive a restart; use a resolver that returns a fixed id if sessions or snapshots must persist across restarts.
+
 ## 2. Observability
 
 ```python
@@ -436,4 +471,5 @@ The exception propagates out of `agent.run()`, so the request handler can catch 
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | Added AG-UI hosting: since 1.23.0 the endpoint needs `authorization_scope_resolver=` or `single_user=True`. |
 | 2026-10-24 | 1.22.0 | Fixed `FoundryChatClient()` examples that omitted the required credential, the FastAPI example (returned a non-serialisable `AgentResponse`, no session, no shutdown), DevUI auth defaults (auth is on by default; network binds without a token fail), the project-endpoint format and the circuit breaker (`MiddlewareTermination` from chat middleware breaks the run). |

@@ -87,6 +87,23 @@ Each registered agent gets an HTTP endpoint and its conversation state is kept b
 
 Register one `IChatClient` and the agents as singletons, keep conversations in an `AgentSessionStore` that all replicas share, and isolate sessions per user (`UseClaimsBasedAgentIsolation`). The [.NET comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#multi-tenant-isolation) shows the registration, and [Recipe 9](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-9-exposing-an-agent-through-aspnet-core) an HTTP endpoint.
 
+A store of your own derives from `AgentSessionStore` (experimental, `MAAI001`) and overrides `GetSessionAsync`, `SaveSessionAsync` and, since 1.26.0, `DeleteSessionAsync`, which is abstract again: a custom store written for 1.25 no longer compiles until you add it. Deleting a session that does not exist should do nothing, as the built-in stores do.
+
+`MapAGUIServer` (in `Microsoft.Agents.AI.Hosting.AGUI.AspNetCore`) gained an overload in 1.26.0 that picks the agent per request, so one endpoint can serve several registered agents. Returning `null` answers 404 without loading any session state. Sessions are partitioned by the selected agent's `Name`, so it must be non-empty and distinct for agents that must not share sessions:
+
+```csharp
+using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.Hosting.AGUI.AspNetCore;
+
+// The {agent} route value picks a keyed AIAgent registered with builder.AddAIAgent(...).
+app.MapAGUIServer("/agui/{agent}", context =>
+    context.Request.RouteValues["agent"] is string name
+        ? context.RequestServices.GetKeyedService<AIAgent>(name)
+        : null);
+```
+
+The overloads that take a hosted agent builder or an agent name now respect the registration's DI lifetime: a singleton agent is resolved once when the endpoint is mapped, scoped and transient agents once per request.
+
 ## 2. Observability
 
 Wrap agents with `.AsBuilder().UseOpenTelemetry(sourceName)` (and chat clients with `ChatClientBuilder.UseOpenTelemetry`), then add that source to your OpenTelemetry tracer provider with the Azure Monitor or OTLP exporter. Spans follow the GenAI semantic conventions (`invoke_agent`, `chat`, `execute_tool`) and carry token usage; prompt text is excluded unless you set `EnableSensitiveData`. Workflows have `WorkflowBuilder.WithOpenTelemetry()`. A complete set-up is in the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#opentelemetry-integration---net).

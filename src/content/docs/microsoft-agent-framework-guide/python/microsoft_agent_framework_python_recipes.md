@@ -13,7 +13,7 @@ Practical, runnable patterns for the real `agent_framework` package. Every recip
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.
 - **Pinned version:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; the recipes were first written for 1.10.0). Check the latest with `pip index versions agent-framework`.
 - **Python:** 3.10+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
-- **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`, `CompactionProvider`, `ToolResultCompactionStrategy`, `SelectiveToolCallCompactionStrategy`, `TokenBudgetComposedStrategy`, `TodoProvider`, `TodoFileStore`, `MemoryContextProvider`, `MemoryFileStore`.
+- **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`, `CompactionProvider`, `ToolResultCompactionStrategy`, `SelectiveToolCallCompactionStrategy`, `TokenBudgetComposedStrategy`, `TodoProvider`, `TodoFileStore`, `MemoryContextProvider`, `MemoryFileStore`.
 
 ```bash
 pip install agent-framework
@@ -764,7 +764,7 @@ Setting `context.result` and raising `MiddlewareTermination` returns a synthetic
 
 ### Recipe 16 — Expose an agent over MCP
 
-`agent.as_mcp_server()` returns a low-level `mcp.server.lowlevel.Server` that hosts the agent as a single tool. Drop it into stdio for inter-process composition or hook it up to the streamable-HTTP host of your choice.
+`agent.as_mcp_server()` returns a low-level `mcp.server.lowlevel.Server` that hosts the agent as a single tool. Drop it into stdio for inter-process composition, or mount it over streamable HTTP as shown on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/#serving-over-http). It runs unchanged on MCP SDK 2.x (1.23.0 and later).
 
 ```python
 # mcp_server.py
@@ -1524,7 +1524,7 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Visualise a workflow | `WorkflowViz(workflow).to_mermaid()` / `.to_digraph()` / `.export(format="svg")` |
 | In-memory skill source | `InMemorySkillsSource([skill_a, skill_b])` |
 | Custom composable skill source | Subclass `DelegatingSkillsSource(inner_source)` |
-| WebSocket MCP server | `MCPWebsocketTool(name=, url="wss://...", request_timeout=)` |
+| Your own MCP client | `MCPStreamableHTTPTool(name=, mcp_client=client)` with an entered `mcp.Client` |
 | Intercept agent.run() | Subclass `AgentMiddleware`, override `async process(context, call_next)` |
 | Intercept LLM calls | Subclass `ChatMiddleware`, override `async process(context, call_next)` |
 | Intercept tool calls | Subclass `FunctionMiddleware`, override `async process(context, call_next)` |
@@ -1536,4 +1536,5 @@ For more detail see the framework's other Python guides: [agent harness](/micros
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | Re-ran recipes 11, 12 and 16 against 1.23.0 and MCP SDK 2.x with local test servers. Removed `MCPWebsocketTool` (transport removed); recipe 16 links to the HTTP hosting example. |
 | 2026-10-25 | 1.22.0 | Rewrote recipe 25: `@executor` return values are not forwarded, so the old pipeline produced no output, and the shown Mermaid output was wrong. The function-middleware cache now sets `context.result` and returns (raising `MiddlewareTermination` there ends the tool loop). Fixed MCP naming (`name=` is not a prefix; added `tool_name_prefix`) and approval behaviour for unlisted tools, tool error text, the agent-middleware kwargs source, Redis checkpointing (does not exist; Cosmos does), `FoundryChatClient` credentials, the todo file path and `MemoryContextProvider` defaults. Recipes that keep history locally on `OpenAIChatClient` now set `store=False`. |

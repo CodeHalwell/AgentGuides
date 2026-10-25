@@ -938,7 +938,7 @@ Group chat, Magentic, plan review, autonomous handoff mode and the request-info 
 
 ## MCP
 
-MCP servers are tool sources. Use `MCPStdioTool` for local processes, `MCPStreamableHTTPTool` for HTTP servers and `MCPWebsocketTool` for websocket servers, each as an async context manager:
+MCP servers are tool sources. Use `MCPStdioTool` for local processes and `MCPStreamableHTTPTool` for HTTP servers, each as an async context manager. Since 1.23.0 the framework uses MCP Python SDK 2.x, which has no WebSocket transport:
 
 ```python
 import asyncio
@@ -959,7 +959,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`header_provider=lambda kwargs: {...}` builds per-request headers from the `function_invocation_kwargs` of the `run()` call, which suits multi-tenant tokens. `allowed_tools`, `approval_mode`, `tool_name_prefix`, sampling and long-running MCP tasks are on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/).
+`header_provider=lambda kwargs: {...}` builds per-request headers from the `function_invocation_kwargs` of the `run()` call, which suits multi-tenant tokens. `allowed_tools`, `approval_mode`, `tool_name_prefix`, sampling, caller-owned `mcp.Client` connections (`mcp_client=`) and reconnecting are on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/).
 
 ## Agent harness
 
@@ -1164,7 +1164,7 @@ Where each part of the public API is documented. Classes are importable from `ag
 | Chat clients | `OpenAIChatClient`, `OpenAIChatCompletionClient`, `FoundryChatClient`, `AnthropicClient`, `BedrockChatClient`, `OllamaChatClient`, `GeminiChatClient`, `ClaudeAgent`, `GitHubCopilotAgent`, `CopilotStudioAgent` | [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) |
 | Custom clients and providers | `BaseChatClient`, `BaseEmbeddingClient`, `ContextProvider`, `Supports*` protocols, `Content` factories | [Advanced patterns](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_advanced/) |
 | Tools | `@tool`, `FunctionTool`, `FunctionInvocationConfiguration` | [Tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/) |
-| MCP | `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`, `MCPTaskOptions`, `Agent.as_mcp_server()` | [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) |
+| MCP | `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPSpecificApproval`, `Agent.as_mcp_server()`; `agent-framework-hosting-mcp` (alpha) | [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) |
 | Skills | `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `SkillsProvider`, `*SkillsSource` | [Skills](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) |
 | Sessions | `AgentSession`, `HistoryProvider`, `InMemoryHistoryProvider`, `FileHistoryProvider`, `VectorStoreHistoryProvider`, `FileSessionStore` | [Sessions](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/) |
 | Compaction | `CompactionProvider` and the strategy classes | [Compaction](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_compaction/) |
@@ -1188,6 +1188,7 @@ Where each part of the public API is documented. Classes are importable from `ag
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | MCP section and API map updated for MCP SDK 2.x (no WebSocket transport or MCP tasks; `mcp_client=`). |
 | 2026-10-21 | 1.22.0 | Rewritten. Removed the separate class reference (its entries now live on the topic pages, indexed by the API map) and the duplicated orchestration, harness and session sections. Fixed streaming (`get_final_response()`), structured output (`options={"response_format": ...}`), `WorkflowContext[Never, ...]`, nested-workflow executor reuse and the per-call `tools=` description. Added the A2A, hosting and API map sections. |
 | 2026-08-21 | 1.14.0 | Per-class reference pages consolidated into this guide. |
 | 2026-05-15 | 1.4.0 | `SecureAgentConfig` (FIDES) section added. |

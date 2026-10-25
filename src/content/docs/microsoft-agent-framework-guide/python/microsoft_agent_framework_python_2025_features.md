@@ -341,10 +341,10 @@ restored = AgentSession.from_dict(snapshot)
 
 Built-in providers (`InMemoryHistoryProvider`, `FileHistoryProvider`) plus the Redis/Cosmos backends in the beta sub-packages all subclass `HistoryProvider`. To roll your own, override `get_messages()` and `save_messages()` — the rest of the lifecycle (`load_messages` / `store_inputs` / `store_outputs` / `store_context_messages` flags) is handled by the parent.
 
-## MCP — three transports, one tool surface
+## MCP — two transports, one tool surface
 
 ```python
-from agent_framework import Agent, MCPStreamableHTTPTool, MCPStdioTool, MCPWebsocketTool
+from agent_framework import Agent, MCPStreamableHTTPTool, MCPStdioTool
 from agent_framework.openai import OpenAIChatClient
 
 # Streamable HTTP (most remote MCP servers)
@@ -366,11 +366,9 @@ async with MCPStdioTool(
     args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
 ) as fs:
     agent = Agent(client=OpenAIChatClient(), tools=fs)
-
-# WebSocket (bidirectional realtime)
-async with MCPWebsocketTool(name="realtime", url="wss://service.example.com/mcp") as rt:
-    agent = Agent(client=OpenAIChatClient(), tools=rt)
 ```
+
+Since 1.23.0 the framework runs on MCP Python SDK 2.x, which dropped the WebSocket transport (`MCPWebsocketTool` remains only as a deprecated stub that cannot connect) and MCP tasks. You can also pass your own entered `mcp.Client` with `mcp_client=` instead of `url=` or `command=`.
 
 Per-tool approval gates work uniformly:
 
@@ -386,7 +384,7 @@ mcp = MCPStdioTool(
 )
 ```
 
-For hosted MCP (the provider runs the MCP client server-side), feature-detect via `isinstance(client, SupportsMCPTool)` and call `client.get_mcp_tool(name=..., url=...)`. See the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) for full transport, header, and approval coverage.
+For hosted MCP (the provider runs the MCP client server-side), feature-detect via `isinstance(client, SupportsMCPTool)` and call `client.get_mcp_tool(name=..., url=...)`. See the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) for full transport, header, lifecycle and approval coverage.
 
 ## Magentic — manager + workers + replanning
 
@@ -453,4 +451,5 @@ The `with_text` helper on `AgentExecutorResponse` matters when you transform age
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | MCP section: WebSocket transport removed (MCP SDK 2.x); `mcp_client=` noted. |
 | 2026-10-25 | 1.22.0 | Middleware examples now use `call_next()` (the `next(context)` form no longer works, and naming the parameter `next` broke the built-in `next()` in the content-safety example). Replaced an incorrect breaking-changes list (`context_providers` was never made singular) with a link to the current list. Corrected the Mem0 filter check (it runs per run, not at construction), DevUI auth (on by default; non-loopback without a token raises) and CLI flags, span names, and checkpoint storage methods. The `WorkflowFactory` example now allow-lists the declarative checkpoint type (without it no checkpoint saved) and notes the .NET runtime needed for Power Fx. History-provider examples on `OpenAIChatClient` now set `store=False`. |
