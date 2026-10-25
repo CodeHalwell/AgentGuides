@@ -99,7 +99,7 @@ flowchart TD
     rs["Agent::run_stream"] --> prep["prepare_request (as for run)"]
     prep --> has{"agent middleware configured?"}
     has -- yes --> core["run the full pipeline as run() does"]
-    core --> replay["replay the finished response's messages as updates"]
+    core --> replay["adopt conversation id, after_run on providers,<br/>then replay the response's messages as updates"]
     has -- no --> pre["chat middleware: pre-call changes only<br/>(no post-processing, no short-circuit)"]
     pre --> tools{"executable tools?"}
     tools -- no --> tokens["provider stream: token-level updates"]
@@ -110,7 +110,7 @@ flowchart TD
     end_ --> out
 ```
 
-Token-level streaming only happens when there is no agent middleware and no local tool. With agent middleware, `run_stream` goes through the same pipeline as `run` so guardrails apply, and replays the result as updates; with local tools, the tool loop's streaming method runs the whole loop and replays its messages, carrying usage on the last update. Chat middleware on the plain token path can only change the request, because a live stream cannot pass back through `ChatContext::result`. Context providers record the run when the stream ends, so a stream dropped before the end records nothing. See [streaming runs](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_middleware/#streaming-runs).
+Token-level streaming only happens when there is no agent middleware and no local tool. With agent middleware, `run_stream` goes through the same pipeline as `run` so guardrails apply, records the run, and only then replays the result as updates; with local tools, the tool loop's streaming method runs the whole loop and replays its messages, carrying usage on the last update. Chat middleware on the plain token path can only change the request, because a live stream cannot pass back through `ChatContext::result`. On the other two paths, context providers record the run when the stream ends, so a stream dropped before the end records nothing. See [streaming runs](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_middleware/#streaming-runs).
 
 ## The tool loop
 
