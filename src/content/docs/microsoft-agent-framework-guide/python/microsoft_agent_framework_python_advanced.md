@@ -713,10 +713,10 @@ The currently gated features (verified against `agent-framework` %%version=agent
 | Experimental | `ExperimentalFeature.FIDES` | `agent_framework.security`: `SecureAgentConfig`, `SecureMCPToolProxy`, `ContentVariableStore`, label-tracking middleware |
 | Experimental | `ExperimentalFeature.SESSION_STORE` | `SessionStore`, `FileSessionStore` |
 | Experimental | `ExperimentalFeature.VECTOR_STORES` | `InMemoryStore`, `InMemoryCollection`, `Filter`, `FilterGroup` |
-| Experimental | `MCP_SKILLS`, `MCP_LONG_RUNNING_TASKS`, `AGENT_HOOKS`, `COMPUTER_USE`, `DECLARATIVE_AGENTS`, `FOUNDRY_TOOLS`, `FOUNDRY_PREVIEW_TOOLS`, `PROGRESSIVE_TOOLS`, `TO_PROMPT_AGENT` | MCP-backed skills, MCP task options, agent hooks, computer-use safety checks, declarative agents, Foundry tool helpers, progressive tool disclosure |
+| Experimental | `MCP_SKILLS`, `AGENT_HOOKS`, `COMPUTER_USE`, `DECLARATIVE_AGENTS`, `FOUNDRY_TOOLS`, `FOUNDRY_PREVIEW_TOOLS`, `PROGRESSIVE_TOOLS`, `TO_PROMPT_AGENT` | MCP-backed skills, agent hooks, computer-use safety checks, declarative agents, Foundry tool helpers, progressive tool disclosure |
 | Release candidate | *(empty)* | The enum exists but has no members in this release. |
 
-Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0.
+Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0. `MCP_LONG_RUNNING_TASKS` was removed in 1.23.0 along with MCP task support.
 
 Both enums are stage-scoped inventories, not stable introspection surfaces. Members move or disappear as features advance — the docstring on `ReleaseCandidateFeature` is explicit about this. Always enumerate at runtime when you need an authoritative list:
 
@@ -1030,4 +1030,5 @@ agent = Agent(
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | Removed `MCP_LONG_RUNNING_TASKS` from the experimental feature list (the member no longer exists). |
 | 2026-10-25 | 1.22.0 | Corrected the claim that a `BaseChatClient` subclass gets the tool loop, middleware and telemetry for free (they come from layer mixins; added the pattern). `RawAgent` skips only the agent-level layers, not chat middleware. Fixed the `Supports*` examples (Anthropic supports web search, code interpreter, MCP and shell) and added the missing protocols; removed `ChatAgent`, which no longer exists. Completed the experimental feature list and exception tree. The token-budget middleware now checks before the run (raising `MiddlewareTermination` after `call_next()` stopped nothing), and the note on what `agent.run()` returns after a termination is corrected. Added missing imports to the caching client. |

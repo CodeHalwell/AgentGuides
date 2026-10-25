@@ -361,14 +361,18 @@ agent = Agent(
 
 ```python
 import asyncio
+from mcp import Client, StdioServerParameters
 from agent_framework import Agent, MCPSkillsSource, MCPStdioTool, SkillsProvider
 from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
-    async with MCPStdioTool(name="skills-server", command="python", args=["skills_server.py"]) as mcp:
-        # session_provider (not client=) survives the tool reconnecting and swapping its session.
-        source = MCPSkillsSource(session_provider=lambda: mcp.session)
+    server = StdioServerParameters(command="python", args=["skills_server.py"])
+    async with (
+        Client(server) as mcp_client,                                   # one connection, owned by you
+        MCPStdioTool(name="skills-server", mcp_client=mcp_client) as mcp,  # the server's tools
+    ):
+        source = MCPSkillsSource(client=mcp_client)                     # the server's skills
         agent = Agent(
             client=OpenAIChatClient(),
             instructions="Use your skills to help the user.",
@@ -381,7 +385,9 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Pass exactly one of `client=` (a live `mcp.ClientSession`) or `session_provider=`. The `archive_max_file_count` (default 20), `archive_max_size_bytes` and `archive_max_uncompressed_size_bytes` (1 MB each), `archive_resource_extensions` and `archive_resource_search_depth` (default 2) limits protect against oversized or zip-bomb archives. A non-null `sha256:` digest on an archive entry is verified before extraction, and a mismatched archive is skipped with a warning. The source doesn't cache, so wrap it in `CachingSkillsSource` to avoid re-reading the index every run. Skills from a remote server are untrusted input, so keep the default approval flags on `SkillsProvider` unless you control the server.
+Since 1.23.0 the source takes a high-level `mcp.Client` (MCP SDK 2.x); a low-level `ClientSession` still works but is deprecated. Sharing one `Client` between the tool and the source, as above, avoids a second connection. The 1.22 pattern `MCPSkillsSource(session_provider=lambda: mcp.session)` fails on 1.23.0: a connection the tool opens itself has no `session` (it is `None`), so reading the index raises `AttributeError`. Leave out the `MCPStdioTool` if the server has skills but no tools you want the model to call.
+
+Pass exactly one of `client=` (an entered `mcp.Client`, or a `ClientSession`) or `session_provider=` (a callable returning one, read on every fetch, for a connection you replace over time). The source borrows the connection and never opens or closes it. The `archive_max_file_count` (default 20), `archive_max_size_bytes` and `archive_max_uncompressed_size_bytes` (1 MB each), `archive_resource_extensions` and `archive_resource_search_depth` (default 2) limits protect against oversized or zip-bomb archives. A non-null `sha256:` digest on an archive entry is verified before extraction, and a mismatched archive is skipped with a warning. The source doesn't cache, so wrap it in `CachingSkillsSource` to avoid re-reading the index every run. Skills from a remote server are untrusted input, so keep the default approval flags on `SkillsProvider` unless you control the server.
 
 ## Sources, context and caching
 
@@ -965,4 +971,5 @@ Skills compose with tools and MCP. A skill's `instructions` often tells the agen
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | `MCPSkillsSource` example rewritten for MCP SDK 2.x: share a caller-owned `mcp.Client` between `MCPStdioTool(mcp_client=...)` and `MCPSkillsSource(client=...)`; the old `session_provider=lambda: mcp.session` form now fails. |
 | 2026-10-24 | 1.22.0 | Fixed examples that failed at run time: `FilteringSkillsSource` predicates take `(skill, context)`, skill metadata is on `skill.frontmatter`, `AggregatingSkillsSource` needs sources (not lists), script runners receive `FileSkill` / `FileSkillScript` (`script.full_path`, not `script.path`). Replaced a hand-written cache that shadowed the built-in `CachingSkillsSource` and used the old `get_skills()` signature; documented `SkillsSourceContext` and provider caching options. |
