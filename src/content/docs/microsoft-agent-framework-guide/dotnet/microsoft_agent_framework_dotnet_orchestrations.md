@@ -560,7 +560,7 @@ public static class ApprovalInOrchestration
         Workflow workflow = AgentWorkflowBuilder.BuildSequential(tester, deployer);
 
         await using StreamingRun run = await InProcessExecution.RunStreamingAsync(
-            workflow, new List<ChatMessage> { new(ChatRole.User, "Ship version 2.4.0.") });
+            workflow, new List<ChatMessage> { new(ChatRole.User, "Ship release 2.4.0.") });
         await run.TrySendMessageAsync(new TurnToken(emitEvents: false));
 
         await foreach (WorkflowEvent evt in run.WatchStreamAsync())

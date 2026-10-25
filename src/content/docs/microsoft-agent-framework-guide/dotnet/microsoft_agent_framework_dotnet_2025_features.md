@@ -1,34 +1,38 @@
 ---
 title: "Microsoft Agent Framework (.NET) — Feature Tour"
-description: "Tour of the .NET A2A, workflow, checkpointing, human-in-the-loop, declarative agent, OpenTelemetry, content-safety and dependency-injection features, with compiled examples."
+description: "A short tour of the .NET framework's main features beyond the single agent, with links to the pages that cover each: A2A, graph workflows, checkpointing, human-in-the-loop, orchestrations, hosting, OpenTelemetry and evaluation, plus declarative YAML agents, content-safety middleware and dependency-injection patterns with compiled examples."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 sidebar:
   label: "Feature tour"
-  order: 41
+  order: 17
 ---
 
 **First written:** November 2025, for the October 2025 public preview
-**Verified against:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%). Every C# block on this page was compiled against that release.
+**Verified against:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%). Every C# block on this page was compiled against that release, and the declarative agent was run against a local stand-in for the OpenAI API.
 **Target audience:** .NET/C# developers
 **.NET version:** 8.0+
 
+This page started as a tour of the preview's headline features. Most of them now have their own pages; the sections below summarise each and link to the full treatment, and keep the code only for the features that are not covered elsewhere (declarative agents, content-safety middleware and dependency-injection patterns).
+
 The preview-era version of this page described `Microsoft.Agents.AI.Graphs`, `.Config`, `.Telemetry` and `.Safety` namespaces (`AgentGraph`, `HITLConfig`, `A2AProtocolAdapter`, `AgentTelemetry`, `ContentSafetyConfig`). They never shipped. The shipped equivalents are:
 
-| Feature | Package / namespace | Key types |
-| --- | --- | --- |
-| A2A client | `Microsoft.Agents.AI.A2A` (preview) | `A2ACardResolver.GetAIAgentAsync()`, `A2AAgent` |
-| A2A server | `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (preview) | `AddA2AServer`, `MapA2AJsonRpc` |
-| Graph workflows | `Microsoft.Agents.AI.Workflows` | `WorkflowBuilder`, `Executor<TIn,TOut>`, `InProcessExecution` |
-| Checkpointing | `Microsoft.Agents.AI.Workflows` | `CheckpointManager`, `CheckpointInfo` |
-| Human-in-the-loop | `Microsoft.Agents.AI.Workflows` | `RequestPort`, `RequestInfoEvent` |
-| Declarative agents | `Microsoft.Agents.AI.Declarative` (rc) | `ChatClientPromptAgentFactory`, `CreateFromYamlAsync` |
-| Declarative workflows | `Microsoft.Agents.AI.Workflows.Declarative` | `DeclarativeWorkflowBuilder` |
-| OpenTelemetry | `Microsoft.Agents.AI` | `.AsBuilder().UseOpenTelemetry()` |
-| Content safety | your middleware over `Azure.AI.ContentSafety` | `.AsBuilder().Use(...)` |
-| Hosting / DI | `Microsoft.Agents.AI.Hosting` (preview) | `AddAIAgent`, `AddWorkflow` |
+| Feature | Package / namespace | Key types | Covered on |
+| --- | --- | --- | --- |
+| A2A client | `Microsoft.Agents.AI.A2A` (preview) | `A2ACardResolver.GetAIAgentAsync()`, `A2AAgent` | [Hosting: A2A](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#a2a) |
+| A2A server | `Microsoft.Agents.AI.Hosting.A2A.AspNetCore` (preview) | `AddA2AServer`, `MapA2AJsonRpc`, `MapA2AHttpJson` | [Hosting: A2A](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#a2a) |
+| Graph workflows | `Microsoft.Agents.AI.Workflows` | `WorkflowBuilder`, `Executor<TIn,TOut>`, `InProcessExecution` | [Workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/) |
+| Checkpointing | `Microsoft.Agents.AI.Workflows` | `CheckpointManager`, `CheckpointInfo` | [Workflows: checkpointing](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#checkpointing) |
+| Human-in-the-loop | `Microsoft.Agents.AI.Workflows` | `RequestPort`, `RequestInfoEvent` | [Workflows: request ports](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#human-input-with-request-ports) |
+| Orchestrations | `Microsoft.Agents.AI.Workflows` | `AgentWorkflowBuilder` | [Orchestrations](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/) |
+| Declarative agents | `Microsoft.Agents.AI.Declarative` (rc) | `ChatClientPromptAgentFactory`, `CreateFromYamlAsync` | [Below](#declarative-agents-with-net) |
+| Declarative workflows | `Microsoft.Agents.AI.Workflows.Declarative` | `DeclarativeWorkflowBuilder` | [Workflows: declarative](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#declarative-workflows) |
+| OpenTelemetry | `Microsoft.Agents.AI`, `Microsoft.Agents.AI.Workflows` | `.AsBuilder().UseOpenTelemetry()`, `WithOpenTelemetry()` | [Observability](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/) |
+| Evaluation | `Microsoft.Agents.AI` | `LocalEvaluator`, `EvalChecks`, `EvaluateAsync` | [Testing and evaluation](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/) |
+| Content safety | your middleware over `Azure.AI.ContentSafety` | `.AsBuilder().Use(...)`, `DelegatingAIAgent` | [Below](#content-safety---net) |
+| Hosting / DI | `Microsoft.Agents.AI.Hosting` (preview) | `AddAIAgent`, `AddWorkflow` | [Hosting](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/), and [below](#dependency-injection-patterns) |
 
-The examples share one helper for creating a chat client:
+The examples on this page share one helper for creating a chat client:
 
 ```csharp
 // Models.cs
@@ -61,321 +65,27 @@ public static class Models
 
 ## Agent2Agent (A2A) Protocol - .NET
 
-[A2A](https://a2a-protocol.org/) lets agents on different frameworks call each other over HTTP. In the framework a remote A2A agent is just another `AIAgent`, and any `AIAgent` can be published as an A2A endpoint.
+[A2A](https://a2a-protocol.org/) lets agents on different frameworks call each other over HTTP. In the framework a remote A2A agent is just another `AIAgent` (`await new A2ACardResolver(url, http).GetAIAgentAsync(http)`), so it can sit in a workflow, be wrapped with middleware, or become a tool with `AsAIFunction()`. Any `AIAgent` can be published with `AddA2AServer` and `MapA2AJsonRpc` / `MapA2AHttpJson`; publish its agent card as well with `MapWellKnownAgentCard`, because the server does not do it for you and clients discover agents from the card. A complete server and client, both run, are on the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#a2a). Earlier versions of this page showed a server without a card, which a card-resolving client cannot find.
 
-```bash
-dotnet add package Microsoft.Agents.AI.A2A --prerelease
-dotnet add package Microsoft.Agents.AI.Hosting.A2A.AspNetCore --prerelease
-```
-
-### Calling a remote A2A agent
-
-The client resolves the remote agent's card (`/.well-known/agent-card.json`) and wraps it as an `AIAgent`. Authentication is whatever the remote agent's card asks for; supply it through the `HttpClient`.
-
-```csharp
-using A2A;
-using Microsoft.Agents.AI;
-
-public static class A2AClientExample
-{
-    public static async Task CallRemoteAgentAsync()
-    {
-        using var http = new HttpClient();
-        // e.g. http.DefaultRequestHeaders.Authorization = new("Bearer", token);
-
-        var resolver = new A2ACardResolver(new Uri("https://api.partner.com/agents/analytics/"), http);
-        AIAgent analytics = await resolver.GetAIAgentAsync(http);
-
-        AgentSession session = await analytics.CreateSessionAsync();   // maps to an A2A context id
-        AgentResponse response = await analytics.RunAsync("Analyse Q3 sales trends", session);
-        Console.WriteLine(response.Text);
-    }
-}
-```
-
-Because it is an `AIAgent`, a remote A2A agent can sit in a workflow, be wrapped with middleware, or be handed to another agent as a tool with `analytics.AsAIFunction()`.
-
-### Exposing an agent over A2A
-
-```csharp
-// Program.cs (ASP.NET Core)
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-
-var builder = WebApplication.CreateBuilder(args);
-
-AIAgent salesAgent = new ChatClientAgent(
-    Models.ChatClient(),
-    instructions: "You are a helpful sales data agent.",
-    name: "SalesAgent",
-    description: "Answers questions about sales figures.");
-
-builder.AddA2AServer(salesAgent);
-
-var app = builder.Build();
-app.MapA2AJsonRpc(salesAgent, "/agents/sales");   // JSON-RPC binding; MapA2AHttpJson for HTTP+JSON
-app.Run();
-```
-
-Put the endpoint behind your normal ASP.NET Core authentication (`.RequireAuthorization()`).
-
-### Type-safe exchanges
-
-A2A carries messages, not typed RPC. For a typed contract, serialise the request into the message and ask the remote side for JSON; locally, `RunAsync<T>` gives you the same safety against an in-process agent.
-
-```csharp
-using System.Text.Json;
-using Microsoft.Agents.AI;
-
-public record SalesQuery(string QueryType, string DateRange, string? Region = null, string Currency = "USD");
-
-public record SalesResponse(decimal TotalSales, string Period, string Region, string Currency, Dictionary<string, decimal> Breakdown);
-
-public static class TypedSales
-{
-    public static async Task<SalesResponse> QueryAsync(AIAgent salesAgent, SalesQuery query)
-    {
-        AgentResponse<SalesResponse> response = await salesAgent.RunAsync<SalesResponse>(
-            $"Answer this query as JSON: {JsonSerializer.Serialize(query)}");
-        return response.Result;
-    }
-}
-```
+For a typed contract over A2A, which carries messages rather than typed calls, serialise the request into the message and ask the remote side for JSON; against a local agent, `RunAsync<T>` gives you the same safety directly.
 
 ---
 
 ## Graph-Based Workflows - .NET
 
-Workflows are directed graphs of **executors**. An executor is a class deriving from `Executor<TInput, TOutput>` (or `Executor<TInput>`), a plain function bound with `BindAsExecutor`, or an `AIAgent`. Edges carry typed messages between them; the workflow runs in supersteps and can checkpoint after each one.
+Workflows are typed graphs of executors joined by edges, run in supersteps. The [workflows page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/) covers them in full, with run examples for each feature:
 
-```bash
-dotnet add package Microsoft.Agents.AI.Workflows --version %%version=Microsoft.Agents.AI%%
-```
-
-### Building a workflow
-
-```csharp
-using Microsoft.Agents.AI.Workflows;
-
-public record Document(string Title, string Body);
-
-public sealed class DraftExecutor() : Executor<string, Document>("draft")
-{
-    public override ValueTask<Document> HandleAsync(string topic, IWorkflowContext context, CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult(new Document(topic, $"A first draft about {topic}."));
-}
-
-public sealed class ReviewExecutor() : Executor<Document, string>("review")
-{
-    public override async ValueTask<string> HandleAsync(Document doc, IWorkflowContext context, CancellationToken cancellationToken = default)
-    {
-        await context.QueueStateUpdateAsync("reviewed-title", doc.Title, cancellationToken: cancellationToken);
-        return $"{doc.Title}: {doc.Body} (reviewed)";
-    }
-}
-
-public static class ContentPipeline
-{
-    public static Workflow Build()
-    {
-        var draft = new DraftExecutor();
-        var review = new ReviewExecutor();
-
-        return new WorkflowBuilder(draft)
-            .AddEdge(draft, review)
-            .WithOutputFrom(review)
-            .WithName("ContentPipeline")
-            .Build();
-    }
-
-    public static async Task RunAsync()
-    {
-        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(Build(), "agent frameworks");
-        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
-        {
-            switch (evt)
-            {
-                case ExecutorCompletedEvent done:
-                    Console.WriteLine($"[{done.ExecutorId}] completed");
-                    break;
-                case WorkflowOutputEvent output:
-                    Console.WriteLine(output.As<string>());
-                    break;
-            }
-        }
-    }
-}
-```
-
-Agents slot in the same way: `new WorkflowBuilder(researcher).AddEdge(researcher, writer)` where both are `AIAgent`s. Send a `TurnToken` after starting the run so agent executors begin their turn (see the [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-8-explicit-multi-agent-graph-with-workflowbuilder)).
-
-### Conditional routing
-
-`AddEdge<T>(source, target, condition)` only delivers a message when the predicate holds. For many branches, `AddSwitch` reads more clearly.
-
-```csharp
-using Microsoft.Agents.AI.Workflows;
-
-public record Claim(string Id, decimal Amount);
-
-public static class ClaimsRouting
-{
-    public static Workflow Build()
-    {
-        var intake = ((Func<string, Claim>)(text => new Claim(Guid.NewGuid().ToString("N")[..8], decimal.Parse(text))))
-            .BindAsExecutor("intake");
-        var autoApprove = ((Func<Claim, string>)(c => $"Claim {c.Id} auto-approved")).BindAsExecutor("auto-approve");
-        var manualReview = ((Func<Claim, string>)(c => $"Claim {c.Id} sent for manual review")).BindAsExecutor("manual-review");
-
-        return new WorkflowBuilder(intake)
-            .AddSwitch(intake, s => s
-                .AddCase<Claim>(c => c!.Amount < 1_000m, autoApprove)
-                .WithDefault(manualReview))
-            .WithOutputFrom(autoApprove, manualReview)
-            .Build();
-    }
-}
-```
-
-### Parallel execution
-
-Fan-out sends one message to several executors in the same superstep; a fan-in barrier waits for all of them. For agents only, `AgentWorkflowBuilder.BuildConcurrent(agents)` does this for you.
-
-```csharp
-using Microsoft.Agents.AI.Workflows;
-
-public static class ParallelChecks
-{
-    public static Workflow Build()
-    {
-        var start = ((Func<string, string>)(text => text)).BindAsExecutor("start");
-        var spelling = ((Func<string, string>)(t => $"spelling: ok ({t.Length} chars)")).BindAsExecutor("spelling");
-        var tone = ((Func<string, string>)(t => "tone: neutral")).BindAsExecutor("tone");
-
-        var report = new ReportExecutor(expectedBranches: 2);
-
-        return new WorkflowBuilder(start)
-            .AddFanOutEdge(start, [spelling, tone])
-            .AddFanInBarrierEdge([spelling, tone], report)
-            .WithOutputFrom(report)
-            .Build();
-    }
-}
-
-/// Collects one result per branch (in workflow state, so it survives checkpoints) and yields once all have arrived.
-/// [YieldsOutput] declares the output type; an executor may only yield types it declares.
-[YieldsOutput(typeof(string))]
-public sealed class ReportExecutor(int expectedBranches) : Executor<string>("report")
-{
-    public override async ValueTask HandleAsync(string result, IWorkflowContext context, CancellationToken cancellationToken = default)
-    {
-        List<string> results = await context.ReadOrInitStateAsync("results", () => new List<string>(), cancellationToken: cancellationToken);
-        results.Add(result);
-        await context.QueueStateUpdateAsync("results", results, cancellationToken: cancellationToken);
-
-        if (results.Count == expectedBranches)
-        {
-            await context.YieldOutputAsync(string.Join("; ", results), cancellationToken);
-        }
-    }
-}
-```
-
-### Checkpointing and recovery
-
-Pass a `CheckpointManager` when you start the run and the workflow checkpoints at the end of every superstep. `CheckpointManager.CreateInMemory()` is for tests; `CheckpointManager.CreateJson(new FileSystemJsonCheckpointStore(dir))` or the Cosmos DB store (`Microsoft.Agents.AI.CosmosNoSql`) persist across processes.
-
-```csharp
-using Microsoft.Agents.AI.Workflows;
-using Microsoft.Agents.AI.Workflows.Checkpointing;
-
-public static class CheckpointDemo
-{
-    public static async Task RunAsync()
-    {
-        var store = new FileSystemJsonCheckpointStore(new DirectoryInfo("./checkpoints"));
-        CheckpointManager checkpoints = CheckpointManager.CreateJson(store);
-        Workflow workflow = ContentPipeline.Build();
-
-        CheckpointInfo? resumeFrom = null;
-        await using (StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, "durable workflows", checkpoints))
-        {
-            await foreach (WorkflowEvent evt in run.WatchStreamAsync())
-            {
-                if (evt is SuperStepCompletedEvent step && step.CompletionInfo?.Checkpoint is { } cp)
-                {
-                    // In production, persist cp.SessionId / cp.CheckpointId after every step.
-                    // For the demo, keep the checkpoint taken after the first superstep (the draft).
-                    resumeFrom ??= cp;
-                }
-            }
-        }
-
-        // Later, possibly in another process: resume from the saved checkpoint.
-        // The review step runs again from the stored state; the draft step does not.
-        if (resumeFrom is not null)
-        {
-            await using StreamingRun resumed = await InProcessExecution.ResumeStreamingAsync(workflow, resumeFrom, checkpoints);
-            await foreach (WorkflowEvent evt in resumed.WatchStreamAsync())
-            {
-                if (evt is WorkflowOutputEvent output) Console.WriteLine(output.As<string>());
-            }
-        }
-    }
-}
-```
-
-Resuming from a checkpoint taken after the workflow has already finished leaves nothing to run; resume from the latest checkpoint of a run that did **not** complete.
+- [Executors](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#executors): `Executor<TIn, TOut>`, function executors, multi-handler executors and the `[MessageHandler]` source generator.
+- [Edges and routing](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#edges-and-routing): conditions, switch, fan-out and fan-in, multi-selection.
+- [Shared state](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#shared-state), [events and errors](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#custom-events-halting-and-errors).
+- [Human input with request ports](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#human-input-with-request-ports) and [checkpointing](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#checkpointing), including resuming in another process.
+- [Sub-workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#sub-workflows), [agents in workflows](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#agents-in-workflows) and [workflows as agents](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#workflows-as-agents).
 
 ### Human-in-the-loop
 
-A `RequestPort` is a node that leaves the workflow: messages sent to it surface as `RequestInfoEvent`s, and the workflow waits until you send back a response. Combined with checkpointing, the wait can last as long as you like.
+A `RequestPort` is a node whose input leaves the workflow as a `RequestInfoEvent`; the caller answers with `request.CreateResponse(value)` and the run continues from the port. With a durable checkpoint store the answer can arrive days later in another process, and agent tool approvals inside workflows surface the same way. See [human input with request ports](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#human-input-with-request-ports), and [HostedWorkflowState](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#human-in-the-loop-workflows-over-http) for doing it over HTTP. For tool-level approval inside a single agent, wrap the tool in `ApprovalRequiredAIFunction`; see the [comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tool-approval).
 
-```csharp
-using Microsoft.Agents.AI.Workflows;
-
-public record ApprovalRequest(string Content);
-public record ApprovalDecision(bool Approved, string? Comment = null);
-
-public static class ApprovalWorkflow
-{
-    public static Workflow Build()
-    {
-        var draft = ((Func<string, ApprovalRequest>)(topic => new ApprovalRequest($"Draft post about {topic}")))
-            .BindAsExecutor("draft");
-        var approval = RequestPort.Create<ApprovalRequest, ApprovalDecision>("human-approval");
-        var publish = ((Func<ApprovalDecision, string>)(d => d.Approved ? "Published." : $"Rejected: {d.Comment}"))
-            .BindAsExecutor("publish");
-
-        return new WorkflowBuilder(draft)
-            .AddEdge(draft, approval)
-            .AddEdge(approval, publish)
-            .WithOutputFrom(publish)
-            .Build();
-    }
-
-    public static async Task RunAsync()
-    {
-        await using StreamingRun run = await InProcessExecution.RunStreamingAsync(Build(), "release notes");
-        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
-        {
-            switch (evt)
-            {
-                case RequestInfoEvent request when request.Request.TryGetDataAs<ApprovalRequest>(out var ask):
-                    Console.Write($"Approve '{ask.Content}'? [y/N] ");
-                    bool ok = Console.ReadLine()?.Trim().ToLowerInvariant() == "y";
-                    await run.SendResponseAsync(request.Request.CreateResponse(new ApprovalDecision(ok, ok ? null : "Not now")));
-                    break;
-                case WorkflowOutputEvent output:
-                    Console.WriteLine(output.As<string>());
-                    break;
-            }
-        }
-    }
-}
-```
-
-For tool-level approval inside a single agent (rather than a workflow step), wrap the tool in `ApprovalRequiredAIFunction`; see the [.NET comprehensive guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_comprehensive_guide/#tool-approval).
+The prebuilt multi-agent patterns (sequential, concurrent, group chat, handoff, Magentic) are on the [orchestrations page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_orchestrations/). Two behaviours that catch people coming from Python: there is no superstep limit, so every cycle needs its own exit, and agent nodes only start when the run receives a `TurnToken`.
 
 ---
 
@@ -436,7 +146,7 @@ public static class DeclarativeAgents
 }
 ```
 
-The model is the chat client you pass in; the YAML sets the options. Workflows have a declarative form too (`DeclarativeWorkflowBuilder.Build<T>("workflow.yaml", options)` in `Microsoft.Agents.AI.Workflows.Declarative`), covered on the [graph workflows and declarative agents page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/).
+The model is the chat client you pass in; the YAML sets the options. With the definition above, the request carries `temperature` 0.7, `top_p` 0.95, the instructions as the system prompt and a JSON schema built from `outputSchema`, so the reply is a JSON object with `category` and `answer`. Workflows have a declarative form too, covered on the [workflows page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_workflows/#declarative-workflows).
 
 ### Strongly-typed configuration with the options pattern
 
@@ -500,77 +210,18 @@ public static class ConfiguredAgentRegistration
 
 ## OpenTelemetry Integration - .NET
 
-### Observability set-up
-
-Wrap the agent with `UseOpenTelemetry(sourceName)` and subscribe to that source. Workflows have the matching `WorkflowBuilder.WithOpenTelemetry()`. The spans follow the OpenTelemetry GenAI conventions (`invoke_agent`, `chat`, `execute_tool`).
-
-```csharp
-using Azure.Monitor.OpenTelemetry.Exporter;
-using Microsoft.Agents.AI;
-using OpenTelemetry;
-using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
-
-public static class Observability
-{
-    public const string SourceName = "Contoso.Agents";
-
-    public static TracerProvider StartTracing() =>
-        Sdk.CreateTracerProviderBuilder()
-            .SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("enterprise-agents"))
-            .AddSource(SourceName)
-            .AddOtlpExporter()                                   // OTEL_EXPORTER_OTLP_ENDPOINT
-            .AddAzureMonitorTraceExporter(o =>
-                o.ConnectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING"))
-            .Build();
-
-    public static AIAgent Instrument(AIAgent agent) =>
-        agent.AsBuilder()
-            .UseOpenTelemetry(SourceName, o => o.EnableSensitiveData = false)   // no prompt text in spans
-            .Build();
-}
-```
-
-In an ASP.NET Core app use `builder.Services.AddOpenTelemetry().WithTracing(t => t.AddSource(Observability.SourceName))` from `OpenTelemetry.Extensions.Hosting` instead of building the provider by hand.
-
-### Custom metrics
-
-Your own metrics are plain `System.Diagnostics.Metrics`. Token usage is on every `AgentResponse`.
-
-```csharp
-using System.Diagnostics;
-using System.Diagnostics.Metrics;
-using Microsoft.Agents.AI;
-
-public sealed class AgentMetrics
-{
-    private static readonly Meter Meter = new("Contoso.Agents.Business");
-    private static readonly Counter<long> Requests = Meter.CreateCounter<long>("agent.requests");
-    private static readonly Histogram<double> Latency = Meter.CreateHistogram<double>("agent.latency", unit: "ms");
-    private static readonly Counter<long> Tokens = Meter.CreateCounter<long>("agent.tokens");
-
-    public static async Task<AgentResponse> RunMeasuredAsync(AIAgent agent, string input, string tenant)
-    {
-        var tags = new TagList { { "agent", agent.Name }, { "tenant", tenant } };
-        var stopwatch = Stopwatch.StartNew();
-
-        AgentResponse response = await agent.RunAsync(input);
-
-        Requests.Add(1, tags);
-        Latency.Record(stopwatch.Elapsed.TotalMilliseconds, tags);
-        Tokens.Add(response.Usage?.TotalTokenCount ?? 0, tags);
-        return response;
-    }
-}
-
-// Export it with .AddMeter("Contoso.Agents.Business") on your MeterProvider.
-```
+Wrap an agent with `.AsBuilder().UseOpenTelemetry(sourceName)` and subscribe to that source with `AddSource` and `AddMeter`; workflows have `WorkflowBuilder.WithOpenTelemetry()`, whose spans go to `Microsoft.Agents.AI.Workflows` unless you pass your own `ActivitySource`. The spans follow the GenAI conventions (`invoke_agent`, `chat`, `execute_tool`) and carry token usage, and the meters record `gen_ai.client.operation.duration` and `gen_ai.client.token.usage`. Prompt text is excluded unless you set `EnableSensitiveData`. The [observability page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/) lists every span and attribute and has set-ups for OTLP, the Aspire dashboard and Azure Monitor, and your own business metrics.
 
 ---
 
 ## Content Safety - .NET
 
-There is no `Microsoft.Agents.AI.Safety` namespace and no `contentSafety:` option on `ChatClientAgent`. Content safety is middleware you write over `Azure.AI.ContentSafety`, attached with `agent.AsBuilder().Use(...)`. The full input-and-output screening example is on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#net-content-safety-integration).
+There is no `Microsoft.Agents.AI.Safety` namespace and no `contentSafety:` option on `ChatClientAgent`. Content safety is middleware you write over `Azure.AI.ContentSafety`, attached with `agent.AsBuilder().Use(...)` or written as a `DelegatingAIAgent`. The full input-and-output screening example is on the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#net-content-safety-integration), and middleware in general on the [middleware page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/).
+
+```bash
+dotnet add package Azure.AI.ContentSafety
+dotnet add package Azure.AI.TextAnalytics   # for PII redaction
+```
 
 ### A reusable safety wrapper
 
@@ -647,7 +298,7 @@ public static class PiiRedaction
 
 ### Registering agents and workflows
 
-`Microsoft.Agents.AI.Hosting` registers agents (and workflows) as keyed `AIAgent` services. A workflow registered with `AddWorkflow(...).AddAsAIAgent()` is callable exactly like an agent, and both can then be mapped to OpenAI-compatible, A2A or AG-UI endpoints.
+`Microsoft.Agents.AI.Hosting` registers agents (and workflows) as keyed `AIAgent` services. A workflow registered with `AddWorkflow(...).AddAsAIAgent()` is callable exactly like an agent, and both can then be mapped to OpenAI-compatible, A2A or AG-UI endpoints (see the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/)).
 
 ```csharp
 // Program.cs
@@ -677,17 +328,20 @@ var app = builder.Build();
 app.MapPost("/brief", async (BriefRequest request, [FromKeyedServices("research-brief")] AIAgent workflow) =>
     Results.Ok(new { brief = (await workflow.RunAsync(request.Topic)).Text }));
 
-app.MapOpenAIResponses();   // POST /v1/responses with "model": "researcher" | "writer" | "research-brief"
+app.MapOpenAIResponses();   // POST /v1/responses with "agent": {"name": "researcher" | "writer" | "research-brief"}
 app.Run();
 
 public record BriefRequest(string Topic);
 ```
+
+The shared Responses route selects the agent with `agent.name` in the request body (or `metadata.entity_id`); the `model` field does not select anything. Earlier versions of this page said otherwise.
 
 ### Lifetimes
 
 - Register the `IChatClient` as a singleton; it owns the HTTP connection pool.
 - Agents are safe to share as singletons (the default for `AddAIAgent`); keep per-user state in sessions.
 - Use `ServiceLifetime.Scoped` on `AddAIAgent` only when the agent depends on scoped services (for example a per-request `DbContext` used by its tools).
+- Build workflows per run (a factory, or `AddWorkflow`'s delegate) in services that run several at once: one `Workflow` instance can only be in one run at a time.
 
 ---
 
@@ -695,7 +349,7 @@ public record BriefRequest(string Topic);
 
 ### 1. Async all the way
 - Use `async`/`await` throughout; never block on `.Result` or `.Wait()`.
-- Flow `CancellationToken`s from the request into `RunAsync`.
+- Flow `CancellationToken`s from the request into `RunAsync` and into workflow runs.
 
 ### 2. Dependency injection
 - One `IChatClient` per model deployment, registered once.
@@ -707,8 +361,8 @@ public record BriefRequest(string Topic);
 - Prefer `RunAsync<T>` over parsing JSON out of `response.Text`.
 
 ### 4. Error handling
-- Catch `ClientResultException` (OpenAI SDK) or `RequestFailedException` (Azure SDK) around model calls; add retries with `Microsoft.Extensions.Http.Resilience` on the `HttpClient`.
-- Watch for `WorkflowErrorEvent` and `ExecutorFailedEvent` in workflow streams.
+- Catch `ClientResultException` (OpenAI SDK) or `RequestFailedException` (Azure SDK) around model calls; add retries with `Microsoft.Extensions.Http.Resilience` on the `HttpClient` ([production guide](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/#resilience)).
+- Workflow executors do not throw out of the run: watch for `WorkflowErrorEvent` and `ExecutorFailedEvent`.
 
 ### 5. Performance
 - Stream (`RunStreamingAsync`) for user-facing latency.
