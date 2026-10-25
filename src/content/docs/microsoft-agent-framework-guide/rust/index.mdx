@@ -1,0 +1,161 @@
+---
+title: "Microsoft Agent Framework (Rust)"
+description: "agent-framework-rs, a community Rust port of Microsoft Agent Framework: installation and cargo features, a first agent, what is stable and what is experimental, and how it maps to the Python and .NET SDKs."
+framework: "microsoft-agent-framework"
+language: "rust"
+sidebar:
+  label: "Overview"
+  order: 0
+---
+
+import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
+
+**`agent-framework` on crates.io is a Rust port of Microsoft Agent Framework.** It follows the Python SDK's design closely (chat clients, agents, tools, sessions, context providers, three levels of middleware, a superstep graph engine and the prebuilt orchestrations) and adds the surrounding integrations: MCP, A2A, HTTP hosting, declarative agents, memory backends, Purview and OpenTelemetry. The API is ordinary async Rust on tokio: builders for configuration, traits for extension points, `serde_json::Value` for workflow messages, and method pairs such as `run` and `run_stream` where Python uses a flag.
+
+<Aside type="caution" title="A community port, not a Microsoft package">
+  The crate is maintained in [codehalwell/agent-framework-rs](https://github.com/codehalwell/agent-framework-rs) under the MIT licence. Its README describes it as an independent port, not affiliated with or endorsed by Microsoft; Microsoft's own SDKs are for Python, .NET and Go. The author of this site also maintains the crate. It is pre-1.0: the changelog follows the convention that a minor release may break the API, and several have (0.10.0, 0.11.0 and 0.13.0, for example). Version 0.1.1 was the first on crates.io, on 13 July 2026, and 0.14.0, released on 21 October 2026, is the fourteenth. Every example in this guide was compiled against %%version=agent-framework-rs%% from crates.io, and run where it needs no external service.
+</Aside>
+
+<CardGrid>
+  <Card title="Install" icon="rocket">
+    ```bash
+    cargo add agent-framework@%%version=agent-framework-rs%%
+    cargo add tokio --features full
+    ```
+  </Card>
+  <Card title="Version" icon="information">
+    `agent-framework` **%%version=agent-framework-rs%%** (checked %%versions-checked%%) · Rust **1.88** or later · async on **tokio**
+  </Card>
+  <Card title="Best for" icon="puzzle">
+    Rust services that want Agent Framework's agent, tool and workflow model, with OpenAI, Azure, Anthropic, Gemini, Bedrock or local models, without a Python or .NET runtime.
+  </Card>
+</CardGrid>
+
+## A minimal agent
+
+```rust
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Reads OPENAI_API_KEY (and OPENAI_BASE_URL, for a compatible endpoint).
+    let client = OpenAIChatCompletionClient::from_env("%%model=openai-small%%")?;
+
+    let agent = Agent::builder(client)
+        .name("assistant")
+        .instructions("You are a concise assistant. Answer in one sentence.")
+        .build();
+
+    let response = agent.run_once("What is the capital of France?").await?;
+    println!("{}", response.text());
+    Ok(())
+}
+```
+
+The repository README's quick start still uses the names `ChatAgent`, `OpenAIClient` and `AiFunction` (and a `0.1` version requirement); in %%version=agent-framework-rs%% the types are `Agent`, `OpenAIChatCompletionClient` and `FunctionTool`, as in this guide. The [comprehensive guide](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_comprehensive_guide/#agents-and-runs) carries on from here.
+
+## Cargo features
+
+The `agent-framework` crate re-exports the core crate at its root and each companion crate as a module behind a feature (`agent_framework::anthropic`, `agent_framework::mcp`, and so on). The prelude brings in the common types from every enabled feature. Only `openai` is on by default.
+
+| Feature | Adds |
+| --- | --- |
+| `openai` (default) | `OpenAIChatCompletionClient` (Chat Completions, or any compatible endpoint), `OpenAIChatClient` (Responses API), `OpenAIEmbeddingClient` |
+| `azure` | Azure OpenAI chat, Responses and embedding clients; Entra ID credentials |
+| `foundry` | Microsoft Foundry: `FoundryChatClient`, client-side prompt agents, embeddings, managed memory |
+| `anthropic` | Claude through the Anthropic API, Amazon Bedrock, Vertex AI or Foundry |
+| `gemini`, `mistral`, `ollama`, `foundry-local`, `bedrock`, `github-copilot` | Those providers' chat clients (and embeddings where they offer them) |
+| `copilotstudio` | A published Copilot Studio agent as a `SupportsAgentRun` participant |
+| `mcp` | MCP tools over stdio, streamable HTTP and WebSocket |
+| `a2a` | An A2A client (`A2AAgent`, `A2AClient`); serving A2A is part of `hosting` |
+| `hosting`, `agui-client` | axum routers for DevUI-style, OpenAI-compatible, AG-UI and A2A serving; an AG-UI chat client |
+| `redis`, `mem0`, `cosmos`, `azure-ai-search` | History stores and memory or retrieval providers |
+| `purview` | Purview data-loss-prevention middleware |
+| `tools` | Local and Docker shell tools, as `agent_framework::builtin_tools` |
+| `otel-metrics`, `otel-export` | GenAI metrics through the OpenTelemetry API; a ready-made OTLP exporter |
+| `full` | Every integration above except the two OpenTelemetry features |
+
+```toml
+[dependencies]
+agent-framework = { version = "%%version=agent-framework-rs%%", features = ["anthropic", "azure", "mcp"] }
+tokio = { version = "1", features = ["full"] }
+```
+
+The README's feature tables predate several providers and omit `ollama`, `gemini`, `mistral`, `foundry-local`, `bedrock`, `github-copilot`, `otel-export` and `experimental-session-store`; the crate's `Cargo.toml` and docs.rs page are the complete list. The [providers page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_providers/#feature-flags-and-imports) shows which names each provider feature adds to the prelude.
+
+## Stable and experimental
+
+Upstream marks some APIs experimental (Python warns on use, .NET raises a compiler diagnostic). The port puts each of those behind a cargo feature named `experimental-<id>`, so using one is an explicit choice at build time. Nothing behind these features is covered by semver, `full` does not include them, and `experimental` turns them all on:
+
+| Feature | What it gates |
+| --- | --- |
+| `experimental-declarative-agents` | The whole declarative crate: YAML/JSON agents and workflows |
+| `experimental-harness` | The agent loop (`LoopAgent`), todo list, standing tool approvals, agent modes, file memory |
+| `experimental-session-store` | Saving and restoring whole sessions by key (`AgentSessionStore`) |
+| `experimental-file-history` | `FileHistoryProvider` |
+| `experimental-vector-stores` | The vector store abstraction, vector collection tools, and the in-memory, Cosmos DB and Azure AI Search stores |
+| `experimental-progressive-tools` | Adding or removing tools mid-run from function middleware |
+| `experimental-agent-hooks` | Allow, deny and transform hooks at the agent, model-call and tool-call seams, and `Error::InterceptionBlocked` |
+
+Everything else, including the workflow engine, all orchestrations, compaction, skills, `TextSearchProvider`, MCP, A2A, hosting and the memory providers, is on the stable side. The rules are in the repository's `docs/feature-stages.md`, which also lists the upstream experimental features with no Rust counterpart yet: evaluation, FIDES, computer use, functional workflows, MCP long-running tasks, MCP skills and the Foundry tools.
+
+## Coming from Python or .NET
+
+The crate mirrors the Python package's module layout, so most names carry over:
+
+| Python (`agent_framework`) | Rust (`agent_framework`) |
+| --- | --- |
+| `Agent(client, instructions=..., tools=[...])` | `Agent::builder(client).instructions(...).tool(...).build()` |
+| `await agent.run("...", session=s)` | `agent.run(vec![Message::user("...")], Some(&mut s)).await` or `agent.run_once("...")` |
+| `agent.run(..., stream=True)` | `agent.run_stream(...)`, a `Stream` of `AgentResponseUpdate` |
+| `@tool` / `FunctionTool` | `FunctionTool::typed` (schema from a `schemars` type) or `FunctionTool::new` |
+| `approval_mode="always_require"` | `.with_approval_mode(ApprovalMode::AlwaysRequire)` |
+| `agent.as_tool()` | `agent.as_tool(AsToolOptions::new())` |
+| `AgentSession`, `InMemoryHistoryProvider` | `AgentSession`, `InMemoryHistoryProvider` |
+| `ContextProvider.before_run` / `after_run` | The `ContextProvider` trait |
+| Agent, chat and function middleware | `Middleware<AgentContext>`, `Middleware<ChatContext>`, `Middleware<FunctionInvocationContext>` |
+| `response.value` | `response.value` (JSON) or `response.parse_json::<T>()` |
+| `WorkflowBuilder`, `@executor` | `WorkflowBuilder`, `FunctionExecutor` or the `Executor` trait |
+| `SequentialBuilder` ... `MagenticBuilder` | The same names |
+| `MCPStdioTool`, `MCPStreamableHTTPTool` | `McpStdioTool`, `McpStreamableHttpTool`, `McpWebsocketTool` |
+
+The differences that change how code is written:
+
+- **Streaming is a separate method.** `run_stream` and `get_streaming_response` stand in for `stream=True`, and runs with local tools or agent middleware stream whole messages rather than tokens.
+- **Workflow messages are untyped JSON.** Executors receive and send `serde_json::Value`; there is no handler-type routing or edge type checking.
+- **Group chat, handoff and Magentic are single executors** that call their participants in a loop, so their events carry one executor id.
+- **Middleware is fixed at build time.** There is no per-run `middleware=` argument and no decorator form.
+- **Handoff tools are not injected.** Attach `handoff_tool_spec(...)` tools to each handoff participant yourself.
+- **Chat middleware runs once per agent run**, around the whole tool loop, rather than once per model request as in Python.
+- **Declarative workflows use a format of the port's own**, not Microsoft's Power Fx actions; declarative agents use the official schema.
+- **Some identity settings must be explicit.** For example, Purview needs a tenant id and application location where Python reads them from the token.
+
+Not ported, according to the repository's `SCOPE.md` and `docs/feature-stages.md`: the DevUI frontend (the API is served, with a small built-in debug page), Durable Task, Azure Functions and Foundry hosting, binding to an agent already hosted in Foundry, evaluation, the FIDES prompt-injection defence, functional workflows, ChatKit, sandboxed code execution, the Power Fx declarative workflow language, file-based skills, summarising compaction, workflow run cancellation, and the Postgres, Qdrant, MongoDB and other vector store connectors. The crate has no MCP server either (`as_mcp_server` in Python); the [MCP page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/#exposing-an-agent-as-an-mcp-server) shows a minimal hand-written one. Most topic pages close with what is missing in their area.
+
+## Pages in this guide
+
+<CardGrid>
+  <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_comprehensive_guide/" description="A tour of the core from first agent to workflows: runs and streaming, messages, providers, sessions, structured output, tools, approvals, per-run options, middleware, context providers, retries and errors." />
+  <LinkCard title="Providers" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_providers/" description="Every chat and embedding client: OpenAI Chat Completions and Responses, compatible servers, Azure OpenAI and Entra ID, Foundry, Anthropic, Bedrock, Gemini, Mistral, Ollama, GitHub Copilot, Copilot Studio, and writing your own." />
+  <LinkCard title="Tools" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_tools/" description="Function tools and schemas, the tool loop and its limits, approvals, agents as tools, tools that change at run time, provider-hosted tools and the shell tools." />
+  <LinkCard title="Middleware" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_middleware/" description="Agent, chat and function middleware, ordering and short-circuiting, common patterns, client decorators for every model request, retries, the error enum and agent hooks." />
+  <LinkCard title="Sessions" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_sessions/" description="Multi-turn conversations, service-held and local history, streaming with a session, saving and restoring, writing a message store, FileHistoryProvider and the session store." />
+  <LinkCard title="Context and memory" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/" description="Context providers and their run order, per-session memory, TextSearchProvider retrieval, compaction, skills, the experimental agent harness and vector stores." />
+  <LinkCard title="Workflows" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_workflows/" description="The graph engine: executors and edges, conditions, switch-case, fan-out and fan-in, shared state, events, human in the loop, checkpointing, sub-workflows, agents in workflows." />
+  <LinkCard title="Orchestrations" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_orchestrations/" description="Sequential, concurrent, group chat, handoff and Magentic orchestrations, with approval gates, plan review, stall intervention and streaming updates." />
+  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/" description="MCP servers over stdio, streamable HTTP and WebSocket as tool sources: filtering and approval, results, prompts, sampling, roots, the low-level client and reconnecting." />
+  <LinkCard title="Hosting and A2A" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_hosting/" description="Serving agents and workflows with axum: the DevUI-style Responses API, an OpenAI-compatible endpoint, A2A server and client, AG-UI, SSE, and securing the routers." />
+  <LinkCard title="Integrations" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_integrations/" description="Declarative YAML agents and workflows, Redis, Mem0, Cosmos DB, Azure AI Search and Foundry memory, vector stores, Purview, Copilot Studio and the shell tools." />
+  <LinkCard title="Observability" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_observability/" description="OpenTelemetry GenAI spans for agents, model calls and tools, sensitive-data capture, the otel-metrics histograms and the otel-export OTLP pipeline." />
+  <LinkCard title="Testing and production" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_testing/" description="A scripted ChatClient for cargo test; testing tools, approvals, streaming, middleware, retries, workflows, MCP and HTTP; then timeouts, concurrency, secrets and deployment." />
+  <LinkCard title="Recipes" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_recipes/" description="Complete programs: a chat CLI, a retrieval assistant, a research agent with approvals, batch extraction, a handoff desk, a checkpointed workflow, an HTTP service, provider fallback and more." />
+  <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_diagrams/" description="Mermaid diagrams drawn from the source: the crate map, the run pipeline and where each kind of middleware sits, the tool loop and approvals, sessions, the workflow engine, each orchestration, hosting and the MCP lifecycle." />
+  <LinkCard title="Evaluation" href="/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_evaluation/" description="What of Python's evaluation module is ported, then rule-based checks, LLM judges, rubric and pairwise scoring, golden datasets, scripted regression suites, tool-use, multi-turn and workflow evaluation, cost and latency, and a CI gate." />
+</CardGrid>
+
+## Upstream references
+
+- Repository: [github.com/codehalwell/agent-framework-rs](https://github.com/codehalwell/agent-framework-rs), with about a hundred runnable examples in `examples/`, the `CHANGELOG.md`, `SCOPE.md` (what is left out and why) and `docs/feature-stages.md`
+- API reference: [docs.rs/agent-framework](https://docs.rs/agent-framework), built with all features
+- Package: [crates.io/crates/agent-framework](https://crates.io/crates/agent-framework)
+- The Microsoft SDKs it follows: the [Python](/microsoft-agent-framework-guide/python/), [.NET](/microsoft-agent-framework-guide/dotnet/) and [Go](/microsoft-agent-framework-guide/go/) guides on this site

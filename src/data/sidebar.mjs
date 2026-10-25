@@ -22,7 +22,7 @@ import yaml from 'js-yaml';
 // From the project root: this module is also bundled into the All Guides page,
 // where import.meta.url no longer points at src/data.
 const DOCS = join(process.cwd(), 'src/content/docs');
-const LANGS = { python: 'Python', typescript: 'TypeScript', dotnet: '.NET', go: 'Go' };
+const LANGS = { python: 'Python', typescript: 'TypeScript', dotnet: '.NET', go: 'Go', rust: 'Rust' };
 const GROUPS = { chapter: 'Tutorial', reference: 'API reference' };
 
 function frontmatter(file) {
@@ -55,7 +55,7 @@ function shortLabel(title, guideName) {
   }
   t = t
     .replace(new RegExp(`^${stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`, 'i'), '')
-    .replace(/\((Python|TypeScript|\.NET|C#|Go)\)\s*/g, '')
+    .replace(/\((Python|TypeScript|\.NET|C#|Go|Rust)\)\s*/g, '')
     .replace(/^[—–:\-\s]+/, '')
     .trim();
   return t ? t[0].toUpperCase() + t.slice(1) : String(title);
