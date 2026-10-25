@@ -492,7 +492,7 @@ writer = LlmAgent(
 - `static_instruction` never changes, so it can be cached; `instruction` changes per turn. Keeping them apart helps both implicit and explicit context caching.
 - An instruction can also be a function `(ReadonlyContext) -> str` when the template language is not enough; `inject_session_state(template, ctx, use_jinja2=True)` (from `google.adk.flows.llm_flows.prompt`, 2.7.0) renders Jinja2 templates with conditionals and loops inside such a function. Since 2.10.0, `${var}` and `\{var}` are left alone, so you can write literal braces.
 - `include_contents="none"` sends a sub-agent only its instruction and the current input, not the whole conversation.
-- For long sessions, `App(events_compaction_config=EventsCompactionConfig(...))` summarises old events, and `App(context_cache_config=ContextCacheConfig(...))` caches the stable prefix. Both are covered in [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/#context-caching-contextcacheconfig-experimental) and in the production guide's [cost section](/google-adk-guide/python/google_adk_production_guide/#cost-and-context-controls).
+- For long sessions, `App(events_compaction_config=EventsCompactionConfig(...))` summarises old events, and `App(context_cache_config=ContextCacheConfig(...))` caches the stable prefix. Both are covered in [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/#context-caching-contextcacheconfig) and in the production guide's [cost section](/google-adk-guide/python/google_adk_production_guide/#cost-and-context-controls).
 
 ## Callbacks and plugins
 

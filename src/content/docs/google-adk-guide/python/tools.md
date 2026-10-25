@@ -264,7 +264,7 @@ export_tool = LongRunningFunctionTool(func=export_dataset)
 
 ## AuthenticatedFunctionTool
 
-`AuthenticatedFunctionTool` (experimental) is a `FunctionTool` subclass that handles the ADK authentication flow before invoking your function. It:
+`AuthenticatedFunctionTool` is a `FunctionTool` subclass (stable since 2.13.0) that handles the ADK authentication flow before invoking your function. It:
 
 1. **First call** — credential not yet available → calls `CredentialManager.request_credential`, adds the auth flow to `actions.requested_auth_configs`, and returns `response_for_auth_required` (default: `"Pending User Authorization."`).
 2. **Subsequent call** — credential exchanged → injects it as a `credential` keyword argument and runs your function normally.
@@ -705,6 +705,8 @@ Connection params:
 ### `OpenAPIToolset`
 
 `OpenAPIToolset` parses an OpenAPI 3.x spec and generates one `RestApiTool` per operation. Each tool's name comes from the operation's `operationId` (snake-cased and truncated to 60 characters).
+
+**Private networks are blocked by default (2.13.0).** Generated tools refuse requests to loopback, private and link-local addresses (including cloud metadata endpoints) and to `*.internal` and `*.local` hosts, and return an error such as `Blocked host: 127.0.0.1`. The tool also pins the connection to the address it validated, which guards against DNS rebinding. If the API is on a private network, or you are testing against localhost, pass `allow_private_network_access=True` to `OpenAPIToolset` (or `RestApiTool`). That switches the check off, so use it only with specs you trust.
 
 ```python
 import yaml
@@ -1578,7 +1580,7 @@ class InMemorySkillRegistry(SkillRegistry):
 toolset = SkillToolset(registry=InMemorySkillRegistry([python_skill]))   # adds search_skills
 ```
 
-`SkillToolset` itself is no longer experimental in %%version=google-adk%% (its feature flag is marked stable and on by default); skill lifecycles and snake_case names, above, still are. Suppress the warnings from experimental features with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
+`SkillToolset` itself is no longer experimental in %%version=google-adk%% (its feature flag is marked stable and on by default); skill lifecycles and snake_case names, above, still are. Suppress the warnings from experimental features with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1` (from 2.13.0 this covers every feature-registry warning).
 
 ## Agent transfer
 

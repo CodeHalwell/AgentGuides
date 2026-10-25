@@ -8,7 +8,7 @@ sidebar:
   order: 50
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/runners.py`, `google/adk/apps/app.py`, `google/adk/sessions/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini. `MongoDbSessionService` was exercised for create, append and get against a Mongo mock, not a live MongoDB.
 
 The `Runner` glues an agent/workflow to the three per-session services (session, memory, artifact) plus a credential service and plugin manager. `App` is the container that bundles the root agent with app-wide settings.
 
@@ -368,6 +368,7 @@ All subclass `BaseSessionService` and expose `create_session`, `get_session`, `l
 | `InMemorySessionService` | `google.adk.sessions` | Python dict | Dev/testing |
 | `DatabaseSessionService(db_url)` | `google.adk.sessions` (lazy) | SQLAlchemy URL with an async driver | `pip install "google-adk[db]"` plus the driver: `aiosqlite` (bundled), `asyncpg`, `aiomysql`, `asyncmy` |
 | `SqliteSessionService` | `google.adk.sessions.sqlite_session_service` | SQLite file (async) | Zero-dep alternative to `DatabaseSessionService` for SQLite only |
+| `MongoDbSessionService(*, database_name, connection_string=None, mongo_client=None, ...)` | `google.adk.integrations.mongodb` | MongoDB collections for sessions, events, app state and user state (experimental, added in 2.13.0) | `pip install "google-adk[mongodb]"`; replicas of one runner can share sessions. Add `timeoutMS=<ms>` to the connection string to bound each operation; collection names and `ensure_indexes` are keyword options |
 | `VertexAiSessionService(project, location, agent_engine_id, *, express_mode_api_key=None)` | `google.adk.sessions` | Vertex AI Agent Engine | Production-ready, scales with Agent Engine |
 
 ```python
@@ -765,7 +766,7 @@ Access via `ctx.state` in callbacks and tools. State is a `dict`-like object wit
 
 Declare a Pydantic schema on the `Workflow` (`state_schema=`) to validate mutations at runtime. Reserved prefixes bypass validation.
 
-## Context caching (`ContextCacheConfig`, experimental)
+## Context caching (`ContextCacheConfig`)
 
 `ContextCacheConfig` enables Gemini's server-side context caching for all `LlmAgent`s in an `App`. When active, ADK caches the system instruction + static tools prefix in Gemini's cache after the first call and reuses it for up to `cache_intervals` subsequent invocations. Cached tokens are billed at a reduced rate.
 
@@ -804,7 +805,7 @@ runner = Runner(
 - Large tool schemas registered on the agent
 - High-frequency, short user messages (chat, Q&A)
 
-> **Experimental**: `ContextCacheConfig` is marked experimental (`@experimental(FeatureName.AGENT_CONFIG)` in the source) and logs a warning when used. It only works with Gemini models that support context caching; check the Gemini docs for supported model versions.
+> **Stability**: `ContextCacheConfig` was experimental up to 2.12.0 and is stable from 2.13.0, so it no longer logs a warning when used. It only works with Gemini models that support context caching; check the Gemini docs for supported model versions.
 
 ### `ContextCacheConfig` — the `create_http_options` timeout knob
 

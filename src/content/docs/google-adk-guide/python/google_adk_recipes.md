@@ -1611,7 +1611,7 @@ async def chat(session_id: str, body: dict):
     return {"reply": reply}
 ```
 
-Every `run_async` call emits an `invocation` root span with `invoke_agent <name>`, `call_llm`, `generate_content <model>` and `execute_tool <name>` spans beneath it. Spans are visible in the Google Cloud Trace console under your project.
+Every `run_async` call emits an `invoke_workflow` root span with `invoke_agent <name>`, `generate_content <model>` and `execute_tool <name>` spans beneath it (from 2.13.0; earlier releases, or `ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN=otel_semconv_1_36`, name the root `invocation` and add a `call_llm` span). Spans are visible in the Google Cloud Trace console under your project.
 
 ---
 

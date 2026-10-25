@@ -379,6 +379,68 @@ How the next nodes are chosen after a node finishes (`Graph.get_next_pending_nod
 
 Route values can be `bool`, `int` or `str`.
 
+### Routing on a classifier (`ClassifierNode`, experimental)
+
+Since 2.13.0, `ClassifierNode` (in `google.adk.labs.classifiers`) routes on a classifier's answer instead of code you write. The classifier gets the node's input and one question, either `Choice` (route is the chosen label) or `Binary` (route is `True` or `False`, with a `threshold` that defaults to 0.5). The input passes through unchanged, so the next node sees what the classifier saw. Graph validation checks that every label has an edge, unless a `DEFAULT_ROUTE` or unrouted edge catches the rest. Set `answer_key` to store the full answer, including each label's probability, in session state.
+
+`LlmClassifier(model=...)` answers the question with any ADK model, as structured output. A `BaseClassifier` subclass can wrap a dedicated decision model instead; ADK includes `TypesafeClassifier` for TypeSafe's Jev models. The example below uses a stub model that stands in for Gemini; pass a real model name or `BaseLlm` in its place.
+
+```python
+import asyncio
+import json
+
+from google.adk.labs.classifiers import Choice, ClassifierNode, LlmClassifier
+from google.adk.models.base_llm import BaseLlm
+from google.adk.models.llm_response import LlmResponse
+from google.adk.runners import InMemoryRunner
+from google.adk.workflow import START, Workflow, node
+from google.genai import types
+
+
+class StubModel(BaseLlm):
+    """Stands in for Gemini: always answers 'billing'."""
+    model: str = "stub-classifier"
+
+    async def generate_content_async(self, llm_request, stream=False):
+        answer = {"route": {"billing": 0.9, "support": 0.1}}
+        yield LlmResponse(content=types.Content(
+            role="model", parts=[types.Part(text=json.dumps(answer))]))
+
+
+@node
+def billing(node_input: str):
+    return f"billing handled: {node_input}"
+
+
+@node
+def support(node_input: str):
+    return f"support handled: {node_input}"
+
+
+router = ClassifierNode(
+    name="router",
+    classifier=LlmClassifier(model=StubModel()),
+    question=Choice(
+        instructions="Which team should handle this message?",
+        criteria={"billing": "Invoices and payments", "support": "Everything else"},
+    ),
+    answer_key="route_answer",
+)
+workflow = Workflow(name="triage", edges=[(START, router, {"billing": billing, "support": support})])
+
+
+async def main():
+    runner = InMemoryRunner(agent=workflow, app_name="triage_app")
+    session = await runner.session_service.create_session(app_name="triage_app", user_id="u1")
+    message = types.Content(role="user", parts=[types.Part(text="Where is my invoice?")])
+    async for event in runner.run_async(user_id="u1", session_id=session.id, new_message=message):
+        if event.output and isinstance(event.output, str):
+            print(event.output)   # billing handled: Where is my invoice?
+
+
+asyncio.run(main())
+```
+
 ## Loops
 
 Replace `LoopAgent` with a routing map that either loops back to the same node or flows to a terminal node (any node with no outgoing edges). There is **no** `END_NODE` sentinel — terminality is structural.

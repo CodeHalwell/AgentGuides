@@ -65,7 +65,7 @@ async def test_arithmetic():
 
 ## From the command line
 
-`adk eval` runs eval set files against an agent folder (one whose `agent.py` defines `root_agent`) and prints a pass/fail summary per set. Results are also written under the agent's `.adk/eval_history/`.
+`adk eval` runs eval set files against an agent folder (one whose `agent.py` defines `root_agent`) and prints a pass/fail summary per set. Results are also written under the agent's `.adk/eval_history/`. From 2.13.0 the command exits with status 1 when any case fails (or when nothing ran) and 0 when all pass, so a CI step can rely on it; earlier releases always exited 0.
 
 ```bash
 pip install "google-adk[eval]"

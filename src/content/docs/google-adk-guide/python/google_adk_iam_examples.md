@@ -181,7 +181,7 @@ adc_cred = AuthCredential(
 
 ## 5 · `AuthenticatedFunctionTool` — automatic credential injection
 
-`AuthenticatedFunctionTool` (experimental) is a `FunctionTool` subclass that runs the ADK auth flow before your function is called. It handles:
+`AuthenticatedFunctionTool` (stable since 2.13.0) is a `FunctionTool` subclass that runs the ADK auth flow before your function is called. It handles:
 
 1. **First call** — credential not yet obtained → requests it from the client (OAuth redirect, API-key prompt, etc.) and returns `response_for_auth_required`.
 2. **Subsequent call** — credential obtained → injects it as the `credential` kwarg and calls your function.
@@ -588,7 +588,7 @@ gcloud secrets add-iam-policy-binding "my-secret" \
 
 ## 9 · Gotchas
 
-- `AuthenticatedFunctionTool` is `@experimental(FeatureName.AUTHENTICATED_FUNCTION_TOOL)` and logs `[EXPERIMENTAL] feature FeatureName.AUTHENTICATED_FUNCTION_TOOL is enabled.` once as a `UserWarning`. `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS` does not affect these feature-registry warnings; filter them with `warnings.filterwarnings("ignore", message=r"\[EXPERIMENTAL\] feature")`.
+- `AuthenticatedFunctionTool` was experimental up to 2.12.0 and logged an `[EXPERIMENTAL]` warning; from 2.13.0 it is stable and logs nothing. On 2.12.0 and earlier, `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS` did not affect these feature-registry warnings and you had to filter them with `warnings.filterwarnings("ignore", message=r"\[EXPERIMENTAL\] feature")`.
 - `credential_key` in `AuthConfig` allows two tools to share a cached token. Without it, each tool triggers its own auth flow even when they use the same provider.
 - `AuthenticatedFunctionTool` marks `"credential"` as an `_ignore_params` name — it does **not** appear in the model's function schema. Always name the parameter exactly `credential` in your function signature.
 - Secrets read at startup stay in memory for the life of the instance. On Cloud Run, a secret mounted with `--set-secrets NAME=secret:latest` as an environment variable is resolved when the instance starts; mounted as a file it is re-read on access.

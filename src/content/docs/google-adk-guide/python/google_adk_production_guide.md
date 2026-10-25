@@ -246,7 +246,7 @@ Never put keys in `instruction` text or session state: both are sent to the mode
 ## Observability
 
 - `--otel_to_cloud` (all deploy targets, `adk web`, `adk api_server`) exports OpenTelemetry traces, metrics and logs to Cloud Trace, Cloud Monitoring and Cloud Logging. Install `google-adk[gcp]` for the exporters when you run your own server.
-- ADK emits spans for each invocation, agent run, model call and tool call, and `gen_ai.client.*` metrics for token usage and latency.
+- ADK emits spans for each invocation, agent run, model call and tool call, and `gen_ai.client.*` metrics for token usage and latency. From 2.13.0 the default span schema follows the OpenTelemetry GenAI conventions (root span `invoke_workflow`, no `call_llm` span); see [Observability](/google-adk-guide/python/google_adk_advanced_python/#observability--opentelemetry) before you update dashboards or alerts.
 - In your own process, `google.adk.telemetry.setup.maybe_set_otel_providers(otel_hooks_to_setup=[hooks])`, with `hooks = google.adk.telemetry.google_cloud.get_gcp_exporters(enable_cloud_tracing=True, enable_cloud_metrics=True, enable_cloud_logging=True)`, sets the same thing up by hand.
 
 For your own usage log, a runner plugin sees every model call across all agents:
@@ -328,7 +328,7 @@ run_config = RunConfig(max_llm_calls=20)   # hard cap on model calls per invocat
 - **`max_llm_calls`** stops runaway tool loops. `adk api_server` and `get_fast_api_app` also accept `max_llm_calls`, and the `ADK_MAX_LLM_CALLS` environment variable sets a process-wide default.
 - **Model choice per agent.** Give routers and classifiers a small model (`%%model=gemini-small%%`) and keep the larger one for the agents that need it.
 
-Details and the exact trigger rules are in [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/#context-caching-contextcacheconfig-experimental).
+Details and the exact trigger rules are in [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/#context-caching-contextcacheconfig).
 
 ## Reliability
 
@@ -399,7 +399,7 @@ Blocked content is replaced with the configured message, and by default a screen
 ## Testing and CI
 
 - **Unit tests without a model.** Register a `BaseLlm` subclass for test model names, or pass a stub model instance to the agent, and drive it with `InMemoryRunner(...).run_debug(...)`.
-- **Behaviour tests.** `adk eval my_agent my_agent/tests/smoke.evalset.json --config_file_path my_agent/test_config.json` runs eval sets and prints a pass/fail summary; `AgentEvaluator` does the same from pytest. See [Evaluation](/google-adk-guide/python/evaluation/).
+- **Behaviour tests.** `adk eval my_agent my_agent/tests/smoke.evalset.json --config_file_path my_agent/test_config.json` runs eval sets and prints a pass/fail summary (the exit status is non-zero on any failure from 2.13.0, so it can gate a CI step); `AgentEvaluator` does the same from pytest. See [Evaluation](/google-adk-guide/python/evaluation/).
 - **Deploy from CI** by running the same `adk deploy …` command in Cloud Build or GitHub Actions, authenticated with Workload Identity Federation rather than a key file. Pass `--agent_engine_id` (Agent Engine) or a fixed `--service_name` (Cloud Run, GKE) so each run updates the existing deployment.
 
 A minimal Cloud Build step:

@@ -8,7 +8,7 @@ sidebar:
   order: 80
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; the authenticated-tool and OpenTelemetry examples need external services.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/planners/`, `google/adk/tools/`, `google/adk/auth/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini (span names checked with an in-memory exporter under both telemetry schemas); the authenticated-tool and OpenTelemetry examples need external services.
 
 ## Planners
 
@@ -596,7 +596,9 @@ Deployment (`adk deploy agent_engine | cloud_run | gke`, the Agent Platform SDK'
 
 ## Observability — OpenTelemetry
 
-ADK emits OpenTelemetry traces, metrics, and logs via `google.adk.telemetry`. Every `run_async` call creates a root span named `invocation`, with child spans for each agent run, model call and tool call (see the table at the end of this section).
+ADK emits OpenTelemetry traces, metrics, and logs via `google.adk.telemetry`. Every `run_async` call creates a root span named `invoke_workflow`, with child spans for each agent run, model call and tool call (see the table at the end of this section).
+
+Since 2.13.0 ADK emits the OpenTelemetry GenAI semantic-convention schema (`otel_semconv_1_44`) by default. That renamed the root span from `invocation` to `invoke_workflow` and dropped the `call_llm` span. Dashboards, alerts and trace queries that match on those names need updating. To keep the earlier schema for now, set `ADK_TELEMETRY_SCHEMA_VERSION_OPT_IN=otel_semconv_1_36` (or `1`) in the process environment. The source says the legacy schema is supported until at least 2027-03-31.
 
 ### Using the ADK-native `maybe_set_otel_providers`
 
@@ -654,7 +656,7 @@ pip install opentelemetry-exporter-gcp-trace opentelemetry-exporter-gcp-monitori
 | Field | Env-var fallback | Purpose |
 |---|---|---|
 | `capture_message_content` | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | A `ContentCapturingMode`: `NO_CONTENT`, `EVENT_ONLY`, `SPAN_ONLY` or `SPAN_AND_EVENT` |
-| `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | `"experimental"` opts in to the GenAI semconv attributes; `"stable"` keeps the legacy path |
+| `genai_semconv_stability_opt_in` | `OTEL_SEMCONV_STABILITY_OPT_IN` | `"experimental"` opts in to the GenAI semconv attributes; `"stable"` keeps the legacy path. Left unset, the default follows the schema version: experimental on the 2.13.0 default schema, stable on the legacy one |
 | `adk_experimental_telemetry_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY` | `StrictBool`: pass `True`/`False`, not `"true"` |
 | `experimental_features_opt_in` | `ADK_EXPERIMENTAL_TELEMETRY_FEATURES` | `frozenset[str]` of experimental telemetry features |
 
@@ -695,10 +697,10 @@ web_app = FastAPI(lifespan=lifespan)
 
 | Span | Key attributes |
 |---|---|
-| `invocation` | The root span of one `run_async` call |
+| `invoke_workflow <name>` | The root span of one `run_async` call (named `invocation` under the legacy schema). Attributes include `gen_ai.workflow.name` and `gen_ai.conversation.id` |
 | `invoke_agent <agent name>` | `gen_ai.agent.name`, `gen_ai.agent.description`, `gen_ai.conversation.id` (the session ID) |
-| `call_llm` and `generate_content <model>` | `gen_ai.request.model`, `gen_ai.system`, request settings such as `gen_ai.request.max_tokens`, token usage, `gen_ai.response.finish_reasons` |
-| `execute_tool <tool name>` | `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`, and `gcp.vertex.agent.tool_call_args` / `tool_response` when content capture is on |
+| `generate_content <model>` (and `call_llm`, legacy schema only) | `gen_ai.request.model`, `gen_ai.provider.name` (`gen_ai.system` on the legacy `call_llm` span), request settings such as `gen_ai.request.max_tokens`, token usage, `gen_ai.response.finish_reasons` |
+| `execute_tool <tool name>` | `gen_ai.tool.name`, `gen_ai.tool.type`, `gen_ai.tool.call.id`. With content capture on, the arguments and result are recorded under `gen_ai.tool.call.*` attributes (`gcp.vertex.agent.tool_call_args` / `tool_response` on the legacy schema) |
 
 Attribute names follow the OpenTelemetry GenAI semantic conventions; which ones appear depends on `OTEL_SEMCONV_STABILITY_OPT_IN` and the capture settings above.
 
