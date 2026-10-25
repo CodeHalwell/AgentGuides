@@ -74,9 +74,9 @@ crew = Crew(agents=[writer], tasks=[summary], max_rpm=30)   # requests per minut
 print(crew.kickoff(inputs={"product": "a USB-C dock"}).raw)
 ```
 
-- **Guardrails** run after the task; a failure sends the reason back to the agent for another attempt. On success, return the output (`output.raw`) as the second value; that value becomes the task output. See [Task API → Guardrails](/crewai-guide/crewai_task_api_python/#guardrails) for the structured-output caveats.
-- **`tool_failure_policy`** (`"ignore"`, `"warn"`, `"raise"`) applies when a tool runs but reports failure. Set it on the crew, agent or task; the most specific wins, and the default is `"warn"`.
-- **Tool caps**: `@tool("search", max_usage_count=5)` stops a tool after five calls per task.
+- **Guardrails** run after the task; a failure sends the reason back to the agent for another attempt, and `guardrail_max_retries=2` allows three attempts in all before the task raises. On success, return the output (`output.raw`) as the second value; that value becomes the task output. `Agent(guardrail=...)` is not a substitute: it only applies to `Agent.kickoff()`, not to tasks in a crew. See [Task API → Guardrails](/crewai-guide/crewai_task_api_python/#guardrails).
+- **`tool_failure_policy`** (`"ignore"`, `"warn"`, `"raise"`) decides what happens when a tool call fails: the tool returned a `ToolFailure`, raised, exceeded its usage cap and so on. Set it on the tool, task, agent or crew (most specific wins); the default is `"warn"`. A tool that merely returns an error string is not treated as failed. See [Tools → Reporting tool failures](/crewai-guide/crewai_tools_python/#reporting-tool-failures).
+- **Tool caps**: `@tool("search", max_usage_count=5)` stops a tool after five calls. The count lives on the tool object, so it accumulates across tasks until you call `reset_usage_count()`.
 - `LLM(timeout=...)` bounds each model call; `max_execution_time` bounds the whole task.
 
 ## Event listeners
@@ -93,7 +93,7 @@ from crewai.events import (
     CrewKickoffFailedEvent,
     LLMCallFailedEvent,
     TaskFailedEvent,
-    ToolUsageErrorEvent,
+    ToolFailureDetectedEvent,
 )
 
 log = logging.getLogger("crew.ops")
@@ -115,11 +115,13 @@ class OpsListener(BaseEventListener):
 
         @crewai_event_bus.on(TaskFailedEvent)
         def on_task_failed(source, event):
-            emit("task_failed", task=event.task_name, agent=event.agent_role, error=event.error)
+            agent = event.task.agent.role if event.task and event.task.agent else None
+            emit("task_failed", task=event.task_name, agent=agent, error=event.error)
 
-        @crewai_event_bus.on(ToolUsageErrorEvent)
-        def on_tool_error(source, event):
-            emit("tool_error", tool=event.tool_name, agent=event.agent_role, error=event.error)
+        @crewai_event_bus.on(ToolFailureDetectedEvent)
+        def on_tool_failure(source, event):
+            emit("tool_failure", tool=event.tool_name, agent=event.agent_role,
+                 code=event.failure.code, error=event.failure.message, policy=event.policy.value)
 
         @crewai_event_bus.on(LLMCallFailedEvent)
         def on_llm_failed(source, event):
@@ -129,6 +131,8 @@ class OpsListener(BaseEventListener):
 ops_listener = OpsListener()   # instantiate once, at import time, before any kickoff
 ```
 
+- Task events do not fill in `agent_role` (it is `None` on `TaskStartedEvent`, `TaskCompletedEvent` and `TaskFailedEvent` in 1.15.28), which is why the task handler above reads the agent from `event.task`. Tool events do carry it.
+- A tool that raises, or returns a `ToolFailure`, produces a `ToolFailureDetectedEvent` (unless the policy is `"ignore"`); in our runs it was this event, not `ToolUsageErrorEvent`, that fired for a tool exception on the function-calling path.
 - Handlers take `(source, event)`. Sync handlers run on a thread pool, so they don't block the agents; call `crewai_event_bus.flush()` when you need them finished (in tests, or before a short-lived process exits).
 - Event families include `Crew*`, `Task*`, `Agent*`, `LLMCall*`, `LLMStreamChunkEvent`, `ToolUsage*`, `ToolFailureDetectedEvent`, `MCP*`, `Memory*`, `Knowledge*`, `Flow*`, `MethodExecution*`, `HumanFeedback*`, `Conversation*` and `Checkpoint*`; all are importable from `crewai.events`.
 - `crewai_event_bus.scoped_handlers()` is a context manager that removes handlers registered inside it, which keeps tests independent.

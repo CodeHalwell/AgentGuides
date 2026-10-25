@@ -58,7 +58,7 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `max_execution_time` | `int \| None` | `None` | Wall-clock seconds per task. |
 | `verbose` | `bool` | `False` | Print the agent's inner monologue. |
 | `allow_delegation` | `bool` | `False` | Give the agent the `delegate_work_to_coworker` and `ask_question_to_coworker` tools (see [Multi-agent patterns](/crewai-guide/crewai_advanced_multi_agent_python/#delegation)). |
-| `cache` | `bool` | `True` | Cache tool-call results. |
+| `cache` | `bool` | `True` | Whether the agent may take part in tool-result caching. The default only permits it: caching turns on when the crew sets `cache=True` or the agent passes `cache=True` explicitly. `False` keeps the agent out. See [Tools → Caching](/crewai-guide/crewai_tools_python/#caching). |
 | `respect_context_window` | `bool` | `True` | Summarise messages to stay under the model's context limit. |
 | `max_retry_limit` | `int` | `2` | Retries on task-level errors. |
 | `use_system_prompt` | `bool \| None` | `True` | Whether to set a system message (some o1-style models want `False`). |
@@ -111,7 +111,7 @@ support = Agent(
 ```
 
 - In a sequential crew, `allow_delegation=True` adds two more tools to this agent, one to delegate work and one to ask a question, each addressed to the other agents in the crew. Workers in a hierarchical crew do not need it: the manager gets the delegation tools.
-- Set `cache=False` on an agent whose tool outputs change between calls (live APIs, RNG).
+- Tool-result caching is off unless the crew or the agent opts in, so a default agent calls its tools every time. If you do enable it, pass `cache=False` for an agent whose tool outputs change between calls (live APIs, RNG).
 - Use `max_usage_count` on individual tools to cap how often the agent can call them.
 
 ## Planning — plan before acting

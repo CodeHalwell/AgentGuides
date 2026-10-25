@@ -123,29 +123,39 @@ class SemanticSearch(BaseTool):
 | `name` | required | Unique label the LLM addresses the tool by. |
 | `description` | required | Sent to the LLM, with a rendered JSON schema of args prepended automatically. |
 | `args_schema` | derived | Pydantic model of arguments; validated before `_run`. |
-| `cache_function` | always-cache | Callable `(args, result) -> bool` deciding whether to cache this call. |
+| `cache_function` | cache every call | Callable `(args, result) -> bool` deciding whether to cache this call, once caching is on (see [Caching](#caching)). |
 | `result_as_answer` | `False` | When `True`, the tool's output becomes the agent's final answer for that task. |
-| `max_usage_count` | `None` | Hard cap on how many times the agent can call this tool per task. Over-limit behaviour depends on the call path — see [Usage caps](#usage-caps). |
-
-```python
-def no_cache(_args, _result): return False
-
-def only_cache_stable(args, result):
-    return args.get("volatile") is not True
-
-class PriceCheck(BaseTool):
-    name: str = "price_check"
-    description: str = "Look up current price."
-    cache_function = staticmethod(no_cache)       # live data, never cache
-```
+| `max_usage_count` | `None` | Hard cap on how many times the agent can call this tool. Over the cap the agent is told so instead of the tool running; see [Usage caps](#usage-caps). |
+| `tool_failure_policy` | `None` | Per-tool override of what happens when the tool reports failure; see [Reporting tool failures](#reporting-tool-failures). |
 
 ## Caching
 
-When `Agent.cache=True` (default), CrewAI remembers `(tool, args) -> result` across the whole crew run. Override with:
+Tool-result caching is **opt-in** in 1.15.28. When it is on, a repeated call with the same tool and the same arguments returns the first result without running the tool again. We ran the same two-call script against every combination:
 
-- Tool-level `cache_function` — inspect args/result per call.
-- Agent-level `cache=False` — disables caching for all this agent's tools.
-- Crew-level `cache=False` — global off-switch.
+| `Agent(cache=...)` | `Crew(cache=...)` | Tool executions for two identical calls |
+|---|---|---|
+| not passed (field default `True`) | not passed / `False` | 2 (no caching) |
+| not passed | `True` | 1 |
+| `True` passed explicitly | any | 1 |
+| `False` | any | 2 |
+
+So: pass `Crew(cache=True)` to cache for every agent that has not opted out, pass `Agent(cache=True)` to cache for that agent only, and pass `Agent(cache=False)` to keep an agent out of a caching crew. The cache is an in-memory `CacheHandler`, so it does not persist between processes, and a declared `ToolFailure` is never cached.
+
+Do not turn it on for tools that read live data or change state. A tool-level `cache_function(args, result) -> bool` decides, per call, whether the result may be cached:
+
+```python
+def only_cache_stable(args, result):
+    return args.get("volatile") is not True
+
+
+class PriceCheck(BaseTool):
+    name: str = "price_check"
+    description: str = "Look up the price of a SKU."
+    cache_function = staticmethod(only_cache_stable)
+
+    def _run(self, sku: str, volatile: bool = False) -> str:
+        return f"price of {sku}"
+```
 
 ## `result_as_answer` — skip final LLM synthesis
 
@@ -167,19 +177,65 @@ def external_api(q: str) -> str:
     ...
 ```
 
-Two call paths, two behaviours (both are in the installed source):
-
-- **Direct call** — `BaseTool.run()` / `Tool.run()`: `_claim_usage()` returns the sentinel string `"Tool '...' has reached its usage limit of N times..."` instead of executing. The caller sees a normal return value.
-- **Agent executor** — the executor wraps the tool as a `CrewStructuredTool` (internal API), whose `_run` / `_arun` **raises `ToolUsageLimitExceededError`** when over-limit. The executor catches it and feeds the message back to the LLM, so the agent sees the limit message as a tool observation and usually adapts.
-
-Catch the exception if you're driving the structured tool yourself; if you're calling `tool.run(...)` directly, check for the sentinel string in the return value.
-
-Reset per-tool counters between runs:
+When the agent asks for the tool after the cap is spent, the tool does not run. The agent receives `Tool 'external_api' has reached its usage limit of 3 times and cannot be used anymore.` as the tool result and normally finishes without it. We ran a four-call script against `max_usage_count=3` on the native function-calling path: three calls executed and the fourth got that message. The count lives on the tool object (`current_usage_count`), so it accumulates across tasks and runs for as long as the object does. Reset it between runs:
 
 ```python
 for t in my_tools:
     t.reset_usage_count()
 ```
+
+Calling `tool.run(...)` yourself returns the same message as an ordinary string when the cap is hit.
+
+One quirk in 1.15.28: on the text (ReAct) path, used by models that do not report native function calling, each call incremented the count twice, so `max_usage_count=4` allowed only two executions. The native path counted correctly. If you cap a tool and run a custom `BaseLLM`, test the cap.
+
+## Reporting tool failures
+
+An exception inside a tool and an error message returned as a string are different things to CrewAI. A tool that wants the framework to know a call failed, without raising, returns a `ToolFailure`:
+
+```python
+from crewai import Agent, Crew, Task, LLM
+from crewai.tools import tool, ToolFailure
+
+
+@tool("send_slack")
+def send_slack(channel: str, text: str) -> str | ToolFailure:
+    """Post a message to a Slack channel."""
+    if channel != "#general":
+        return ToolFailure(
+            message=f"channel {channel} not found",
+            code="channel_not_found",
+            retryable=False,
+        )
+    return "sent"
+
+
+notifier = Agent(
+    role="Notifier",
+    goal="Tell the team about releases",
+    backstory="Release coordinator.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    tools=[send_slack],
+    tool_failure_policy="warn",       # the default; "ignore" and "raise" are the others
+)
+task = Task(description="Announce release 2.4 to the team.", expected_output="Confirmation.",
+            agent=notifier, name="announce")
+result = Crew(agents=[notifier], tasks=[task]).kickoff()
+
+for failure in result.tasks_output[0].tool_failures:
+    print(failure.tool_name, failure.failure.code, failure.failure.message)
+```
+
+What each policy does when a tool call fails (we ran all three against a scripted model):
+
+| Policy | Agent sees | Recorded | Run |
+|---|---|---|---|
+| `"warn"` (default) | `channel #nope not found (code: channel_not_found)` | In `TaskOutput.tool_failures` and as a `ToolFailureDetectedEvent` | Continues; the agent can retry |
+| `"ignore"` | The same text | Not recorded | Continues |
+| `"raise"` | n/a | Event emitted | Aborts with `ToolExecutionFailedError` |
+
+The policy is resolved most specific first: the tool's own `tool_failure_policy`, then the task's, the agent's and the crew's, then `"warn"`.
+
+What counts as a failure: a returned `ToolFailure`, a tool that raises (the exception text is fed back to the agent and recorded with the exception class as `code`), an MCP server answering `isError`, a call over `max_usage_count`, a call to a tool that does not exist, and arguments that do not validate. A tool that merely returns a string such as `"Error: not found"` is **not** a failure: detection is declarative and CrewAI does not guess from text.
 
 ## MCP server tools — `Agent.mcps`
 
@@ -223,8 +279,72 @@ agent = Agent(
 | Single-tool filter | `"url#tool_name"` | Only that tool is surfaced. |
 
 Per-server options:
-- `tool_filter: ToolFilter` — allow/deny lists.
+- `tool_filter: ToolFilter` — allow/deny lists (`create_static_tool_filter(allowed_tool_names=..., blocked_tool_names=...)`) or a function (`create_dynamic_tool_filter`).
 - `cache_tools_list: bool` — memoise the tool listing for faster subsequent runs.
+
+### An MCP server you can run locally
+
+The `mcp` package (a CrewAI dependency) includes `FastMCP`, which is enough to try the integration without any external service. Save this as `notes_server.py`:
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("notes")
+
+
+@mcp.tool()
+def read_note(name: str) -> str:
+    """Read a note by name."""
+    return f"note:{name}"
+
+
+@mcp.tool()
+def delete_note(name: str) -> str:
+    """Delete a note."""
+    return "deleted"
+
+
+@mcp.tool()
+def search_notes(q: str) -> str:
+    """Search notes."""
+    return f"found {q}"
+
+
+if __name__ == "__main__":
+    mcp.run()          # stdio transport
+```
+
+Then give an agent the server, with a filter that hides the destructive tool:
+
+```python
+import sys
+
+from crewai import Agent, Crew, Task, LLM
+from crewai.mcp import MCPServerStdio
+from crewai.mcp.filters import create_static_tool_filter
+
+notes = MCPServerStdio(
+    command=sys.executable,
+    args=["notes_server.py"],
+    tool_filter=create_static_tool_filter(blocked_tool_names=["delete_note"]),
+)
+
+librarian = Agent(
+    role="Librarian",
+    goal="Answer questions from the notes",
+    backstory="Keeps the team's notes tidy.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    mcps=[notes],
+)
+task = Task(description="Find what the notes say about {topic}.", expected_output="A short answer.",
+            agent=librarian)
+print(Crew(agents=[librarian], tasks=[task]).kickoff(inputs={"topic": "onboarding"}).raw)
+```
+
+We ran this against a scripted model: the agent was offered two tools (`read_note` and `search_notes`), called all three tools successfully when no filter was set, and the filter removed `delete_note` when it was. Two things to know:
+
+- The model sees each MCP tool under a **namespaced name** of the form `<sanitised server command and arguments>_<8 hex characters>`, cut to a fixed length, rather than `read_note`. Filters receive the server's original tool name, so write filters against `read_note`, not the namespaced name.
+- Each run starts the stdio server as a subprocess and lists its tools. `cache_tools_list=True` skips re-listing.
 
 ## Bridging from LangChain tools
 
@@ -239,7 +359,7 @@ crew_tool = BaseTool.from_langchain(lc_tool)
 agent = Agent(role="Researcher", goal="Search the web", backstory="Analyst.", tools=[crew_tool])
 ```
 
-The return trip exists too — `to_langchain([crew_tool])` converts to `CrewStructuredTool` instances compatible with LangChain-style orchestrators.
+`BaseTool.from_langchain` is a class method, so the LangChain package must be installed separately; `langchain-community` is not a CrewAI dependency. `crewai.tools.base_tool.to_langchain([crew_tool])` converts the other way and returns `CrewStructuredTool` instances.
 
 ## Built-in helper tools
 
@@ -350,7 +470,7 @@ When the agent calls this, the task's `TaskOutput.raw` is exactly the return val
 - **A docstring is mandatory** with `@tool`: the decorator raises `ValueError: Function must have a docstring` at import time without one. Annotations are optional but give the LLM a typed schema.
 - **`description` is auto-extended.** `BaseTool._generate_description` prepends name/args JSON to your description; what the LLM sees is longer than what you wrote.
 - **`async_execution` on the task is separate from `_arun`.** Tasks run on threads when `async_execution=True`; tools still execute on that thread.
-- **MCP stdio servers spawn a subprocess.** Long-lived crews may leak processes if you don't run them under a supervisor — set `cache_tools_list=True` to avoid re-listing.
+- **MCP stdio servers spawn a subprocess.** `cache_tools_list=True` avoids re-listing tools on later runs; keep long-lived processes under a supervisor.
 - **`CrewStructuredTool` moved to internal API.** Use `BaseTool` everywhere external. `to_structured_tool()` exists only for the executor's internal use.
 - **`CodeInterpreterTool` was removed.** Use E2B, Modal, or a custom sandbox in a `BaseTool` subclass.
 - **LangChain interop uses `CrewStructuredTool`.** `from_langchain()` and `to_langchain()` round-trip through it even though the class is considered internal.
