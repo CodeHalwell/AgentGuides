@@ -634,7 +634,7 @@ approve deploy_to_production({"version": "example version"})? yes
 final: Here is what the tool returned: deployed example version
 ```
 
-The same works in concurrent and group-chat orchestrations; `e.Request.PortInfo.PortID` tells you which participant asked. Set `InterceptUserInputRequests` in `agentworkflow.Config` (custom graphs only) to receive approval requests as ordinary workflow messages instead, so another executor, such as a policy engine, can answer them.
+The same works in concurrent and group-chat orchestrations. `e.Request.PortInfo.PortID` tells you which participant asked: it is the participant's executor ID followed by `_UserInput` (here `devops_<agent ID>_UserInput`). Set `InterceptUserInputRequests` in `agentworkflow.Config` (custom graphs only) to receive approval requests as ordinary workflow messages instead, so another executor, such as a policy engine, can answer them.
 
 ## A workflow as an agent
 

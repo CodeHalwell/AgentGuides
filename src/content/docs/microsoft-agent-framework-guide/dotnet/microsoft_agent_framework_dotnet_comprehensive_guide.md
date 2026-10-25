@@ -3,7 +3,7 @@ title: "Microsoft Agent Framework (.NET) — Comprehensive Guide"
 sidebar:
   label: "Comprehensive guide"
   order: 2
-description: "Microsoft.Agents.AI for .NET: ChatClientAgent, hosting and DI, workflows, tools, structured output, MCP, memory, the harness agent, Anthropic and GitHub Copilot agents, evaluation and DevUI, with compiled examples."
+description: "Start here for Microsoft.Agents.AI in .NET: installation, configuration and DI, ChatClientAgent, structured output, the harness agent, evaluation, DevUI and Semantic Kernel interop, with a map of the topic pages for providers, tools, MCP, middleware, sessions and workflows."
 framework: "microsoft-agent-framework"
 language: "dotnet"
 ---
@@ -11,7 +11,16 @@ language: "dotnet"
 **Framework version:** `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%% (checked %%versions-checked%%; first written for the October 2025 preview). Every C# block on this page was compiled against that release.
 **Target platform:** .NET 8.0+ (the core packages also target .NET Standard 2.0 / .NET Framework 4.7.2)
 
-The building blocks: agents built from an `IChatClient`, hosting through `Microsoft.Agents.AI.Hosting`, graphs through `Microsoft.Agents.AI.Workflows`.
+This page is the starting point: what the framework is, how to install and configure it, how a `ChatClientAgent` works, structured output, and the pieces that have no page of their own (the harness agent, evaluation, DevUI, Semantic Kernel interop). Each major topic has its own page, linked from the short section here:
+
+| Topic | Page |
+| --- | --- |
+| Every model provider and agent type, credentials, routing | [Providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/) |
+| Function tools, the tool loop, approvals, hosted tools, shell and code execution | [Tools](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/) |
+| MCP clients, hosted MCP, MCP servers | [MCP](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/) |
+| Agent, function and chat-client middleware, retries and errors | [Middleware](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_middleware/) |
+| Sessions, history, session stores, context providers, memory, compaction | [Sessions and memory](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/) |
+| Foundry agents, workflows as agents | [Advanced patterns](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/) |
 
 ---
 
@@ -71,9 +80,13 @@ dotnet add package Azure.Identity
 
 # Optional
 dotnet add package Microsoft.Agents.AI.Workflows --version %%version=Microsoft.Agents.AI%%
+dotnet add package Microsoft.Agents.AI.Anthropic --version %%version=Microsoft.Agents.AI%%
 dotnet add package Microsoft.Agents.AI.Hosting --prerelease      # DI registration, session stores
 dotnet add package Microsoft.Agents.AI.Foundry --prerelease      # Microsoft Foundry agents
+dotnet add package ModelContextProtocol                          # MCP servers as tools
 ```
+
+The full package list, with which are stable and which are previews, is on the [providers page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#packages).
 
 ### Authentication and configuration
 
@@ -188,35 +201,7 @@ Register the `IChatClient` (and the `AzureOpenAIClient` behind it) once as a sin
 
 ### Testing agents
 
-`ChatClientAgent` sits on `IChatClient`, so a mocked chat client is the natural seam: no live model calls, no framework internals to fake.
-
-```csharp
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using Moq;
-using Xunit;
-
-public class AgentTests
-{
-    [Fact]
-    public async Task Agent_returns_the_model_reply()
-    {
-        var chatClient = new Mock<IChatClient>();
-        chatClient
-            .Setup(c => c.GetResponseAsync(
-                It.IsAny<IEnumerable<ChatMessage>>(),
-                It.IsAny<ChatOptions?>(),
-                It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ChatResponse(new ChatMessage(ChatRole.Assistant, "This is a mock response.")));
-
-        var agent = new ChatClientAgent(chatClient.Object, instructions: "You are helpful.");
-
-        AgentResponse response = await agent.RunAsync("test");
-
-        Assert.Equal("This is a mock response.", response.Text);
-    }
-}
-```
+`ChatClientAgent` sits on `IChatClient`, so a fake chat client (a small class implementing `IChatClient`, or a mock) is the natural seam: no live model calls and no framework internals to fake. The [testing and evaluation page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/#a-scripted-chat-client) builds a scripted chat client and uses it to test agents, workflows and hosted endpoints.
 
 ---
 
@@ -272,63 +257,7 @@ public class ResearchWorkflow(IChatClient chatClient)
 
 Don't share one `AgentSession` across two different agents to "pass context"; a session belongs to the agent that created it. Use a workflow, or pass the first agent's output into the second agent's input.
 
-### Shared state
-
-Inside a workflow, executors share state through the workflow context rather than through a global object: `context.QueueStateUpdateAsync(key, value)` and `context.ReadStateAsync<T>(key)`, scoped and checkpointed with the run.
-
-```csharp
-using Microsoft.Agents.AI.Workflows;
-
-public sealed class CountingExecutor() : Executor<string, string>("counter")
-{
-    public override async ValueTask<string> HandleAsync(string message, IWorkflowContext context, CancellationToken cancellationToken = default)
-    {
-        int seen = await context.ReadStateAsync<int>("messages-seen", cancellationToken: cancellationToken);
-        await context.QueueStateUpdateAsync("messages-seen", seen + 1, cancellationToken: cancellationToken);
-        return $"{message} (message #{seen + 1})";
-    }
-}
-```
-
-### Custom graphs and conditional edges
-
-`WorkflowBuilder` builds a directed graph of executors. Agents convert to executors implicitly, and plain functions become executors with `BindAsExecutor`. Conditional routing is an `AddEdge<T>` with a predicate over the message.
-
-```csharp
-using Microsoft.Agents.AI.Workflows;
-
-public record Ticket(string Text, bool IsUrgent);
-
-public static class TriageGraph
-{
-    public static async Task RunAsync()
-    {
-        var classify = ((Func<string, Ticket>)(text =>
-            new Ticket(text, text.Contains("outage", StringComparison.OrdinalIgnoreCase)))).BindAsExecutor("classify");
-
-        // An executor's return value is its output message; on an output executor it becomes a workflow output.
-        var page = ((Func<Ticket, string>)(t => $"PAGED ON-CALL: {t.Text}")).BindAsExecutor("page");
-        var queue = ((Func<Ticket, string>)(t => $"Queued: {t.Text}")).BindAsExecutor("queue");
-
-        Workflow workflow = new WorkflowBuilder(classify)
-            .AddEdge<Ticket>(classify, page, condition: t => t!.IsUrgent)
-            .AddEdge<Ticket>(classify, queue, condition: t => !t!.IsUrgent)
-            .WithOutputFrom(page, queue)
-            .Build();
-
-        await using Run run = await InProcessExecution.RunAsync(workflow, "Total outage in EU-West");
-        foreach (WorkflowEvent evt in run.OutgoingEvents)
-        {
-            if (evt is WorkflowOutputEvent output)
-            {
-                Console.WriteLine(output.As<string>());   // PAGED ON-CALL: Total outage in EU-West
-            }
-        }
-    }
-}
-```
-
-The [graph workflows and declarative agents page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) covers fan-out/fan-in, switches, checkpointing and human-in-the-loop request ports.
+Inside a workflow, executors share state through the workflow context (`QueueStateUpdateAsync`, `ReadStateAsync<T>`), and custom graphs are built with `WorkflowBuilder`, conditional edges and fan-out/fan-in. The [graph workflows and declarative agents page](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) and the [.NET feature tour](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_2025_features/#graph-based-workflows---net) cover custom graphs, checkpointing and human-in-the-loop request ports, and a workflow can itself be [exposed as an agent](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/#workflows-as-agents).
 
 ---
 
@@ -371,69 +300,19 @@ public static class WeatherAgent
 }
 ```
 
+The [tools page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/) covers schemas and parameter binding, the function loop and its limits, tools that change during a run, agents as tools, and the shell and code-execution packages.
+
 ### Hosted tools
 
-Some providers run tools server-side. `Microsoft.Extensions.AI` models these as `HostedCodeInterpreterTool`, `HostedWebSearchTool`, `HostedFileSearchTool` and `HostedMcpServerTool`; pass them in `tools:` like any other tool, on a provider that supports them (Foundry agents, the OpenAI Responses API).
+Provider-run tools (`HostedWebSearchTool`, `HostedCodeInterpreterTool`, `HostedFileSearchTool`, `HostedImageGenerationTool`, `HostedMcpServerTool`) and Foundry's own (`FoundryAITool`) are on the [tools page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#hosted-tools).
 
 ### Tool approval
 
-Wrap a function in `ApprovalRequiredAIFunction` to make the agent stop and ask before calling it. The run then returns a `ToolApprovalRequestContent` instead of executing the tool; you answer it on the next run in the same session.
-
-```csharp
-using System.ComponentModel;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-
-public static class ApprovalFlow
-{
-    [Description("Transfer money between two accounts.")]
-    public static string Transfer(string from, string to, decimal amount) => $"Moved {amount} from {from} to {to}.";
-
-    public static async Task RunAsync(IChatClient chatClient)
-    {
-        AIAgent agent = new ChatClientAgent(chatClient,
-            instructions: "You are a banking assistant.",
-            tools: [new ApprovalRequiredAIFunction(AIFunctionFactory.Create(Transfer))]);
-
-        AgentSession session = await agent.CreateSessionAsync();
-        AgentResponse response = await agent.RunAsync("Move 50 from ACC-1 to ACC-2", session);
-
-        var requests = response.Messages.SelectMany(m => m.Contents).OfType<ToolApprovalRequestContent>().ToList();
-        while (requests.Count > 0)
-        {
-            var answers = requests.Select(r =>
-            {
-                var call = (FunctionCallContent)r.ToolCall;
-                Console.Write($"Approve {call.Name}? [y/N] ");
-                bool approved = Console.ReadLine()?.Trim().ToLowerInvariant() == "y";
-                return new ChatMessage(ChatRole.User, [r.CreateResponse(approved)]);
-            });
-
-            response = await agent.RunAsync(answers, session);
-            requests = response.Messages.SelectMany(m => m.Contents).OfType<ToolApprovalRequestContent>().ToList();
-        }
-
-        Console.WriteLine(response.Text);
-    }
-}
-```
+Wrap a function in `ApprovalRequiredAIFunction` and the run stops with a `ToolApprovalRequestContent` instead of calling it; you answer with `request.CreateResponse(approved)` on the next run in the same session. The round trip, what the framework enforces around it, and standing approvals with `ToolApprovalAgent` are under [approvals](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#approvals).
 
 ### Errors in tools
 
-If a tool throws, the function-invocation loop catches it and tells the model the call failed, but by default **without** the exception message, so internal details do not leak into the prompt. Return an explanatory string when the model should know what went wrong:
-
-```csharp
-using System.ComponentModel;
-
-public class RobustTools
-{
-    [Description("Performs a division operation.")]
-    public string Divide(double numerator, double denominator) =>
-        denominator == 0
-            ? "Error: cannot divide by zero. Ask the user for a non-zero denominator."
-            : (numerator / denominator).ToString();
-}
-```
+A tool that throws does not end the run: the model is told "Error: Function failed." without the exception message, unless you enable `IncludeDetailedErrors`. See [what the model sees when a tool fails](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#what-the-model-sees-when-a-tool-fails).
 
 ---
 
@@ -468,75 +347,15 @@ public class DataExtractionAgent(IChatClient chatClient)
 // person.Name == "John Doe", person.Age == 42, person.Skills == ["C#", ".NET", "Python"]
 ```
 
-If the model's output cannot be deserialised into `T`, `RunAsync<T>` throws (a `JsonException`); catch it and retry or fall back. Models with native structured-output support (the GPT-4o family and later) rarely fail.
+How it works: `RunAsync<T>` is defined on `AIAgent`, so it works with any agent. It builds a JSON schema for `T` (`ChatResponseFormat.ForJsonSchema<T>()`), puts it in `AgentRunOptions.ResponseFormat`, and runs normally. Schemas that are not objects (a `List<T>`, a string, a number) are wrapped in an object, because providers require an object at the top level; `AgentResponse<T>.IsWrappedInObject` records that and `Result` unwraps it. The JSON is only parsed when you read `Result`: if the response contained no JSON it throws `InvalidOperationException`, and if the JSON does not fit `T` the `JsonException` from `System.Text.Json` propagates, so catch both and retry or fall back. `response.Text` still holds the raw JSON. Pass a `JsonSerializerOptions` (from a source-generated context for trimming and AOT) as the `serializerOptions` argument to control naming and converters.
+
+To ask for JSON without deserialising, set `AgentRunOptions.ResponseFormat` yourself (`ChatResponseFormat.Json`, or `ChatResponseFormat.ForJsonSchema(schema)`), or set `ChatOptions.ResponseFormat` on the agent for every run. Whether a schema is enforced or only requested depends on the provider: OpenAI and Azure OpenAI enforce it, other `IChatClient`s may treat it as a hint.
 
 ---
 
 ## Model Context Protocol (MCP)
 
-MCP support comes from the official C# SDK (`ModelContextProtocol`, `ModelContextProtocol.AspNetCore`), whose client tools are already `AIFunction`s, so they drop straight into an agent.
-
-### Using MCP tools in an agent
-
-```csharp
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using ModelContextProtocol.Client;
-
-public static class McpToolsAgent
-{
-    public static async Task RunAsync(IChatClient chatClient)
-    {
-        await using McpClient mcp = await McpClient.CreateAsync(new StdioClientTransport(new StdioClientTransportOptions
-        {
-            Name = "github",
-            Command = "npx",
-            Arguments = ["-y", "@modelcontextprotocol/server-github"],
-        }));
-
-        IList<McpClientTool> tools = await mcp.ListToolsAsync();
-
-        AIAgent agent = new ChatClientAgent(
-            chatClient,
-            instructions: "You help with GitHub repositories.",
-            tools: [.. tools.Cast<AITool>()]);
-
-        Console.WriteLine((await agent.RunAsync("List the open issues in microsoft/agent-framework")).Text);
-    }
-}
-```
-
-For a remote server use `new HttpClientTransport(new HttpClientTransportOptions { Endpoint = new Uri("https://...") })`.
-
-### Exposing tools (or an agent) as an MCP server
-
-```csharp
-// Program.cs (ASP.NET Core)
-using System.ComponentModel;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-using ModelContextProtocol.Server;
-
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services
-    .AddMcpServer()
-    .WithHttpTransport()
-    .WithTools<MyCustomTools>();
-
-var app = builder.Build();
-app.MapMcp("/mcp");     // Streamable HTTP endpoint
-app.Run();
-
-[McpServerToolType]
-public class MyCustomTools
-{
-    [McpServerTool, Description("Look up an order's status by ID.")]
-    public static string GetOrderStatus(string orderId) => $"Order {orderId}: shipped";
-}
-```
-
-To publish a whole agent as one MCP tool, convert it with `agent.AsAIFunction()` and register it with `McpServerTool.Create(...)`.
+MCP support comes from the official C# SDK (`ModelContextProtocol`, `ModelContextProtocol.AspNetCore`). Its client tools are `AIFunction`s, so `await mcpClient.ListToolsAsync()` goes straight into an agent's `tools:`. The [MCP page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/) covers stdio and Streamable HTTP connections, filtering and approving MCP tools, authentication, long-running MCP tasks, hosted MCP, and exposing tools or whole agents as MCP servers.
 
 ---
 
@@ -607,117 +426,25 @@ public static class Reflection
 
 ## Memory Systems
 
-### Conversation history
-
-By default a `ChatClientAgent` keeps history in the session itself (`InMemoryChatHistoryProvider`) — or, for providers with server-side conversations such as the Responses API or Foundry agents, as a conversation ID. Persist a session between requests by serialising it:
-
-```csharp
-using System.Text.Json;
-using Microsoft.Agents.AI;
-
-public static class SessionPersistence
-{
-    public static async Task<string> SaveAsync(AIAgent agent, AgentSession session)
-    {
-        JsonElement state = await agent.SerializeSessionAsync(session);
-        return state.GetRawText();                     // store in Redis, SQL, Blob, ...
-    }
-
-    public static async Task<AgentSession> LoadAsync(AIAgent agent, string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        return await agent.DeserializeSessionAsync(doc.RootElement.Clone());
-    }
-}
-```
-
-### Cosmos DB chat history
-
-`Microsoft.Agents.AI.CosmosNoSql` (preview) stores each message in Cosmos DB instead of in the session blob, which suits long conversations and lets you query or expire history (`MessageTtlSeconds`).
-
-```csharp
-using Azure.Identity;
-using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
-
-public static class CosmosHistory
-{
-    public static AIAgent Create(IChatClient chatClient) =>
-        new ChatClientAgent(chatClient, new ChatClientAgentOptions
-        {
-            Name = "support",
-            ChatOptions = new() { Instructions = "You are a support assistant." },
-        }.WithCosmosDBChatHistoryProviderUsingManagedIdentity(
-            accountEndpoint: "https://contoso.documents.azure.com:443/",
-            databaseId: "agents",
-            containerId: "chat-history",
-            tokenCredential: new DefaultAzureCredential()));
-}
-```
-
-The same package provides `CosmosCheckpointStore` for workflow checkpoints.
-
-### Retrieval (RAG)
-
-Retrieval is a context provider. `TextSearchProvider` calls your search function — Azure AI Search, a vector database, SQL full-text, anything — and injects the hits before each model call (or exposes search as a tool, with `SearchTime = OnDemandFunctionCalling`). Ingestion is done with the search service's own SDK. Recipe 6 in the [.NET recipes](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_recipes/#recipe-6-retrieval-with-azure-ai-search) has a complete Azure AI Search example.
-
-For long-term user memory across sessions, `ChatHistoryMemoryProvider` (vector search over past conversations) and `FoundryMemoryProvider` (Foundry's managed memory, in `Microsoft.Agents.AI.Foundry`) are the shipped options.
+By default a `ChatClientAgent` keeps the conversation in the session's state bag (`InMemoryChatHistoryProvider`), or, for services that store it themselves (the Responses API, Foundry), as a conversation ID. Persist a session with `agent.SerializeSessionAsync(session)` and restore it with `agent.DeserializeSessionAsync(json)`. Database-backed history (`CosmosChatHistoryProvider`, `ValkeyChatHistoryProvider`, or your own `ChatHistoryProvider`), retrieval (`TextSearchProvider`), long-term memory (`ChatHistoryMemoryProvider`, `FileMemoryProvider`, `FoundryMemoryProvider`) and compaction are on the [sessions and memory page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/).
 
 ---
 
 ## Context Engineering
 
-Everything the model sees on a turn is assembled from the agent's instructions, the session history, and the output of its **context providers**. A custom `AIContextProvider` can add instructions, messages or tools per run, and observe the result afterwards.
-
-```csharp
-using Microsoft.Agents.AI;
-
-public sealed class UserProfileProvider(string displayName, string locale) : AIContextProvider
-{
-    protected override ValueTask<AIContext> ProvideAIContextAsync(InvokingContext context, CancellationToken cancellationToken = default) =>
-        ValueTask.FromResult(new AIContext
-        {
-            Instructions = $"The user is {displayName}. Reply in {locale}.",
-        });
-}
-
-// new ChatClientAgent(chatClient, new ChatClientAgentOptions
-// {
-//     ChatOptions = new() { Instructions = "You are a support assistant." },
-//     AIContextProviders = [new UserProfileProvider("Ana", "pt-PT")],
-// });
-```
-
-Context compaction (summarising or trimming long histories) is built in: see `Microsoft.Agents.AI.Compaction` and the `CompactionProvider`.
+Everything the model sees on a turn is assembled from the agent's instructions, the session history, and the output of its **context providers**: `AIContextProvider`s that add instructions, messages or tools on each run and observe the result afterwards. Writing one, how their output is ordered and stored, and the built-in providers are under [context providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#context-providers).
 
 ### Multi-tenant isolation
 
-Sessions are the isolation boundary: never let a request choose a session that belongs to someone else. Key stored sessions by the authenticated user (and tenant), not by an ID from the request body. With `Microsoft.Agents.AI.Hosting`, a hosted agent's session store can do this for you: `builder.AddAIAgent(...).WithInMemorySessionStore(withIsolation: true)` together with `builder.Services.UseClaimsBasedAgentIsolation()` (from `Microsoft.Agents.AI.Hosting.AspNetCore`) partitions stored sessions by a claim of the signed-in user.
-
-```csharp
-using Azure.AI.OpenAI;
-using Azure.Identity;
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.Hosting;
-using Microsoft.Extensions.AI;
-
-var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddChatClient(
-    new AzureOpenAIClient(new Uri(builder.Configuration["AzureOpenAI:Endpoint"]!), new DefaultAzureCredential())
-        .GetChatClient("%%model=openai-small%%").AsIChatClient());
-builder.Services.AddHttpContextAccessor();
-builder.Services.UseClaimsBasedAgentIsolation();               // isolation key = the user's "oid" claim by default
-builder.AddAIAgent("assistant", "You are a helpful assistant.")
-       .WithInMemorySessionStore(withIsolation: true);         // swap for a durable AgentSessionStore in production
-```
+Sessions are the isolation boundary: never let a request choose a session that belongs to someone else. Key stored sessions by the authenticated user (and tenant), never by an ID from the request body. With `Microsoft.Agents.AI.Hosting`, `builder.AddAIAgent(...).WithInMemorySessionStore()` (or another session store) together with `builder.Services.UseClaimsBasedAgentIsolation()` partitions stored sessions by a claim of the signed-in user, `ClaimTypes.NameIdentifier` by default. See [session stores](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#session-stores-hosting).
 
 ---
 
 ## More agent types
 
-`ChatClientAgent` covers any `IChatClient`. Three stable packages add agents with more built in.
+`ChatClientAgent` covers any `IChatClient`. `Microsoft.Agents.AI.Harness` adds an agent with planning, memory and compaction already wired in; other agent types (Anthropic, GitHub Copilot, A2A, Copilot Studio, Foundry-defined agents, your own `AIAgent` subclass) are on the [providers page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/).
 
-### `HarnessAgent` — planning, memory and compaction wired together
+### `HarnessAgent`
 
 `Microsoft.Agents.AI.Harness` wraps a chat client in an agent that already has the harness context providers: a todo list, plan/execute modes, file memory, skills, background sub-agents, standing tool approvals, compaction and OpenTelemetry. Each one can be turned off (`DisableTodoProvider`, `DisableAgentModeProvider`, `DisableFileMemory`, `DisableAgentSkillsProvider`, `DisableCompaction`, `DisableWebSearch`, `DisableOpenTelemetry`) or configured through `HarnessAgentOptions`.
 
@@ -726,6 +453,7 @@ dotnet add package Microsoft.Agents.AI.Harness --version %%version=Microsoft.Age
 ```
 
 ```csharp
+#pragma warning disable MAAI001   // the context-window settings are experimental
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using Microsoft.Agents.AI;
@@ -751,127 +479,23 @@ AgentResponse response = await agent.RunAsync("Compare three heat-pump designs a
 Console.WriteLine(response.Text);
 ```
 
-Setting `MaxContextWindowTokens` and `MaxOutputTokens` turns on compaction sized to the model; `LoopEvaluators` keeps the agent working until a condition (for example, no open todos) is met. The same providers (`TodoProvider`, `AgentModeProvider`, `AgentSkillsProvider`, `BackgroundAgentsProvider`, file memory and file access) live in `Microsoft.Agents.AI` and can be added to a plain `ChatClientAgent` individually through `ChatClientAgentOptions.AIContextProviders`.
+Setting `MaxContextWindowTokens` and `MaxOutputTokens` (both experimental, `MAAI001`, in %%version=Microsoft.Agents.AI%%) turns on compaction sized to the model; `LoopEvaluators` keeps the agent working until a condition (for example, no open todos) is met. The same providers (`TodoProvider`, `AgentModeProvider`, `AgentSkillsProvider`, `BackgroundAgentsProvider`, file memory and file access) live in `Microsoft.Agents.AI` and can be added to a plain `ChatClientAgent` individually through `ChatClientAgentOptions.AIContextProviders`.
 
-### Anthropic
+### Anthropic and GitHub Copilot
 
-`Microsoft.Agents.AI.Anthropic` adds `AsAIAgent` to the official Anthropic SDK client (`Anthropic` package), including its beta service.
-
-```bash
-dotnet add package Microsoft.Agents.AI.Anthropic --version %%version=Microsoft.Agents.AI%%
-```
-
-```csharp
-using Anthropic;
-using Anthropic.Core;
-using Microsoft.Agents.AI;
-
-AnthropicClient anthropic = new(new ClientOptions
-{
-    ApiKey = Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY"),
-});
-
-AIAgent claude = anthropic.AsAIAgent(
-    model: "%%model=anthropic%%",
-    instructions: "You are a concise technical writer.",
-    name: "writer");
-
-Console.WriteLine((await claude.RunAsync("Explain idempotency in two sentences.")).Text);
-```
-
-`AsAIAgent` also takes `tools:` and `defaultMaxTokens:`; the agent is a normal `ChatClientAgent`, so sessions, middleware and workflows work unchanged.
-
-### GitHub Copilot
-
-`Microsoft.Agents.AI.GitHub.Copilot` exposes the GitHub Copilot SDK as an `AIAgent` (`GitHubCopilotAgent`). The Copilot CLI does the tool use and file editing, so the agent suits repository tasks. It needs the Copilot CLI installed and signed in.
-
-```bash
-dotnet add package Microsoft.Agents.AI.GitHub.Copilot --version %%version=Microsoft.Agents.AI%%
-```
-
-```csharp
-using GitHub.Copilot;
-using Microsoft.Agents.AI;
-
-AIAgent copilot = new CopilotClient(new CopilotClientOptions())
-    .AsAIAgent(ownsClient: true, name: "repo-helper", instructions: "Answer questions about this repository.");
-
-AgentSession session = await copilot.CreateSessionAsync();
-Console.WriteLine((await copilot.RunAsync("Which projects in this solution have no tests?", session)).Text);
-```
-
-Pass a `SessionConfig` instead of `instructions:` to control the model, tools and permissions of the Copilot session.
+`Microsoft.Agents.AI.Anthropic` adds `AsAIAgent` to the Anthropic SDK client (including its beta service and Claude in Foundry), and `Microsoft.Agents.AI.GitHub.Copilot` exposes the GitHub Copilot SDK as `GitHubCopilotAgent`. Both are on the providers page: [Anthropic](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#anthropic), [GitHub Copilot](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#github-copilot).
 
 ---
 
 ## Evaluation
 
-Evaluation is in the core package. `LocalEvaluator` runs cheap, deterministic checks (`EvalChecks.KeywordCheck`, `ToolCalledCheck`, `ToolCallsPresent`, `ToolCallArgsMatch`, `NonEmpty`, `ContainsExpected`, or your own via `FunctionEvaluator.Create`). `agent.EvaluateAsync(queries, evaluator)` runs the agent on each query and scores the results; overloads take expected outputs and tool calls, a conversation splitter and a repetition count. `Microsoft.Extensions.AI.Evaluation` evaluators (`IEvaluator`, for model-graded relevance, coherence and so on) and Foundry's evaluators (`FoundryEvals`, package `Microsoft.Agents.AI.Foundry`) plug into the same `EvaluateAsync` overloads.
-
-```csharp
-using Microsoft.Agents.AI;
-
-public static class AgentQualityChecks
-{
-    public static async Task RunAsync(AIAgent agent)
-    {
-        var evaluator = new LocalEvaluator(
-            EvalChecks.KeywordCheck("refund"),
-            EvalChecks.ToolCalledCheck("lookup_order"),
-            FunctionEvaluator.Create("short_answer", (string response) => response.Length < 1_000));
-
-        AgentEvaluationResults results = await agent.EvaluateAsync(
-            ["I want a refund for order 1042", "How do I return a damaged item?"],
-            evaluator);
-
-        Console.WriteLine($"{results.Passed}/{results.Total} passed");
-        results.AssertAllPassed();      // throws, failing the test, if any item failed
-    }
-}
-```
-
-`AgentEvaluationResults` has `Passed`, `Failed`, `Total`, per-item detail and assertion helpers (`AssertAllPassed`, `AssertNoFailedItems`, `AssertScoreAtLeast`, `AssertDimensionScoreAtLeast`), so the same code works as an xUnit or NUnit test. For workflows, `run.EvaluateAsync(evaluator, includePerAgent: true)` (in `Microsoft.Agents.AI.Workflows`) scores a finished run overall and per agent.
+Evaluation is in the core package. `LocalEvaluator` runs cheap, deterministic checks (`EvalChecks.KeywordCheck`, `ToolCalledCheck`, `ToolCallArgsMatch`, `NonEmpty` and others, or your own with `FunctionEvaluator.Create`), `agent.EvaluateAsync(queries, evaluator)` runs the agent on each query and scores the results, and `AgentEvaluationResults` has assertion helpers (`AssertAllPassed`, `AssertScoreAtLeast`, ...) so the same code works as a unit test. Model-graded evaluators from `Microsoft.Extensions.AI.Evaluation` and Foundry's evaluators (`FoundryEvals`, in `Microsoft.Agents.AI.Foundry`) plug into the same calls. All of it, with workflow evaluation and running the suite in CI, is on the [testing and evaluation page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_testing_and_evaluation/#evaluating-with-localevaluator).
 
 ---
 
 ## Local testing with DevUI
 
-`Microsoft.Agents.AI.DevUI` (preview) adds a browser UI for chatting with your registered agents and workflows during development. It talks to the OpenAI Responses and Conversations endpoints from `Microsoft.Agents.AI.Hosting.OpenAI`, so map those too. DevUI is a development tool; don't expose it in production.
-
-```bash
-dotnet add package Microsoft.Agents.AI.DevUI --prerelease
-```
-
-```csharp
-using Microsoft.Agents.AI;
-using Microsoft.Agents.AI.DevUI;
-using Microsoft.Agents.AI.Hosting;
-using Microsoft.Extensions.AI;
-
-var builder = WebApplication.CreateBuilder(args);
-
-builder.Services.AddChatClient(Models.ChatClient());
-builder.AddAIAgent("writer", "You write short stories about the given topic.");
-
-builder.Services.AddOpenAIResponses();
-builder.Services.AddOpenAIConversations();
-builder.AddDevUI();
-
-var app = builder.Build();
-
-app.MapOpenAIResponses();
-app.MapOpenAIConversations();
-if (app.Environment.IsDevelopment())
-{
-    app.MapDevUI();     // /devui
-}
-
-app.Run();
-
-static class Models { public static IChatClient ChatClient() => null!; }
-```
-
-With .NET Aspire, the `Aspire.Hosting.AgentFramework.DevUI` integration runs one DevUI for several agent services; see [Microsoft's DevUI page](https://learn.microsoft.com/agent-framework/integrations/by-component/ui/devui/).
+`Microsoft.Agents.AI.DevUI` (preview) adds a browser UI for chatting with your registered agents and workflows during development, on top of the OpenAI Responses and Conversations endpoints from `Microsoft.Agents.AI.Hosting.OpenAI`. It is a development tool; map it only in development. Set-up is on the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#devui).
 
 ---
 
@@ -879,16 +503,17 @@ With .NET Aspire, the `Aspire.Hosting.AgentFramework.DevUI` integration runs one
 
 The integration runs in both directions:
 
-- **Calling a Copilot Studio agent from .NET:** `Microsoft.Agents.AI.CopilotStudio` (preview) provides `CopilotStudioAgent`, an `AIAgent` over the Copilot Studio client (`Microsoft.Agents.CopilotStudio.Client`). It can then take part in workflows like any other agent.
-- **Calling your .NET tools from Copilot Studio:** expose them as an MCP server (above) and add it in Copilot Studio as an MCP tool, or publish an OpenAPI description and add it as a custom connector.
+- **Calling a Copilot Studio agent from .NET:** `Microsoft.Agents.AI.CopilotStudio` (preview) provides `CopilotStudioAgent`, an `AIAgent` over the Copilot Studio client; see the [providers page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#copilot-studio).
+- **Calling your .NET tools or agents from Copilot Studio:** expose them as an [MCP server](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_mcp/#exposing-tools-and-agents-as-mcp-servers) and add it in Copilot Studio as an MCP tool, or publish an OpenAPI description and add it as a custom connector.
 
 ---
 
 ## Azure AI Integration
 
-- **Azure OpenAI / Foundry models** — the primary model providers (`Azure.AI.OpenAI` with `AsAIAgent`, or `Microsoft.Agents.AI.Foundry`).
-- **Foundry Agent Service** — service-managed agents with server-side threads and hosted tools, surfaced as `AIAgent`.
-- **Azure AI Search** — retrieval through `TextSearchProvider` or `HostedFileSearchTool`.
+- **Azure OpenAI / Foundry models** — the primary model providers: the OpenAI client against the Azure v1 endpoint, `Azure.AI.OpenAI`, or `Microsoft.Agents.AI.Foundry` ([providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#azure-openai)).
+- **Foundry Agent Service** — service-managed agents with server-side conversations and hosted tools, surfaced as `FoundryAgent` ([providers](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_providers/#agents-defined-in-foundry), [advanced](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_advanced/)).
+- **Azure AI Search** — retrieval through `TextSearchProvider`, `FoundryAITool.CreateAzureAISearchTool` or `HostedFileSearchTool`.
+- **Cosmos DB and Blob Storage** — chat history (`CosmosChatHistoryProvider`) and session stores (`AzureBlobAgentSessionStore`); see [sessions and memory](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/).
 - **Azure AI Content Safety** — call it from agent middleware; see the [enterprise page](/microsoft-agent-framework-guide/microsoft_agent_framework_enterprise_2025/#azure-ai-content-safety-integration).
 - **Application Insights** — `.AsBuilder().UseOpenTelemetry(...)` plus the Azure Monitor exporter.
 
@@ -905,7 +530,7 @@ The Agent Framework is the successor to Semantic Kernel's agent APIs, and both s
 
 ### Reusing Semantic Kernel plugins
 
-A `KernelFunction` converts to an `AIFunction` with `AsAIFunction()`, so existing plugins work as agent tools without wrappers.
+In current Semantic Kernel releases `KernelFunction` derives from `AIFunction`, so existing plugin functions are agent tools as they are. (`KernelFunction.AsAIFunction()` is obsolete as of Semantic Kernel 1.81.0.)
 
 ```csharp
 using System.ComponentModel;
@@ -924,7 +549,7 @@ public static class SkInterop
     public static AIAgent Create(IChatClient chatClient)
     {
         KernelPlugin plugin = KernelPluginFactory.CreateFromType<MySKPlugin>();
-        IList<AITool> tools = plugin.Select(f => (AITool)f.AsAIFunction()).ToList();
+        IList<AITool> tools = plugin.Select(f => (AITool)f).ToList();   // a KernelFunction is an AIFunction
 
         return new ChatClientAgent(chatClient, instructions: "Use your tools.", tools: tools);
     }
@@ -933,7 +558,7 @@ public static class SkInterop
 
 ### Migration strategy
 
-- **Tools:** convert plugins with `AsAIFunction()` as above, then move them to plain methods with `[Description]` at your own pace.
+- **Tools:** pass plugin functions as tools as above, then move them to plain methods with `[Description]` at your own pace.
 - **Agents:** `ChatCompletionAgent` → `ChatClientAgent`; `AgentThread` → `AgentSession`; `InvokeAsync` → `RunAsync`.
 - **Orchestration:** SK planners and `AgentGroupChat` → `Microsoft.Agents.AI.Workflows` (sequential, concurrent, handoff, group chat, Magentic, or a custom graph).
 - **History:** move stored chat history to a `ChatHistoryProvider` (in-memory, Cosmos DB, or your own).

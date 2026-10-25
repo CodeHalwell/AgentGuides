@@ -266,17 +266,15 @@ func main() {
 }
 ```
 
-Output against the stand-in (the experts finish in any order):
+Output against the stand-in. The experts finish in any order, and the stand-in quotes only the first 80 characters of the editor's prompt:
 
 ```text
+economist has answered
 engineer has answered
 regulator has answered
-economist has answered
 --- brief ---
 Mock reply to: Expert notes:
-economist: Mock reply to: Should the city replace diesel buses with battery buses by 2030?
-engineer: Mock reply to: Should the city replace diesel buses with battery buses by 2030?
-regulator: Mock reply to: Should the city replace diesel buses with battery buses by 2030?
+engineer: Mock reply to: Should the city replace diesel buses with
 ```
 
 The aggregator runs inside the workflow, so its context carries the run's deadline and cancellation. The expert batches arrive in completion order; the editor sees them in whatever order they finished.
@@ -408,13 +406,13 @@ func main() {
 }
 ```
 
-Output against the stand-in, whose critic always scores 3:
+Output against the stand-in, whose critic always scores 3 (and which truncates the quoted prompt):
 
 ```text
 round 1 scored 3
 round 2 scored 3
 round 3 scored 3
-round 3, score 3, best effort after the round limit: Mock reply to: Revise "Mock reply to: Revise \"Mock reply to: Write a product tagline about a solar-powered bike light\". Feedback: example feedback". Feedback: example feedback
+round 3, score 3, best effort after the round limit: Mock reply to: Revise "Mock reply to: Revise \"Mock reply to: Write a product tagline about a s
 ```
 
 Two conditional edges leave the critic with complementary conditions, and the round limit lives in the condition. Because the Go engine has no superstep limit, that condition, plus the context deadline, is what guarantees the loop ends.
@@ -511,9 +509,15 @@ type service struct {
 	pending map[string]Expense
 }
 
-// drive watches a run until it halts and reports an outcome, if any.
+// drive watches a run and reports an outcome, if any. Without an answer it
+// stops at the first halt and leaves requests pending; with one it keeps
+// watching until the answered run produces its outcome.
 func drive(ctx context.Context, run *inproc.StreamingRun, answer *Decision) (*Outcome, error) {
-	for evt, err := range run.WatchUntilHalt(ctx) {
+	events := run.WatchUntilHalt(ctx)
+	if answer != nil {
+		events = run.WatchStream(ctx)
+	}
+	for evt, err := range events {
 		if err != nil {
 			return nil, err
 		}
@@ -801,9 +805,10 @@ func newSupportAgent() *agent.Agent {
 		func(_ context.Context, in lookupIn) (string, error) { return in.Order + " was delivered on 3 May", nil })
 
 	return openaiprovider.NewAgent(openai.NewClient(), openaiprovider.AgentConfig{
-		Model:              "%%model=openai-small%%",
-		Instructions:       "You are a support agent. Refunds need approval.",
-		DisableStoreOutput: true, // keep the history in the session, so the file is self-contained
+		Model:        "%%model=openai-small%%",
+		Instructions: "You are a support agent. Refunds need approval.",
+		// The Responses API keeps the conversation service-side; the session
+		// file holds the conversation's response ID. See the note below.
 		Config: agent.Config{
 			Name:  "support",
 			Tools: []tool.Tool{tool.ApprovalRequiredFunc(refund), lookup},
@@ -878,8 +883,7 @@ func main() {
 	turn(ctx, b, restored, "Refund my other order too.", false)
 	save(path, restored)
 
-	history, _ := restored.InMemoryHistory("")
-	fmt.Printf("refunds issued: %d, messages in the saved session: %d\n", refundsIssued, len(history))
+	fmt.Printf("refunds issued: %d, service conversation ID saved: %t\n", refundsIssued, restored.ServiceID() != "")
 }
 ```
 
@@ -887,15 +891,17 @@ Output against the stand-in, which calls the first tool (the refund) each time:
 
 ```text
 user: Order A-77 arrived broken, please refund it.
-  approval needed for issue_refund({"order": "example order", "amount": 21.5}): true
+  approval needed for issue_refund({"amount": 21.5, "order": "example order"}): true
 agent: Here is what the tool returned: refunded £21.50 on example order
 user: Refund my other order too.
-  approval needed for issue_refund({"order": "example order", "amount": 21.5}): false
-agent: Here is what the tool returned: Error: Tool call invocation was rejected. checked by duty manager
-refunds issued: 1, messages in the saved session: 10
+  approval needed for issue_refund({"amount": 21.5, "order": "example order"}): false
+agent: Here is what the tool returned: Tool call invocation rejected. checked by duty manager
+refunds issued: 1, service conversation ID saved: true
 ```
 
-A denied call is reported to the model as a rejection, with your reason, and the model carries on. Approval requests are bound to the session that raised them, so answer them with the same session, after loading it if necessary. The [tools page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_tools/#approvals) covers standing approvals ("always allow this tool").
+A denied call is reported to the model as a rejection, with your reason, and the model carries on.
+
+**Keep the service-side history here.** With the history kept in the session instead (Chat Completions, or Responses with `DisableStoreOutput: true`), a *second* approval-gated call on the same session failed in v%%version=github.com/microsoft/agent-framework-go%% with `ToolApprovalRequestContent found with ToolCall.CallID(s) '…' that have no matching ToolApprovalResponseContent`, whether or not the session had been saved and reloaded. The first approval always worked. We reproduced this against the stand-in only, so check it against your provider before relying on locally held history with repeated approvals. Approval requests are bound to the session that raised them, so answer them with the same session, after loading it if necessary. The [tools page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_tools/#approvals) covers standing approvals ("always allow this tool").
 
 ## Traced data-quality pipeline
 
@@ -1052,11 +1058,12 @@ Output against the stand-in:
 ```text
 Mock reply to: customers: row 2: email is null
 orders: row 11: total is negative
+
 chat                 1
 edge_group.process   8
-executor.process     6
+executor.process     8
 invoke_agent         1
-message.send         6
+message.send         8
 workflow.build       1
 workflow.session     1
 workflow_invoke      1
@@ -1075,7 +1082,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"slices"
 	"strings"
 	"time"
@@ -1233,7 +1239,7 @@ func main() {
 			log.Fatal(err)
 		}
 		if text := update.String(); text != "" {
-			fmt.Printf("[%s] %s\n", update.MessageID != "", text)
+			fmt.Printf("[%s] %s\n", update.AuthorName, text)
 		}
 	}
 }
@@ -1242,8 +1248,8 @@ func main() {
 Output:
 
 ```text
-[true] NL: Goedemorgen, team
-[true] Reviewed: NL: Goedemorgen, team
+[] NL: Goedemorgen, team
+[] Reviewed: NL: Goedemorgen, team
 ```
 
-The AG-UI handler is stateless, and so is a workflow agent run without a session: each request starts a fresh workflow run with the history the client sends. That suits AG-UI, whose clients send the whole conversation every time. Approvals inside the workflow do not cross AG-UI in v%%version=github.com/microsoft/agent-framework-go%% ([details](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_hosting_and_a2a/#frontend-tools)); serve approval-gated workflows over A2A instead.
+The updates arrive without an author name: the AG-UI event stream carries text and message IDs but not which participant wrote them, so put the participant into the text if the front end should show it. The AG-UI handler is stateless, and so is a workflow agent run without a session: each request starts a fresh workflow run with the history the client sends. That suits AG-UI, whose clients send the whole conversation every time. Approvals inside the workflow do not cross AG-UI in v%%version=github.com/microsoft/agent-framework-go%% ([details](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_hosting_and_a2a/#frontend-tools)); serve approval-gated workflows over A2A instead.

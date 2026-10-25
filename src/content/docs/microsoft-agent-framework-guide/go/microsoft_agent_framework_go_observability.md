@@ -471,7 +471,7 @@ To correlate logs with traces, use a `slog.Handler` that adds the trace and span
 
 ## Usage telemetry in the User-Agent header
 
-Separately from OpenTelemetry, the OpenAI and Foundry adapters add the framework's identity and a feature-usage bitmask to the `User-Agent` header, for example `agent-framework-go/v0.2.0 ... (feat=v1.15)`. The mask records which framework features have been used in the process; it holds no identifiers, prompts or data. It is sent only on HTTPS requests to approved Azure hosts (`openai.azure.com`, `cognitiveservices.azure.com`, `services.ai.azure.com`, `inference.ai.azure.com`), never to api.openai.com, other providers or custom gateways. Two environment variables, read once per process, turn it off:
+Separately from OpenTelemetry, the OpenAI and Foundry adapters add the framework's identity and a feature-usage bitmask to the `User-Agent` header, for example `agent-framework-go/v%%version=github.com/microsoft/agent-framework-go%% ... (feat=v1.15)`. The mask records which framework features have been used in the process; it holds no identifiers, prompts or data. It is sent only on HTTPS requests to approved Azure hosts (`openai.azure.com`, `cognitiveservices.azure.com`, `services.ai.azure.com`, `inference.ai.azure.com`), never to api.openai.com, other providers or custom gateways. Two environment variables, read once per process, turn it off:
 
 | Variable | Effect |
 | --- | --- |

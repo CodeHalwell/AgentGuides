@@ -186,8 +186,4 @@ Every constructor returns the same `*agent.Agent`, and provider-native request p
 
 ## Production notes
 
-- **Telemetry.** The OpenAI and Foundry adapters add the SDK identity and a feature-usage bitmask to the `User-Agent` header, but only on approved Azure/Foundry HTTPS hosts. Set `AGENT_FRAMEWORK_FEATURE_MASK_DISABLED=1` to drop the bitmask, or `AGENT_FRAMEWORK_USER_AGENT_DISABLED=1` to drop the framework's whole `User-Agent` contribution.
-- **Cancellation.** Every run takes a `context.Context`, which is passed through to the provider client and to each tool call. Set deadlines on it.
-- **Concurrency.** An `*agent.Agent` can be shared. A `*agent.Session` is safe for concurrent use after initialisation, but one conversation should not run twice at once.
-- **Background responses.** `agent.AllowBackgroundResponses(true)` and `agent.WithContinuationToken(token)` support long-running Responses-API work that you poll for or resume.
-- **Version pinning.** Pin the exact v0.x version in `go.mod` and read the release notes before upgrading.
+Every run takes a `context.Context`, which carries deadlines and cancellation to the provider and to each tool call; an `*agent.Agent` can be shared between goroutines, but one session should not run twice at once; and the SDK is 0.x, so pin the exact version. [Production](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_production/) covers timeouts at each layer, retries, concurrency limits, persisting sessions, credentials, tool-loop limits, workflow durability, a deployable service and a checklist; the `User-Agent` usage telemetry and its opt-out variables are on the [observability page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_observability/#usage-telemetry-in-the-user-agent-header).

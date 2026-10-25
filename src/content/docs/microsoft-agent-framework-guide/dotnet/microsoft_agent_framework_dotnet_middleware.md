@@ -260,10 +260,10 @@ public sealed class AuditingAgent(AIAgent inner, Action<string> write) : Delegat
 | Extension | Adds | Notes |
 | --- | --- | --- |
 | `UseLogging(loggerFactory)` | `LoggingAgent` | Logs each run at `Debug`; message contents only at `Trace`. |
-| `UseOpenTelemetry(sourceName)` | `OpenTelemetryAgent` | `invoke_agent` spans and metrics per the GenAI semantic conventions; also switches on the agent's chat-level telemetry. See the [observability documentation](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/#2-observability). |
+| `UseOpenTelemetry(sourceName)` | `OpenTelemetryAgent` | `invoke_agent` spans and metrics per the GenAI semantic conventions; also switches on the agent's chat-level telemetry. See the [observability page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_observability/#tracing-an-agent). |
 | `UseToolApproval(options)` | `ToolApprovalAgent` | Standing approvals; see [tools](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#standing-approvals-with-toolapprovalagent). |
 | `UseAIContextProviders(providers)` | A provider-running agent | Runs `MessageAIContextProvider`s around *any* agent, not just `ChatClientAgent`. |
-| `UseClientHeaders()` (Foundry, experimental) | `ClientHeadersAgent` | Sends headers set per run with `ChatOptions.WithClientHeader(name, value)`. |
+| `UseClientHeaders()` (Foundry, experimental `MEAI001`) | A header-forwarding decorator | Sends HTTP headers set per run with `ChatOptions.WithClientHeader(name, value)`. |
 
 ### Ordering
 
@@ -502,7 +502,7 @@ Each run here has no session, so both send the same two messages and the second 
 `AIContextProvider`s (covered on the [sessions and memory page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#context-providers)) are the structured way to add instructions, messages or tools on each run. They can be attached at two levels besides `ChatClientAgentOptions.AIContextProviders`:
 
 - `agentBuilder.UseAIContextProviders(params MessageAIContextProvider[])` runs message-only providers around any agent, including A2A, Copilot and workflow agents.
-- `chatClientBuilder.UseAIContextProviders(params AIContextProvider[])` runs providers on every model call inside the loop. This is where compaction belongs, so that a long tool loop is compacted between iterations, not only at the start of the run.
+- `chatClientBuilder.UseAIContextProviders(params AIContextProvider[])` runs providers on every model call inside the loop, which must happen inside an agent run. In %%version=Microsoft.Agents.AI%% do not use it for `CompactionProvider`: with tool calls it causes the user's messages to be dropped from the stored history (details under [compaction strategies](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#compaction-strategies)).
 
 ## Retries and transient errors
 

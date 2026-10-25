@@ -765,7 +765,7 @@ With auto-calling off, the server's own tools are not run automatically either. 
 
 ## MCP over HTTP
 
-An agent exposed as an MCP tool can serve any MCP client: IDEs, desktop assistants and other agents. `mcptool.AddTool` registers a `tool.FuncTool` on an `mcp.Server`, and `agenttool.New` makes an agent into one. The [comprehensive guide](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/#mcp) covers MCP in general, including stdio. Over HTTP, use the MCP SDK's streamable HTTP handler:
+An agent exposed as an MCP tool can serve any MCP client: IDEs, desktop assistants and other agents. `mcptool.AddTool` registers a `tool.FuncTool` on an `mcp.Server`, and `agenttool.New` makes an agent into one. The [MCP page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_mcp/#exposing-tools-and-agents-as-an-mcp-server) covers building the server (tools, agents, stdio); this section is only about serving it over HTTP next to your other endpoints, with the MCP SDK's streamable HTTP handler:
 
 ```go
 package main

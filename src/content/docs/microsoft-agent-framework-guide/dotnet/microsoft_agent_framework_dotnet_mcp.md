@@ -10,15 +10,15 @@ sidebar:
 
 The Agent Framework does not have its own MCP client. It uses the official C# SDK (`ModelContextProtocol`, with `ModelContextProtocol.AspNetCore` for HTTP servers), whose client tools are already `AIFunction`s, so an MCP server's tools drop straight into an agent's `tools:` list. On top of that the framework adds `Microsoft.Agents.AI.Mcp` (alpha) for long-running MCP tasks and MCP-delivered skills, and the provider packages add hosted MCP, where the model provider calls the MCP server for you.
 
-Every C# block was compiled against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%%, `Microsoft.Agents.AI.Mcp` 1.26.0-alpha.261023.1 and `ModelContextProtocol` 2.2.0 (checked %%versions-checked%%). The stdio, HTTP and tasks examples start their own MCP server, so they run without anything else installed; they were run against a local stand-in for the OpenAI API that calls the first tool it is offered and echoes the result. The hosted-MCP and Foundry examples were compiled only.
+Every C# block was compiled against `Microsoft.Agents.AI` %%version=Microsoft.Agents.AI%%, the `Microsoft.Agents.AI.Mcp` alpha released with it, and `ModelContextProtocol` 2.2.0 (checked %%versions-checked%%). The stdio, HTTP and tasks examples start their own MCP server, so they run without anything else installed; they were run against a local stand-in for the OpenAI API that calls the first tool it is offered and echoes the result. The hosted-MCP and Foundry examples were compiled only.
 
 ```bash
-dotnet add package ModelContextProtocol --version 2.2.0
-dotnet add package ModelContextProtocol.AspNetCore --version 2.2.0      # only to serve MCP over HTTP
-dotnet add package Microsoft.Agents.AI.Mcp --prerelease                # only for MCP tasks and MCP skills
+dotnet add package ModelContextProtocol
+dotnet add package ModelContextProtocol.AspNetCore      # only to serve MCP over HTTP
+dotnet add package Microsoft.Agents.AI.Mcp --prerelease # only for MCP tasks and MCP skills
 ```
 
-`Microsoft.Agents.AI.Mcp` 1.26.0 depends on `ModelContextProtocol.Extensions.Tasks` 2.2.0, which pins `ModelContextProtocol` to exactly 2.2.0. With 2.3.0 the build still succeeds but NuGet warns (NU1608) about the mismatch; stay on 2.2.0 if you use the alpha package.
+The current `Microsoft.Agents.AI.Mcp` alpha depends on `ModelContextProtocol.Extensions.Tasks` 2.2.0, which pins `ModelContextProtocol` to exactly 2.2.0. With the newer 2.3.0 the build still succeeds but NuGet warns (NU1608) about the mismatch, so if you use the alpha package, reference `ModelContextProtocol` 2.2.0 explicitly in your project file.
 
 ## Two ways an agent uses MCP
 
@@ -803,7 +803,7 @@ public sealed class InventoryTools
 
 Since the 2026-07-28 protocol revision, and in `ModelContextProtocol.AspNetCore` 2.2.0, the HTTP transport is stateless by default (`HttpServerTransportOptions.SessionMode = HttpServerSessionMode.Stateless`), so the server scales out behind a load balancer with no sticky sessions. `ConfigureSessionOptions` lets you vary the server per request, for example per-tenant tool lists read from `HttpContext`. The stateful-mode settings (`SessionMode = Stateful`, `IdleTimeout`, `MaxIdleSessionCount`, `EventStreamStore`, `WithDistributedCacheEventStreamStore()`) are kept only for clients on the 2025-11-25 revision or earlier and are `[Obsolete]` (`MCP9006`); `EnableLegacySse` is obsolete too (`MCP9004`). Protect the endpoint with ASP.NET Core authentication and `MapMcp(...).RequireAuthorization()`; tool methods can take `HttpContext` through `IHttpContextAccessor` to see who is calling.
 
-To host an agent for non-MCP clients (OpenAI-compatible endpoints, A2A, AG-UI), see the [hosting documentation](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/).
+To host an agent for non-MCP clients (OpenAI-compatible endpoints, A2A, AG-UI), see the [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/).
 
 ## Lifecycle and failures
 

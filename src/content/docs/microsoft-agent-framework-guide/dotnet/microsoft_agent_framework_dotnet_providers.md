@@ -144,7 +144,7 @@ Console.WriteLine($"default model: {model?.DefaultModelId}");       // the model
 Console.WriteLine($"tool loop: {loop?.MaximumIterationsPerRequest}"); // 40
 ```
 
-`AIAgentMetadata.ProviderName` comes from the inner client's `ChatClientMetadata`, and is what the OpenTelemetry spans report as `gen_ai.provider.name`.
+`AIAgentMetadata.ProviderName` comes from the inner client's `ChatClientMetadata`, captured when the agent is built.
 
 ## OpenAI
 
@@ -282,7 +282,7 @@ while (response.ContinuationToken is { } token)
 Console.WriteLine(response.Text);
 ```
 
-The rules are enforced: continuing without a session throws, and passing messages together with a continuation token throws. With streaming, each `AgentResponseUpdate` carries a `ContinuationToken`; keep the last one and you can resume the stream from that point after a disconnect by calling `RunStreamingAsync(session, options)` with it. A service that does not support background responses simply completes the run and returns no token. The [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_production_guide/) covers keeping the session between the calls.
+The rules are enforced: continuing without a session throws, and passing messages together with a continuation token throws. With streaming, each `AgentResponseUpdate` carries a `ContinuationToken`; keep the last one and you can resume the stream from that point after a disconnect by calling `RunStreamingAsync(session, options)` with it. A service that does not support background responses simply completes the run and returns no token. The [hosting page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_hosting/#session-stores-and-isolation) covers keeping the session between the calls.
 
 ### Reasoning models
 
