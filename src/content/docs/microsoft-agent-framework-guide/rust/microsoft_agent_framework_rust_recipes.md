@@ -1512,15 +1512,20 @@ async fn job() -> Result<usize> {
     // Resident mode: run on an interval until Ctrl-C, finishing the current pass first.
     let mut ticks = tokio::time::interval(Duration::from_secs(seconds));
     ticks.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // One listener for the whole loop: created once and pinned, it stays
+    // registered while a pass runs, so a Ctrl-C during `run_once` is not lost.
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
     let mut failed = 0;
     loop {
         tokio::select! {
-            _ = ticks.tick() => {
-                failed = run_once(&agent, &load_tickets(path)?).await;
-            }
-            _ = tokio::signal::ctrl_c() => {
+            biased; // check for a pending Ctrl-C before starting another pass
+            _ = &mut shutdown => {
                 tracing::info!("stopping");
                 return Ok(failed);
+            }
+            _ = ticks.tick() => {
+                failed = run_once(&agent, &load_tickets(path)?).await;
             }
         }
     }
