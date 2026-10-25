@@ -426,30 +426,75 @@ For a key that does not change, `HttpClientTransportOptions.AdditionalHeaders` i
 
 ### Per-run tokens
 
-When each user or tenant needs a different token, the MCP client should still be shared (connecting per request is slow), so the token has to be attached per HTTP request. A `DelegatingHandler` on the transport's `HttpClient` can read the current caller from an `AsyncLocal` and add the header, restricted to the MCP server's own origin:
+When each user or tenant needs a different token, the MCP client should still be shared (connecting per request is slow), so the token has to be attached per HTTP request. A `DelegatingHandler` on the transport's `HttpClient` can read the current caller from an `AsyncLocal` and add the header, restricted to the MCP server's own origin.
+
+The handler applies to *every* request the client sends, including the ones you do not make yourself: `McpClient.CreateAsync` performs the initialise handshake, and `ListToolsAsync` lists the tools, before any user's run has started. Against a server that requires authentication those requests fail unless a token is already in place, so connect and list tools under a service (bootstrap) token, then switch to the caller's token for each run. The example runs an in-process MCP server that rejects requests without a known bearer token and reports which token each tool call carried:
 
 ```csharp
+using System.ComponentModel;
 using System.Net.Http.Headers;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol.Client;
+using ModelContextProtocol.Server;
 using OpenAI;
 
-var serverUri = new Uri("https://mcp.example.com/mcp");
+// --- A local MCP server that requires a bearer token (stand-in for a real protected server) ---
+var builder = WebApplication.CreateBuilder(args);
+builder.Logging.SetMinimumLevel(LogLevel.Warning);
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddMcpServer().WithHttpTransport().WithTools<AccountTools>();
+var server = builder.Build();
+HashSet<string> validTokens = ["service-token", "token-a", "token-b"];
+server.Use(async (context, next) =>
+{
+    string? token = context.Request.Headers.Authorization.ToString() is { } h && h.StartsWith("Bearer ") ? h["Bearer ".Length..] : null;
+    Console.WriteLine($"[server] {context.Request.Method} with token {token ?? "(none)"}");
+    if (token is null || !validTokens.Contains(token))
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return;
+    }
+    await next(context);
+});
+server.MapMcp("/mcp");
+await server.StartAsync();
+var serverUri = new Uri($"{server.Urls.First()}/mcp");
+
+// --- The client side ---
 using var http = new HttpClient(new CallerTokenHandler(serverUri) { InnerHandler = new HttpClientHandler() });
 
+// Initialisation and tool listing run before any user is involved: use the service identity.
+CallerToken.Current = "service-token";
 await using McpClient mcp = await McpClient.CreateAsync(
     new HttpClientTransport(new() { Endpoint = serverUri, TransportMode = HttpTransportMode.StreamableHttp }, http));
+IList<McpClientTool> tools = await mcp.ListToolsAsync();
 
 AIAgent agent = new OpenAIClient(Environment.GetEnvironmentVariable("OPENAI_API_KEY")!)
     .GetChatClient("%%model=openai%%")
     .AsIChatClient()
-    .AsAIAgent(tools: [.. await mcp.ListToolsAsync()]);
+    .AsAIAgent(tools: [.. tools]);
 
 foreach (var (user, token) in new[] { ("alice", "token-a"), ("bob", "token-b") })
 {
-    CallerToken.Current = token;   // set from the authenticated request in a real app
-    Console.WriteLine($"{user}: {await agent.RunAsync("What can you access?")}");
+    Console.WriteLine($"{user}: {await RunAsCallerAsync(token, () => agent.RunAsync("Which account am I?"))}");
+}
+
+await server.StopAsync();
+
+// Set the caller's token for one run only, and restore the previous one afterwards.
+static async Task<T> RunAsCallerAsync<T>(string token, Func<Task<T>> run)
+{
+    string? previous = CallerToken.Current;
+    CallerToken.Current = token;   // from the authenticated request in a real app
+    try
+    {
+        return await run();
+    }
+    finally
+    {
+        CallerToken.Current = previous;
+    }
 }
 
 public static class CallerToken
@@ -473,9 +518,33 @@ public sealed class CallerTokenHandler(Uri server) : DelegatingHandler
         return base.SendAsync(request, cancellationToken);
     }
 }
+
+[McpServerToolType]
+public sealed class AccountTools(IHttpContextAccessor http)
+{
+    [McpServerTool(Name = "whoami", ReadOnly = true), Description("Describe the calling account.")]
+    public string WhoAmI() => $"called with {http.HttpContext?.Request.Headers.Authorization}";
+}
 ```
 
-`ListToolsAsync` is called with whatever token is current at that moment, so list tools once with a service identity, or make sure the tool list does not depend on the caller.
+```text
+[server] POST with token service-token
+[server] POST with token service-token
+[server] POST with token token-a
+alice: Here is what the tool returned: {
+  "$type": "text",
+  "text": "called with Bearer token-a"
+}
+[server] POST with token token-b
+bob: Here is what the tool returned: {
+  "$type": "text",
+  "text": "called with Bearer token-b"
+}
+```
+
+The first two requests are the initialise handshake and the tool listing, sent with the service token; each tool call then carries its caller's token.
+
+Without the `CallerToken.Current = "service-token"` line, `CreateAsync` fails with a 401 before either run starts. Two more things follow from the handler applying to every request: the tool list is whatever the *service* identity is allowed to see, so make sure it does not depend on the caller (or list tools per caller and pass them as [per-run tools](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_tools/#per-run-tools)); and a stateful server session is shared by all callers, which is one more reason to prefer a stateless server when tokens vary per request. Setting the token in a helper that restores the previous value keeps it from leaking into later work on the same async flow.
 
 ### OAuth
 
