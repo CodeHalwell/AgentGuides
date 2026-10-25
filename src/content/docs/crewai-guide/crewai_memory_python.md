@@ -293,5 +293,5 @@ Any provider config that `build_embedder` accepts works here; provider SDKs are 
 - **Three weights should sum to ~1.0.** They're not normalised automatically; wildly off numbers make the ranking useless.
 - **Default embedder needs OpenAI.** `Memory()` with no arguments uses OpenAI for the analysis LLM and the embedder, both created on first use. Pass `llm=` and `embedder=` (a provider dict or a callable) to avoid the dependency.
 - **Private records** only show up in `recall` when `source=` matches the record's source, unless `include_private=True`.
-- **Two processes writing the same LanceDB path will corrupt it.** Use Qdrant Edge or a remote store if you need multi-process writes.
+- **Concurrent writers need a shared lock.** LanceDB writes are guarded by a file lock in the system temp directory, which covers processes on one machine, or by a Redis lock when `REDIS_URL` is set (`crewai_core.lock_store`). For several hosts writing one store, set `REDIS_URL` or use a custom `StorageBackend` built for concurrent writers.
 - **`entity memory` is not a separate class.** The legacy `EntityMemory` was folded into scoped views — use `categories=["entity:<name>"]` or distinct scopes.
