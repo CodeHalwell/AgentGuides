@@ -307,7 +307,7 @@ async def healthz() -> dict:
 
 ### Kubernetes notes
 
-- Requests and limits: budget a few hundred MB of memory per concurrent run, and size replicas by concurrent runs, not requests per second.
+- Requests and limits: size replicas by concurrent runs, not requests per second, and measure the memory of one run under your own workload before setting limits (each run is a separate CLI process).
 - Put `ANTHROPIC_API_KEY` in a `Secret` and expose it as an environment variable; never bake it into the image.
 - Use a `readOnlyRootFilesystem` with writable `emptyDir` volumes for `/work` and `$HOME`.
 - Set `terminationGracePeriodSeconds` longer than your longest expected run, and stop accepting work on `SIGTERM`.
