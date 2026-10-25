@@ -130,7 +130,7 @@ class SemanticSearch(BaseTool):
 
 ## Caching
 
-Tool-result caching is **opt-in** in 1.15.28. When it is on, a repeated call with the same tool and the same arguments returns the first result without running the tool again. We ran the same two-call script against every combination:
+Tool-result caching is **opt-in** in %%version=crewai%%. When it is on, a repeated call with the same tool and the same arguments returns the first result without running the tool again. We ran the same two-call script against every combination:
 
 | `Agent(cache=...)` | `Crew(cache=...)` | Tool executions for two identical calls |
 |---|---|---|
@@ -186,7 +186,7 @@ for t in my_tools:
 
 Calling `tool.run(...)` yourself returns the same message as an ordinary string when the cap is hit.
 
-One quirk in 1.15.28: on the text (ReAct) path, used by models that do not report native function calling, each call incremented the count twice, so `max_usage_count=4` allowed only two executions. The native path counted correctly. If you cap a tool and run a custom `BaseLLM`, test the cap.
+One quirk in %%version=crewai%%: on the text (ReAct) path, used by models that do not report native function calling, each call incremented the count twice, so `max_usage_count=4` allowed only two executions. The native path counted correctly. If you cap a tool and run a custom `BaseLLM`, test the cap.
 
 ## Reporting tool failures
 
@@ -236,6 +236,8 @@ What each policy does when a tool call fails (we ran all three against a scripte
 The policy is resolved most specific first: the tool's own `tool_failure_policy`, then the task's, the agent's and the crew's, then `"warn"`.
 
 What counts as a failure: a returned `ToolFailure`, a tool that raises (the exception text is fed back to the agent and recorded with the exception class as `code`), an MCP server answering `isError`, a call over `max_usage_count`, a call to a tool that does not exist, and arguments that do not validate. A tool that merely returns a string such as `"Error: not found"` is **not** a failure: detection is declarative and CrewAI does not guess from text.
+
+Since 1.15.30 there is one more stop that no policy overrides: when an agent makes the same call (same tool, same arguments, same result) five times in a run, CrewAI raises `ToolExecutionFailedError` with reason `repeated_call` (`ToolFailureReason.REPEATED_CALL`). We ran a scripted model that repeated one call six times: the run stopped after the fifth execution under the default policy and under `"ignore"`, and four repeats completed normally. With caching on, the repeats are served from the cache but still count, so the run stops on the fifth.
 
 ## MCP server tools — `Agent.mcps`
 

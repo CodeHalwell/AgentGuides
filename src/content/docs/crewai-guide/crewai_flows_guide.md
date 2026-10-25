@@ -496,7 +496,7 @@ print(flow.kickoff(inputs={"topic": "Vector Databases"}))   # topic has 16 chara
 | `await flow.kickoff_async(inputs=...)` / `await flow.akickoff(...)` | Run inside an event loop. |
 | `flow.kickoff(from_checkpoint=CheckpointConfig(restore_from=...))` | Resume a checkpointed run. |
 | `Flow(stream=True)` then `kickoff()` | Returns a stream session of frames instead of the final value. |
-| `flow.plot("my_flow.html", show=False)` | Writes an interactive HTML graph and returns its path (a temporary directory in 1.15.28). |
+| `flow.plot("my_flow.html", show=False)` | Writes an interactive HTML graph and returns its path (a temporary directory in %%version=crewai%%). |
 | `crewai flow plot` | The same from a flow project. |
 
 Async methods (`async def`) are supported anywhere a sync method is.

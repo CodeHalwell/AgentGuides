@@ -32,7 +32,7 @@ This page covers what CrewAI itself gives you for running crews and flows in pro
 - Keep provider keys (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, …) in the environment. CrewAI and the provider SDKs read them from there; `LLM(api_key=...)` is only needed for non-standard setups.
 - The project scaffold puts a `.env` in the project root and lists it in `.gitignore`. It is for local runs. Never `COPY` it into an image or commit it; inject secrets at runtime (`docker run --env-file`, Kubernetes Secrets, your platform's secret store).
 - `crewai deploy create` **reads your local `.env` and sends its variables to CrewAI AMP** as deployment environment variables, after showing you the list to confirm. Check that file before you deploy, or keep production values out of it and set them on the platform.
-- Pin the model per agent (`llm=LLM(model="openai/%%model=openai-small%%")`) rather than relying on the default. An agent without `llm` reads the `MODEL`, `MODEL_NAME` or `OPENAI_MODEL_NAME` environment variable, then falls back to CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), which can change between releases. Provider SDKs other than OpenAI are extras: `pip install "crewai[anthropic]"`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`.
+- Pin the model per agent (`llm=LLM(model="openai/%%model=openai-small%%")`) rather than relying on the default. An agent without `llm` reads the `MODEL`, `MODEL_NAME` or `OPENAI_MODEL_NAME` environment variable, then falls back to CrewAI's built-in default (`gpt-4.1-mini` in %%version=crewai%%), which can change between releases. Provider SDKs other than OpenAI are extras: `pip install "crewai[anthropic]"`, `crewai[google-genai]`, `crewai[bedrock]`, `crewai[litellm]`.
 - CrewAI sends anonymous usage telemetry by default. Turn it off with `CREWAI_DISABLE_TELEMETRY=true` (or `CREWAI_DISABLE_TRACKING=true`). `OTEL_SDK_DISABLED=true` also works but disables **every** OpenTelemetry SDK in the process, including your own tracing. Leave `Crew(share_crew=False)` (the default) unless you intend to share crew data with CrewAI.
 
 ## Limits, guardrails and failure policy
@@ -131,7 +131,7 @@ class OpsListener(BaseEventListener):
 ops_listener = OpsListener()   # instantiate once, at import time, before any kickoff
 ```
 
-- Task events do not fill in `agent_role` (it is `None` on `TaskStartedEvent`, `TaskCompletedEvent` and `TaskFailedEvent` in 1.15.28), which is why the task handler above reads the agent from `event.task`. Tool events do carry it.
+- Task events do not fill in `agent_role` (it is `None` on `TaskStartedEvent`, `TaskCompletedEvent` and `TaskFailedEvent` in %%version=crewai%%), which is why the task handler above reads the agent from `event.task`. Tool events do carry it.
 - A tool that raises, or returns a `ToolFailure`, produces a `ToolFailureDetectedEvent` (unless the policy is `"ignore"`); in our runs it was this event, not `ToolUsageErrorEvent`, that fired for a tool exception on the function-calling path.
 - Handlers take `(source, event)`. Sync handlers run on a thread pool, so they don't block the agents; call `crewai_event_bus.flush()` when you need them finished (in tests, or before a short-lived process exits).
 - Event families include `Crew*`, `Task*`, `Agent*`, `LLMCall*`, `LLMStreamChunkEvent`, `ToolUsage*`, `ToolFailureDetectedEvent`, `MCP*`, `Memory*`, `Knowledge*`, `Flow*`, `MethodExecution*`, `HumanFeedback*`, `Conversation*` and `Checkpoint*`; all are importable from `crewai.events`.
@@ -429,7 +429,7 @@ def test_router_declares_its_labels():
 
 ### Evaluation with a real model
 
-- `crewai test -n 3 -m %%model=openai-small%%` runs the crew three times and scores each task with an OpenAI model. It costs tokens, and in 1.15.28 it exits 0 even when the run errors, so it is a report rather than a CI gate.
+- `crewai test -n 3 -m %%model=openai-small%%` runs the crew three times and scores each task with an OpenAI model. It costs tokens, and in %%version=crewai%% it exits 0 even when the run errors, so it is a report rather than a CI gate.
 - `crewai eval` grades the last traced run through CrewAI AMP and exits non-zero on a failed gate; `crewai eval --models a,b` compares models on a deployment. It needs tracing and `crewai login`.
 
 ## Deploying

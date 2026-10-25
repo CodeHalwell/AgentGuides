@@ -47,7 +47,7 @@ uv tool install crewai
 | `crewai update` | Update the project's `pyproject.toml` to use uv. |
 | `crewai train -n 5 -f trained.pkl` | Kick off `main:train`: run the crew with human feedback on every task, then distil the feedback (see [Training mode](#training-mode)). |
 | `crewai test -n 3 -m %%model=openai-small%%` | Kick off `main:test` (eval; OpenAI models only). |
-| `crewai eval` | Grade the last traced run through CrewAI AMP; `--models a,b` compares models on a deployment. |
+| `crewai eval` | Grade the last traced run through CrewAI AMP, running the crew first if there is none or the project changed since; `--models a,b` compares models on a deployment. `crewai eval export ID` downloads an evaluation's full data into `./crewai-eval-ID/`. |
 | `crewai replay -t <task_id>` | Re-run starting from a specific task. |
 | `crewai log-tasks-outputs` | List logged task outputs. |
 | `crewai reset-memories -m -kn -a` | Reset memory / knowledge / kickoff outputs. |
@@ -249,7 +249,7 @@ crewai deploy logs -u <uuid>
 crewai deploy remove -u <uuid>
 ```
 
-`crewai deploy validate` runs the same pre-flight checks as `create`/`push` without contacting the platform — handy in CI. In 1.15.28 it looks for `src/<package>/main.py` with a `Flow` subclass in flow projects, so a **declarative** flow project (`crewai create flow --declarative`, which has `flow.yaml` and no `main.py`) fails with `missing_flow_main` and `no_flow_subclass`. `crewai run` works for those projects; validation and deploy checks do not accept them yet.
+`crewai deploy validate` runs the same pre-flight checks as `create`/`push` without contacting the platform — handy in CI. In %%version=crewai%% it looks for `src/<package>/main.py` with a `Flow` subclass in flow projects, so a **declarative** flow project (`crewai create flow --declarative`, which has `flow.yaml` and no `main.py`) fails with `missing_flow_main` and `no_flow_subclass`. `crewai run` works for those projects; validation and deploy checks do not accept them yet.
 
 ## Tool Repository
 
@@ -282,7 +282,7 @@ Set `CREWAI_TRACING_ENABLED=true` in `.env` for an always-on setup.
 - run: crewai test -n 2 -m %%model=openai-small%%
 ```
 
-`deploy validate` exits non-zero on blocking issues. `crewai test` calls the real model (it needs the API key as a CI secret and costs tokens) and prints a score table. It does not fail the job on a low score, and in 1.15.28 it also exits 0 when the run itself errors (the CLI catches the error and prints it), so keep offline unit tests with a stub LLM as the gate (see [Production](/crewai-guide/crewai_production_guide/#testing-without-a-model)).
+`deploy validate` exits non-zero on blocking issues. `crewai test` calls the real model (it needs the API key as a CI secret and costs tokens) and prints a score table. It does not fail the job on a low score, and in %%version=crewai%% it also exits 0 when the run itself errors (the CLI catches the error and prints it), so keep offline unit tests with a stub LLM as the gate (see [Production](/crewai-guide/crewai_production_guide/#testing-without-a-model)).
 
 ### 2. Scheduled resume from checkpoint
 

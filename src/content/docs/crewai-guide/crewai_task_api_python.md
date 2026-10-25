@@ -76,7 +76,7 @@ Full structured-output fields are covered below — they interact with each othe
 | `output_json=ModelCls` | Same as above, but the result is kept as a dict. | `TaskOutput.json_dict` |
 | `response_model=ModelCls` | The model is passed to the LLM as its `response_model` only. | Nothing is parsed. `TaskOutput.raw` holds the JSON string; `.pydantic` stays `None`. |
 
-Use `output_pydantic` when you want a model instance back. In 1.15.28 `response_model` on its own does not populate `.pydantic`, even when the provider returns a validated model: we checked this with a stub that returned a `BaseModel` instance from `call()`, and `raw` held the JSON while `pydantic` and `json_dict` were empty. If you want provider-enforced JSON and a parsed result, set `output_pydantic`; to parse `response_model` output yourself, use `Brief.model_validate_json(result.raw)`.
+Use `output_pydantic` when you want a model instance back. In %%version=crewai%% `response_model` on its own does not populate `.pydantic`, even when the provider returns a validated model: we checked this with a stub that returned a `BaseModel` instance from `call()`, and `raw` held the JSON while `pydantic` and `json_dict` were empty. If you want provider-enforced JSON and a parsed result, set `output_pydantic`; to parse `response_model` output yourself, use `Brief.model_validate_json(result.raw)`.
 
 ```python
 from pydantic import BaseModel, Field
