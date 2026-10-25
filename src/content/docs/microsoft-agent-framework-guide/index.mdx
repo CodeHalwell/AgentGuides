@@ -13,10 +13,10 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 
 <CardGrid>
   <Card title="Status" icon="approve-check">
-    Python `agent-framework` **%%version=agent-framework%%** · .NET `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** · Go `agent-framework-go` **v%%version=github.com/microsoft/agent-framework-go%%** (preview). Each is versioned independently. Checked %%versions-checked%%.
+    Python `agent-framework` **%%version=agent-framework%%** · .NET `Microsoft.Agents.AI` **%%version=Microsoft.Agents.AI%%** · Go `agent-framework-go` **v%%version=github.com/microsoft/agent-framework-go%%** (preview). Each is versioned independently. Checked %%versions-checked%%. A community Rust port, `agent-framework` **%%version=agent-framework-rs%%** on crates.io, is not a Microsoft release.
   </Card>
   <Card title="Languages" icon="puzzle">
-    Python 3.10+ · .NET 8.0+ (packages also target .NET Standard 2.0 / .NET Framework 4.7.2) · Go
+    Python 3.10+ · .NET 8.0+ (packages also target .NET Standard 2.0 / .NET Framework 4.7.2) · Go · Rust (community port)
   </Card>
   <Card title="Best for" icon="rocket">
     Azure-native agents, multi-agent workflows that must survive restarts and wait for people, A2A interop.
@@ -40,6 +40,11 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
     title="Go (preview)"
     href="/microsoft-agent-framework-guide/go/"
     description="github.com/microsoft/agent-framework-go · agents, tools, Foundry/OpenAI/Azure providers, MCP, A2A, graph workflows."
+  />
+  <LinkCard
+    title="Rust (community port)"
+    href="/microsoft-agent-framework-guide/rust/"
+    description="agent-framework on crates.io · an independent port, not from Microsoft · agents, tools, workflows and orchestrations, MCP, A2A, hosting."
   />
 </CardGrid>
 
@@ -98,12 +103,15 @@ Dates are from PyPI, NuGet and the Go module proxy.
 | 2026-10-22 | Python 1.23.0: moves to MCP Python SDK 2.x (WebSocket transport and MCP tasks removed); AG-UI endpoints need an explicit authorization scope |
 | 2026-10-23 | .NET 1.26.0: `AgentSessionStore.DeleteSessionAsync` is abstract again; request-time agent selection for AG-UI hosting |
 
+The community Rust port is versioned separately and not listed here; its [overview](/microsoft-agent-framework-guide/rust/) has its history.
+
 Since GA, Python and .NET have shipped frequent minor releases, and some of them changed experimental APIs. Each language guide lists the breaking changes that affect its examples. Coming from Semantic Kernel or AutoGen? See Microsoft's [migration guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/).
 
 ## Revision history
 
 | Date | Changes |
 |---|---|
+| 2026-10-25 | Added the Rust guide for the community port `agent-framework` 0.14.0 (a Rust language card, and a note in the status card and release history that it is not a Microsoft package). |
 | 2026-10-25 | Updated for `agent-framework` 1.23.0 and `Microsoft.Agents.AI` 1.26.0: Python MCP, skills and AG-UI examples re-run against the new release; .NET blocks rebuilt against 1.26.0 (no new failures). Added both releases to the release history. |
 | 2026-10-25 | Audit of the whole guide against `agent-framework` 1.22.0, `Microsoft.Agents.AI` 1.25.0 and the Go SDK 0.2.0: Python blocks run with a fake model, C# blocks compiled, Go examples vetted. Corrected the declarative YAML action list, A2A, recipes and diagram pages; added sidebar order to every page. |
 | 2026-10-21 | Release history corrected from the package registries (GA was 2026-04-02). Removed the obsolete guide-split notice. Added the Go release dates. |
