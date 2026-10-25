@@ -119,7 +119,7 @@ support = Agent(
 ```python
 from crewai import Agent, PlanningConfig, LLM
 
-planner_llm = LLM(model="openai/%%model=openai%%")  # cheaper than the exec LLM is fine
+planner_llm = LLM(model="openai/%%model=openai%%")  # a stronger model for the plan only
 
 researcher = Agent(
     role="Researcher",
@@ -131,9 +131,27 @@ researcher = Agent(
 )
 ```
 
-- `planning=True` with no `planning_config` uses defaults.
-- `planning_config.llm` lets you swap a smarter model in for the reflection step while the executor stays cheap.
-- `planning_enabled` is a property — it's `True` if either `planning` or `planning_config` is set.
+With planning on, the agent first asks the planning model for a step-by-step plan, refines it until the model says it is ready (or `max_attempts` is reached, after which it proceeds with the current plan and logs a warning), then executes. In a run with a stub we saw the planner model take the planning calls and the agent's own model take the task call.
+
+- `planning=True` with no `planning_config` uses the defaults below.
+- `planning_config.llm` swaps a different model in for planning while the executor stays as it is. When it is `None` the agent's own LLM plans.
+- `planning_enabled` is a property: `True` if either `planning` or `planning_config` is set.
+
+`PlanningConfig` fields (all optional):
+
+| Field | Default | Effect |
+|---|---|---|
+| `reasoning_effort` | `"medium"` | How much the agent re-checks its plan while executing. `"low"` skips the per-step observer call. `"medium"` observes each step with the LLM and replans on failure. `"high"` also allows early finish, refinement and replanning after every step; most adaptive, most latency. |
+| `observe_steps` | `None` | Force per-step LLM observation on or off regardless of `reasoning_effort`. |
+| `max_attempts` | `None` | Cap on plan-refinement rounds. `None` continues until the model reports it is ready. |
+| `max_steps` | `20` | Maximum steps in the generated plan. |
+| `max_replans` | `3` | Maximum full replans before finalising. |
+| `max_step_iterations` | `15` | Model iterations allowed inside one plan step. |
+| `step_timeout` | `None` | Seconds allowed for one step; an overrun marks the step failed. |
+| `system_prompt`, `plan_prompt`, `refine_prompt` | `None` | Replace the built-in planning prompts. |
+| `llm` | `None` | Planning model. |
+
+Planning adds model calls (one or more before the task, plus observer calls per step), so it pays off on long, multi-step tasks and is wasted on short ones. `Crew(planning=True)` is the crew-level variant: one planner writes a plan per task and appends it to each task's description ([Multi-agent patterns → Planning](/crewai-guide/crewai_advanced_multi_agent_python/#planning)).
 
 ## Guardrails
 
@@ -246,8 +264,8 @@ agent = Agent(role="Researcher", goal="Find sources", backstory="Librarian.", st
 
 What `step_callback` receives depends on how the executor talks to the model:
 
-- With a model that supports native function calling (the OpenAI, Anthropic and Gemini integrations), the callback fires **once, with an `AgentFinish`**, when the agent produces its final answer. Tool calls do not reach it.
-- With a model that goes through the text (ReAct) path, such as a custom `BaseLLM` that does not report function calling, it fires with `ToolResult` and `AgentAction` objects after each tool call, then `AgentFinish`.
+- With a model that reports native function calling (`supports_function_calling()` returns true), the callback fires **once, with an `AgentFinish`**, when the agent produces its final answer. Tool calls do not reach it.
+- With a model on the text (ReAct) path, such as a custom `BaseLLM` that does not report function calling, it fires with a `ToolResult` and an `AgentAction` after each tool call, then an `AgentFinish`.
 
 We confirmed both by running the same agent against a function-calling stub and a text stub. To watch tool calls whatever the model, listen for `ToolUsageStartedEvent` / `ToolUsageFinishedEvent` instead; see [Production → Event listeners](/crewai-guide/crewai_production_guide/#event-listeners). `Crew(step_callback=...)` behaves the same way for every agent in the crew, and `Task(callback=...)` / `Crew(task_callback=...)` receive the `TaskOutput` when a task completes.
 
