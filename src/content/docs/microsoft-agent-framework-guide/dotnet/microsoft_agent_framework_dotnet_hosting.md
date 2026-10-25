@@ -476,9 +476,11 @@ Every endpoint above that keeps conversations loads and saves sessions through a
 
 There is no Cosmos DB session store. To keep long histories out of the session, give the agent a `CosmosChatHistoryProvider` (package `Microsoft.Agents.AI.CosmosNoSql`): the messages then live in Cosmos DB and the session only records where. `Microsoft.Agents.AI.Foundry.Hosting` has its own `FoundryAgentSessionStore`, `InMemoryAgentSessionStore` and `FileSystemAgentSessionStore` for Foundry hosted agents.
 
-The store contract (the three abstract methods, `AgentSessionStoreKey` and its partitions, and the `DeleteSessionAsync` change in 1.26.0) is on the [sessions and memory page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#session-stores-hosting). For hosting, the point is that the storage key must include the key's partitions as well as its `SessionId`, because the isolation key travels as a partition. A store over `IDistributedCache`, for Redis or SQL Server, looks like this:
+The store contract (the three abstract methods, `AgentSessionStoreKey` and its partitions, and the `DeleteSessionAsync` change in 1.26.0) is on the [sessions and memory page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#session-stores-hosting). For hosting, the point is that the storage key must include the key's partitions as well as its `SessionId`, because the isolation key travels as a partition, and it must encode them unambiguously. Joining the parts with a separator is not safe: with `:` as the separator, isolation key `alice` with session ID `b:c` and isolation key `alice:b` with session ID `c` produce the same string, so one caller could read, overwrite or delete another's conversation despite the isolation decorator. Length-prefix each component (or serialise the tuple) and hash the result. A store over `IDistributedCache`, for Redis or SQL Server, looks like this:
 
 ```csharp
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.Caching.Distributed;
@@ -486,27 +488,45 @@ using Microsoft.Extensions.Caching.Distributed;
 // A session store over IDistributedCache (Redis, SQL Server, ...), so every replica sees every conversation.
 public sealed class DistributedCacheSessionStore(IDistributedCache cache, TimeSpan slidingExpiry) : AgentSessionStore
 {
-    private static string Key(AIAgent agent, AgentSessionStoreKey key) =>
-        $"session:{agent.Name}:{string.Join(":", (key.Partitions ?? new Dictionary<string, string>()).OrderBy(p => p.Key).Select(p => $"{p.Key}={p.Value}"))}:{key.SessionId}";
+    // The isolation key arrives as a partition, so the cache key must keep every component distinct.
+    // Joining them with a separator is not enough: ("alice", "b:c") and ("alice:b", "c") would collide.
+    // Length-prefix each component, sort partitions ordinally, then hash.
+    public static string CacheKey(AIAgent agent, AgentSessionStoreKey key)
+    {
+        var builder = new StringBuilder();
+        void Append(char tag, string value) => builder.Append(tag).Append(value.Length).Append(':').Append(value);
+
+        Append('a', agent.Name ?? agent.Id);
+        foreach (KeyValuePair<string, string> partition in (key.Partitions ?? new Dictionary<string, string>()).OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            Append('n', partition.Key);
+            Append('v', partition.Value);
+        }
+        Append('s', key.SessionId);
+
+        return "session:" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(builder.ToString())));
+    }
 
     public override async ValueTask<AgentSession?> GetSessionAsync(AIAgent agent, AgentSessionStoreKey key, CancellationToken cancellationToken = default)
     {
-        string? json = await cache.GetStringAsync(Key(agent, key), cancellationToken);
+        string? json = await cache.GetStringAsync(CacheKey(agent, key), cancellationToken);
         return json is null ? null : await agent.DeserializeSessionAsync(JsonDocument.Parse(json).RootElement, cancellationToken: cancellationToken);
     }
 
     public override async ValueTask SaveSessionAsync(AIAgent agent, AgentSessionStoreKey key, AgentSession session, CancellationToken cancellationToken = default)
     {
         JsonElement state = await agent.SerializeSessionAsync(session, cancellationToken: cancellationToken);
-        await cache.SetStringAsync(Key(agent, key), state.GetRawText(),
+        await cache.SetStringAsync(CacheKey(agent, key), state.GetRawText(),
             new DistributedCacheEntryOptions { SlidingExpiration = slidingExpiry }, cancellationToken);
     }
 
     // Abstract since 1.26.0. Deleting a session that does not exist must not throw.
     public override async ValueTask DeleteSessionAsync(AIAgent agent, AgentSessionStoreKey key, CancellationToken cancellationToken = default) =>
-        await cache.RemoveAsync(Key(agent, key), cancellationToken);
+        await cache.RemoveAsync(CacheKey(agent, key), cancellationToken);
 }
 ```
+
+The store was run with those two keys: they hash to different cache keys, a session saved under one is not found under the other, and deleting a missing session is a no-op. The shipped stores do not have this problem in 1.26.0: `InMemoryAgentSessionStore` keys a dictionary on the structured `AgentSessionStoreKey` (whose equality compares the session ID and each partition separately), and `AzureBlobAgentSessionStore` length-prefixes every component before hashing it into the blob name.
 
 `WithInMemorySessionStore`, `WithSessionStore` and `WithAzureBlobSessionStore` wrap the store in an `IsolationKeyScopedAgentSessionStore` unless you pass `withIsolation: false`. That decorator asks the registered `AgentIsolationKeyProvider` for the caller's key and adds it to every session key, so two users who send the same conversation ID get different sessions; with no provider registered it throws. `UseClaimsBasedAgentIsolation()` (from `Microsoft.Agents.AI.Hosting.AspNetCore`, together with `AddHttpContextAccessor()`) registers a provider that reads a claim from the authenticated user, `sub` by default (`ClaimsIdentityAgentIsolationKeyProviderOptions.ClaimType`).
 
