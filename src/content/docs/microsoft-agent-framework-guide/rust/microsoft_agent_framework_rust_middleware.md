@@ -907,7 +907,7 @@ Ok("The service is busy; please try again shortly.")
 peak concurrent runs: 2
 ```
 
-The order of registration is the order of reasoning: `LogRuns` is outermost, so it logs what the caller receives (`status="ok"` even for the outage, because `Fallback` inside it turned the error into an answer); the limiter sits outside the guardrail and fallback so that their work counts as part of a run; `Fallback` is innermost, nearest the model. The durations show the semaphore at work: two runs at a time, in waves of about 50 ms.
+The order of registration is the order of reasoning: `LogRuns` is outermost, so it logs what the caller receives (`status="ok"` even for the outage, because `Fallback` inside it turned the error into an answer); the limiter sits outside the guardrail and fallback so that their work counts as part of a run; `Fallback` is innermost, nearest the model. The durations show the semaphore at work: two runs at a time, in waves of about 50 ms. Which runs share a wave varies from one execution to the next, so the order of the lines does too.
 
 ## Retries
 
