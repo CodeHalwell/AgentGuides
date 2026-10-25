@@ -43,7 +43,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="4 · Tools" href="./ag2_comprehensive_guide/#tools" description="@tool, Context, built-in toolkits · 15 min" />
   <LinkCard title="5 · Structured output" href="./ag2_comprehensive_guide/#structured-output" description="response_schema and reply.content() · 10 min" />
   <LinkCard title="6 · Human in the loop" href="./ag2_comprehensive_guide/#human-in-the-loop" description="context.input and hitl_hook · 10 min" />
-  <LinkCard title="7 · Events & streams" href="./ag2_comprehensive_guide/#observing-a-turn-with-memorystream" description="MemoryStream subscriptions · 10 min" />
+  <LinkCard title="7 · Events & streams" href="./ag2_comprehensive_guide/#streaming-and-observing-a-turn" description="Streaming chunks, Agent.run, MemoryStream · 10 min" />
   <LinkCard title="8 · Multi-agent Network" href="./ag2_comprehensive_guide/#multi-agent-the-network" description="Hub, channels, TransitionGraph · 25 min" />
   <LinkCard title="9 · Middleware, knowledge, DI" href="./ag2_comprehensive_guide/#middleware-and-observers" description="Retry, limits, observers, compaction, Inject/Variable · 15 min" />
   <LinkCard title="10 · MCP and A2A" href="./ag2_comprehensive_guide/#mcp-servers" description="MCPToolkit, A2AServer, A2AConfig · 15 min" />
@@ -105,6 +105,7 @@ Ready? **[Start with what changed in 1.0 →](./ag2_comprehensive_guide/#what-ch
 
 | Date | Version | Changes | Reviewer |
 |------|---------|---------|----------|
+| 2026-10-25 | 1.2.1 | Audit against the installed package. Fixed the Network pipeline example (the initiator's `send` is its own turn, so the first agent never ran), the claim that `ToolMiddleware` is a base class, and the claim that tool exceptions propagate out of `ask()`. Corrected the swarm and `autogen.beta` history. Added streaming and `Agent.run`, custom middleware and observers, approval-gated tools, sub-task, consulting and tool-call routing examples, serving an agent as an MCP server, and two recipes. | Claude |
 | 2026-10-21 | 1.2.1 | Retitled "AG2" (it is a fork, not a rename). AG2 Classic pages moved here from the AutoGen guide into `/ag2-guide/classic/`, with a single migration page. Added sections on dependency injection, code execution (local sandbox vs provider-hosted tools), multimodal input, middleware and observers, knowledge and compaction, sub-tasks and eval, and an OpenTelemetry/usage example in production. |
 | 2026-10-21 | 1.2.1 | Guide rewritten for the ag2 1.x API (`import ag2`); every example run offline with `ag2.testing.TestConfig` against 1.1.2 and re-run against 1.2.1 (1.1.2 → 1.2.1 changelog reviewed: additive only). Removed examples that never matched a released API (`ag2 init`/`ag2 ui` CLI, `QuickResearchTool`, `autogen.interop.A2AServer`, `Agent(system_message=...)` from `autogen`). Classic material condensed into a Classic/migration section verified against `autogen` 0.14.1. | Claude |
 | 2026-06-07 | 0.13.3 | Patch release; core Classic symbols verified. | Claude routine |

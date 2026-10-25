@@ -8,7 +8,7 @@ sidebar:
   order: 85
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`), checked %%versions-checked%%. Examples work from 2.3.0 onwards unless noted.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/auth/`, `google/adk/integrations/secret_manager/`, `google/adk/tools/authenticated_function_tool.py`), checked %%versions-checked%%.
 
 This guide covers the full credential story for ADK agents deployed on Google Cloud: which IAM roles each service needs, how to create and bind a service account, how to inject secrets via Secret Manager, and how to wire OAuth2 / API-key auth into your tools with `AuthenticatedFunctionTool`.
 
@@ -24,7 +24,7 @@ Grant these roles to the service account that **runs** your ADK application.
 | Read/write Vertex AI Agent Engine sessions | `roles/aiplatform.user` | VertexAiSessionService |
 | Use Vertex AI Memory Bank | `roles/aiplatform.user` | VertexAiMemoryBankService |
 | Read GCS artifacts | `roles/storage.objectViewer` | GcsArtifactService loads |
-| Write GCS artifacts | `roles/storage.objectAdmin` | GcsArtifactService saves |
+| Write GCS artifacts | `roles/storage.objectUser` | GcsArtifactService saves and deletes (`objectAdmin` also works but adds IAM control over objects) |
 | Read Secret Manager secrets | `roles/secretmanager.secretAccessor` | API keys, OAuth secrets |
 | Write logs | `roles/logging.logWriter` | Structured logging |
 | Write metrics | `roles/monitoring.metricWriter` | Cloud Monitoring |
@@ -60,7 +60,7 @@ gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
 # 3. Grant GCS artifact storage
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
   --member="serviceAccount:${SA_EMAIL}" \
-  --role="roles/storage.objectAdmin" \
+  --role="roles/storage.objectUser" \
   --condition="expression=resource.name.startsWith('projects/_/buckets/my-adk-artifacts'),title=adk-bucket-only"
 
 # 4. Grant Secret Manager access
@@ -402,10 +402,9 @@ client = SecretManagerClient(
 )
 
 # --- Access a secret version --------------------------------------------------
+# get_secret takes the full version resource name.
 secret_value = client.get_secret(
-    project_id="my-gcp-project",
-    secret_id="openai-api-key",
-    version="latest",          # or "3" for a specific version
+    "projects/my-gcp-project/secrets/openai-api-key/versions/latest"  # or .../versions/3
 )
 ```
 
@@ -415,6 +414,9 @@ secret_value = client.get_secret(
 import os
 from google.adk.integrations.secret_manager.secret_client import SecretManagerClient
 from google.adk.agents import LlmAgent
+from google.adk.auth.auth_credential import AuthCredential, AuthCredentialTypes
+from google.adk.auth.auth_schemes import CustomAuthScheme
+from google.adk.auth.auth_tool import AuthConfig
 from google.adk.tools.authenticated_function_tool import AuthenticatedFunctionTool
 
 def build_agent() -> LlmAgent:
@@ -422,8 +424,8 @@ def build_agent() -> LlmAgent:
     client = SecretManagerClient()
 
     # Pull the API key at import time — not baked into the image
-    stripe_key = client.get_secret(project, "stripe-api-key", "latest")
-    db_password = client.get_secret(project, "pg-password", "latest")
+    stripe_key = client.get_secret(f"projects/{project}/secrets/stripe-api-key/versions/latest")
+    db_password = client.get_secret(f"projects/{project}/secrets/pg-password/versions/latest")
 
     stripe_auth = AuthConfig(
         auth_scheme=CustomAuthScheme(type="apiKey", **{"in": "header", "name": "Stripe-API-Key"}),
@@ -528,7 +530,7 @@ async def list_drive_files(folder_id: str, tool_context: ToolContext) -> dict:
 
 ### 1 — Per-tenant API keys in session state
 
-Store each tenant's API key in session state under `user:` prefix (persisted across sessions):
+Store each tenant's API key in session state under the `user:` prefix (persisted across that user's sessions). State is stored with the session by the session service, so use this only when that store is as well protected as a secret store would be; otherwise keep a secret name in state and fetch the value from Secret Manager inside the tool. Never put the key in the agent's instruction, where it would be sent to the model:
 
 ```python
 from google.adk.tools.tool_context import ToolContext
@@ -556,7 +558,7 @@ session = await runner.session_service.create_session(
 
 ### 2 — Workload Identity + Impersonation
 
-For agents that call other Google APIs on behalf of users:
+For an agent that needs a more privileged service account for some calls:
 
 ```bash
 # Grant the ADK SA permission to impersonate a higher-privileged SA
@@ -565,11 +567,11 @@ gcloud iam service-accounts add-iam-policy-binding "privileged-sa@${PROJECT_ID}.
   --role="roles/iam.serviceAccountTokenCreator"
 ```
 
-Then use `ServiceAccount(use_default_credential=True)` in code — ADC resolves the attached SA and the token creator binding handles elevation.
+ADK does not impersonate for you: `ServiceAccount(use_default_credential=True)` uses the attached service account as it is. Inside the tool, build impersonated credentials with `google.auth.impersonated_credentials.Credentials(source_credentials=..., target_principal="privileged-sa@...", target_scopes=[...])` and pass them to the client library you are calling.
 
 ### 3 — Rotate secrets without redeployment
 
-Store the API key version in Secret Manager. On each new deploy, `SecretManagerClient.get_secret(..., version="latest")` always fetches the current live secret. Rotate by publishing a new version in Secret Manager — no code change needed.
+Read `.../versions/latest` and add a new secret version to rotate; no code change is needed. A value read at startup (as in `build_agent()` above) is kept until the process restarts, so either restart the service after rotating or call `get_secret` inside the tool when it runs.
 
 ### 4 — Cross-project Secret Manager access
 
@@ -586,10 +588,10 @@ gcloud secrets add-iam-policy-binding "my-secret" \
 
 ## 9 · Gotchas
 
-- `AuthenticatedFunctionTool` is `@experimental(FeatureName.AUTHENTICATED_FUNCTION_TOOL)` — suppress experimental-feature warnings with `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS=1`.
+- `AuthenticatedFunctionTool` is `@experimental(FeatureName.AUTHENTICATED_FUNCTION_TOOL)` and logs `[EXPERIMENTAL] feature FeatureName.AUTHENTICATED_FUNCTION_TOOL is enabled.` once as a `UserWarning`. `ADK_SUPPRESS_EXPERIMENTAL_FEATURE_WARNINGS` does not affect these feature-registry warnings; filter them with `warnings.filterwarnings("ignore", message=r"\[EXPERIMENTAL\] feature")`.
 - `credential_key` in `AuthConfig` allows two tools to share a cached token. Without it, each tool triggers its own auth flow even when they use the same provider.
 - `AuthenticatedFunctionTool` marks `"credential"` as an `_ignore_params` name — it does **not** appear in the model's function schema. Always name the parameter exactly `credential` in your function signature.
-- On Cloud Run with min-instances=0, the SA key rotation is picked up on cold start. Warm instances keep the old secret until their memory is cleared.
-- `SecretManagerClient` with no arguments tries ADC first, then raises `ValueError` if ADC is not configured. Always set `GOOGLE_APPLICATION_CREDENTIALS` in local dev environments.
+- Secrets read at startup stay in memory for the life of the instance. On Cloud Run, a secret mounted with `--set-secrets NAME=secret:latest` as an environment variable is resolved when the instance starts; mounted as a file it is re-read on access.
+- `SecretManagerClient` with no arguments uses ADC and raises `ValueError` ("'service_account_json' or 'auth_token' are both missing, and error occurred while trying to use default credentials") if ADC is not configured. Locally, run `gcloud auth application-default login`. Pass `location=` to use a regional Secret Manager endpoint.
 - The `roles/aiplatform.user` role is required for **every** Vertex AI API call — including Agent Engine sessions and memory. If you see `403 PERMISSION_DENIED` from Vertex, this role is missing.
 - Never log `credential.oauth2.access_token` or `credential.api_key` — redact these in all callback and plugin logging.

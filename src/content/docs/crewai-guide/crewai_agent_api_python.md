@@ -57,7 +57,7 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `max_tokens` | `int \| None` | `None` | Max tokens per LLM call. |
 | `max_execution_time` | `int \| None` | `None` | Wall-clock seconds per task. |
 | `verbose` | `bool` | `False` | Print the agent's inner monologue. |
-| `allow_delegation` | `bool` | `False` | Let the agent call `Delegate Work` / `Ask Question` tools. |
+| `allow_delegation` | `bool` | `False` | Give the agent the `delegate_work_to_coworker` and `ask_question_to_coworker` tools (see [Multi-agent patterns](/crewai-guide/crewai_advanced_multi_agent_python/#delegation)). |
 | `cache` | `bool` | `True` | Cache tool-call results. |
 | `respect_context_window` | `bool` | `True` | Summarise messages to stay under the model's context limit. |
 | `max_retry_limit` | `int` | `2` | Retries on task-level errors. |
@@ -70,11 +70,11 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `knowledge_sources` | `list[BaseKnowledgeSource] \| None` | `None` | Per-agent knowledge (see Knowledge page). |
 | `knowledge_config` | `KnowledgeConfig \| None` | `None` | Limits/threshold for knowledge retrieval. |
 | `mcps` | `list[str \| MCPServerConfig] \| None` | `None` | MCP server references — URL, bare slug, or config object. `"server#tool"` filters to one tool. |
-| `apps` | `list[PlatformAppOrAction] \| None` | `None` | CrewAI Platform app integrations (e.g. `"gmail"`, `"gmail/send_email"`). |
+| `apps` | `list[str] \| None` | `None` | CrewAI Platform app integrations (e.g. `"gmail"`, `"gmail/send_email"`). |
 | `a2a` | `A2AConfig \| A2AClientConfig \| A2AServerConfig \| list[A2AConfig \| A2AClientConfig \| A2AServerConfig] \| None` | `None` | Agent-to-Agent config (remote agents). |
-| `guardrail` | `str \| GuardrailType \| None` | `None` | Validator applied to agent output. |
-| `guardrail_max_retries` | `int` | `3` | Retries when the guardrail fails. |
-| `step_callback` | `Callable \| None` | `None` | Called after every agent step. |
+| `guardrail` | `str \| Callable \| None` | `None` | Validator for output produced by `Agent.kickoff()`. It is not applied to tasks run inside a crew; use `Task.guardrail` there. See [Guardrails](#guardrails). |
+| `guardrail_max_retries` | `int` | `3` | Retries when the `Agent.kickoff()` guardrail fails. |
+| `step_callback` | `Callable \| None` | `None` | Step hook. What it receives depends on how the model is called; see [Callbacks and observability](#callbacks-and-observability). |
 | `system_template` / `prompt_template` / `response_template` | `str \| None` | `None` | Override the built-in prompt strings. |
 | `checkpoint` | `CheckpointConfig \| bool \| None` | `None` | Opt the agent into checkpointing. |
 | `executor_class` | `type[CrewAgentExecutor] \| type[AgentExecutor]` | `AgentExecutor` | The newer `AgentExecutor` (from `crewai.experimental`) is now the default; pass `CrewAgentExecutor` to get the older loop back. |
@@ -110,7 +110,7 @@ support = Agent(
 )
 ```
 
-- `tools=[]` + `allow_delegation=True` in a hierarchical crew still lets the agent call the manager's delegation tools.
+- In a sequential crew, `allow_delegation=True` adds two more tools to this agent, one to delegate work and one to ask a question, each addressed to the other agents in the crew. Workers in a hierarchical crew do not need it: the manager gets the delegation tools.
 - Set `cache=False` on an agent whose tool outputs change between calls (live APIs, RNG).
 - Use `max_usage_count` on individual tools to cap how often the agent can call them.
 
@@ -137,26 +137,35 @@ researcher = Agent(
 
 ## Guardrails
 
+`Agent.guardrail` checks the output of **`Agent.kickoff()`**: the standalone, crew-less run. It does not run for tasks that a crew executes. We ran an agent with a failing `guardrail` as a crew task: the function was never called and the crew returned the unvalidated answer. In a crew, put the check on the task (`Task.guardrail`, see [Task API → Guardrails](/crewai-guide/crewai_task_api_python/#guardrails)).
+
 ```python
-from crewai import Agent
+from crewai import Agent, LLM
 from crewai.tasks.task_output import TaskOutput
 
-def no_pii(output: TaskOutput) -> tuple[bool, str]:
+
+def no_ssn(output: TaskOutput) -> tuple[bool, str]:
     if "ssn" in output.raw.lower():
-        return False, "Output contains what looks like an SSN — rewrite without it."
+        return False, "The answer mentions an SSN. Rewrite it without personal identifiers."
     return True, output.raw
+
 
 writer = Agent(
     role="Writer",
-    goal="Draft blog posts",
+    goal="Draft short customer replies",
     backstory="Seasoned content editor.",
-    guardrail=no_pii,
+    llm=LLM(model="openai/%%model=openai-small%%"),
+    guardrail=no_ssn,
     guardrail_max_retries=2,
 )
+
+reply = writer.kickoff("Write a two-line reply about the customer's refund.")
+print(reply.raw)
 ```
 
-- `guardrail` accepts a `(TaskOutput) -> tuple[bool, Any]` callable or a string describing the check (the agent itself runs the check).
-- On failure the agent re-executes up to `guardrail_max_retries` with the failure reason injected into the prompt.
+- `guardrail` takes a `(output) -> (bool, value)` callable or a string. A string is judged by the agent's own LLM.
+- On failure the agent runs again with the reason added to its input, up to `guardrail_max_retries` times. When the retries are spent, `kickoff()` raises `ValueError("Agent's guardrail failed validation after N retries. Last error: ...")`.
+- On success the second value replaces the output: a string replaces `.raw`, a Pydantic model replaces `.pydantic`. Return `output.raw` if you do not want to change it.
 
 ## Knowledge
 
@@ -168,11 +177,11 @@ research = Agent(
     role="Legal Research",
     goal="Summarise clauses from the supplied statutes",
     backstory="Lawyer with 15 years of contract experience.",
-    knowledge_sources=[PDFKnowledgeSource(file_paths=["gdpr.pdf"])],
+    knowledge_sources=[PDFKnowledgeSource(file_paths=["gdpr.pdf"])],   # read from ./knowledge/gdpr.pdf
 )
 ```
 
-Knowledge is separate from memory: it's an immutable vector store attached to the agent (or crew). See the Knowledge page for the full list of sources.
+Knowledge is separate from memory: it is a vector store you fill ahead of time and attach to the agent (or crew). Before each task the agent rewrites the task text into a search query with its own LLM, retrieves matching chunks and appends them to the prompt, so each task costs one extra model call. File paths given as strings are looked up under `./knowledge/`. See [Knowledge](/crewai-guide/crewai_knowledge_python/).
 
 ## MCP servers
 
@@ -194,8 +203,11 @@ agent = Agent(
 ```
 
 - Stdio / HTTP / SSE are the three transports exposed in `crewai.mcp`.
-- `tool_filter=` on the config object lets you allow-list tools without a `#tool` suffix.
-- `cache_tools_list=True` speeds up subsequent runs after discovery.
+- `tool_filter=` on the config object lets you allow-list or block-list tools without a `#tool` suffix.
+- `cache_tools_list=True` reuses the tool listing after the first discovery.
+- The model sees each MCP tool under a namespaced name (a sanitised server name plus a hash), not the server's own tool name. Filters receive the original name.
+
+[Tools → MCP server tools](/crewai-guide/crewai_tools_python/#mcp-server-tools--agentmcps) has an end-to-end example against a local server.
 
 ## A2A — remote agents
 
@@ -218,16 +230,26 @@ Pass a single config, a single `A2AServerConfig`, or a list combining clients wi
 ## Callbacks and observability
 
 ```python
-from crewai.agents.parser import AgentAction
+from crewai import Agent
+from crewai.agents.parser import AgentAction, AgentFinish
+
 
 def on_step(step):
     if isinstance(step, AgentAction):          # a tool call and its result
         print(f"{step.tool}({step.tool_input}) -> {str(step.result)[:80]}")
+    elif isinstance(step, AgentFinish):        # the final answer
+        print("finished:", step.output[:80])
+
 
 agent = Agent(role="Researcher", goal="Find sources", backstory="Librarian.", step_callback=on_step)
 ```
 
-`step_callback` fires after each tool step. It receives the executor's own objects (`AgentAction`, `ToolResult`), not the agent; a run that answers without calling a tool may not trigger it. For run-wide observability use event listeners (see [Production](/crewai-guide/crewai_production_guide/#event-listeners)). For crew-wide callbacks, use `Crew(step_callback=...)` — the crew-level one runs for every agent.
+What `step_callback` receives depends on how the executor talks to the model:
+
+- With a model that supports native function calling (the OpenAI, Anthropic and Gemini integrations), the callback fires **once, with an `AgentFinish`**, when the agent produces its final answer. Tool calls do not reach it.
+- With a model that goes through the text (ReAct) path, such as a custom `BaseLLM` that does not report function calling, it fires with `ToolResult` and `AgentAction` objects after each tool call, then `AgentFinish`.
+
+We confirmed both by running the same agent against a function-calling stub and a text stub. To watch tool calls whatever the model, listen for `ToolUsageStartedEvent` / `ToolUsageFinishedEvent` instead; see [Production → Event listeners](/crewai-guide/crewai_production_guide/#event-listeners). `Crew(step_callback=...)` behaves the same way for every agent in the crew, and `Task(callback=...)` / `Crew(task_callback=...)` receive the `TaskOutput` when a task completes.
 
 ## Patterns
 
@@ -278,7 +300,7 @@ crew = Crew(
 )
 ```
 
-Don't set both `manager_llm` and `manager_agent` — pick one. `manager_agent` gives you full control over prompts.
+Pick one of `manager_llm` and `manager_agent`; if both are set, the `manager_agent` is used. `manager_agent` gives you full control over the manager's prompts. Do not put `{placeholders}` in a `manager_agent`'s role, goal or backstory: crew inputs are interpolated into the worker agents and tasks only, so the manager would see the literal `{topic}`. A manager agent must not have tools; `Crew` raises `Exception: Manager agent should not have tools` at kickoff.
 
 ### 4. Per-agent rate limiting
 
@@ -286,7 +308,7 @@ Don't set both `manager_llm` and `manager_agent` — pick one. `manager_agent` g
 Agent(role="Web Scraper", goal="Collect pages", backstory="Crawler operator.", max_rpm=20)
 ```
 
-`max_rpm` is enforced before each LLM call; `max_execution_time` covers the whole task wall-clock.
+`max_rpm` throttles this agent's model requests (the crew-level `Crew(max_rpm=...)` applies to the whole run); `max_execution_time` covers the whole task wall-clock.
 
 ### 5. Checkpoint one slow agent only
 
@@ -297,7 +319,7 @@ slow = Agent(role="Heavy Research", goal="Survey the literature", backstory="Res
              checkpoint=CheckpointConfig(on_events=["task_completed", "llm_call_completed"]))
 ```
 
-Other agents in the same crew can leave `checkpoint=None` (the crew's setting then applies).
+Other agents in the same crew can leave `checkpoint=None`. See [Production → Recovery with checkpoints](/crewai-guide/crewai_production_guide/#recovery-with-checkpoints) for the crew-level setting.
 
 ## Gotchas
 
@@ -305,4 +327,4 @@ Other agents in the same crew can leave `checkpoint=None` (the crew's setting th
 - **`function_calling_llm` isn't the agent's primary LLM.** It's used only for tool-call formatting, and it is marked deprecated in 1.15; prefer a model that handles tool calls itself.
 - **`allow_code_execution` is a no-op.** `CodeInterpreterTool` was removed from the public API in 1.14; use E2B or Modal.
 - **`knowledge_sources` needs an embedder.** If neither the agent's `embedder` nor the crew's is set, the default `OpenAIEmbeddingFunction` tries to reach OpenAI and needs `OPENAI_API_KEY`.
-- **`from_repository`** merges settings from your CrewAI repo on top of the explicit kwargs you passed — explicit values win.
+- **`from_repository`** loads an agent definition from your CrewAI repository and merges the keyword arguments you pass on top of it, so explicit values override the stored ones.

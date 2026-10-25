@@ -43,7 +43,7 @@ CMD ["python", "-m", "app"]
 ### Serving an agent
 
 - **A2A** — `A2AServer(agent).build_jsonrpc(...)` returns an ASGI app; run it under uvicorn or any ASGI server. REST and gRPC transports can share one `task_store=`. Since 1.2.0 `A2AServer` can run on several replicas: pass a versioned shared task store together with an `event_stream=` that carries task events between replicas (see the upstream A2A server docs).
-- **MCP** — `ag2.mcp.MCPServer(agent)` exposes an `Agent` as an MCP server for other clients.
+- **MCP** — `ag2.mcp.MCPServer(agent)` exposes an `Agent` as an MCP server: `await server.run_stdio()` for a subprocess client, or run the server object itself under uvicorn for streamable HTTP at `/mcp`. See [Serving an agent as an MCP server](/ag2-guide/ag2_comprehensive_guide/#serving-an-agent-as-an-mcp-server).
 - **AG-UI / ACP** — adapters in `ag2.ag_ui` and `ag2.acp` (extras `ag-ui`, `acp`) connect agents to front-ends and editor clients.
 
 ## State and durability
@@ -55,7 +55,7 @@ CMD ["python", "-m", "app"]
 ## Resilience
 
 - Provider configs accept `timeout=` and `max_retries=` (OpenAI-family) — set both explicitly.
-- Tool exceptions propagate to the `ask()` call; catch them at the boundary, or convert expected failures into returned error strings so the model can recover.
+- A tool that raises does not fail `ask()`. AG2 publishes a `ToolErrorEvent` and hands it to the model as the tool result, and that text includes the Python traceback. So catch expected failures inside the tool and return a short message the model can act on, and keep secrets out of exception messages. `ag2.testing.TestConfig` behaves differently by default: it re-raises the tool's exception so a test fails loudly. Pass `raise_tool_errors=False` to model what a real provider does.
 - Bound multi-agent runs: `TransitionGraph(..., max_turns=N)` for workflows, and an explicit `close()` plus a timeout for `conversation` and `discussion` channels, which never end on their own.
 - A2A clients reconnect on dropped streams (`max_reconnects`, `reconnect_backoff` on `A2AConfig`) and raise `ag2.a2a.errors.A2AReconnectError` when the budget is spent.
 

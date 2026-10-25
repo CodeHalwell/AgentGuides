@@ -211,7 +211,7 @@ void onVertex;
 void withKey;
 ```
 
-There is no built-in client for Anthropic, OpenAI or other providers in the published 2.3.0 packages. A `Claude` class for Claude on Vertex AI exists in the `adk-js` repository's `@google/adk-integrations` package, but the 2.3.0 release of that package exports only its version number, so it is not usable from npm yet. To use another provider, subclass `BaseLlm` and register it. This minimal provider talks to any OpenAI-compatible chat endpoint (Ollama, vLLM and similar), text only:
+There is no built-in client for Anthropic, OpenAI or other providers in `@google/adk` %%version=@google/adk%%. A `Claude` class for Claude on Vertex AI exists in the `adk-js` repository's `@google/adk-integrations` package, but the release of that package published alongside it exports only its version number, so it is not usable from npm yet. To use another provider, subclass `BaseLlm` and register it. This minimal provider talks to any OpenAI-compatible chat endpoint (Ollama, vLLM and similar), text only:
 
 ```typescript
 import {BaseLlm, LLMRegistry, LlmAgent, type BaseLlmConnection, type LlmRequest, type LlmResponse} from '@google/adk';

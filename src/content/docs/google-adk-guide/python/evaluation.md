@@ -292,7 +292,7 @@ await AgentEvaluator.evaluate_eval_set(
 
 **How `evaluate_eval_set` works internally (source-verified):**
 
-1. Loads the agent via `_get_agent_for_eval` — imports the module and looks for `get_agent_async` first, then `root_agent`.
+1. Loads the agent via `_get_agent_for_eval`: imports the module (its name must end in `.agent`, or it must have an `agent` attribute), uses `root_agent` if present and otherwise awaits `get_agent_async()`. A module-level `app` that is an `App` is used too, so its plugins run during the eval.
 2. Creates an `InMemoryEvalSetsManager` and stores the eval set.
 3. Runs each `EvalCase` `num_runs` times — calls the agent via a `Runner` for each turn in the conversation.
 4. After all runs, scores each metric using the registered `MetricEvaluatorRegistry`.
@@ -460,7 +460,7 @@ eval_config = EvalConfig(
 # --- Run evaluation ----------------------------------------------------------
 async def main():
     await AgentEvaluator.evaluate_eval_set(
-        agent_module="my_package.travel_agent",
+        agent_module="travel_bench.agent",
         eval_set=eval_set,
         eval_config=eval_config,
         num_runs=2,
@@ -504,7 +504,7 @@ async def preload_artifacts() -> None:
 async def main() -> None:
     await preload_artifacts()
     await AgentEvaluator.evaluate_eval_set(
-        agent_module="my_package.travel_agent",
+        agent_module="travel_bench.agent",
         eval_set=eval_set,
         eval_config=eval_config,
         num_runs=3,
@@ -551,7 +551,7 @@ from google.adk.evaluation.local_eval_set_results_manager import (
 results_manager = LocalEvalSetResultsManager(agents_dir="./agents")
 
 await AgentEvaluator.evaluate_eval_set(
-    agent_module="my_agent",
+    agent_module="my_agent.agent",
     eval_set=eval_set,
     eval_config=eval_config,
     app_name="my_agent",
@@ -841,7 +841,7 @@ eval_config = EvalConfig(
 
 async def main():
     await AgentEvaluator.evaluate_eval_set(
-        agent_module="my_package.flight_agent",
+        agent_module="flight_bench.agent",
         eval_set=eval_set,
         eval_config=eval_config,
         num_runs=1,                 # multi-turn rubric metrics are expensive; 1 run is typical
@@ -986,7 +986,7 @@ snapshot = AppDetails(
 
 ## Gotchas
 
-- `agent_module` must be an **importable dotted path** (e.g. `"my_package.agent"`), not a file path. The module must be on `sys.path`.
+- `agent_module` must be an **importable dotted path** (e.g. `"my_package.agent"`), not a file path, and must be on `sys.path`. Its name must end in `.agent`, or the module must have an `agent` attribute; otherwise loading fails with a `ValueError` saying the module has no member named `agent`.
 - `num_runs=1` can produce flaky results for non-deterministic models. Use `num_runs=2` (the default) or higher for metrics that use LLM judges.
 - The `criteria` dict key must exactly match the `PrebuiltMetrics.value` string (e.g. `"tool_trajectory_avg_score"`) or a custom metric name registered in `custom_metrics`.
 - `RESPONSE_EVALUATION_SCORE` is inherently unstable — the docstring in source says "this evaluation is not very stable". Treat it as a soft signal, not a hard gate.

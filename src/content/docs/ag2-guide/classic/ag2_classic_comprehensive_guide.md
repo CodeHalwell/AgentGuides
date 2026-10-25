@@ -480,6 +480,7 @@ Classic receives security and critical fixes only. To port to AG2 1.x, or to mov
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | autogen 0.14.1 | Audit: corrected the swarm history (the swarm API was in `autogen.agentchat.contrib.swarm_agent` before 0.13 and was removed in 0.14.0) and the `autogen.beta` start (0.11.4). |
 | 2026-10-21 | autogen 0.14.1 | Moved from `/autogen-guide/python/autogen_comprehensive_guide/` into the AG2 guide. Replaced the "continuing in next part" stub with a tools section; fixed the custom speaker selector (pass the callable as `speaker_selection_method`), the `.process()` call on a `ChatResult`, and the claim that swarms live in `contrib.swarm_agent` (removed in 0.14.0); added group-chat patterns and handoffs, `response_format` structured output and `code_execution_config=False` where no code runs. Standardised on `LLMConfig`, removed the auto-discovery claim and hard-coded keys, cut prompt-only examples and the duplicated migration section. |
 | 2026-10-21 | autogen 0.14.1 | Reframed as an AG2 Classic page; removed invented `context_truncation_strategy`, `TelemetryConfig`, `get_cost_stats` and AutoGen Studio material. |
 | 2026-04-05 | 0.11.5 | Earlier revision. |

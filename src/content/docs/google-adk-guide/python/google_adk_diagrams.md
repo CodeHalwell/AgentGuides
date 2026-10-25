@@ -1,6 +1,6 @@
 ---
 title: "Google ADK Architecture Diagrams (Python)"
-description: "These diagrams provide visual representations of key ADK concepts and architectures. Refer to the comprehensive and production guides for detailed explanations."
+description: "Text diagrams of Google ADK's runtime, agents, workflows, sessions, memory and deployment, with links to the pages that explain each part."
 framework: "google-adk"
 language: "python"
 sidebar:
@@ -303,95 +303,101 @@ User Query
 
 ## Memory Architecture
 
+Three stores with different lifetimes. The agent sees session state and events directly; long-term memory is reached through a tool (`load_memory`, `preload_memory`) or `ctx.search_memory()`, and is filled by calling `add_session_to_memory()` (for example from an `after_agent_callback`).
+
 ```text
-                    ┌────────────────┐
-                    │   Agent        │
-                    └────────┬───────┘
-                             │
-         ┌───────────────────┼───────────────────┐
-         │                   │                   │
-         ▼                   ▼                   ▼
-    ┌─────────┐         ┌──────────┐       ┌──────────┐
-    │ Immediate│        │ Short-Term│      │ Long-Term│
-    │ Memory  │         │ Memory   │      │ Memory   │
-    │(Context)│         │(Session) │      │(Persistent)│
-    └─────────┘         └──────────┘      └──────────┘
-         │                   │                   │
-         │                   │          ┌────────┴────────┐
-         │                   │          │                 │
-         │                   │          ▼                 ▼
-         │                   │       ┌────────┐      ┌──────────┐
-         │                   │       │Firestore│      │Vector DB │
-         │                   │       │(State) │      │(Semantic)│
-         │                   │       └────────┘      └──────────┘
-         │                   │
-         └───────────────────┼─────────────────────────┐
-                             │                         │
-                             ▼                         ▼
-                        ┌──────────────────────────────────┐
-                        │  Memory Management               │
-                        │  • Expiration                    │
-                        │  • Cleanup                       │
-                        │  • Prioritisation                │
-                        └──────────────────────────────────┘
+                       ┌──────────────────────┐
+                       │      LlmAgent        │
+                       └──────────┬───────────┘
+                                  │
+          ┌───────────────────────┼────────────────────────┐
+          │                       │                        │
+          ▼                       ▼                        ▼
+ ┌─────────────────┐   ┌─────────────────────┐   ┌──────────────────────┐
+ │ Context window  │   │ Session             │   │ Memory service       │
+ │ (one model call)│   │ events + state      │   │ (across sessions)    │
+ │                 │   │ app: / user: /      │   │ load_memory tool,    │
+ │ instruction,    │   │ session / temp:     │   │ preload_memory tool, │
+ │ history, tools  │   │                     │   │ ctx.search_memory()  │
+ └─────────────────┘   └──────────┬──────────┘   └──────────┬───────────┘
+                                  │                         │
+                                  ▼                         ▼
+                      ┌───────────────────────┐  ┌───────────────────────┐
+                      │ Session service       │  │ InMemoryMemoryService │
+                      │ InMemory, Sqlite,     │  │ SqliteMemoryService   │
+                      │ Database (SQLAlchemy),│  │ VertexAiMemoryBank    │
+                      │ VertexAi (Agent       │  │ VertexAiRag           │
+                      │ Platform), Firestore  │  │                       │
+                      └───────────────────────┘  └───────────────────────┘
+
+ Artifacts (files, images) sit beside these in an artifact service:
+ InMemory, File, or GCS, scoped to a session or (with a "user:" filename) to the user.
 ```
+
+See [Memory and artifacts](/google-adk-guide/python/memory-and-artifacts/) and [Runner, App and Sessions](/google-adk-guide/python/runner-and-sessions/).
 
 ---
 
 ## Google Cloud Integration Architecture
 
 ```text
-┌──────────────────────────────────────────────────────────┐
+┌───────────────────────────────────────────────────────────┐
 │                      ADK Application                      │
-└──────────────────────────────────────────────────────────┘
-                           │
-        ┌──────────────────┼──────────────────┐
-        │                  │                  │
-        ▼                  ▼                  ▼
-   ┌─────────┐      ┌──────────┐      ┌───────────┐
-   │ Gemini  │      │Vertex AI │      │Google     │
-   │API      │      │Search    │      │Services   │
-   └────┬────┘      └────┬─────┘      └─────┬─────┘
-        │                │                  │
-        │                │                  │
-        └────────────────┼──────────────────┘
-                         │
-        ┌────────────────┼────────────────┐
-        │                │                │
-        ▼                ▼                ▼
-   ┌──────────┐    ┌─────────────┐  ┌──────────┐
-   │ Firestore│    │ Cloud       │  │BigQuery  │
-   │(Sessions)│    │Storage      │  │(Analytics)
-   │(Memory)  │    │(Artifacts)  │  │          │
-   └──────────┘    └─────────────┘  └──────────┘
+└──────────────────────────────┬────────────────────────────┘
+                               │
+     ┌─────────────────────────┼──────────────────────────┐
+     │                         │                          │
+     ▼                         ▼                          ▼
+┌───────────────┐     ┌─────────────────────┐    ┌───────────────────┐
+│ Models        │     │ Built-in and Google │    │ Runtime           │
+│ Gemini API or │     │ Cloud tools         │    │ Agent Engine,     │
+│ Vertex AI     │     │ google_search,      │    │ Cloud Run, GKE    │
+│ (Agent        │     │ VertexAiSearchTool, │    │                   │
+│ Platform)     │     │ BigQuery, Spanner,  │    │                   │
+│               │     │ Pub/Sub toolsets    │    │                   │
+└───────────────┘     └─────────────────────┘    └───────────────────┘
+     │                         │                          │
+     ▼                         ▼                          ▼
+┌───────────────┐     ┌─────────────────────┐    ┌───────────────────┐
+│ Sessions and  │     │ Artifacts           │    │ Observability     │
+│ Memory Bank   │     │ Cloud Storage       │    │ Cloud Trace,      │
+│ (Agent        │     │ (GcsArtifactService)│    │ Monitoring and    │
+│ Platform);    │     │                     │    │ Logging via       │
+│ Cloud SQL via │     │                     │    │ --otel_to_cloud   │
+│ Database-     │     │                     │    │                   │
+│ SessionService│     │                     │    │                   │
+└───────────────┘     └─────────────────────┘    └───────────────────┘
 ```
 
 ---
 
 ## Multi-Agent Orchestration
 
+There is no separate routing service or tool broker: the agents themselves do the routing. An `LlmAgent` with `sub_agents` can hand the conversation to one of them (`transfer_to_agent`), wrap another agent as a tool (`AgentTool`), or the whole system can be a `Workflow` graph with fixed edges.
+
 ```text
-                    ┌─────────────────┐
-                    │  Orchestrator   │
-                    │     Agent       │
-                    └────────┬────────┘
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        ▼                    ▼                    ▼
-    ┌────────┐          ┌────────┐          ┌────────┐
-    │Routing │          │State   │          │Tool    │
-    │Service │          │Manager │          │Broker  │
-    └───┬────┘          └───┬────┘          └───┬────┘
-        │                   │                   │
-        ▼                   ▼                   ▼
-    ┌────────────┐    ┌────────────┐    ┌────────────┐
-    │Agent Pool  │    │Session     │    │Tool        │
-    │- Agent A   │    │Registry    │    │Registry    │
-    │- Agent B   │    │- Session 1 │    │- Tool A    │
-    │- Agent C   │    │- Session 2 │    │- Tool B    │
-    └────────────┘    │- Session N │    │- Tool C    │
-                      └────────────┘    └────────────┘
+                    ┌──────────────────────────┐
+                    │  Coordinator (LlmAgent)  │
+                    │  sub_agents=[...]        │
+                    └────────────┬─────────────┘
+                                 │
+         ┌───────────────────────┼─────────────────────────┐
+         │                       │                         │
+         ▼                       ▼                         ▼
+┌──────────────────┐   ┌──────────────────────┐   ┌──────────────────────┐
+│ transfer_to_agent│   │ AgentTool(agent)     │   │ Workflow edges       │
+│ the sub-agent    │   │ called like a tool;  │   │ fixed order, fan-out │
+│ takes over the   │   │ result returns to    │   │ and join, routing on │
+│ conversation     │   │ the caller           │   │ a node's output      │
+└──────────────────┘   └──────────────────────┘   └──────────────────────┘
+         │                       │                         │
+         └───────────────────────┼─────────────────────────┘
+                                 ▼
+                ┌───────────────────────────────────┐
+                │ One session shared by all agents: │
+                │ events, state (output_key), and   │
+                │ the same artifact/memory services │
+                └───────────────────────────────────┘
 ```
 
 ---

@@ -29,6 +29,9 @@ None of the three extras is in the default `pydantic-ai` install, so add the one
 Since 2.14.0 durability is a **capability** you attach to a normal agent:
 
 ```python
+from pydantic_ai import Agent
+from pydantic_ai.durable_exec.temporal import TemporalDurability
+
 agent = Agent('openai:%%model=openai%%', name='support', capabilities=[TemporalDurability()])
 ```
 

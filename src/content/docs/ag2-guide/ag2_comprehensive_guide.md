@@ -41,7 +41,7 @@ pip install "ag2[openai]"            # or ag2[anthropic], ag2[gemini], ag2[bedro
 pip install "ag2[openai]==%%version=ag2%%"   # pinned
 ```
 
-The base install is deliberately small (pydantic, httpx, anyio); each provider and integration is an extra: `openai`, `anthropic`, `gemini`, `bedrock`, `ollama`, `mistral`, `xai`, `zai`, `dashscope`, `typesafe`, plus `mcp`, `a2a`, `ag-ui`, `acp`, `redis`, `tavily`, `ddgs`, `perplexity`, `tracing`, `metrics`.
+The base install is deliberately small (pydantic, httpx, anyio, PyYAML and FastDepends); each provider and integration is an extra: `openai`, `anthropic`, `gemini`, `bedrock`, `ollama`, `mistral`, `xai`, `zai`, `dashscope`, `typesafe`, `elevenlabs`, plus `mcp`, `mcp-ui`, `a2a`, `a2ui`, `ag-ui`, `acp`, `redis`, `tavily`, `ddgs`, `perplexity`, `tracing`, `metrics`. Importing something whose extra is missing raises an `ImportError` that names the extra to install.
 
 Each provider has its own config class in `ag2.config`, which reads the provider's standard environment variable when `api_key` is omitted:
 
@@ -93,7 +93,7 @@ asyncio.run(main())
 
 - `Agent.ask(...)` starts a **new** conversation; `AgentReply.ask(...)` continues it.
 - `prompt=` accepts a string, a callable returning a string (sync or async), or a list of either — useful for prompts built from runtime state.
-- `Agent.run(...)` is the observable counterpart of `ask`: it returns an `AgentRun` you can drive (`run.start()`), watch (`run.stream.join()`), feed (`run.enqueue(...)`) and finally `await run.result()`.
+- `Agent.run(...)` is the observable counterpart of `ask`: it returns an `AgentRun`, an async context manager you drive (`run.start()` or `await run.result()`), watch (`run.stream`), and feed (`run.enqueue(...)`). See [Streaming and observing a turn](#streaming-and-observing-a-turn).
 - `agent.as_tool(description=...)` turns an agent into a tool another agent can call (registered as `task_<name>`) — the simplest sub-agent pattern.
 
 ## Tools
@@ -213,7 +213,7 @@ analyst = Agent(
 )
 ```
 
-`SandboxCodeTool` has no default environment. It runs whatever the model writes, so you must choose the backend explicitly. `SandboxShellTool` takes `allowed=` / `blocked=` command lists and `readonly=True`.
+`SandboxCodeTool` has no default environment. It runs whatever the model writes, so you must choose the backend explicitly. `SandboxShellTool` takes its environment as an optional argument and also accepts `allowed=` / `blocked=` command lists and `readonly=True`. A command outside the allow-list is not run: the model receives a `Command not allowed` result instead. The tool names the model sees are `run_code(code, language)` and `run_shell_command(command)`.
 
 ## Structured output
 
@@ -295,6 +295,48 @@ teacher = Agent(
 
 The hook may be sync or async and may return a `HumanMessage` or a plain string. Tools that need approval before running can also be wrapped declaratively with the `approval_required` tool middleware from `ag2.middleware`.
 
+## Streaming and observing a turn
+
+Set `streaming=True` on the provider config and the model's text arrives as `ModelMessageChunk` events while the turn runs. A `MemoryStream` you pass to `ask()` lets you subscribe to them. The final `ModelResponse` still carries the complete text, and `reply.body` is unchanged.
+
+```python
+import asyncio
+
+from ag2 import Agent, MemoryStream
+from ag2.config import OpenAIConfig
+from ag2.events import ModelMessageChunk, ModelResponse
+
+agent = Agent("writer", prompt="Write one sentence.", config=OpenAIConfig(model="%%model=openai-small%%", streaming=True))
+
+
+async def main() -> None:
+    # 1. Subscribe to chunks on a stream you own.
+    stream = MemoryStream()
+
+    @stream.where(ModelMessageChunk).subscribe()
+    async def show(chunk: ModelMessageChunk) -> None:
+        print(chunk.content, end="", flush=True)
+
+    reply = await agent.ask("Describe tea.", stream=stream)
+    print("\nfinal:", reply.body)
+
+    # 2. Or open the turn as a scope and drive it yourself.
+    async with agent.run("Describe coffee.") as run:
+        seen: list[str] = []
+
+        @run.stream.where(ModelResponse).subscribe()
+        async def on_response(event: ModelResponse) -> None:
+            seen.append(type(event).__name__)
+
+        result = await run.result()     # drives the turn; run.start() would drive it in the background
+    print(result.body, seen)
+
+
+asyncio.run(main())
+```
+
+`AgentRun` owns the turn's task: leaving the `async with` block cancels a turn that is still running, so await `run.result()` (or `run.start()` and then the result) inside the block. Subscribe before driving, because callbacks fire inline as events are published.
+
 ## Observing a turn with MemoryStream
 
 ```python
@@ -347,7 +389,73 @@ agent = Agent(
 )
 ```
 
-Other built-ins: `TelemetryMiddleware` (OpenTelemetry spans; see [production](/ag2-guide/ag2_production_guide/#observability)) and `MetricsMiddleware` (extra `metrics`). `approval_required()` is tool middleware: `@tool(middleware=[approval_required()])` asks a human (through `hitl_hook`) before the tool runs. Write your own by subclassing `BaseMiddleware` (or `ToolMiddleware`) or `BaseObserver`. A `Plugin(tools=..., middleware=..., observers=..., prompt=...)` bundles all of these so you can attach them with `plugins=[...]`.
+Other built-ins: `TelemetryMiddleware` (OpenTelemetry spans; see [production](/ag2-guide/ag2_production_guide/#observability)) and `MetricsMiddleware` (extra `metrics`). `approval_required()` is tool middleware: `@tool(middleware=[approval_required()])` asks a human (through `hitl_hook`) before the tool runs. Write your own turn-level middleware by subclassing `BaseMiddleware`, and your own observer by subclassing `BaseObserver`. `ToolMiddleware` is not a base class: it is the type of a tool-middleware callable, `async def mw(call_next, event, context)`, which you pass to `@tool(middleware=[...])` (the next section shows both). A `Plugin(tools=..., middleware=..., observers=..., prompt=...)` bundles all of these so you can attach them with `plugins=[...]`.
+
+### Writing your own middleware and observers
+
+`BaseMiddleware` has four hooks, each receiving `call_next` so it can run code before and after the wrapped step: `on_turn`, `on_llm_call`, `on_tool_execution` and `on_human_input`. Register it with `Middleware(Class, **options)`, which builds a fresh instance per turn. Observers publish an `ObserverAlert` on the stream, which you can subscribe to like any other event.
+
+```python
+import asyncio
+import time
+
+from ag2 import Agent, MemoryStream, tool
+from ag2.config import OpenAIConfig
+from ag2.events import ModelResponse, ObserverAlert
+from ag2.middleware import BaseMiddleware, Middleware, approval_required
+from ag2.observers import LoopDetector
+
+
+class Timing(BaseMiddleware):
+    """Print how long each LLM call takes."""
+
+    def __init__(self, event, context, *, label: str) -> None:
+        super().__init__(event, context)
+        self.label = label
+
+    async def on_llm_call(self, call_next, events, context) -> ModelResponse:
+        started = time.perf_counter()
+        response = await call_next(events, context)
+        print(f"[{self.label}] LLM call took {time.perf_counter() - started:.3f}s")
+        return response
+
+
+@tool(middleware=[approval_required()])      # asks the human before every call
+def delete_account(user_id: str) -> str:
+    """Delete a user account."""
+    return f"deleted {user_id}"
+
+
+def human(event) -> str:                      # hitl_hook: answer "y", "n" or "always"
+    return input(event.content)
+
+
+agent = Agent(
+    "ops",
+    prompt="Operate customer accounts.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),
+    tools=[delete_account],
+    middleware=[Middleware(Timing, label="ops")],
+    observers=[LoopDetector(repeat_threshold=3)],
+    hitl_hook=human,
+)
+
+
+async def main() -> None:
+    stream = MemoryStream()
+
+    @stream.where(ObserverAlert).subscribe()
+    async def on_alert(alert: ObserverAlert) -> None:
+        print("alert:", alert.severity, alert.message)
+
+    reply = await agent.ask("Delete account u1.", stream=stream)
+    print(reply.body)
+
+
+asyncio.run(main())
+```
+
+`approval_required()` accepts `message=`, `denied_message=`, `timeout=` and `allow_always=`. A denied call returns `denied_message` to the model as the tool result. Answering `always` skips the question for later calls of the same tool in that conversation. `LoopDetector` emits a warning alert after `repeat_threshold` consecutive identical tool calls; it does not stop the turn, so a policy that should stop it belongs in middleware or the tool.
 
 ## Knowledge, memory and compaction
 
@@ -380,8 +488,36 @@ agent = Agent(
 
 ## Sub-tasks and evaluation
 
-- `tasks=TaskConfig(...)` gives an agent `run_subtask` / `run_subtasks` tools for delegating work to sub-agents. The sub-agents inherit its tools, narrowed with `include_tools=` / `exclude_tools=`, and cannot delegate further. `agent.task(...)` is the lifecycle handle for tracking a unit of work yourself.
+- `tasks=TaskConfig(...)` gives an agent `run_subtask(task)` and `run_subtasks(tasks, parallel=True)` tools for delegating work to sub-agents. The sub-agents inherit its tools, narrowed with `include_tools=` / `exclude_tools=`, and cannot delegate further. `TaskConfig(config=...)` picks a cheaper model for them, `extra_tools=` adds tools only they have, and `max_concurrency=` bounds how many run at once. `agent.task(...)` is the lifecycle handle for tracking a unit of work yourself.
 - `ag2.eval` runs agents offline against datasets with scorers (`Suite`, `Scorer`), replays model output deterministically with `TestConfig` cassettes, and saves run JSON for run-against-run diffs.
+
+```python
+import asyncio
+
+from ag2 import Agent, TaskConfig, tool
+from ag2.config import OpenAIConfig
+
+
+@tool
+def word_count(text: str) -> int:
+    """Count the words in a text."""
+    return len(text.split())
+
+
+lead = Agent(
+    "lead",
+    prompt="Split big jobs into sub-tasks with run_subtasks, then combine the results.",
+    config=OpenAIConfig(model="%%model=openai-flagship%%"),
+    tools=[word_count],
+    tasks=TaskConfig(
+        config=OpenAIConfig(model="%%model=openai-small%%"),   # cheaper model for the workers
+        include_tools=["word_count"],                          # workers may only count words
+        max_concurrency=2,
+    ),
+)
+
+print(asyncio.run(lead.ask("How many words are in each of these: 'a b c' and 'd e'?")).body)
+```
 
 ## Multi-agent: the Network
 
@@ -435,9 +571,95 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+- The initiator's `channel.send(...)` is the initiator's own turn. If the initiator is the first step of the graph, its model never runs, so give the first step to an agent whose job is just to hand over the brief (`requester` above), and put the agents you want to run after it.
 - `TransitionGraph.round_robin(participants=[...], max_turns=N)` and `TransitionGraph.sequence([...])` cover the common cases; custom graphs use `Transition(when=..., then=...)` with conditions such as `FromSpeaker(...)` or `ToolCalled("escalate")` and targets such as `AgentTarget(...)`, `StayTarget()`, `RevertToInitiatorTarget()` and `TerminateTarget(reason=...)`.
 - Graphs are plain data (`to_dict()`), so a channel survives `Hub.hydrate()` after a restart. Use `DiskKnowledgeStore`, `SqliteKnowledgeStore` or `RedisKnowledgeStore` instead of `MemoryKnowledgeStore` for durable hubs.
 - For a two-agent exchange, `type="conversation"` with `target="reviewer"` is simpler; close it yourself with `await channel.close()`.
+
+### A consulting channel: one question, one answer
+
+`consulting` is the lightest channel. The initiator sends one message, the respondent replies once, and the hub closes the channel with the reason `consulting_complete`. Targets can be given by agent name or `agent_id`.
+
+```python
+import asyncio
+
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.knowledge import MemoryKnowledgeStore
+from ag2.network import EV_CHANNEL_CLOSED, EV_TEXT, Hub
+
+
+async def main() -> None:
+    config = OpenAIConfig(model="%%model=openai-small%%")
+    hub = await Hub.open(MemoryKnowledgeStore(), ttl_sweep_interval=0)
+    asker = await hub.register(Agent("asker", prompt="You ask questions.", config=config))
+    await hub.register(Agent("tax_expert", prompt="Answer tax questions in one sentence.", config=config))
+
+    channel = await asker.open(type="consulting", target="tax_expert")
+    await channel.send("What is the standard UK VAT rate?")
+
+    while not any(e.event_type == EV_CHANNEL_CLOSED for e in await hub.read_wal(channel.channel_id)):
+        await asyncio.sleep(0.05)
+    answer = [e.event_data["text"] for e in await hub.read_wal(channel.channel_id) if e.event_type == EV_TEXT][-1]
+    print(answer)
+    await hub.close()
+
+
+asyncio.run(main())
+```
+
+### Routing on a tool call
+
+A transition can depend on what an agent did, not only on who spoke. `ToolCalled("escalate")` fires when the speaker's turn included a call to a tool named `escalate`, and the graph's `default_target` handles every other case. Below, the desk submits a ticket, triage answers it or escalates it, and a specialist only speaks when triage escalated:
+
+```python
+import asyncio
+
+from ag2 import Agent, tool
+from ag2.config import OpenAIConfig
+from ag2.knowledge import MemoryKnowledgeStore
+from ag2.network import (
+    EV_CHANNEL_CLOSED, EV_PACKET, AgentTarget, FromSpeaker, Hub, TerminateTarget, ToolCalled, Transition, TransitionGraph,
+)
+
+
+@tool
+def escalate(reason: str) -> str:
+    """Hand the ticket to a human specialist."""
+    return "escalated"
+
+
+async def main() -> None:
+    config = OpenAIConfig(model="%%model=openai-small%%")
+    hub = await Hub.open(MemoryKnowledgeStore(), ttl_sweep_interval=0)
+    desk = await hub.register(Agent("desk", prompt="You submit tickets.", config=config))
+    triage = await hub.register(Agent("triage", prompt="Answer simple questions. Call escalate for refunds over 500 pounds.", config=config, tools=[escalate]))
+    specialist = await hub.register(Agent("specialist", prompt="You handle escalated refund requests.", config=config))
+
+    graph = TransitionGraph(
+        initial_speaker=desk.agent_id,
+        transitions=[
+            Transition(when=FromSpeaker(desk.agent_id), then=AgentTarget(triage.agent_id)),
+            Transition(when=ToolCalled("escalate"), then=AgentTarget(specialist.agent_id)),
+        ],
+        default_target=TerminateTarget(reason="resolved"),   # anything else ends the channel
+        max_turns=4,
+    )
+    channel = await desk.open(type="workflow", target=[triage.agent_id, specialist.agent_id], knobs={"graph": graph.to_dict()})
+    await channel.send("Customer wants a 900 pound refund.")
+
+    while not any(e.event_type == EV_CHANNEL_CLOSED for e in await hub.read_wal(channel.channel_id)):
+        await asyncio.sleep(0.1)
+    for envelope in await hub.read_wal(channel.channel_id):
+        if envelope.event_type == EV_PACKET:
+            print(envelope.event_data["body"])
+    await hub.close()
+
+
+asyncio.run(main())
+```
+
+A tool can also choose the next speaker at run time by returning `Handoff(target="specialist", reason=...)` (the target is the agent's registered name), or end the channel by returning `Finish(summary=...)`; both are exported from `ag2.network`.
 
 ## MCP servers
 
@@ -460,6 +682,27 @@ agent = Agent(
 ```
 
 `MCPToolkit` connects from your process and exposes each MCP tool as an ordinary function tool, so it works with any provider. The stdio subprocess gets a minimal environment, so pass `env=dict(os.environ)` (or the variables it needs) to `MCPStdioServerConfig` if `npx` must reach a registry through a proxy.  `allowed_tools=` / `blocked_tools=` / `tool_name_prefix=` on the server config narrow what the model sees. `MCPServerTool` instead forwards the server URL to providers that connect to MCP themselves (for example Anthropic). Requires `ag2[mcp]`.
+
+### Serving an agent as an MCP server
+
+`ag2.mcp.MCPServer` does the reverse: it exposes an `Agent` to other MCP clients as a single tool (named `ask` unless you set `tool_name=`) that takes a `message`. It speaks stdio through `run_stdio()`, and the server object is also an ASGI app that serves streamable HTTP at `/mcp`. Requires `ag2[mcp]`.
+
+```python
+# tax_server.py
+import asyncio
+
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.mcp import MCPServer
+
+agent = Agent("tax_expert", prompt="Answer tax questions in one sentence.", config=OpenAIConfig(model="%%model=openai-small%%"))
+server = MCPServer(agent, name="tax-expert", tool_name="ask_tax_expert")
+
+if __name__ == "__main__":
+    asyncio.run(server.run_stdio())           # or: uvicorn tax_server:server  (HTTP at /mcp)
+```
+
+Another AG2 agent can then use it with `MCPToolkit(MCPStdioServerConfig(command="python", args=["tax_server.py"]))`, or with `MCPServerConfig(server_url="http://127.0.0.1:8000/mcp")` for the HTTP form. Any other MCP client works too.
 
 ## A2A protocol
 

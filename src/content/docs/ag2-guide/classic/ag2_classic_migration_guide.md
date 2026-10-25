@@ -9,7 +9,7 @@ sidebar:
 
 > Checked %%versions-checked%% against `autogen` %%version=autogen%% (AG2 Classic), `ag2` %%version=ag2%% and `autogen-agentchat` %%version=autogen-agentchat%%.
 
-An earlier version of this page said Microsoft AutoGen had been "rebranded as AG2 (AutoGen 2.0)" and that switching was a matter of renaming the package. That was wrong. AG2 is a **fork** created in November 2024 by AutoGen's original authors from the AutoGen 0.2 code base; Microsoft continued its own project, rewrote it as 0.4 (January 2025), put it into maintenance mode in October 2025 in favour of Microsoft Agent Framework, and marked it archived in October 2026. "Migrating to AG2" therefore means different things depending on which AutoGen you have.
+An earlier version of this page said Microsoft AutoGen had been "rebranded as AG2 (AutoGen 2.0)" and that switching was a matter of renaming the package. That was wrong. AG2 is a **fork** created in November 2024 by AutoGen's original authors from the AutoGen 0.2 code base; Microsoft continued its own project, rewrote it as 0.4 (January 2025), put it into maintenance mode in favour of Microsoft Agent Framework, and has since archived the repository. "Migrating to AG2" therefore means different things depending on which AutoGen you have.
 
 ## Which AutoGen do you have?
 

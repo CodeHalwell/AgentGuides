@@ -260,4 +260,5 @@ Classic has no deployment layer of its own. Chats are ordinary Python calls, so 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | autogen 0.14.1 | Audit: `Cache.disk` needs `autogen[diskcache]` and otherwise falls back to an in-memory cache; added the extra and the upstream security note. |
 | 2026-10-21 | autogen 0.14.1 | Moved from `/autogen-guide/python/autogen_production_guide/` and rewritten around Classic's own production features (TestAgent, caching, usage summaries, runtime logging, `autogen.opentelemetry`, async chats, A2A, Interoperability). Removed the broken A2A server/client code, the LangChain/LlamaIndex section built on removed APIs, the `ag2[openai]==0.2.x` pin and helper classes that were never wired in. |
