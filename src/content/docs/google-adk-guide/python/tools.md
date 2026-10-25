@@ -8,7 +8,7 @@ sidebar:
   order: 40
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. Most examples work from 2.3.0 onwards; the `BigQueryToolset` section needs 2.9.0+ (canonical integration path). Per-section minimums are noted where they differ.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/tools/__init__.py`, `google/adk/tools/function_tool.py`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; toolsets that call Google Cloud or third-party APIs were checked for construction only.
 
 Tools are the mechanism by which an `LlmAgent` calls code. Three flavours: **plain callable** (auto-wrapped into `FunctionTool`), **`BaseTool` subclass** (the built-ins + your own), and **`BaseToolset`** (dynamic tool lists — MCP, OpenAPI, custom).
 
@@ -42,7 +42,7 @@ Everything in `google.adk.tools` is lazy-loaded (`tools/__init__.py`):
 
 | Name | Kind | Import note |
 |---|---|---|
-| `BaseTool`, `BaseToolset` | Abstract | Subclass for custom tools |
+| `BaseTool` | Abstract | Subclass for custom tools (`BaseToolset` is imported from `google.adk.tools.base_toolset`) |
 | `FunctionTool` | Class | Wraps a callable |
 | `LongRunningFunctionTool` | Class | Wraps an async long-running callable |
 | `AgentTool` | Class | Wraps a `BaseAgent` as a tool |
@@ -144,6 +144,8 @@ async def save_and_return(
 
 **Missing mandatory args** short-circuit to an `{"error": ...}` response without calling the function, so the LLM can retry (`function_tool.py`).
 
+**Exceptions are not caught.** An exception raised inside a tool function ends the run with that exception, unless an `on_tool_error_callback` or `ReflectAndRetryToolPlugin` handles it. For failures the model should see and work around (not found, invalid input), return a dict such as `{"error": "order Z9 not found"}` instead. (ADK for TypeScript differs here: it catches the error and sends it to the model.)
+
 **Argument validation (2.10.0+, opt-in).** With the experimental `FUNCTION_TOOL_ARG_VALIDATION` feature on, `FunctionTool` validates and coerces arguments against the type hints before calling, so `{"base": "3"}` becomes `base=3` for an `int` parameter, and a value that can't be coerced goes back to the model as an error it can correct:
 
 ```python
@@ -209,7 +211,7 @@ The key contract: the function **returns immediately** with a `{"status": "pendi
 | Aspect | `FunctionTool` | `LongRunningFunctionTool` |
 |---|---|---|
 | `is_long_running` flag | `False` | `True` |
-| Declaration description | Unchanged | "`[LONG RUNNING TOOL]` …do not call again if pending" appended |
+| Declaration description | Unchanged | "NOTE: This is a long-running operation. Do not call this tool again if it has already returned some intermediate or pending status." appended |
 | Return value | Anything JSON-serialisable | Same — **must** return immediately; typically `{"status": "pending", "job_id": ...}` |
 | Follow-up tool needed? | No | Yes (companion poll/status tool reads from `tool_context.state`) |
 
@@ -443,7 +445,7 @@ calendar_tool = AuthenticatedFunctionTool(func=read_calendar, auth_config=SHARED
 
 ## ExecuteBashTool and BashToolPolicy
 
-`ExecuteBashTool` (experimental, `@experimental(FeatureName.SKILL_TOOLSET)`) lets an agent run shell commands in a sandboxed workspace. It always requests user confirmation before executing.
+`ExecuteBashTool` lets an agent run shell commands with the working directory set to a workspace folder. It always requests user confirmation before executing, and the policy below limits what it will run; it is not a sandbox (see the security notes).
 
 Source: `tools/bash_tool.py`.
 
@@ -508,10 +510,6 @@ from google.adk.apps import App
 from google.adk.runners import InMemoryRunner
 from google.adk.tools.bash_tool import ExecuteBashTool, BashToolPolicy
 from google.genai import types
-
-# Enable the experimental flag first
-import os
-os.environ["GOOGLE_ADK_ALLOW_FEATURES"] = "skill_toolset"
 
 policy = BashToolPolicy(
     allowed_command_prefixes=("ls", "cat", "echo", "python3 -c"),
