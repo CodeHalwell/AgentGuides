@@ -73,7 +73,7 @@ func main() {
 }
 ```
 
-The upstream README's quickstart uses Microsoft Foundry instead; see [Providers](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/#providers).
+The upstream README's quickstart uses Microsoft Foundry instead; see [Providers](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_providers/).
 
 ## Key concepts
 
@@ -93,7 +93,7 @@ The upstream README's quickstart uses Microsoft Foundry instead; see [Providers]
 
 Compared with the [Python guide](/microsoft-agent-framework-guide/python/), the following are **not implemented** in v%%version=github.com/microsoft/agent-framework-go%%, according to the upstream README:
 
-- **Handoff orchestration.** Sequential, concurrent and round-robin group chat exist; handoff does not.
+- **Handoff and Magentic orchestrations.** Sequential, concurrent and round-robin group chat exist; handoff and Magentic do not (see [Orchestrations](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_orchestrations/) for a custom routing manager in place of handoff).
 - **Declarative (YAML/JSON) agents and workflows.**
 - **Functional workflows** (the Python `@workflow` / `@step` style). Graph workflows only.
 - **CodeAct, DevUI and AF Labs.**
@@ -105,9 +105,20 @@ What it does have, beyond the basics: Anthropic, Gemini, GitHub Copilot, A2A and
 ## Pages in this guide
 
 <CardGrid>
-  <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/" description="Agents, sessions, streaming, structured output, tools and approvals, middleware, context providers, providers, MCP, A2A, observability." />
-  <LinkCard title="Workflows" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_workflows/" description="Executors and edges, conditional routing, sequential / concurrent / group chat agents, human in the loop, checkpointing, workflow as an agent." />
-  <LinkCard title="Testing with a fake provider" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_testing/" description="Script model turns with agent.ProviderConfig, test tool calls, approvals, sessions and workflows with go test — no API key needed." />
+  <LinkCard title="Comprehensive guide" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/" description="Overview: the package map, agents and runs, structured output, and a summary of each topic with a link to its page." />
+  <LinkCard title="Providers" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_providers/" description="OpenAI Responses and Chat Completions, Azure OpenAI, Foundry, Anthropic, Gemini, GitHub Copilot, OpenAI-compatible servers, embeddings and writing your own provider." />
+  <LinkCard title="Tools" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_tools/" description="functool and its schema rules, the tool loop and its limits, approvals and standing approvals, agents as tools, hosted tools, the shell tool and what the model sees when a tool fails." />
+  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_mcp/" description="stdio, streamable HTTP and SSE transports, filtering and approval, results, prompts and resources, reconnecting, serving tools and agents over MCP, hosted MCP." />
+  <LinkCard title="Middleware" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_middleware/" description="Agent and function middleware, short-circuiting, guardrails and redaction, intercepting every model call, retries, timeouts and error types." />
+  <LinkCard title="Sessions and memory" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_sessions_and_memory/" description="Sessions and state, service-held vs local history, history and context providers, compaction, text search, vector stores, Foundry memory and the harness." />
+  <LinkCard title="Workflows" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_workflows/" description="Executors and edges, routing, fan-out and fan-in, environments, shared state, events, human in the loop, checkpointing, sub-workflows and agents in workflows." />
+  <LinkCard title="Orchestrations" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_orchestrations/" description="Sequential, concurrent and group chat orchestrations, approvals inside them, and a workflow exposed as an agent or a tool." />
+  <LinkCard title="Hosting and A2A" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_hosting_and_a2a/" description="A2A server and client, long-running tasks, AG-UI server and client, MCP over HTTP and a plain SSE endpoint." />
+  <LinkCard title="Observability" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_observability/" description="otelprovider spans, attributes and metrics, OTLP export, workflow telemetry and logging." />
+  <LinkCard title="Testing with a fake provider" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_testing/" description="Scripted model turns, tools, middleware, approvals, workflows, checkpoints, orchestrations, A2A and AG-UI over httptest, and telemetry assertions." />
+  <LinkCard title="Production" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_production/" description="Timeouts, retries, cancellation, concurrency, session persistence, credentials, workflow durability and a deployable service." />
+  <LinkCard title="Recipes" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_recipes/" description="Nine complete programs: triage, research, writer–critic, HTTP approvals with checkpoints, A2A delegation, support with saved sessions, and more." />
+  <LinkCard title="Diagrams" href="/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_diagrams/" description="Mermaid diagrams of the run pipeline, tool loop, sessions, workflow engine, orchestrations and hosting." />
 </CardGrid>
 
 ## Upstream references
