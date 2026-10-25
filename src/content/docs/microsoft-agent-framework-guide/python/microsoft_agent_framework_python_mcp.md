@@ -368,10 +368,6 @@ async def direct_invocation() -> None:
         result = await fs.call_tool("list_directory", path="/tmp")
         print("directory listing:", result)
 
-        # Render one of the server's prompts by name (the arguments are the prompt's own)
-        prompt_text = await fs.get_prompt("summarise", path="/tmp")   # a prompt your server defines
-        print("prompt:", prompt_text[:200])
-
 
 async def http_direct() -> None:
     # HTTP example — call a remote tool without an agent
@@ -393,7 +389,7 @@ asyncio.run(http_direct())
 
 `call_tool` takes the server's tool name and returns a `list[Content]` with the default parser (or whatever your `parse_tool_results=` returns). The tool must be in `allowed_tools` (if that param is set) and the session must be connected — otherwise the call raises.
 
-`get_prompt` returns the rendered prompt text as a `str`. Prompts are only loaded when `load_prompts=True` (the default); disable with `MCPStdioTool(..., load_prompts=False)` to skip the prompts handshake entirely on servers that don't use them.
+`get_prompt(name, **arguments)` renders one of the server's prompts and returns the text as a `str`. The filesystem server above defines no prompts, so the call only makes sense against a server that does; it raises if the prompt does not exist. For example, against a server that defines a `summarise` prompt: `text = await mcp.get_prompt("summarise", path="/tmp")`. Prompts are only loaded when `load_prompts=True` (the default); disable with `MCPStdioTool(..., load_prompts=False)` to skip the prompts handshake entirely on servers that don't use them.
 
 ### Checking connection state
 

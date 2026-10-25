@@ -619,13 +619,13 @@ from mistralai.client import Mistral
 client = Mistral(api_key="...")
 
 response = client.responses.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     input="What is the capital of France?",
     instructions="Answer in one word.",
 )
 message = response.output[0]            # a "message" item; reasoning and function-call items also appear in output
 print(message.content[0].text)
-print(client.responses.count_input_tokens(model="mistral-medium-latest", input="What is the capital of France?").input_tokens)
+print(client.responses.count_input_tokens(model="%%model=mistral%%", input="What is the capital of France?").input_tokens)
 ```
 
 We ran this against a scripted `httpx2.MockTransport`, not the live API, so the output shape is the SDK's model rather than a recorded reply. `stream=True` returns server-sent events, and `previous_response_id`, `conversation` and `prompt` are accepted by the signature but we did not exercise them. The TypeScript equivalent is `await client.responses.create({ model, input, instructions })`.
