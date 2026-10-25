@@ -10,7 +10,7 @@ sidebar:
 
 > **Verified against `crewai` %%version=crewai%%** (checked %%versions-checked%%; source: `crewai/task.py`, `crewai/tasks/conditional_task.py`, `crewai/tasks/task_output.py`, `crewai/process.py`).
 
-Tasks are the units of work a crew executes. Their outputs feed forward into `{variables}` available to later tasks. This page covers the real fields, the two process types, and the surprisingly subtle rules around structured outputs.
+Tasks are the units of work a crew executes. A task's output reaches later tasks as **context** appended to their prompt; it is not substituted into `{variables}`, which are filled only from the `inputs` passed to `kickoff()`. This page covers the fields, the two process types, and the surprisingly subtle rules around structured outputs and guardrails.
 
 ## Minimal runnable example
 
@@ -49,7 +49,7 @@ print(out.tasks_output[0].pydantic.headline)
 |---|---|---|---|
 | `description` | `str` | required | The instruction sent to the agent. `{vars}` pulled from crew `inputs` and prior task outputs. |
 | `expected_output` | `str` | required | Plain-language description of what "done" looks like. |
-| `agent` | `Agent \| None` | `None` | Executor. Hierarchical crews can leave this `None` — the manager assigns. |
+| `agent` | `Agent \| None` | `None` | Executor in a sequential crew. Hierarchical crews can leave this `None`; there the manager runs every task and decides whom to delegate to. |
 | `async_execution` | `bool` | `False` | Run in a thread. Several async tasks in a row fan out in parallel. |
 | `context` | `list[Task] \| None` | *auto* | Explicit upstream tasks. When unset, the task sees the outputs of **all** earlier tasks. |
 | `tools` | `list[BaseTool] \| None` | `[]` | Restrict the tools available **for this task only**. |
@@ -59,62 +59,82 @@ print(out.tasks_output[0].pydantic.headline)
 | `create_directory` | `bool \| None` | `True` | Create the parent dir of `output_file` if missing. |
 | `markdown` | `bool` | `False` | Add a Markdown format instruction to the prompt. |
 | `human_input` | `bool` | `False` | Pause after this task and ask the user to accept/modify. |
-| `guardrail` | `str \| Callable` | `None` | Single validator on `TaskOutput`. |
-| `guardrails` | `list[...]` | `None` | Multiple validators; also accepts a single callable. |
+| `guardrail` | `str \| Callable` | `None` | Single validator on `TaskOutput`. A string is judged by the agent's LLM. |
+| `guardrails` | `list[...]` | `None` | Several validators, run in order, each seeing the previous one's result. If both `guardrail` and `guardrails` are set, only `guardrails` runs. |
 | `guardrail_max_retries` | `int` | `3` | Retries across all guardrails. |
 | `name` | `str \| None` | `None` | Friendly name used in logs and events. |
+| `input_files` | `dict[str, File]` | `{}` | Named files attached to the task. Needs `crewai[file-processing]`; see [File inputs](#file-inputs). |
+| `converter_cls` | `type[Converter] \| None` | `None` | Custom converter used to parse `output_pydantic` / `output_json` results. |
 
 Full structured-output fields are covered below — they interact with each other in ways the docstrings don't spell out.
 
 ## Structured output: three fields, one answer
 
-| Field | Effect | Output lives in |
+| Field | What the agent is told | Where the parsed result lives |
 |---|---|---|
-| `output_pydantic=ModelCls` | Prompt-level: the agent is asked to emit JSON; the framework parses into `ModelCls`. | `TaskOutput.pydantic` |
-| `output_json=ModelCls` | Same prompt trick but leaves the dict raw, without instantiating the model. | `TaskOutput.json_dict` |
-| `response_model=ModelCls` | Uses the **LLM provider's native structured outputs** (OpenAI `response_format`, etc.) — no prompt hack. | `TaskOutput.pydantic` |
+| `output_pydantic=ModelCls` | The model's JSON schema is added to the prompt, and the model is also passed to the LLM as its `response_model` (native structured output where the provider supports it). The final text is parsed into `ModelCls`. | `TaskOutput.pydantic` (and `CrewOutput.pydantic` for the last task) |
+| `output_json=ModelCls` | Same as above, but the result is kept as a dict. | `TaskOutput.json_dict` |
+| `response_model=ModelCls` | The model is passed to the LLM as its `response_model` only. | Nothing is parsed. `TaskOutput.raw` holds the JSON string; `.pydantic` stays `None`. |
 
-Pick **one**. Set `response_model` when the provider supports it (OpenAI, Gemini, Anthropic) — the JSON is guaranteed by the provider. Fall back to `output_pydantic` otherwise.
+Use `output_pydantic` when you want a model instance back. In 1.15.28 `response_model` on its own does not populate `.pydantic`, even when the provider returns a validated model: we checked this with a stub that returned a `BaseModel` instance from `call()`, and `raw` held the JSON while `pydantic` and `json_dict` were empty. If you want provider-enforced JSON and a parsed result, set `output_pydantic`; to parse `response_model` output yourself, use `Brief.model_validate_json(result.raw)`.
 
 ```python
 from pydantic import BaseModel, Field
+from crewai import Agent, Crew, Task, LLM
+
 
 class Report(BaseModel):
     score: int = Field(ge=0, le=100)
     reasons: list[str]
 
+
+analyst = Agent(
+    role="Analyst",
+    goal="Score articles for credibility",
+    backstory="Fact-checking editor.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
+)
 task = Task(
     description="Score the article on {topic}.",
     expected_output="Report with integer score and 3 reasons.",
     agent=analyst,
-    response_model=Report,  # provider-enforced
+    output_pydantic=Report,
 )
-```
-
-Access after kickoff:
-
-```python
+crew = Crew(agents=[analyst], tasks=[task])
 out = crew.kickoff(inputs={"topic": "remote work"})
-print(out.tasks_output[-1].pydantic.score)
+print(out.tasks_output[-1].pydantic.score)   # a Report instance
+print(out.to_dict())                          # {'score': ..., 'reasons': [...]}
 ```
+
+`CrewOutput.to_dict()` returns the final task's `json_dict`, or its `pydantic` result dumped to a dict, and an empty dict when the final task had no structured output (so it is empty with `response_model` alone).
 
 ## Guardrails
 
-Single or multiple validators run after the task finishes; a failing guardrail feeds the reason back to the agent for another attempt up to `guardrail_max_retries`.
+Single or multiple validators run after the task finishes. A failing guardrail sends the reason back to the agent for another attempt, up to `guardrail_max_retries`.
 
 ```python
+from crewai import Agent, Crew, Task, LLM
 from crewai.tasks.task_output import TaskOutput
+
 
 def min_length(output: TaskOutput) -> tuple[bool, str]:
     if len(output.raw) < 200:
-        return False, "Output under 200 chars — please expand."
+        return False, "Output under 200 chars. Please expand."
     return True, output.raw
+
 
 def no_dollars(output: TaskOutput) -> tuple[bool, str]:
     if "$" in output.raw:
         return False, "Strip currency symbols, they upset our CMS."
     return True, output.raw
 
+
+writer = Agent(
+    role="Writer",
+    goal="Summarise earnings clearly",
+    backstory="Financial copy editor.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
+)
 task = Task(
     description="Summarise earnings.",
     expected_output="Plain-text summary, 200+ chars, no $ symbols.",
@@ -122,9 +142,15 @@ task = Task(
     guardrails=[min_length, no_dollars],
     guardrail_max_retries=2,
 )
+print(Crew(agents=[writer], tasks=[task]).kickoff().raw)
 ```
 
-String guardrails let the LLM itself judge the output: `guardrail="Output must not mention competitors by name."`
+How it behaves (each point checked by running it):
+
+- **Attempts.** `guardrail_max_retries=2` allows three attempts in total: the first, then two retries. If the last attempt still fails, the task raises `Exception("Task failed guardrail validation after 2 retries. Last error: ...")`.
+- **What the agent sees on a retry.** The task prompt gains a block reading "Previous attempt failed validation: <your reason>" followed by the previous result, so make the reason specific.
+- **Chaining.** With `guardrails=[a, b]`, `b` receives the output `a` returned. What a guardrail returns on success becomes the task output, so return `output.raw` unless you mean to rewrite it. Returning `(True, "ok")` replaces the real answer with `"ok"`.
+- **String guardrails.** `guardrail="Output must not mention competitors by name."` makes a separate "Guardrail Agent" call on the agent's LLM for every attempt. That is an extra model call per check; use a function when a code check will do.
 
 ## Context and task chaining
 
@@ -136,6 +162,7 @@ draft    = Task(description="Write the full article.", expected_output="Markdown
 
 - When `context` is unset, a task receives the outputs of **all** earlier tasks in the crew. Use `context=[...]` to narrow it to specific ones.
 - `context=[]` (empty list) explicitly isolates a task from previous outputs.
+- Context is appended to the prompt as "This is the context you're working with:" followed by the raw text of each output. Nothing is substituted into `{variables}`: a `{research}` placeholder in a later task's description is left as the literal text `{research}`.
 
 ## Async execution and parallel fan-out
 
@@ -153,18 +180,27 @@ summary = Task(description="Synthesise the three regional reports",
 
 ## File inputs
 
-```python
-from crewai.tasks.task_output import TaskOutput
+File inputs need the optional `crewai-files` package: `pip install "crewai[file-processing]"`. Without it, `Task(input_files=...)` is accepted and silently ignored.
 
+```python
+from crewai import Agent, Crew, Task, LLM
+from crewai_files import File
+
+analyst = Agent(
+    role="Analyst",
+    goal="Extract data from filings",
+    backstory="Financial analyst.",
+    llm=LLM(model="openai/%%model=openai-small%%"),
+)
 task = Task(
-    description="Extract tables from {doc}.",
+    description="Extract the tables from the attached filing.",
     expected_output="Markdown tables.",
     agent=analyst,
-    input_files={"doc": "/path/to/filing.pdf"},
+    input_files={"filing": File(source="/path/to/filing.pdf")},
 )
 ```
 
-`input_files` is a dict of reference names to paths (or `File` objects). They're passed through to the LLM using whichever mechanism the provider supports (OpenAI file upload, Anthropic files API, etc.). This replaces the deprecated `Agent.multimodal=True` flag.
+Wrap each path in a `File` (or `PDFFile`, `ImageFile`, `TextFile`, ...). A plain string or `Path` as the dict value fails validation once `crewai-files` is installed. The prompt gains an "Available input files" list naming each file by its dict key, and the files are attached to the message for the provider integration to format (inline or upload, depending on the provider). The key is not a template variable: writing `{filing}` in the description leaves the literal text in place, so refer to the file by name in plain words. `crew.kickoff(input_files=...)` and `Agent.kickoff(input_files=...)` take the same dict. This replaces the deprecated `Agent.multimodal=True` flag.
 
 ## Conditional tasks
 
@@ -187,9 +223,11 @@ fact_check = ConditionalTask(
 crew = Crew(agents=[writer, checker], tasks=[draft, fact_check])
 ```
 
-Constraints from the source:
-- A `ConditionalTask` **cannot** be the first or only task — it reads the prior task's `TaskOutput`.
-- When the condition returns `False`, the task yields an empty `TaskOutput` (`raw=""`).
+Rules, each checked by running it:
+- The first task cannot be a `ConditionalTask` (`ValidationError: The first task cannot be a ConditionalTask`), and a crew of only conditional tasks is rejected.
+- The condition receives the `TaskOutput` of the task immediately before it in the list, not of every earlier task.
+- When the condition returns `False`, the task does not run and yields an empty `TaskOutput` (`raw=""`). It still appears in `tasks_output`.
+- `CrewOutput.raw` is the last **non-empty** task output, so a skipped conditional task at the end does not blank the crew's result; `tasks_output[-1].raw` is `""`.
 
 ## Process types
 
@@ -229,15 +267,16 @@ crew = Crew(
 ```
 
 Rules:
-- You must set **exactly one** of `manager_llm` or `manager_agent`.
-- Tasks in a hierarchical crew don't need an `agent=` — the manager routes them (agent-less tasks go into the pool).
-- The manager can delegate to any worker, ask clarifying questions, and synthesise answers.
+- Set one of `manager_llm` or `manager_agent`. With neither, `Crew(...)` raises a `ValidationError`. If you set both, the `manager_agent` is used.
+- In a hierarchical crew the **manager runs every task**. It gets delegation tools addressed to your worker agents and decides which of them does the work. Each `TaskOutput.agent` therefore shows the manager's role (for example "Crew Manager"), not the worker's. A `Task(agent=...)` is not binding on the manager.
+- Tasks don't need an `agent=`; leave it out and let the manager choose.
+- Crew inputs are interpolated into worker agents and tasks, but not into a `manager_agent`'s role, goal or backstory.
 
 ## CrewOutput — what `kickoff()` returns
 
 `CrewOutput` exposes:
 
-- `.raw` — the final task's raw string output
+- `.raw` — the raw string output of the last task that produced non-empty output
 - `.tasks_output` — list of `TaskOutput`, in execution order
 - `.token_usage` — `UsageMetrics` (total / prompt / completion / reasoning / cache-creation tokens)
 - `.json_dict` / `.pydantic` — shortcut to the final task's structured output if set
@@ -313,11 +352,14 @@ Task(
 ### 4. File-fed comparison
 
 ```python
+from crewai import Task
+from crewai_files import File
+
 Task(
-    description="Diff the two contracts in {a} and {b}; list the risky clauses.",
+    description="Compare the two attached contracts (v1 and v2) and list the risky clauses.",
     expected_output="Ranked list with clause numbers.",
     agent=legal,
-    input_files={"a": "contracts/v1.pdf", "b": "contracts/v2.pdf"},
+    input_files={"v1": File(source="contracts/v1.pdf"), "v2": File(source="contracts/v2.pdf")},
 )
 ```
 
@@ -334,10 +376,10 @@ cond = ConditionalTask(
 
 ## Gotchas
 
-- **`output_pydantic` vs `response_model`** — the first is prompt-driven and can still parse-fail; the second uses provider-native structured outputs and is enforced.
-- **Guardrails see unparsed output.** When a guardrail is set, `output.pydantic` is only filled if the agent already returned a model; otherwise parse `output.raw` yourself. With `response_model` plus a guardrail and a plain-text result, `pydantic` stays `None`, so use `output_pydantic` when you need both.
+- **`output_pydantic` vs `response_model`** — `output_pydantic` parses the result into `.pydantic` (and can still fail to parse if the model ignores the schema). `response_model` only asks the provider for structured output and leaves the parsed value to you.
+- **Guardrails see unparsed output.** When a guardrail is set, `output.pydantic` is only filled if the agent already returned a model; otherwise parse `output.raw` yourself, as in the strict-JSON pattern above.
 - **`max_retries` is deprecated on `Task`** — use `guardrail_max_retries`. The source docstring says "will be removed in v1.0.0" (written before the 1.x line, so effectively: a future major). Treat it as already-deprecated and avoid it in new code.
 - **Async tasks and ordering.** A synchronous task waits for all pending async tasks before it starts; `context=[t1, t2]` controls which outputs it sees, not when it runs.
-- **Hierarchical tasks with `agent=` still obey delegation** — the manager can route them elsewhere.
-- **`input_files` supersedes `Agent.multimodal=True`.** That flag is deprecated and is removed in 2.0.
+- **Hierarchical tasks with `agent=` are run by the manager** — the manager can route them to any worker.
+- **`input_files` supersedes `Agent.multimodal=True`.** That flag is deprecated and is removed in 2.0. `input_files` needs `crewai[file-processing]`.
 - **`Process.consensual` doesn't exist.** It's commented out in `process.py`.
