@@ -53,7 +53,119 @@ A middleware implements `Middleware<C>` for its context type. Its one method, `p
 Middleware registered first runs outermost: its code before `next.run` runs first and its code after `next.run` runs last. The levels nest in a fixed order, which the next program prints:
 
 ```rust
-@@mw_00@@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+use agent_framework::middleware::FnMiddleware;
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+type Log = Arc<Mutex<Vec<String>>>;
+
+/// One struct can be middleware at every level: the trait is generic over
+/// the context type.
+struct Tag {
+    name: &'static str,
+    log: Log,
+}
+
+#[async_trait]
+impl<C: Send + 'static> Middleware<C> for Tag {
+    async fn process(&self, ctx: C, next: Next<C>) -> Result<C> {
+        self.log.lock().unwrap().push(format!("{} >", self.name));
+        let ctx = next.run(ctx).await?;
+        self.log.lock().unwrap().push(format!("{} <", self.name));
+        Ok(ctx)
+    }
+}
+
+/// Wraps the provider client, below the tool loop: sees every model request.
+struct EveryModelCall<C> {
+    inner: C,
+    log: Log,
+}
+
+#[async_trait]
+impl<C: ChatClient> ChatClient for EveryModelCall<C> {
+    async fn get_response(&self, messages: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        self.log.lock().unwrap().push(format!("    model request ({} messages)", messages.len()));
+        self.inner.get_response(messages, options).await
+    }
+    async fn get_streaming_response(&self, messages: Vec<Message>, options: ChatOptions) -> Result<ChatStream> {
+        self.inner.get_streaming_response(messages, options).await
+    }
+}
+
+/// Calls `lookup` on the first request, answers on the second.
+#[derive(Clone, Default)]
+struct TwoTurns(Arc<AtomicUsize>);
+
+#[async_trait]
+impl ChatClient for TwoTurns {
+    async fn get_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        if self.0.fetch_add(1, Ordering::SeqCst) % 2 == 1 {
+            return Ok(ChatResponse::from_text("It is 21 degrees."));
+        }
+        let call = FunctionCallContent::new("c1", "lookup", Some(FunctionArguments::Raw("{}".into())));
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let log: Log = Arc::default();
+    let tag = |name| Arc::new(Tag { name, log: log.clone() });
+
+    let lookup = FunctionTool::new("lookup", "Look it up.", json!({ "type": "object" }), {
+        let log = log.clone();
+        move |_| {
+            let log = log.clone();
+            async move {
+                log.lock().unwrap().push("        tool runs".into());
+                Ok(json!(21))
+            }
+        }
+    })
+    .into_definition();
+
+    // The closure form, for middleware with no state of its own.
+    let closure_log = log.clone();
+    let timing = FnMiddleware::new(move |ctx: AgentContext, next: Next<AgentContext>| {
+        let log = closure_log.clone();
+        async move {
+            let started = std::time::Instant::now();
+            let ctx = next.run(ctx).await?;
+            log.lock().unwrap().push(format!("run took {} ms", started.elapsed().as_millis()));
+            Ok(ctx)
+        }
+    });
+
+    let agent = Agent::builder(EveryModelCall { inner: TwoTurns::default(), log: log.clone() })
+        .tool(lookup)
+        .middleware(Arc::new(timing))
+        .middleware(tag("agent A"))
+        .middleware(tag("  agent B"))
+        .chat_middleware(tag("  chat A"))
+        .chat_middleware(tag("   chat B"))
+        .function_middleware(tag("      function A"))
+        .function_middleware(tag("       function B"))
+        .build();
+
+    println!("{}", agent.run_once("Weather?").await?.text());
+    for line in log.lock().unwrap().iter() {
+        println!("{line}");
+    }
+    Ok(())
+}
 ```
 
 ```text
@@ -91,7 +203,80 @@ The run made two model requests, one that asked for the tool and one that answer
 Agent middleware runs after the agent has prepared the request. By then the context providers have run, so `ctx.messages` is the complete list about to go to the model: the instructions as a leading system message, the history loaded from the session, anything providers added, and the caller's new messages last. Its `result` is the `AgentResponse` that the run returns. After the middleware chain finishes, the context providers' `after_run` hooks record the run, and what they record is the caller's original input plus the final `result`, not the middleware's edited `messages`:
 
 ```rust
-@@mw_01@@
+use std::sync::Arc;
+
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+use futures::StreamExt;
+
+/// Replies with a summary of the messages it was sent.
+#[derive(Clone)]
+struct Echo;
+
+#[async_trait]
+impl ChatClient for Echo {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let seen: Vec<String> = messages.iter().map(|m| format!("{}:{}", m.role.0, m.text())).collect();
+        Ok(ChatResponse::from_text(format!("{seen:?}")))
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+/// Adds a message for this request only, and answers "ping" itself.
+struct Desk;
+
+#[async_trait]
+impl Middleware<AgentContext> for Desk {
+    async fn process(&self, mut ctx: AgentContext, next: Next<AgentContext>) -> Result<AgentContext> {
+        if ctx.messages.last().is_some_and(|m| m.text() == "ping") {
+            ctx.result = Some(AgentResponse {
+                messages: vec![Message::assistant("pong")],
+                ..Default::default()
+            });
+            return Ok(ctx); // the model is not called
+        }
+        ctx.messages.push(Message::system("Reply in French."));
+        let mut ctx = next.run(ctx).await?;
+        if let Some(result) = ctx.result.as_mut() {
+            result.additional_properties.insert("checked_by".into(), "desk".into());
+        }
+        Ok(ctx)
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(Echo)
+        .instructions("Be brief.")
+        .middleware(Arc::new(Desk))
+        .build();
+    let mut session = agent.create_session();
+
+    for text in ["hello", "ping", "again"] {
+        let response = agent.run(vec![Message::user(text)], Some(&mut session)).await?;
+        println!("{text:>5} -> {} {:?}", response.text(), response.additional_properties);
+    }
+
+    // With agent middleware, a streaming run is buffered: the whole response
+    // arrives as one update per message once the run has finished.
+    let updates: Vec<_> = agent.run_stream_once("stream").await?.collect().await;
+    println!("stream: {} update(s)", updates.len());
+
+    // `terminate` without a result is an error, not an empty answer.
+    struct Stop;
+    #[async_trait]
+    impl Middleware<AgentContext> for Stop {
+        async fn process(&self, mut ctx: AgentContext, next: Next<AgentContext>) -> Result<AgentContext> {
+            ctx.terminate = true; // the terminal handler skips the model
+            next.run(ctx).await
+        }
+    }
+    let stopped = Agent::builder(Echo).middleware(Arc::new(Stop)).build();
+    println!("terminate: {:?}", stopped.run_once("hi").await.map(|r| r.text()));
+    Ok(())
+}
 ```
 
 ```text
@@ -121,7 +306,98 @@ An agent with any agent middleware does not stream. `run_stream` runs the whole 
 Chat middleware wraps the call from the agent into its chat client. It sees the final message list and the merged `ChatOptions` (per-run options already applied, tools assembled), so it is the place to enforce request settings, choose a model, add a stop sequence or answer from a cache. The run's session is available too, as `ctx.chat_options.session`, a framework-internal field that the tool loop removes before the provider sees the options.
 
 ```rust
-@@mw_02@@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+use futures::StreamExt;
+
+/// Reports the options it received, streamed or not.
+#[derive(Clone)]
+struct Echo;
+
+impl Echo {
+    fn describe(options: &ChatOptions) -> String {
+        format!("temperature={:?} stop={:?}", options.temperature, options.stop)
+    }
+}
+
+#[async_trait]
+impl ChatClient for Echo {
+    async fn get_response(&self, _m: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        Ok(ChatResponse::from_text(format!("model: {}", Self::describe(&options))))
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, options: ChatOptions) -> Result<ChatStream> {
+        let update = ChatResponseUpdate {
+            contents: vec![Content::text(format!("model (streamed): {}", Self::describe(&options)))],
+            role: Some(Role::assistant()),
+            ..Default::default()
+        };
+        Ok(Box::pin(futures::stream::iter([Ok(update)])))
+    }
+}
+
+/// Enforces deployment-wide request settings.
+struct Policy;
+
+#[async_trait]
+impl Middleware<ChatContext> for Policy {
+    async fn process(&self, mut ctx: ChatContext, next: Next<ChatContext>) -> Result<ChatContext> {
+        ctx.chat_options.temperature = Some(0.0);
+        ctx.chat_options.stop.get_or_insert_with(Vec::new).push("END".into());
+        // The run's session rides along in the options here.
+        let user = ctx.chat_options.session.as_ref().and_then(|s| s.state.get("user"));
+        println!("  [policy] user={user:?} streaming={}", ctx.is_streaming);
+        next.run(ctx).await
+    }
+}
+
+/// Serves repeated questions from memory.
+#[derive(Default)]
+struct Cache(Mutex<HashMap<String, ChatResponse>>);
+
+#[async_trait]
+impl Middleware<ChatContext> for Cache {
+    async fn process(&self, mut ctx: ChatContext, next: Next<ChatContext>) -> Result<ChatContext> {
+        let key = ctx.messages.last().map(Message::text).unwrap_or_default();
+        if let Some(hit) = self.0.lock().unwrap().get(&key).cloned() {
+            ctx.result = Some(hit);
+            return Ok(ctx);
+        }
+        let ctx = next.run(ctx).await?;
+        if let Some(result) = &ctx.result {
+            let mut cached = result.clone();
+            cached.messages = vec![Message::assistant(format!("(cached) {}", result.text()))];
+            self.0.lock().unwrap().insert(key, cached);
+        }
+        Ok(ctx)
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(Echo)
+        .temperature(0.9)
+        .chat_middleware(Arc::new(Policy))
+        .chat_middleware(Arc::new(Cache::default()))
+        .build();
+    let mut session = agent.create_session();
+    session.state.insert("user", "ada".into());
+
+    for _ in 0..2 {
+        let r = agent.run(vec![Message::user("What is 2+2?")], Some(&mut session)).await?;
+        println!("{}", r.text());
+    }
+
+    // Streaming without agent middleware: the request rewrite applies, but
+    // the cache cannot answer: short-circuits and results are ignored.
+    let mut stream = agent.run_stream_once("What is 2+2?").await?;
+    while let Some(update) = stream.next().await {
+        println!("{}", update?.text());
+    }
+    Ok(())
+}
 ```
 
 ```text
@@ -143,10 +419,185 @@ The consequences: chat middleware that counts calls counts runs; one that redact
 
 ## Function middleware
 
-Function middleware wraps each local tool call: approved calls, every call of a parallel batch, and calls made by the loop on behalf of a sub-agent's own tools (inside that sub-agent). It does not see hosted tools, which the provider runs, or calls to unknown tools and unparseable arguments, which the loop answers before building a context. `function_name` and `arguments` can be rewritten before `next.run`; `result` can be replaced after it; a middleware can answer without calling the tool; and `metadata["call_id"]` holds the model's call id.
+Function middleware wraps each local tool call, including calls run after approval and every call of a parallel batch. A sub-agent used as a tool has its own middleware, if any; the caller's function middleware sees only the call to the sub-agent. It does not see hosted tools, which the provider runs, or calls to unknown tools and unparseable arguments, which the loop answers before building a context. `function_name` and `arguments` can be rewritten before `next.run`; `result` can be replaced after it; a middleware can answer without calling the tool; and `metadata["call_id"]` holds the model's call id.
 
 ```rust
-@@mw_03@@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::{json, Value};
+
+/// Asks for the batch of calls, then lists the results it got.
+#[derive(Clone)]
+struct Batch(Vec<(&'static str, Value)>);
+
+#[async_trait]
+impl ChatClient for Batch {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let last = messages.last().unwrap();
+        if last.role == Role::tool() {
+            let lines: Vec<String> = last
+                .contents
+                .iter()
+                .filter_map(|c| match c {
+                    Content::FunctionResult(r) => Some(format!("  {}: {:?} {:?}", r.call_id, r.result, r.exception)),
+                    _ => None,
+                })
+                .collect();
+            return Ok(ChatResponse::from_text(lines.join("\n")));
+        }
+        let calls = self
+            .0
+            .iter()
+            .enumerate()
+            .map(|(i, (name, args))| {
+                Content::FunctionCall(FunctionCallContent::new(
+                    format!("call{i}"),
+                    *name,
+                    Some(FunctionArguments::Raw(args.to_string())),
+                ))
+            })
+            .collect();
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), calls)],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+/// Clamps an argument before the tool sees it.
+struct ClampLimit;
+
+#[async_trait]
+impl Middleware<FunctionInvocationContext> for ClampLimit {
+    async fn process(
+        &self,
+        mut ctx: FunctionInvocationContext,
+        next: Next<FunctionInvocationContext>,
+    ) -> Result<FunctionInvocationContext> {
+        if let Some(limit) = ctx.arguments.get_mut("limit") {
+            *limit = json!(limit.as_u64().unwrap_or(10).min(50));
+        }
+        next.run(ctx).await
+    }
+}
+
+/// Masks e-mail addresses in whatever a tool returns.
+struct RedactEmails;
+
+#[async_trait]
+impl Middleware<FunctionInvocationContext> for RedactEmails {
+    async fn process(
+        &self,
+        ctx: FunctionInvocationContext,
+        next: Next<FunctionInvocationContext>,
+    ) -> Result<FunctionInvocationContext> {
+        let mut ctx = next.run(ctx).await?;
+        if let Some(result) = ctx.result.take() {
+            let text = result.to_string();
+            let masked: Vec<String> = text
+                .split('"')
+                .map(|part| if part.contains('@') { "[email]".to_string() } else { part.to_string() })
+                .collect();
+            ctx.result = Some(serde_json::from_str(&masked.join("\"")).unwrap_or(result));
+        }
+        Ok(ctx)
+    }
+}
+
+/// Caches results per tool and arguments; a hit never reaches the tool.
+#[derive(Default)]
+struct ResultCache(Mutex<HashMap<String, Value>>);
+
+#[async_trait]
+impl Middleware<FunctionInvocationContext> for ResultCache {
+    async fn process(
+        &self,
+        mut ctx: FunctionInvocationContext,
+        next: Next<FunctionInvocationContext>,
+    ) -> Result<FunctionInvocationContext> {
+        let key = format!("{}:{}", ctx.function_name, ctx.arguments);
+        if let Some(hit) = self.0.lock().unwrap().get(&key).cloned() {
+            ctx.result = Some(hit);
+            return Ok(ctx);
+        }
+        let ctx = next.run(ctx).await?;
+        if let Some(result) = &ctx.result {
+            self.0.lock().unwrap().insert(key, result.clone());
+        }
+        Ok(ctx)
+    }
+}
+
+/// Refuses calls outside office hours (here: always), in the model's terms.
+struct OfficeHours;
+
+#[async_trait]
+impl Middleware<FunctionInvocationContext> for OfficeHours {
+    async fn process(
+        &self,
+        ctx: FunctionInvocationContext,
+        next: Next<FunctionInvocationContext>,
+    ) -> Result<FunctionInvocationContext> {
+        if ctx.function_name == "send_email" {
+            return Err(Error::tool_rejected(format!(
+                "send_email is only available 09:00-17:00 (call {})",
+                ctx.metadata["call_id"].as_str().unwrap_or("?")
+            )));
+        }
+        next.run(ctx).await
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let runs = Arc::new(Mutex::new(0));
+    let counter = runs.clone();
+    let search = FunctionTool::new(
+        "search_customers",
+        "Search customers.",
+        json!({ "type": "object", "properties": { "q": { "type": "string" }, "limit": { "type": "integer" } } }),
+        move |args| {
+            let counter = counter.clone();
+            async move {
+                *counter.lock().unwrap() += 1;
+                Ok(json!({ "limit_used": args["limit"], "hits": [{ "name": "Ada", "email": "ada@example.com" }] }))
+            }
+        },
+    )
+    .into_definition();
+    let send = FunctionTool::new("send_email", "Send an e-mail.", json!({ "type": "object" }), |_| async {
+        Ok(json!("sent"))
+    })
+    .into_definition();
+
+    let agent = Agent::builder(Batch(vec![
+        ("search_customers", json!({ "q": "ada", "limit": 500 })),
+        ("search_customers", json!({ "q": "ada", "limit": 500 })),
+        ("send_email", json!({ "to": "ada@example.com" })),
+    ]))
+    .tools([search, send])
+    .function_middleware(Arc::new(OfficeHours)) // outermost
+    .function_middleware(Arc::new(RedactEmails))
+    .function_middleware(Arc::new(ResultCache::default()))
+    .function_middleware(Arc::new(ClampLimit)) // innermost: closest to the tool
+    .function_invocation_config(FunctionInvocationConfig {
+        allow_concurrent_invocation: false, // so the second search hits the cache
+        ..Default::default()
+    })
+    .build();
+
+    println!("{}", agent.run_once("find Ada and mail her").await?.text());
+    println!("search tool ran {} time(s)", runs.lock().unwrap());
+    Ok(())
+}
 ```
 
 ```text
@@ -181,7 +632,87 @@ All middleware is attached when the agent is built. `AgentRunOptions` carries ch
 Because chat middleware runs once per run, anything that must happen on every model request is a `ChatClient` decorator: a struct that holds the provider client, implements `ChatClient` by delegating to it, and does its work around the delegated call. Hand the decorated client to `Agent::builder`. The builder puts the tool loop above it, so `get_response` runs once per model request, including the requests that carry tool results. `RetryingChatClient` and `ObservableChatClient` are built this way.
 
 ```rust
-@@mw_05@@
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// A decorator around the provider client. The agent puts its tool loop
+/// above this, so `get_response` runs once per model request.
+struct PerRequest<C> {
+    inner: C,
+    max_requests: usize,
+    requests: AtomicUsize,
+}
+
+#[async_trait]
+impl<C: ChatClient> ChatClient for PerRequest<C> {
+    async fn get_response(&self, mut messages: Vec<Message>, options: ChatOptions) -> Result<ChatResponse> {
+        let n = self.requests.fetch_add(1, Ordering::SeqCst) + 1;
+        if n > self.max_requests {
+            // Errors from the client are not tool errors: the run fails.
+            return Err(Error::other(format!("model request budget of {} spent", self.max_requests)));
+        }
+        // Redact on every request, including the ones carrying tool results.
+        for message in &mut messages {
+            for content in &mut message.contents {
+                if let Content::Text(text) = content {
+                    text.text = text.text.replace("4111-1111", "[card]");
+                }
+            }
+        }
+        println!("  request {n}: {} message(s)", messages.len());
+        self.inner.get_response(messages, options).await
+    }
+    async fn get_streaming_response(&self, messages: Vec<Message>, options: ChatOptions) -> Result<ChatStream> {
+        self.inner.get_streaming_response(messages, options).await
+    }
+    // Forward these so observability and model defaults still work.
+    fn model(&self) -> Option<&str> {
+        self.inner.model()
+    }
+    fn service_url(&self) -> Option<&str> {
+        self.inner.service_url()
+    }
+}
+
+/// Keeps calling `lookup` until it sees two results.
+#[derive(Clone)]
+struct Model;
+
+#[async_trait]
+impl ChatClient for Model {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let results = messages.iter().filter(|m| m.role == Role::tool()).count();
+        if results >= 2 {
+            return Ok(ChatResponse::from_text(format!("done; I saw: {}", messages[0].text())));
+        }
+        let call = FunctionCallContent::new(format!("c{results}"), "lookup", Some(FunctionArguments::Raw("{}".into())));
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+fn agent(max_requests: usize) -> Agent {
+    let lookup = FunctionTool::new("lookup", "", json!({ "type": "object" }), |_| async { Ok(json!("ok")) });
+    let client = PerRequest { inner: Model, max_requests, requests: AtomicUsize::new(0) };
+    Agent::builder(client).tool(lookup.into_definition()).build()
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("{}", agent(5).run_once("card 4111-1111 was declined").await?.text());
+    println!("{:?}", agent(2).run_once("card 4111-1111 was declined").await.map(|r| r.text()));
+    Ok(())
+}
 ```
 
 ```text
@@ -225,7 +756,139 @@ A cache at agent level answers whole runs from the input; at chat level, model c
 To degrade gracefully, match on the result of `next.run` and build a replacement context. `next.run` consumes the context, so keep what you need (the messages, `is_streaming`) beforehand and rebuild with `AgentContext::new(messages, is_streaming)`. For usage, read `result.usage_details` after `next.run`; the tool loop sums usage over every model request of the run, so one read covers the whole run.
 
 ```rust
-@@mw_04@@
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+use tokio::sync::Semaphore;
+
+/// A slow model that sometimes leaks a secret and sometimes fails.
+#[derive(Clone)]
+struct Model;
+
+#[async_trait]
+impl ChatClient for Model {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        let question = messages.last().map(Message::text).unwrap_or_default();
+        match question.as_str() {
+            "config?" => Ok(ChatResponse::from_text("The key is sk-live-1234.")),
+            "outage" => Err(Error::service_status(503, "upstream unavailable", None)),
+            other => Ok(ChatResponse::from_text(format!("answer to {other}"))),
+        }
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+/// Logging: one line per run with duration and outcome.
+struct LogRuns;
+
+#[async_trait]
+impl Middleware<AgentContext> for LogRuns {
+    async fn process(&self, ctx: AgentContext, next: Next<AgentContext>) -> Result<AgentContext> {
+        let started = Instant::now();
+        let question = ctx.messages.last().map(Message::text).unwrap_or_default();
+        let outcome = next.run(ctx).await;
+        let status = match &outcome {
+            Ok(_) => "ok".to_string(),
+            Err(e) => format!("error: {e}"),
+        };
+        tracing::info!(question, status, ms = started.elapsed().as_millis() as u64, "agent run");
+        outcome
+    }
+}
+
+/// Rate limit: at most `permits` runs in flight; the rest wait their turn.
+struct Concurrency {
+    permits: Semaphore,
+    in_flight: AtomicUsize,
+    peak: AtomicUsize,
+}
+
+#[async_trait]
+impl Middleware<AgentContext> for Concurrency {
+    async fn process(&self, ctx: AgentContext, next: Next<AgentContext>) -> Result<AgentContext> {
+        let _permit = self.permits.acquire().await.map_err(Error::other)?;
+        let now = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+        self.peak.fetch_max(now, Ordering::SeqCst);
+        let result = next.run(ctx).await;
+        self.in_flight.fetch_sub(1, Ordering::SeqCst);
+        result
+    }
+}
+
+/// Output guardrail: replace any answer that looks like it leaks a key.
+struct NoKeys;
+
+#[async_trait]
+impl Middleware<AgentContext> for NoKeys {
+    async fn process(&self, ctx: AgentContext, next: Next<AgentContext>) -> Result<AgentContext> {
+        let mut ctx = next.run(ctx).await?;
+        if ctx.result.as_ref().is_some_and(|r| r.text().contains("sk-")) {
+            ctx.result = Some(AgentResponse {
+                messages: vec![Message::assistant("[answer withheld: it contained a credential]")],
+                ..Default::default()
+            });
+        }
+        Ok(ctx)
+    }
+}
+
+/// Fallback: turn a service failure into a polite answer.
+struct Fallback;
+
+#[async_trait]
+impl Middleware<AgentContext> for Fallback {
+    async fn process(&self, ctx: AgentContext, next: Next<AgentContext>) -> Result<AgentContext> {
+        // `next.run` consumes the context; keep what is needed to rebuild one.
+        let (messages, streaming) = (ctx.messages.clone(), ctx.is_streaming);
+        match next.run(ctx).await {
+            Err(Error::ServiceStatus { status, .. }) if status >= 500 => {
+                let mut ctx = AgentContext::new(messages, streaming);
+                ctx.result = Some(AgentResponse {
+                    messages: vec![Message::assistant("The service is busy; please try again shortly.")],
+                    ..Default::default()
+                });
+                Ok(ctx)
+            }
+            other => other,
+        }
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    tracing_subscriber::fmt().with_target(false).without_time().with_ansi(false).init();
+
+    let limiter = Arc::new(Concurrency {
+        permits: Semaphore::new(2),
+        in_flight: AtomicUsize::new(0),
+        peak: AtomicUsize::new(0),
+    });
+    let agent = Arc::new(
+        Agent::builder(Model)
+            .middleware(Arc::new(LogRuns)) // outermost: logs what the caller gets
+            .middleware(limiter.clone())
+            .middleware(Arc::new(NoKeys))
+            .middleware(Arc::new(Fallback)) // innermost: closest to the model
+            .build(),
+    );
+
+    let mut tasks = Vec::new();
+    for question in ["a?", "b?", "c?", "d?", "config?", "outage"] {
+        let agent = agent.clone();
+        tasks.push(tokio::spawn(async move { agent.run_once(question).await.map(|r| r.text()) }));
+    }
+    for task in tasks {
+        println!("{:?}", task.await.unwrap());
+    }
+    println!("peak concurrent runs: {}", limiter.peak.load(Ordering::SeqCst));
+    Ok(())
+}
 ```
 
 ```text
@@ -266,7 +929,95 @@ The delay before retry *n* is `initial_delay * backoff_multiplier^(n-1)`, capped
 `RetryOn::Default` retries `Error::ServiceStatus` with status 408, 429 or 5xx, and an `Error::Service` whose message mentions a transport failure (`request failed`, `timed out`, `timeout`, `connection`, `stream error`). It never retries `ServiceInvalidAuth`, `ServiceInvalidRequest` or `ServiceContentFilter`, or anything that is not a service error. `RetryOn::predicate(|err| ...)` replaces the rule entirely.
 
 ```rust
-@@mw_06@@
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+
+/// Plays back a script of failures, printing when each attempt arrives.
+#[derive(Clone)]
+struct Flaky {
+    script: Arc<Mutex<VecDeque<Result<ChatResponse>>>>,
+    started: Instant,
+}
+
+impl Flaky {
+    fn new(script: Vec<Result<ChatResponse>>) -> Self {
+        Self { script: Arc::new(Mutex::new(script.into())), started: Instant::now() }
+    }
+}
+
+#[async_trait]
+impl ChatClient for Flaky {
+    async fn get_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let next = self.script.lock().unwrap().pop_front();
+        let next = next.unwrap_or_else(|| Ok(ChatResponse::from_text("script exhausted")));
+        let label = match &next {
+            Ok(_) => "ok".to_string(),
+            Err(e) => e.to_string(),
+        };
+        println!("  t={:>4} ms  {label}", self.started.elapsed().as_millis());
+        next
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Deterministic backoff for the demonstration: 100, 200, 400 ms ...
+    let policy = RetryPolicy::with_max_retries(3)
+        .initial_delay(Duration::from_millis(100))
+        .backoff_multiplier(2.0)
+        .max_delay(Duration::from_millis(300))
+        .jitter(0.0);
+
+    println!("503, 503, 503, then success (third delay capped at 300 ms):");
+    let client = RetryingChatClient::new(Flaky::new(vec![
+        Err(Error::service_status(503, "unavailable", None)),
+        Err(Error::service_status(503, "unavailable", None)),
+        Err(Error::service_status(503, "unavailable", None)),
+        Ok(ChatResponse::from_text("hello")),
+    ]))
+    .with_policy(policy.clone());
+    let agent = Agent::builder(client).build();
+    println!("  -> {}", agent.run_once("hi").await?.text());
+
+    println!("429 with Retry-After: 0.05 s wins over the computed 100 ms:");
+    let client = RetryingChatClient::new(Flaky::new(vec![
+        Err(Error::service_status(429, "slow down", Some(0.05))),
+        Ok(ChatResponse::from_text("hello")),
+    ]))
+    .with_policy(policy.clone());
+    println!("  -> {}", Agent::builder(client).build().run_once("hi").await?.text());
+
+    println!("401 is never retried:");
+    let client = RetryingChatClient::new(Flaky::new(vec![Err(Error::service_invalid_auth("401 bad key"))]))
+        .with_policy(policy.clone());
+    println!("  -> {:?}", Agent::builder(client).build().run_once("hi").await.map(|r| r.text()));
+
+    println!("retries exhausted: the last error is returned:");
+    let client = RetryingChatClient::new(Flaky::new(vec![
+        Err(Error::service("request failed: connection reset")),
+        Err(Error::service("request failed: connection reset")),
+    ]))
+    .with_policy(RetryPolicy { max_retries: 1, ..policy.clone() });
+    println!("  -> {:?}", Agent::builder(client).build().run_once("hi").await.map(|r| r.text()));
+
+    println!("a custom rule: also retry content-filter refusals once:");
+    let client = RetryingChatClient::new(Flaky::new(vec![
+        Err(Error::service_content_filter("blocked")),
+        Ok(ChatResponse::from_text("hello")),
+    ]))
+    .with_policy(policy.retry_on(RetryOn::predicate(|e| {
+        matches!(e, Error::ServiceContentFilter { .. }) || e.status().is_some_and(|s| s >= 500)
+    })));
+    println!("  -> {}", Agent::builder(client).build().run_once("hi").await?.text());
+    Ok(())
+}
 ```
 
 ```text
@@ -333,7 +1084,95 @@ Constructor helpers exist for the common ones: `Error::service`, `service_status
 ### Matching errors
 
 ```rust
-@@mw_07@@
+use std::collections::BTreeMap;
+
+use agent_framework::error::{ContentFilterCategory, ContentFilterDetail};
+use agent_framework::prelude::*;
+use async_trait::async_trait;
+
+/// Fails every request with the error it was built with.
+struct Fails(fn() -> Error);
+
+#[async_trait]
+impl ChatClient for Fails {
+    async fn get_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        Err((self.0)())
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Err((self.0)())
+    }
+}
+
+/// What an application might do with each kind of failure.
+fn handle(err: &Error) -> String {
+    match err {
+        Error::ServiceStatus { status: 429, retry_after, .. } => {
+            format!("rate limited; retry after {retry_after:?} s")
+        }
+        Error::ServiceStatus { status, message, .. } if *status >= 500 => {
+            format!("provider error {status}: {message}")
+        }
+        Error::ServiceInvalidAuth { .. } => "check the API key".into(),
+        Error::ServiceInvalidRequest { message } => format!("bad request: {message}"),
+        Error::ServiceContentFilter { message, .. } => match err.content_filter_detail() {
+            Some(detail) => format!(
+                "filtered ({:?}, param {:?}): {:?}",
+                detail.code,
+                detail.param,
+                detail.filtered_categories()
+            ),
+            None => format!("filtered: {message}"),
+        },
+        Error::Service(message) => format!("transport: {message}"),
+        Error::Configuration(message) => format!("misconfigured: {message}"),
+        Error::MiddlewareFailure(message) => format!("blocked by policy: {message}"),
+        // Error is #[non_exhaustive]: a wildcard arm is required.
+        other => format!("other: {other}"),
+    }
+}
+
+fn filtered() -> Error {
+    let mut categories = BTreeMap::new();
+    categories.insert(
+        "violence".to_string(),
+        ContentFilterCategory { filtered: true, detected: None, severity: Some("medium".into()) },
+    );
+    categories.insert("hate".to_string(), ContentFilterCategory::default());
+    Error::service_content_filter_with_detail(
+        "The prompt was filtered",
+        ContentFilterDetail {
+            code: Some(ContentFilterDetail::RESPONSIBLE_AI_POLICY_VIOLATION.into()),
+            param: Some("prompt".into()),
+            categories,
+        },
+    )
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let failures: [fn() -> Error; 7] = [
+        || Error::service_status(429, "Too Many Requests", Some(2.0)),
+        || Error::service_status(502, "Bad Gateway", None),
+        || Error::service_invalid_auth("OpenAI API error 401: invalid key"),
+        || Error::service_invalid_request("OpenAI API error 400: unknown parameter"),
+        filtered,
+        || Error::service("request failed: connection refused"),
+        || Error::middleware_failure("tenant suspended"),
+    ];
+    for make in failures {
+        let agent = Agent::builder(Fails(make)).build();
+        let err = agent.run_once("hi").await.unwrap_err();
+        println!("{:<55} status={:?} retry_after={:?}", handle(&err), err.status(), err.retry_after());
+    }
+
+    // Configuration errors come from constructors, before any request.
+    std::env::remove_var("OPENAI_API_KEY");
+    match OpenAIChatCompletionClient::from_env("%%model=openai-small%%") {
+        Ok(_) => println!("client built"),
+        Err(err) => println!("{}", handle(&err)),
+    }
+    Ok(())
+}
 ```
 
 ```text
@@ -356,7 +1195,106 @@ Not every failure is an error. A response cut off by the token limit or a conten
 The `experimental-agent-hooks` feature implements the [AGENT-HOOKS 0.1](https://github.com/responsibleai/agent-hooks) control contract: a fixed set of interception points, a JSON context handed to interceptors at each, and an `allow`, `deny` or `transform` verdict that the framework must obey. It is the Rust counterpart of Python's `create_agent_hooks_middleware` and .NET's `AgentHooksAgent`. Where ordinary middleware is a toolkit, hooks are an enforcement layer: they fail closed when anything goes wrong, and they are installed as a unit so that no seam can be left out.
 
 ```rust
-@@mw_08@@
+// Needs the `experimental-agent-hooks` feature.
+use std::sync::{Arc, Mutex};
+
+use agent_framework::agent_hooks::{
+    interceptor_fn, AgentHooks, AgentHooksOptions, EnforcementMode, InterceptionPoint,
+    InterceptionRecord, Verdict,
+};
+use agent_framework::prelude::*;
+use agent_framework::types::FunctionArguments;
+use async_trait::async_trait;
+use serde_json::json;
+
+/// Calls `lookup_customer` once, then answers with what it got back.
+#[derive(Clone)]
+struct Model;
+
+#[async_trait]
+impl ChatClient for Model {
+    async fn get_response(&self, messages: Vec<Message>, _o: ChatOptions) -> Result<ChatResponse> {
+        let last = messages.last().unwrap();
+        if let Some(Content::FunctionResult(r)) = last.contents.first() {
+            let got = r.result.clone().map(|v| v.to_string()).or(r.exception.clone());
+            return Ok(ChatResponse::from_text(format!("Customer record: {}", got.unwrap_or_default())));
+        }
+        let call = FunctionCallContent::new(
+            "c1",
+            "lookup_customer",
+            Some(FunctionArguments::Raw(json!({ "id": 42, "include_card": true }).to_string())),
+        );
+        Ok(ChatResponse {
+            messages: vec![Message::with_contents(Role::assistant(), vec![Content::FunctionCall(call)])],
+            finish_reason: Some(FinishReason::tool_calls()),
+            ..Default::default()
+        })
+    }
+    async fn get_streaming_response(&self, _m: Vec<Message>, _o: ChatOptions) -> Result<ChatStream> {
+        Ok(Box::pin(futures::stream::empty()))
+    }
+}
+
+fn builder() -> AgentBuilder {
+    let lookup = FunctionTool::new("lookup_customer", "", json!({ "type": "object" }), |args| async move {
+        Ok(json!({ "id": args["id"], "card": if args["include_card"] == true { "4111 1111 1111 1111" } else { "" } }))
+    });
+    // Pass the raw client: the hooks put their own seam below the tool loop.
+    Agent::builder(Model).tool(lookup.into_definition())
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let policy = interceptor_fn(|ctx| async move {
+        Ok(match ctx.point() {
+            InterceptionPoint::Input if ctx.target().to_string().contains("password") => {
+                Verdict::deny("credential_request").with_message("Requests for passwords are refused.")
+            }
+            // Rewrite the tool's arguments before it runs...
+            InterceptionPoint::PreToolCall => Verdict::transform("$target.include_card", json!(false)),
+            // ...and the final answer before it is returned and stored.
+            InterceptionPoint::Output if ctx.target().to_string().contains("Customer") => {
+                Verdict::transform("$target.content", json!("[customer details withheld]"))
+            }
+            _ => Verdict::allow(),
+        })
+    });
+
+    let records: Arc<Mutex<Vec<InterceptionRecord>>> = Arc::default();
+    let sink = records.clone();
+    let hooks = AgentHooks::new(
+        AgentHooksOptions::new()
+            .named_interceptor("pii-policy", Arc::new(policy))
+            .record_sink(Arc::new(move |record: &InterceptionRecord| sink.lock().unwrap().push(record.clone()))),
+    )?;
+    // AgentHooksAgent implements SupportsAgentRun (it has no run_once).
+    let agent = builder().build_with_agent_hooks(hooks);
+
+    println!("{}", agent.run(vec![Message::user("Show customer 42")], None).await?.text());
+    for r in records.lock().unwrap().iter() {
+        println!("  {:<15} {:?} {:?}", r.interception_point.as_str(), r.verdict.decision, r.verdict.reason);
+    }
+
+    match agent.run(vec![Message::user("What is the admin password?")], None).await {
+        Ok(r) => println!("unexpected: {}", r.text()),
+        Err(err) => {
+            let blocked = err.interception_blocked().expect("an interception block");
+            println!("blocked at {} because {:?}: {err}", blocked.point(), blocked.reason());
+        }
+    }
+
+    // evaluate_only records verdicts but lets everything through.
+    let audit = AgentHooks::new(
+        AgentHooksOptions::new()
+            .interceptor(Arc::new(interceptor_fn(|_| async { Ok(Verdict::deny("would_block")) })))
+            .mode(EnforcementMode::EvaluateOnly),
+    )?;
+    println!("{}", builder().build_with_agent_hooks(audit).run(vec![Message::user("Show customer 42")], None).await?.text());
+
+    // At least one interceptor is required.
+    println!("{:?}", AgentHooks::new(AgentHooksOptions::new()).err());
+    Ok(())
+}
 ```
 
 ```text
