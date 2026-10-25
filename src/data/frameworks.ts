@@ -7,7 +7,7 @@ export type Framework = {
   symbol: string;
   tagline: string;
   href: string;
-  languages: Array<'Python' | 'TypeScript' | '.NET' | 'Go'>;
+  languages: Array<'Python' | 'TypeScript' | '.NET' | 'Go' | 'Rust'>;
   category:
     | 'Multi-Agent'
     | 'Data & RAG'
@@ -38,6 +38,7 @@ export const languageSymbol: Record<Framework['languages'][number], string> = {
   TypeScript: 'Ts',
   '.NET': 'C#',
   Go: 'Go',
+  Rust: 'Rs',
 };
 
 /** Current version of a package, from versions.json (the single source of truth). */
@@ -230,11 +231,11 @@ export const frameworks: Framework[] = [
     name: 'Microsoft Agent Framework',
     tagline: 'Unifies Semantic Kernel + AutoGen. A2A, graphs, declarative.',
     href: '/microsoft-agent-framework-guide/',
-    languages: ['Python', '.NET', 'Go'],
+    languages: ['Python', '.NET', 'Go', 'Rust'],
     category: 'Cloud-Native',
     difficulty: 'Intermediate',
     useCases: ['azure', 'enterprise', 'a2a'],
-    version: `Python ${v('agent-framework')} / .NET ${v('Microsoft.Agents.AI')} / Go ${v('github.com/microsoft/agent-framework-go')}`,
+    version: `Python ${v('agent-framework')} / .NET ${v('Microsoft.Agents.AI')} / Go ${v('github.com/microsoft/agent-framework-go')} / Rust ${v('agent-framework-rs')} (community)`,
   },
   {
     id: 'google-adk',

@@ -53,7 +53,7 @@ Built-in tools (web search, code interpreter, image generation, document librari
 Related Mistral features that this guide does not cover in depth:
 
 - **Le Chat deployment.** `agents.update(..., deployment_chat=True)` makes an agent available in Le Chat; `agents.list_pages(deployment_chat=True)` lists those agents.
-- **Reasoning effort.** `completion_args={"reasoning_effort": "low"}` (`"none"` to `"xhigh"`) on models that support it.
+- **Reasoning effort.** `completion_args={"reasoning_effort": "low"}` on models that support it. The SDK accepts `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` and, from 3.5.0, `"max"` (see [below](#added-in-350-max-reasoning-effort)).
 - **Prompts and Skills** (`client.beta.prompts`, `client.beta.skills`): stored, versioned prompt and skill objects.
 - **Workflows** (`client.workflows`, `mistralai.extra.workflows`) and **voice agents** (`mistralai.extra.voice_agents`) are separate products with their own documentation.
 
@@ -631,6 +631,25 @@ print(client.responses.count_input_tokens(model="%%model=mistral%%", input="What
 We ran this against a scripted `httpx2.MockTransport`, not the live API, so the output shape is the SDK's model rather than a recorded reply. `stream=True` returns server-sent events, and `previous_response_id`, `conversation` and `prompt` are accepted by the signature but we did not exercise them. The TypeScript equivalent is `await client.responses.create({ model, input, instructions })`.
 
 Two smaller 3.4.0 changes sit outside this guide: `audio_agents.create()` now requires `configuration` (it was optional), and `KeywordRetriever` gained an `operator` field (`"or"` by default, or `"and"`).
+
+### Added in 3.5.0: `max` reasoning effort
+
+`mistralai` 3.5.0 (25 October 2026) added one value, `"max"`, to the `ReasoningEffort` type. It is accepted wherever reasoning effort is: an agent's or a conversation's `completion_args`, and the `reasoning_effort=` argument of `chat.complete`, `chat.stream`, `agents.complete` and `agents.stream`. Nothing else in the SDK changed. The TypeScript client gained the same value in 3.3.0 (`completionArgs: { reasoningEffort: "max" }`).
+
+```python
+from mistralai.client import Mistral
+
+client = Mistral(api_key="...")
+
+agent = client.beta.agents.create(
+    model="%%model=mistral%%",
+    name="deep-reviewer",
+    instructions="Review the design carefully before answering.",
+    completion_args={"reasoning_effort": "max"},
+)
+```
+
+We checked this against a scripted `httpx2.MockTransport`: the SDK sends `"reasoning_effort": "max"` and reads it back on the returned agent. Which models accept `"max"`, and how it differs from `"xhigh"` in cost and latency, is decided by the API; we have not tested it against the live service, so check the model's page on docs.mistral.ai first. Upgrade before you rely on it: in the same mock test `mistralai` 3.4.0 accepted `"max"` without an error but left it out of the request body, so the call would run at the model's default effort. The TypeScript 3.2.0 client, by contrast, sent the string through unchanged.
 
 Upgrading from v1 as well? v2 moved every import from `mistralai` to `mistralai.client`, and Azure/GCP clients to `mistralai.azure.client` / `mistralai.gcp.client`.
 

@@ -17,6 +17,12 @@
       "version": "0.2.0",
       "guide": "microsoft-agent-framework-guide"
     },
+    "agent-framework-rs": {
+      "name": "agent-framework",
+      "registry": "crates",
+      "version": "0.14.0",
+      "guide": "microsoft-agent-framework-guide"
+    },
     "pydantic-ai": {
       "registry": "pypi",
       "version": "2.61.0",
@@ -205,12 +211,12 @@
     },
     "mistralai": {
       "registry": "pypi",
-      "version": "3.4.0",
+      "version": "3.5.0",
       "guide": "mistral-agents-api-guide"
     },
     "@mistralai/mistralai": {
       "registry": "npm",
-      "version": "3.2.0",
+      "version": "3.3.0",
       "guide": "mistral-agents-api-guide"
     },
     "boto3": {

@@ -3,7 +3,7 @@ import { frameworks, categoryGroup, languageSymbol, type Framework } from '../da
 import { withBase } from './FrameworkGrid';
 
 type Lang = Framework['languages'][number];
-const LANGS: Lang[] = ['Python', 'TypeScript', '.NET', 'Go'];
+const LANGS: Lang[] = ['Python', 'TypeScript', '.NET', 'Go', 'Rust'];
 
 const groupVar: Record<string, [string, string]> = {
   oxide: ['var(--ac)', 'var(--onac)'],

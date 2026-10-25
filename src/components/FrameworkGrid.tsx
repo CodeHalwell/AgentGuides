@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { frameworks, categoryGroup, languageSymbol, type Framework } from '../data/frameworks';
 
 const categories = ['All', 'Multi-Agent', 'Data & RAG', 'Cloud-Native', 'Model-Specific', 'Enterprise', 'Lightweight'] as const;
-const languages = ['All', 'Python', 'TypeScript', '.NET', 'Go'] as const;
+const languages = ['All', 'Python', 'TypeScript', '.NET', 'Go', 'Rust'] as const;
 const difficulties = ['All', 'Beginner', 'Intermediate', 'Advanced'] as const;
 
 type Category = (typeof categories)[number];
