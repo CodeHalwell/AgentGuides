@@ -1639,7 +1639,7 @@ async fn live_structured_output_matches_the_schema() {
 }
 ```
 
-Assert on behaviour that should hold for any competent model (the tool was called, the JSON parses, the finish reason is `stop`) rather than exact wording. There is no evaluation framework in the Rust port comparable to Python's `agent_framework` evaluation helpers; the [evaluation recipe](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_recipes/#a-regression-suite-with-a-judge-model) is a small one built from the pieces above.
+Assert on behaviour that should hold for any competent model (the tool was called, the JSON parses, the finish reason is `stop`) rather than exact wording. There is no evaluation framework in the Rust port comparable to Python's `agent_framework` evaluation helpers; the [evaluation recipe](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_recipes/#a-regression-suite-with-a-judge-model) is a small one built from the pieces above. The [evaluation page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_evaluation/) covers rule checks, the `Judge`, datasets and CI gates in full.
 
 ## Running the suite in CI
 
