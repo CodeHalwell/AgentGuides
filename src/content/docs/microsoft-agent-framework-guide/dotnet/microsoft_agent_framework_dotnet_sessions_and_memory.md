@@ -396,6 +396,7 @@ A store for a key-value database, with deletion, looks like this:
 ```csharp
 #pragma warning disable MAAI001
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Hosting;
@@ -423,16 +424,30 @@ Console.WriteLine($"restored {history!.Count} messages");
 await store.DeleteSessionAsync(agent, key);
 Console.WriteLine(await store.GetSessionAsync(agent, key) is null ? "deleted" : "still there");
 
+// Two different callers whose components would collide if simply joined with ':'.
+string first = KeyValueSessionStore.RowKey(agent, new AgentSessionStoreKey("b:c").WithPartition("isolation", "alice"));
+string second = KeyValueSessionStore.RowKey(agent, new AgentSessionStoreKey("c").WithPartition("isolation", "alice:b"));
+Console.WriteLine(first == second ? "COLLISION" : "distinct keys");
+
 public sealed class KeyValueSessionStore : AgentSessionStore
 {
     private readonly ConcurrentDictionary<string, string> _rows = new();   // stand-in for Redis, SQL, ...
 
-    private static string RowKey(AIAgent agent, AgentSessionStoreKey key)
+    // Every component is attacker-influenced (session IDs come from clients), so encode them
+    // unambiguously: a JSON array escapes each string, so no value can masquerade as a separator.
+    // Hashing the result gives a fixed-length key that is safe to use in any store.
+    public static string RowKey(AIAgent agent, AgentSessionStoreKey key)
     {
-        string partitions = key.Partitions is null
-            ? ""
-            : string.Join(";", key.Partitions.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"));
-        return $"{agent.Name ?? agent.Id}|{partitions}|{key.SessionId}";
+        string[] parts =
+        [
+            agent.Name ?? agent.Id,
+            key.SessionId,
+            .. (key.Partitions ?? new Dictionary<string, string>())
+                .OrderBy(p => p.Key, StringComparer.Ordinal)
+                .SelectMany(p => new[] { p.Key, p.Value }),
+        ];
+        byte[] canonical = JsonSerializer.SerializeToUtf8Bytes(parts);
+        return Convert.ToHexString(SHA256.HashData(canonical));
     }
 
     public override async ValueTask SaveSessionAsync(AIAgent agent, AgentSessionStoreKey key, AgentSession session, CancellationToken cancellationToken = default)
@@ -455,6 +470,8 @@ public sealed class KeyValueSessionStore : AgentSessionStore
     }
 }
 ```
+
+The row key is the security boundary of a store: if two different keys can map to the same row, one caller can read, overwrite or delete another's session, and partition-based isolation means nothing. Joining the parts with a delimiter is not enough, because a session ID or partition value can contain the delimiter (`alice` + `b:c` and `alice:b` + `c` both join to `alice:b:c`), so encode the parts unambiguously (here, as a JSON array) before hashing, as the example does.
 
 `AIHostAgent` is the `DelegatingAIAgent` the hosting layer wraps around your agent: it adds `GetOrCreateSessionAsync` and `SaveSessionAsync` (by conversation ID or by key), and `BindIsolationKey(key)` to fix the isolation key for one request. Its optional `sessionStorageIdentity` partitions storage by a logical name instead of the agent's ID, so a redeployed agent with a new ID still finds its sessions.
 
