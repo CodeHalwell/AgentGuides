@@ -267,6 +267,90 @@ When `Config.HistoryProvider` is nil the agent uses `agent.NewInMemoryHistoryPro
 | `StoreInputRequestMessageFilter` | messages not from a history provider | which request messages are stored |
 | `StoreInputResponseMessageFilter` | all | which response messages are stored |
 
+### Approvals and local history
+
+The default in-memory history stores approval content like any other: the assistant message holding the `ToolApprovalRequestContent`, and the user message holding your `ToolApprovalResponseContent`, followed by the call and its result. Against the local stand-in (not a real model), the next run on such a session failed before calling the model with `ToolApprovalRequestContent found with ToolCall.CallID(s) 'call_3' that have no matching ToolApprovalResponseContent`, naming the earlier request even though its response is in the stored history. It happened with Chat Completions and with Responses and `DisableStoreOutput`, also with unique call IDs; Responses with service-held history was not affected. Until this is clarified upstream, loading history without the approval messages avoided it in the same test, across several approve-then-continue turns (approval binding is kept in separate session state, so it still works):
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/microsoft/agent-framework-go/agent"
+	"github.com/microsoft/agent-framework-go/message"
+	"github.com/microsoft/agent-framework-go/provider/openaiprovider"
+	"github.com/microsoft/agent-framework-go/tool"
+	"github.com/microsoft/agent-framework-go/tool/functool"
+	"github.com/openai/openai-go/v3"
+)
+
+type NoteIn struct {
+	Text string `json:"text"`
+}
+
+var saveNote = tool.ApprovalRequiredFunc(functool.MustNew(
+	functool.Config{Name: "save_note", Description: "Save a note."},
+	func(ctx context.Context, in NoteIn) (string, error) { return "saved", nil }))
+
+// withoutApprovals drops stored messages that carry approval requests or responses.
+func withoutApprovals(_ context.Context, msgs []*message.Message) ([]*message.Message, error) {
+	out := msgs[:0]
+	for _, m := range msgs {
+		keep := true
+		for _, c := range m.Contents {
+			switch c.(type) {
+			case *message.ToolApprovalRequestContent, *message.ToolApprovalResponseContent:
+				keep = false
+			}
+		}
+		if keep {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+func main() {
+	ctx := context.Background()
+	a := openaiprovider.NewChatCompletionsAgent(openai.NewClient(), openaiprovider.AgentConfig{
+		Model: "%%model=openai%%",
+		Config: agent.Config{
+			Tools: []tool.Tool{saveNote},
+			HistoryProvider: agent.NewInMemoryHistoryProvider(agent.InMemoryHistoryProviderConfig{
+				ProvideOutputMessageFilter: withoutApprovals,
+			}),
+		},
+	})
+	session, err := a.CreateSession(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, q := range []string{"Save a note: buy milk.", "Save another: call Ada."} {
+		resp, err := a.RunText(ctx, q, agent.WithSession(session)).Collect()
+		if err != nil {
+			log.Fatal(err)
+		}
+		var answers []message.Content
+		for c := range resp.Contents() {
+			if req, ok := c.(*message.ToolApprovalRequestContent); ok {
+				answers = append(answers, req.CreateResponse(true, ""))
+			}
+		}
+		if len(answers) > 0 {
+			if resp, err = a.RunMessage(ctx, message.New(answers...), agent.WithSession(session)).Collect(); err != nil {
+				log.Fatal(err)
+			}
+		}
+		fmt.Println(resp)
+	}
+}
+```
+
+The filter only changes what is loaded; the stored transcript still contains the approval messages.
+
 ### Message sources and filters
 
 Each message carries a `Source` (`message.Source{ID, Type}`) saying where it came from. Your input is external (the zero value), messages loaded from history are stamped `agent.SourceTypeHistoryProvider`, context added by a context provider `agent.SourceTypeContextProvider`, and messages added by middleware `agent.SourceTypeMiddleware`. Providers use this to avoid feeding their own output back in: by default the history provider does not store messages it loaded, and context providers search and store only external messages.

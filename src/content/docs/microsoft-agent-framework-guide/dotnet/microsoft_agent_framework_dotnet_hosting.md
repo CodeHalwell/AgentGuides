@@ -476,7 +476,7 @@ Every endpoint above that keeps conversations loads and saves sessions through a
 
 There is no Cosmos DB session store. To keep long histories out of the session, give the agent a `CosmosChatHistoryProvider` (package `Microsoft.Agents.AI.CosmosNoSql`): the messages then live in Cosmos DB and the session only records where. `Microsoft.Agents.AI.Foundry.Hosting` has its own `FoundryAgentSessionStore`, `InMemoryAgentSessionStore` and `FileSystemAgentSessionStore` for Foundry hosted agents.
 
-A store of your own implements `GetSessionAsync`, `SaveSessionAsync` and `DeleteSessionAsync` and serialises sessions with the agent's own `SerializeSessionAsync` / `DeserializeSessionAsync`. `DeleteSessionAsync` became abstract again in 1.26.0, so a store written against 1.25 must add it; deleting a session that does not exist should do nothing. `AgentSessionStoreKey` has the `SessionId` and optional `Partitions` (the isolation key is one), and the storage key must include both.
+The store contract (the three abstract methods, `AgentSessionStoreKey` and its partitions, and the `DeleteSessionAsync` change in 1.26.0) is on the [sessions and memory page](/microsoft-agent-framework-guide/dotnet/microsoft_agent_framework_dotnet_sessions_and_memory/#session-stores-hosting). For hosting, the point is that the storage key must include the key's partitions as well as its `SessionId`, because the isolation key travels as a partition. A store over `IDistributedCache`, for Redis or SQL Server, looks like this:
 
 ```csharp
 using System.Text.Json;

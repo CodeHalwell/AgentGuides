@@ -526,7 +526,7 @@ To give the model on-demand access to resources instead, write a small function 
 
 An `*mcp.ClientSession` is a live connection. Keep it open for as long as an agent may call its tools, and close it afterwards; for a `CommandTransport`, `Close` also stops the child process (stdin is closed, then the process gets `TerminateDuration`, default five seconds, before it is signalled). `session.Wait()` blocks until the server ends the session.
 
-The tools returned by `ListTools` hold the session. If the server goes away, every later call fails with `MCP tool call failed: ...`, the loop reports `Error: Function failed.` to the model, and after the consecutive-error limit the run fails. There is no automatic reconnect at the framework level (the streamable HTTP transport retries a dropped stream up to `MaxRetries` times on its own). For long-running services, reconnect and rebuild the tool list when a call fails with a closed-session error, and pass the new tools per run with `agent.WithTool` so the agent need not be rebuilt:
+The tools returned by `ListTools` hold the session. If the server goes away, every later call fails with `MCP tool call failed: ...`, that error text is passed to the model as the tool result, and after the consecutive-error limit the run fails. There is no automatic reconnect at the framework level (the streamable HTTP transport retries a dropped stream up to `MaxRetries` times on its own). For long-running services, reconnect and rebuild the tool list when a call fails with a closed-session error, and pass the new tools per run with `agent.WithTool` so the agent need not be rebuilt:
 
 ```go
 package main

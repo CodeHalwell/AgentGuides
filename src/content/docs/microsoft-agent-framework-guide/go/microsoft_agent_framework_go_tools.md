@@ -136,7 +136,18 @@ The rules that follow from this:
 
 ### What the model sees when a tool fails
 
-When a tool returns an error, the loop does not fail the run. It sends the model a `FunctionResultContent` whose `Result` is the text `Error: Function failed.` and whose `Error` field holds your error, and lets the model carry on. The details are kept from the model unless you set `IncludeDetailedErrors` (see [the tool loop](#the-tool-loop)), in which case it sees `Error: Function failed. Exception: <your error>`. Validation failures count as errors in the same way. A round counts as failing when any call in it returned an error, and once the number of consecutive failing rounds exceeds `MaximumConsecutiveErrorsPerRequest` (three by default, so on the fourth) the loop gives up and the run returns that round's errors, joined with `errors.Join` when there are several.
+When a tool returns an error, the loop does not fail the run. It records a `FunctionResultContent` whose `Result` is the text `Error: Function failed.` (or `Error: Function failed. Exception: <your error>` with `IncludeDetailedErrors`) and whose `Error` field holds your error, and lets the model carry on. Validation failures count as errors in the same way.
+
+**The model sees your error text anyway.** The `toolautocall` documentation says the generic result keeps details from the model, but in v%%version=github.com/microsoft/agent-framework-go%% every built-in provider serialises the `Error` field, not the `Result`, whenever `Error` is set. So `IncludeDetailedErrors` makes no visible difference, and the raw error reaches the model. Checked in the source and against the local stand-in with a tool returning `pq: password authentication failed for user admin`:
+
+| Provider | What the model receives |
+| --- | --- |
+| OpenAI Responses, Foundry | `function_call_output`: `Error: pq: password authentication failed for user admin` |
+| OpenAI Chat Completions | tool message: `pq: password authentication failed for user admin` (no prefix) |
+| Anthropic | `tool_result` text: `Error: pq: password authentication failed for user admin` |
+| Gemini | `functionResponse`: `{"error": "pq: password authentication failed for user admin"}` |
+
+Errors from databases, HTTP clients and the file system often contain host names, user names or file paths, so do not let them through unfiltered. Use the function middleware on the [production page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_production/#limits-on-the-tool-loop): it logs the real error and returns a bland one, which then is what the model sees. A round counts as failing when any call in it returned an error, and once the number of consecutive failing rounds exceeds `MaximumConsecutiveErrorsPerRequest` (three by default, so on the fourth) the loop gives up and the run returns that round's errors, joined with `errors.Join` when there are several.
 
 If you want the model to see a particular message, return it as the result instead of an error: `return "no weather station in Atlantis; try a nearby city", nil`.
 
@@ -236,7 +247,7 @@ The loop is configured through the provider's `AgentConfig.ToolAutoCall`:
 | --- | --- | --- |
 | `MaximumIterationsPerRequest *int` | 40 | rounds of tool calls per run. When reached, one last model call is made without any function tools, so the model has to answer in text. `new(0)` switches the loop off: function calls are returned to you unexecuted. Negative is an error |
 | `MaximumConsecutiveErrorsPerRequest *int` | 3 | consecutive rounds with at least one failed call that are tolerated; one more fails the run with that round's errors. `new(0)` fails on the first tool error. A round without errors resets the count |
-| `IncludeDetailedErrors` | false | include the error text in the result the model sees |
+| `IncludeDetailedErrors` | false | append the error text to the generic result. The built-in providers send the raw error regardless ([see above](#what-the-model-sees-when-a-tool-fails)) |
 | `AllowConcurrentInvocations` | false | run several calls from one response in parallel goroutines. Your tools must then be safe for concurrent use |
 | `TerminateOnUnknownCalls` | false | when the model calls a tool that does not exist, stop and return the response to you, instead of telling the model `Error: Requested function "x" not found.` |
 | `AdditionalTools []tool.Tool` | none | tools the loop may execute but does not advertise to the model, for providers configured with tool declarations some other way |
@@ -435,6 +446,7 @@ Piped an empty line, the program declines; the model is told `Tool call invocati
 - **Binding.** The loop records the requests it surfaced in the session and checks each response against them, so a client cannot approve a call that was never requested or alter its arguments. That is why approvals need a session. Without one there is nothing to match the response against, and it is dropped without an error: in testing, the follow-up run called the model with an empty message list and the tool never ran. `DisableApprovalResponseBinding` switches the check off, for callers that persist approval state themselves.
 - **Safe calls in the same batch.** If the model asks for an approval-required tool and an ordinary tool in one response, the ordinary call is held back and run automatically once the approvals come in, so you only see the request that needs a decision. `DisableApprovalNotRequiredFunctionBypassing` instead surfaces every call in the batch as an approval request.
 - **Streaming** works the same way: the `ToolApprovalRequestContent` arrives in an update, and the stream ends.
+- **A second approval on a local-history session can fail.** Against the local stand-in, on a session that keeps its history locally (Chat Completions, Anthropic, Gemini, or Responses with `DisableStoreOutput`), the run *after* a completed approval failed with `ToolApprovalRequestContent found with ToolCall.CallID(s) '...' that have no matching ToolApprovalResponseContent`, naming the earlier, already answered request. Sessions with service-held history were not affected. It was seen against a stand-in only, not a real model; [sessions and memory](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_sessions_and_memory/#approvals-and-local-history) has the details and a workaround.
 - **The model never sees the request.** Approval content is removed before the next model call and replaced by the function call and its result, or the rejection text.
 
 ### Standing approvals with `toolapproval`
@@ -590,7 +602,7 @@ func main() {
 }
 ```
 
-Each call runs the specialist without a session, so it remembers nothing between calls, and its intermediate tool calls do not appear in the manager's response. `Config.RunOptions` are passed to every call; to give the specialist a memory, pass `agent.WithSession(s)` there, but then every manager run shares that one session. The tool returns only the response text (`resp.String()`). An error from the inner run becomes the tool's error, which the manager's loop reports to the model as `Error: Function failed.`. If the specialist stops for an approval, there is no error: the manager just receives whatever text preceded the request, usually nothing, and the request is lost. Keep approval-required tools on the outer agent.
+Each call runs the specialist without a session, so it remembers nothing between calls, and its intermediate tool calls do not appear in the manager's response. `Config.RunOptions` are passed to every call; to give the specialist a memory, pass `agent.WithSession(s)` there, but then every manager run shares that one session. The tool returns only the response text (`resp.String()`). An error from the inner run becomes the tool's error, and its text reaches the manager's model ([see above](#what-the-model-sees-when-a-tool-fails)). If the specialist stops for an approval, there is no error: the manager just receives whatever text preceded the request, usually nothing, and the request is lost. Keep approval-required tools on the outer agent.
 
 The specialist inherits the call's context, so the manager's deadline and cancellation apply. For several agents that need to share a conversation or pass control, use a [workflow](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_workflows/).
 
@@ -805,7 +817,7 @@ func main() {
 }
 ```
 
-A command the policy denies is not run, and `Call` returns an error wrapping `shelltool: command rejected` with the reason. Like any tool error, the model sees only `Error: Function failed.` unless the loop has `IncludeDetailedErrors` set, and the failure counts towards the consecutive-error limit. `Result.FormatForModel()` is what the tool returns to the model: stdout, stderr, the exit code and any timeout or truncation flags in one block.
+A command the policy denies is not run, and `Call` returns an error wrapping `shelltool: command rejected` with the reason. Like any tool error, its text (including the reason) reaches the model, and the failure counts towards the consecutive-error limit. `Result.FormatForModel()` is what the tool returns to the model: stdout, stderr, the exit code and any timeout or truncation flags in one block.
 
 ## Differences from Python and .NET
 

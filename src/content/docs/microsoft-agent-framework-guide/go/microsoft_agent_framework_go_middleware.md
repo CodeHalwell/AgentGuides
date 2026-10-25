@@ -317,7 +317,7 @@ type FunctionInvocationMiddleware func(
 | `CallID string` | the model's call ID; read-only, empty if the provider gave none |
 | `Arguments string` | the raw JSON arguments, before the tool validates them. Replace it to change them |
 
-Return without calling `next` to skip the tool: whatever you return is the result (or error) the model sees, and the loop carries on. Errors are treated like tool errors, so the model sees `Error: Function failed.` and the consecutive-error count rises. Function middleware runs for every executed tool, including tools from context providers and MCP servers, and runs only when a tool actually executes; for an approval-required tool, that is after approval.
+Return without calling `next` to skip the tool: whatever you return is the result (or error) the model sees, and the loop carries on. Errors are treated like tool errors: the error text reaches the model (see [tools](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_tools/#what-the-model-sees-when-a-tool-fails)) and the consecutive-error count rises. Function middleware is also where to sanitise those errors; the [production page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_production/#limits-on-the-tool-loop) has one. Function middleware runs for every executed tool, including tools from context providers and MCP servers, and runs only when a tool actually executes; for an approval-required tool, that is after approval.
 
 ```go
 package main
