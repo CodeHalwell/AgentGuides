@@ -12,7 +12,7 @@ In the Go SDK a provider is a constructor that returns an ordinary `*agent.Agent
 
 This page goes through each provider: how to construct it, which credentials and environment variables it reads, what it sends on the wire, and what it does not support. The [comprehensive guide](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/) covers runs, streaming and structured output; [tools](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_tools/) covers function tools and hosted tools in detail.
 
-Every program below compiles with `go vet` and `go build` against `github.com/microsoft/agent-framework-go` v%%version=github.com/microsoft/agent-framework-go%% (Go 1.26). The OpenAI, OpenAI-compatible, Anthropic, Gemini, embedding and custom-provider programs were also run against a local stand-in for each wire API, reached through the vendor SDKs' base-URL environment variables. The Foundry behaviour described here (URLs, token audience, headers, session pinning) was checked with a stub credential against an HTTPS stand-in, but the Foundry program itself, and the Azure OpenAI, Bedrock, Vertex AI and Copilot programs, were only compiled.
+Every program below compiles with `go vet` and `go build` against `github.com/microsoft/agent-framework-go` v%%version=github.com/microsoft/agent-framework-go%% (Go 1.26). The OpenAI (the stand-in answers background requests inline), OpenAI-compatible, Anthropic, Gemini, embedding and custom-provider programs were also run against a local stand-in for each wire API, reached through the vendor SDKs' base-URL environment variables. The Azure OpenAI program was run with an API key against an HTTPS stand-in. The Foundry behaviour described here (URLs, token audience, headers, session pinning) was checked with a stub credential against the same stand-in, but the Foundry program itself, and the Bedrock, Vertex AI and Copilot programs, were only compiled.
 
 ## Choosing a provider
 
@@ -21,7 +21,7 @@ Every program below compiles with `go vet` and `go build` against `github.com/mi
 | OpenAI Responses | `openaiprovider.NewAgent`, `NewResponsesAgent` | `openai.Client` (`github.com/openai/openai-go/v3`) | `POST /responses` | service-side by default, local with `DisableStoreOutput` | web search, file search, code interpreter, hosted MCP | `text.format` JSON schema |
 | OpenAI Chat Completions | `openaiprovider.NewChatCompletionsAgent` | `openai.Client` | `POST /chat/completions` | local (in the session) | web search (`web_search_options`) | `response_format` JSON schema |
 | OpenAI-compatible server | `NewChatCompletionsAgent` + `option.WithBaseURL` | `openai.Client` | `/chat/completions` | local | depends on the server | depends on the server |
-| Azure OpenAI | either OpenAI constructor | `openai.Client` + `azure.WithTokenCredential` or `azure.WithAPIKey` | `/openai/v1/responses` or `/chat/completions` | as OpenAI | as OpenAI | as OpenAI |
+| Azure OpenAI | either OpenAI constructor | `openai.Client` + `azure.WithEndpoint` and `azure.WithTokenCredential` or `azure.WithAPIKey` | `/openai/responses` or `/openai/deployments/{d}/chat/completions` | as OpenAI | as OpenAI | as OpenAI |
 | Microsoft Foundry | `foundryprovider.NewAgent` | built for you from the project endpoint and an `azcore.TokenCredential` | `{project}/openai/v1/responses`, or the agent's own endpoint | service-side by default | as OpenAI Responses | as OpenAI Responses |
 | Anthropic | `anthropicprovider.NewAgent` | `anthropic.Client` (`github.com/anthropics/anthropic-sdk-go`) | `POST /v1/messages` | local | web search, code execution | `output_config.format` |
 | Google Gemini | `geminiprovider.NewAgent` | `*genai.Client` (`google.golang.org/genai`) | `generateContent` / `streamGenerateContent` | local | Google Search, code execution, file search | `responseJsonSchema` |
@@ -36,7 +36,7 @@ A rough guide to choosing:
 - **Claude:** `anthropicprovider.NewAgent`. The same constructor serves Claude on Amazon Bedrock, Google Vertex AI and Microsoft Foundry, because those are options on the Anthropic client.
 - **Gemini:** `geminiprovider.NewAgent`, for both the Gemini API and Vertex AI.
 
-There is no dedicated Ollama, Amazon Bedrock (Converse), Mistral or Foundry Local provider in v%%version=github.com/microsoft/agent-framework-go%%. Use the OpenAI-compatible route where the server offers one. Calling a remote A2A agent is covered under [A2A](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_comprehensive_guide/#a2a) in the comprehensive guide.
+There is no dedicated Ollama, Amazon Bedrock (Converse), Mistral or Foundry Local provider in v%%version=github.com/microsoft/agent-framework-go%%. Use the OpenAI-compatible route where the server offers one. Calling a remote A2A agent is covered on the [hosting and A2A page](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_hosting_and_a2a/#a2a-client).
 
 ## What every provider has in common
 
@@ -247,9 +247,112 @@ func main() {
 }
 ```
 
+### Background responses
+
+A long reasoning task can outlast an HTTP request. With `agent.AllowBackgroundResponses(true)` the Responses API runs it in the background: a non-streaming run returns at once with `resp.ContinuationToken` set, and you poll by running again with `agent.WithContinuationToken(token)` and **no messages** until the token comes back empty. A streaming run streams as usual, and each update carries a token, so an interrupted stream can be resumed from the last one. Background runs require a session; without one the run fails with "a session must be provided when AllowBackgroundResponses is enabled". Other providers ignore the option and answer inline.
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/microsoft/agent-framework-go/agent"
+	"github.com/microsoft/agent-framework-go/provider/openaiprovider"
+	"github.com/openai/openai-go/v3"
+)
+
+func main() {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	a := openaiprovider.NewResponsesAgent(openai.NewClient(), openaiprovider.AgentConfig{
+		Model:        "%%model=openai-flagship%%",
+		Instructions: "You are a thorough research assistant.",
+	})
+	session, err := a.CreateSession(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	resp, err := a.RunText(ctx, "Compare three approaches to rate limiting, with trade-offs.",
+		agent.WithSession(session), agent.AllowBackgroundResponses(true)).Collect()
+	if err != nil {
+		log.Fatal(err)
+	}
+	for resp.ContinuationToken != "" {
+		select {
+		case <-ctx.Done():
+			log.Fatal(ctx.Err())
+		case <-time.After(3 * time.Second):
+		}
+		// Polls carry the token and no messages.
+		resp, err = a.Run(ctx, nil, agent.WithSession(session), agent.WithContinuationToken(resp.ContinuationToken)).Collect()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+	fmt.Println(resp)
+}
+```
+
 ### Chat Completions or Responses?
 
 Use Responses for OpenAI and Azure OpenAI unless you have a reason not to. It is the only OpenAI path with file search, code interpreter, hosted MCP, background responses and server-held conversations, and reasoning summaries are only returned there. Use Chat Completions for servers that implement nothing else, and when you want the agent, not the service, to hold the transcript without having to remember `DisableStoreOutput`.
+
+### Images and files
+
+Input other than text goes in `message.Content` parts on a message passed to `RunMessage` or `Run`. `message.NewDataContent(bytes, mediaType)`, `NewDataContentFromFile(path, "")` and `NewDataContentFromReader` carry inline data (sent base64-encoded); `message.NewURIContent(url, "")` references something the service can fetch, inferring the media type from the URL when you pass an empty one. A `HostedFileContent` refers to a file already uploaded to the provider. Every provider accepts images, inline or by URL. Chat Completions also sends inline audio as `input_audio`, other inline data (a PDF, say) as a `file` part, and a `HostedFileContent` as a file ID, but it silently drops non-image content given by an `http(s)` URL, since the API has no way to fetch it. Responses and Gemini accept files inline, by URL and by hosted ID. Anthropic accepts images and PDFs inline or by URL, and rejects hosted file IDs with an error.
+
+```go
+package main
+
+import (
+	"context"
+	"encoding/base64"
+	"fmt"
+	"log"
+
+	"github.com/microsoft/agent-framework-go/message"
+	"github.com/microsoft/agent-framework-go/provider/openaiprovider"
+	"github.com/openai/openai-go/v3"
+)
+
+// A 1x1 red PNG, so the sample needs no file on disk.
+const redPixel = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=="
+
+func main() {
+	png, err := base64.StdEncoding.DecodeString(redPixel)
+	if err != nil {
+		log.Fatal(err)
+	}
+	inline, err := message.NewDataContent(png, "image/png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	remote, err := message.NewURIContent("https://go.dev/images/gophers/ladder.svg", "")
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("remote media type:", remote.MediaType)
+
+	a := openaiprovider.NewChatCompletionsAgent(openai.NewClient(), openaiprovider.AgentConfig{
+		Model: "%%model=openai%%",
+	})
+	msg := message.New(
+		&message.TextContent{Text: "What colour is this pixel?"},
+		inline,
+	)
+	resp, err := a.RunMessage(context.Background(), msg).Collect()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(resp)
+}
+```
 
 ## OpenAI-compatible servers
 
@@ -296,12 +399,13 @@ Whether tools, streaming and structured output work depends on the server and th
 
 ## Azure OpenAI
 
-Azure OpenAI uses the same two constructors. Build the client with the resource's v1 endpoint (`https://<resource>.openai.azure.com/openai/v1/`) and an Azure credential option from `github.com/openai/openai-go/v3/azure`; `Model` is then your **deployment name**, not the model ID.
+Azure OpenAI uses the same two constructors, with the OpenAI client configured by two options from `github.com/openai/openai-go/v3/azure`: `azure.WithEndpoint(endpoint, apiVersion)` with the resource endpoint (`https://<resource>.openai.azure.com`), and either `azure.WithAPIKey(key)` or `azure.WithTokenCredential(cred)`. `Model` is then your **deployment name**, not the model ID.
 
 ```go
 package main
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log"
@@ -315,8 +419,9 @@ import (
 )
 
 func main() {
-	endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")             // https://my-resource.openai.azure.com/openai/v1/
-	deployment := os.Getenv("AZURE_OPENAI_DEPLOYMENT_NAME")    // the deployment, not the model
+	endpoint := os.Getenv("AZURE_OPENAI_ENDPOINT")          // https://my-resource.openai.azure.com
+	deployment := os.Getenv("AZURE_OPENAI_DEPLOYMENT_NAME") // the deployment, not the model
+	apiVersion := cmp.Or(os.Getenv("AZURE_OPENAI_API_VERSION"), "2025-04-01-preview")
 
 	var auth option.RequestOption
 	if key := os.Getenv("AZURE_OPENAI_API_KEY"); key != "" {
@@ -328,7 +433,7 @@ func main() {
 		}
 		auth = azure.WithTokenCredential(cred) // scope https://cognitiveservices.azure.com/.default
 	}
-	client := openai.NewClient(option.WithBaseURL(endpoint), auth)
+	client := openai.NewClient(azure.WithEndpoint(endpoint, apiVersion), auth)
 
 	responsesAgent := openaiprovider.NewResponsesAgent(client, openaiprovider.AgentConfig{
 		Model:        deployment,
@@ -352,9 +457,9 @@ func main() {
 }
 ```
 
-`azure.WithTokenCredential` takes any `azcore.TokenCredential`. `DefaultAzureCredential` is convenient on a developer machine; in production use a specific credential such as `azidentity.NewManagedIdentityCredential`, which avoids probing a chain of sources on every cold start. To use a non-default scope, pass `azure.WithTokenCredentialScopes(...)` as an option to `WithTokenCredential`.
+`azure.WithEndpoint` adds the `api-version` query to every request and routes deployment-scoped calls: Chat Completions goes to `/openai/deployments/{deployment}/chat/completions`, and Responses to `/openai/responses`. Both Azure authentication options require it. The upstream Azure samples instead pass the v1 URL with `option.WithBaseURL` and `azure.WithTokenCredential`; with openai-go v3.79.0, the version the framework requires, that combination fails on the first request with `azure: authentication requires azure.WithEndpoint`. (Foundry's provider sets this up correctly for its own endpoints.) Authenticated requests must use HTTPS; `azure.WithUnsafeAllowHTTP()` allows plain HTTP to a loopback address for local testing only.
 
-For an older, deployment-routed endpoint with an `api-version` query, use `azure.WithEndpoint(endpoint, apiVersion)` instead of `option.WithBaseURL`. The v1 endpoint needs no API version and is what the upstream samples use.
+`azure.WithTokenCredential` takes any `azcore.TokenCredential`. `DefaultAzureCredential` is convenient on a developer machine; in production use a specific credential such as `azidentity.NewManagedIdentityCredential`, which avoids probing a chain of sources on every cold start. To use a non-default scope, pass `azure.WithTokenCredentialScopes(...)` as an option to `WithTokenCredential`.
 
 ## Microsoft Foundry
 
@@ -807,7 +912,7 @@ The framework itself reads no credentials. Each vendor client does, and the upst
 | Provider | Read by the client | Used by the samples |
 | --- | --- | --- |
 | OpenAI | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_ORG_ID`, `OPENAI_PROJECT_ID`, `OPENAI_CUSTOM_HEADERS` | `OPENAI_CHAT_MODEL_NAME` |
-| Azure OpenAI | none (pass `azure.WithAPIKey` or `azure.WithTokenCredential`); `azidentity` reads the usual `AZURE_*` variables | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME` |
+| Azure OpenAI | none (pass `azure.WithEndpoint` with `azure.WithAPIKey` or `azure.WithTokenCredential`); `azidentity` reads the usual `AZURE_*` variables | `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_DEPLOYMENT_NAME` |
 | Foundry | `azidentity` credentials | `FOUNDRY_PROJECT_ENDPOINT`, `FOUNDRY_MODEL`, `FOUNDRY_EMBEDDING_MODEL` |
 | Anthropic | `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`; `ANTHROPIC_FOUNDRY_*` for Claude on Foundry | |
 | Gemini | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `GOOGLE_GEMINI_BASE_URL`; Vertex AI: `GOOGLE_GENAI_USE_VERTEXAI`, `GOOGLE_CLOUD_PROJECT`, `GOOGLE_CLOUD_LOCATION` | `GEMINI_MODEL` |
@@ -826,7 +931,7 @@ A provider is an `agent.ProviderConfig` passed to `agent.New`. Only `Run` is req
 | `ProviderName` | returned by `a.ProviderName()` and used in telemetry |
 | `Run` | `func(ctx, messages, ...agent.Option) iter.Seq2[*agent.ResponseUpdate, error]`; read options with `agent.GetOption` and `agent.AllOptions` |
 | `Middlewares` | run after history and context providers, around every call to `Run`. Add `toolautocall.New(...)` here if your `Run` returns function calls and you want the framework to execute them |
-| `ManagesToolExecution` | set when `Run` executes tools itself (as Copilot does), so the agent's function middleware is applied to the tools in the options |
+| `ManagesToolExecution` | set when `Run` executes tools itself (as Copilot does), so the agent's function middleware is applied to the tools in the options. Pass `agent.WithFuncCallID(ctx, callID)` as the context of each `Call` so function middleware sees the call ID |
 | `Format`, `Unmarshal` | support `agent.WithStructuredOutput`: build a `ResponseFormat` for a Go value, and decode the reply into it. `jsonformat.ForType` and `jsonformat.FromResponseFormat` do the work |
 | `CreateSession` | set up provider-specific session state when `CreateSession` is called, or when a run creates a throwaway session |
 
