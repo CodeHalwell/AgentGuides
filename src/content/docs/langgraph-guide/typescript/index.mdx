@@ -84,7 +84,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 
 ## Recent releases
 
-- **`@langchain/core` 1.3.0** — tool-call arguments stream as `tool-call-delta` slices instead of `block-delta` snapshots (see [Other additions](/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#other-additions)). `@langchain/langgraph` is unchanged at %%version=@langchain/langgraph%%.
+- **New in `@langchain/core` 1.3.0:** tool-call arguments stream as `tool-call-delta` slices instead of `block-delta` snapshots (see [Other additions](/langgraph-guide/typescript/langchain_langgraph_comprehensive_guide/#other-additions)). `@langchain/langgraph` is unchanged at %%version=@langchain/langgraph%%.
 - **1.5.x** — parallel writes are ordered by task path (as in Python), plus fixes to `DeltaChannel`, exit durability, interrupt resumption and node-cache persistence. No API removals.
 - **1.4.x** — node-level `timeout` (`NodeTimeoutError`) and `errorHandler`; `StateGraph.setNodeDefaults()` for graph-wide `retryPolicy`/`cachePolicy`; cooperative draining with `RunControl`/`GraphDrained`; `DeltaChannel` (beta); `RemoteGraph` v3 streaming (1.4.0); `GraphCallbackHandler` for interrupt and resume events (1.4.17).
 - **1.3.0** — `STREAM_EVENTS_V3_MODES`; `createGraphRunStream`/`GraphRunStream`/`SubgraphRunStream`; stream transformers (`createLifecycleTransformer`, `createMessagesTransformer`, `createSubgraphDiscoveryTransformer`, `createValuesTransformer`).
