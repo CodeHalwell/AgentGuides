@@ -35,7 +35,7 @@ This page explains *what* the pieces of Semantic Kernel are and how they fit tog
 ## 1. Where Semantic Kernel stands today
 
 - **Microsoft Agent Framework (MAF) is the successor.** It is built by the Semantic Kernel and AutoGen teams, reached 1.0 (general availability) in April 2026, and is where most new features go. Microsoft's documentation calls it the direct successor to Semantic Kernel and AutoGen, created by the same teams.
-- **Semantic Kernel 1.x is still supported.** Microsoft has committed to critical bug and security fixes, and to taking some existing features to GA, for as long as substantial numbers of developers use it and for at least one year after MAF's GA.
+- **Semantic Kernel 1.x is still supported.** Microsoft has committed to critical bug and security fixes, and to taking some existing features to GA, for as long as substantial numbers of developers use it and for at least one year after MAF's GA ([Semantic Kernel blog](https://devblogs.microsoft.com/semantic-kernel/semantic-kernel-and-microsoft-agent-framework/)).
 - **Practical advice.** Keep existing SK applications on SK and keep them updated. Start new agent projects on [Microsoft Agent Framework](/microsoft-agent-framework-guide/). Migration can be gradual. In .NET, SK agents wrap as MAF agents with `agent.AsAIAgent()`. In Python, SK functions can serve as MAF tools, but not through the built-in `KernelFunction.as_agent_framework_tool()`: as of %%version=semantic-kernel%% it imports `AIFunction`, a class every released MAF version calls `FunctionTool`, and fails with "agent_framework is not installed". Use the [wrapper in the Python guide](/semantic-kernel-guide/python/semantic_kernel_comprehensive_python/#16-migrating-to-microsoft-agent-framework) instead.
 
 ---
