@@ -94,6 +94,7 @@ Concepts that do not depend on the language — which models to use, how handoff
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 3.3.0 | Bumped from 3.2.0 (released 2026-10-23; 3.3.0 on 2026-10-25). The only change is a new `"max"` value for `reasoningEffort`, noted on the Agents and Conversations page. All 38 TypeScript blocks compile under `tsc --strict` against 3.3.0, and an agent created with `reasoningEffort: "max"` was run against a mocked `fetch`. |
 | 2026-10-25 | 3.2.0 | Bumped from 3.1.0 (released 2026-10-20; 3.2.0 on 2026-10-23). All 36 TypeScript blocks compile under `tsc --strict` against both versions with no errors, and the scripted-conversation test from the Production page passes on 3.2.0. 3.2.0 adds `client.responses` (stateless Responses API; see the [Python guide](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/#14-changes-in-sdk-v3)). |
 | 2026-10-25 | %%version=@mistralai/mistralai%% | Re-checked all 37 TypeScript blocks with `tsc --strict` and ran them against a mock server. Noted that an explicit `apiKey` (even an empty string) outranks `MISTRAL_SA_TOKEN_PATH`; replaced the unsupported "Node.js 20+" claim; model IDs in code now come from the shared model roles. |
 | 2026-10-21 | %%version=@mistralai/mistralai%% | First TypeScript edition. All examples type-checked with `tsc --strict` and request shapes validated against the SDK's Zod schemas. |

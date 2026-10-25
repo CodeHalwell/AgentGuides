@@ -56,7 +56,7 @@ const agent = await client.beta.agents.create({
 console.log(agent.id, agent.version);
 ```
 
-`create()` requires `model` and `name`; `instructions`, `tools`, `completionArgs`, `guardrails`, `description`, `handoffs`, `metadata` and `versionMessage` are optional. The result is an `Agent` with `id`, `version` and `versions`.
+`create()` requires `model` and `name`; `instructions`, `tools`, `completionArgs`, `guardrails`, `description`, `handoffs`, `metadata` and `versionMessage` are optional. The result is an `Agent` with `id`, `version` and `versions`. `completionArgs` also takes `reasoningEffort` on models that support it: `"none"`, `"minimal"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` or, from 3.3.0, `"max"`.
 
 ### Read, list, delete
 
