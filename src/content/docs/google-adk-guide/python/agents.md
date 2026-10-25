@@ -789,16 +789,24 @@ asyncio.run(main())
 The deprecated shells map to `Workflow` like this (full details in the [workflows page](/google-adk-guide/python/workflows/)):
 
 ```python
-from google.adk.workflow import Workflow, START
+from google.adk.agents import LlmAgent
+from google.adk.workflow import JoinNode, START, Workflow
 
-# Sequential
+draft = LlmAgent(name="drafter", model="%%model=gemini%%", instruction="Draft an essay on the input topic.")
+polish = LlmAgent(name="polisher", model="%%model=gemini%%", instruction="Polish the essay. Return only the final text.")
+algo_a = LlmAgent(name="algo_a", model="%%model=gemini%%", instruction="Answer using approach A.")
+algo_b = LlmAgent(name="algo_b", model="%%model=gemini%%", instruction="Answer using approach B.")
+
+# SequentialAgent([draft, polish]): each node's output is the next node's input
 pipeline = Workflow(name="pipeline", edges=[(START, draft, polish)])
 
-# Parallel (fan-out)
-fanout = Workflow(name="fanout", edges=[(START, (algo_a, algo_b))])
+# ParallelAgent([algo_a, algo_b]): fan out, then join the branch outputs
+fanout = Workflow(name="fanout", edges=[(START, (algo_a, algo_b), JoinNode(name="both"))])
 
-# Loop — use a router node + a routing map. See workflows page.
+# LoopAgent: an edge back to an earlier node with a route that exits (see the workflows page)
 ```
+
+Use fresh agent instances. An agent that already has a parent (a sub-agent of a `SequentialAgent`, say) defaults to `mode='chat'` when placed in a workflow, and a chat-mode agent cannot take its input from a preceding node: the `Workflow` constructor rejects it with a validation error.
 
 `Workflow` is a `BaseNode`, not a `BaseAgent`. `App(root_agent=workflow)` is the recommended way to wire it to a `Runner`.
 

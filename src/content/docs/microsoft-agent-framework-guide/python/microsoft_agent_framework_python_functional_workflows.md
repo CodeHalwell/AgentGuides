@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Functional Workflows"
 description: "Build workflows with plain Python functions using the @workflow and @step decorators, RunContext for HITL and state, FunctionalWorkflow checkpointing, and as_agent() for multi-agent composition."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Functional workflows"
+  order: 21
 ---
 
 > **Experimental.** `FunctionalWorkflow`, `@workflow`, `@step`, and `RunContext` are marked `ExperimentalFeature.FUNCTIONAL_WORKFLOWS`. The API is stable enough to build on but may change between minor releases.
@@ -18,7 +21,7 @@ Verified against `agent-framework` %%version=agent-framework%% (`agent_framework
 | Situation | Prefer |
 |---|---|
 | Variable branching, dynamic parallelism, complex Python logic | `@workflow` (functional) |
-| Fixed topology, reuse executor classes, time-travel debugging | `WorkflowBuilder` (graph) |
+| Fixed topology, reusable executor classes, type-checked edges, visualisation with `WorkflowViz` | `WorkflowBuilder` (graph) |
 | Expose a workflow as a node inside a larger graph | Use `.as_agent()` on either |
 | Team already uses LangGraph / other graph-style orchestration | `WorkflowBuilder` — familiar mental model |
 
@@ -90,7 +93,7 @@ FunctionalWorkflowDefinition.build(
 Plain `async` functions work inside `@workflow` without `@step`. Add `@step` only when you want:
 
 - **Result caching** — if the workflow is resumed from a checkpoint, completed steps aren't re-executed.
-- **Event emission** — the framework emits a `step_started` / `step_completed` event pair in the stream.
+- **Event emission** — each step call appears in the run as an `executor_invoked` / `executor_completed` event pair, with the step name as `executor_id`.
 - **Per-step granularity in checkpoints** — the step name and index appear in checkpoint metadata.
 
 ```python
@@ -395,13 +398,13 @@ storage = FileCheckpointStorage("./checkpoints")
 
 @step
 async def slow_research(topic: str) -> str:
-    import time; time.sleep(2)          # simulated slow call
+    await asyncio.sleep(2)              # simulated slow call (never time.sleep in async code)
     return f"research on {topic}"
 
 
 @step
 async def slow_write(facts: str) -> str:
-    import time; time.sleep(2)
+    await asyncio.sleep(2)
     return f"article from: {facts}"
 
 
@@ -502,7 +505,7 @@ FunctionalWorkflow.run(
     responses: dict[str, Any] | None = None,      # HITL reply dict keyed by request_id
     checkpoint_id: str | None = None,             # resume from a specific checkpoint
     checkpoint_storage: CheckpointStorage | None = None,   # override build-level storage
-    include_status_events: bool = False,          # include step_started / step_completed events
+    include_status_events: bool = False,          # also include type="status" lifecycle events
     **kwargs,                                     # extra kwargs stored in RunContext._run_kwargs
 )
 ```
@@ -514,6 +517,8 @@ FunctionalWorkflow.run(
 Wrap a functional workflow as an agent so it can participate in orchestrations:
 
 ```python
+import asyncio
+
 from agent_framework import Agent, FunctionalWorkflowAgent, workflow, step
 from agent_framework_orchestrations import SequentialBuilder
 from agent_framework.openai import OpenAIChatClient
@@ -602,7 +607,13 @@ progress = [e for e in result if e.type == "progress"]
 
 ## See also
 
-- [HITL — `request_info` in graph workflows](./microsoft_agent_framework_python_hitl/)
-- [Checkpointing — `FileCheckpointStorage`](./microsoft_agent_framework_python_checkpointing/)
-- [Workflows & Declarative Agents](../microsoft_agent_framework_graphs_declarative/) — graph-based `WorkflowBuilder` and YAML workflows
-- [Orchestration](./microsoft_agent_framework_python_orchestration/) — `SequentialBuilder`, `MagenticBuilder`, etc.
+- [HITL — `request_info` in graph workflows](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/)
+- [Checkpointing — `FileCheckpointStorage`](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/)
+- [Workflows & Declarative Agents](/microsoft-agent-framework-guide/microsoft_agent_framework_graphs_declarative/) — graph-based `WorkflowBuilder` and YAML workflows
+- [Orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/) — `SequentialBuilder`, `MagenticBuilder`, etc.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-24 | 1.22.0 | Corrected step events (`executor_invoked` / `executor_completed`, not `step_started` / `step_completed`); replaced blocking `time.sleep` in async steps; removed a "time-travel debugging" claim for graph workflows. |

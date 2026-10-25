@@ -23,8 +23,8 @@ embedder = Embedder('openai:text-embedding-3-small')
 async def main():
     result = await embedder.embed_query('What is machine learning?')
     print(result.embeddings[0][:5])    # first 5 dimensions
-    print(result.model)                # 'text-embedding-3-small'
-    print(result.usage.total_tokens)   # token count
+    print(result.model_name)           # 'text-embedding-3-small'
+    print(result.usage.input_tokens)   # tokens billed for the input
 
 asyncio.run(main())
 ```
@@ -32,6 +32,9 @@ asyncio.run(main())
 Synchronous variant:
 
 ```python
+from pydantic_ai import Embedder
+
+embedder = Embedder('openai:text-embedding-3-small')
 result = embedder.embed_query_sync('What is machine learning?')
 print(result.embeddings[0][:5])
 ```
@@ -115,6 +118,11 @@ asyncio.run(main())
 Pass a list to batch embed in a single API call:
 
 ```python
+from pydantic_ai import Embedder
+
+embedder = Embedder('openai:text-embedding-3-small')
+
+
 async def batch_embed(texts: list[str]) -> list[list[float]]:
     result = await embedder.embed_documents(texts)
     return result.embeddings   # list of float vectors, one per input
@@ -122,45 +130,37 @@ async def batch_embed(texts: list[str]) -> list[list[float]]:
 
 ## `EmbeddingSettings` — customise model parameters
 
+`EmbeddingSettings` is a `TypedDict` with four provider-neutral keys: `dimensions` (output size; honoured by OpenAI, Cohere, Google, Sentence Transformers and Bedrock models that support it), `truncate` (whether over-long input is cut down instead of failing), `extra_headers` and `extra_body`. Provider-specific keys live on `OpenAIEmbeddingSettings`, `CohereEmbeddingSettings` and so on.
+
 ```python
 from pydantic_ai import Embedder
 from pydantic_ai.embeddings import EmbeddingSettings
 
-settings = EmbeddingSettings(
-    dimensions=256,       # truncate output dimension (OpenAI text-embedding-3-* only)
-    encoding_format='float',  # 'float' | 'base64' (provider-dependent)
-)
+embedder = Embedder('openai:text-embedding-3-large', settings=EmbeddingSettings(dimensions=256))
 
-embedder = Embedder('openai:text-embedding-3-large', settings=settings)
-
-# Override per-call
-result = await embedder.embed_query(
-    'hello world',
-    settings=EmbeddingSettings(dimensions=512),
-)
+# Per-call settings are merged over the embedder's
+result = embedder.embed_query_sync('hello world', settings=EmbeddingSettings(dimensions=512))
+print(len(result.embeddings[0]))
 ```
 
 ## Token counting
 
 ```python
+from pydantic_ai import Embedder
+
 embedder = Embedder('openai:text-embedding-3-small')
 
-# Async
-token_count = await embedder.count_tokens('How many tokens is this?')
+token_count = embedder.count_tokens_sync('How many tokens is this?')   # await embedder.count_tokens(...) in async code
 print(token_count)
 
-# Sync
-token_count = embedder.count_tokens_sync('How many tokens is this?')
-
-# Model input limit
-max_tokens = await embedder.max_input_tokens()
-print(max_tokens)   # e.g. 8191 for text-embedding-3-small
+max_tokens = embedder.max_input_tokens_sync()   # the model's input limit, or None if unknown
+print(max_tokens)
 ```
 
 ## `EmbeddingResult` — what you get back
 
 ```python
-result = await embedder.embed_query('test')
+result = embedder.embed_query_sync('test')
 
 result.embeddings        # Sequence[Sequence[float]] — one vector per input text
 result.inputs            # the texts that were embedded
@@ -412,8 +412,7 @@ async def main():
     print(result.timestamp)           # datetime of the request
 
     # Usage statistics
-    print(result.usage.total_tokens)  # total tokens consumed
-    print(result.usage.prompt_tokens) # synonym for total_tokens on embedding models
+    print(result.usage.input_tokens)  # tokens consumed (embeddings have no output tokens)
 
     # Provider-specific metadata
     print(result.provider_details)    # raw provider response dict, or None
@@ -587,8 +586,8 @@ asyncio.run(main())
 |---|---|---|
 | `Embedder` | `pydantic_ai.embeddings` | High-level embedding interface |
 | `EmbeddingModel` | `pydantic_ai.embeddings` | Abstract base — subclass for custom models |
-| `EmbeddingResult` | `pydantic_ai.embeddings` | Holds `embeddings`, `model`, `usage`, `inputs`, `input_type` |
-| `EmbeddingSettings` | `pydantic_ai.embeddings` | `dimensions`, `encoding_format` |
+| `EmbeddingResult` | `pydantic_ai.embeddings` | Holds `embeddings`, `inputs`, `input_type`, `model_name`, `provider_name`, `usage`; `cost()` |
+| `EmbeddingSettings` | `pydantic_ai.embeddings` | `dimensions`, `truncate`, `extra_headers`, `extra_body` |
 | `TestEmbeddingModel` | `pydantic_ai.embeddings` | Deterministic unit vectors for tests |
 | `KnownEmbeddingModelName` | `pydantic_ai.embeddings` | Literal type of all known model strings |
 | `WrapperEmbeddingModel` | `pydantic_ai.embeddings` | Base class for custom model wrappers |

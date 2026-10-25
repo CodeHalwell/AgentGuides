@@ -70,6 +70,8 @@ config = ConcurrencyLimit(max_running=10, max_queued=50)
 ## Observability properties
 
 ```python
+from pydantic_ai.concurrency import ConcurrencyLimiter
+
 limiter = ConcurrencyLimiter(max_running=5, name='my-limiter')
 
 print(limiter.max_running)      # 5
