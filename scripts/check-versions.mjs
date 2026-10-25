@@ -49,6 +49,12 @@ function pinPatterns(name, registry) {
       ];
     case 'go':
       return [new RegExp(String.raw`${n}@v${SEMVER}`, 'g')];
+    case 'crates':
+      // cargo add pkg@1.2.3, pkg = "1.2.3" or pkg = { version = "1.2.3" } in Cargo.toml
+      return [
+        new RegExp(String.raw`cargo add\s+${n}@${SEMVER}`, 'g'),
+        new RegExp(String.raw`^\s*${n}\s*=\s*(?:\{[^}\n]*version\s*=\s*)?"[=^~]?${SEMVER}"`, 'gm'),
+      ];
     default:
       return [];
   }
@@ -132,7 +138,8 @@ function scanDocs() {
 
 async function latest(name, registry) {
   const get = async (url) => {
-    const res = await fetch(url);
+    // crates.io rejects requests without a User-Agent.
+    const res = await fetch(url, { headers: { 'User-Agent': 'AgentGuides check-versions' } });
     if (!res.ok) throw new Error(`${url} -> ${res.status}`);
     return res.json();
   };
@@ -153,6 +160,8 @@ async function latest(name, registry) {
       return stable((await get(`https://api.nuget.org/v3-flatcontainer/${name.toLowerCase()}/index.json`)).versions);
     case 'go':
       return (await get(`https://proxy.golang.org/${name}/@latest`)).Version.replace(/^v/, '');
+    case 'crates':
+      return (await get(`https://crates.io/api/v1/crates/${name}`)).crate.max_stable_version;
   }
 }
 

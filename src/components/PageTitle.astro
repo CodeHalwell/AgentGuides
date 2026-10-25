@@ -22,7 +22,7 @@ const framework =
   frameworks.find((f) => path.startsWith(f.href.replace(/(python|typescript)\/$/, '')));
 
 const segment = id.split('/')[1];
-const folderLang: Record<string, string> = { python: 'Py', typescript: 'Ts', dotnet: 'C#', go: 'Go' };
+const folderLang: Record<string, string> = { python: 'Py', typescript: 'Ts', dotnet: 'C#', go: 'Go', rust: 'Rs' };
 const language =
   folderLang[segment] ??
   (framework?.languages.length === 1 ? languageSymbol[framework.languages[0]] : undefined);
