@@ -267,7 +267,7 @@ class PipelineWrapper(BasePipelineWrapper):
         )
 ```
 
-`hayhooks run --pipelines-dir pipelines` starts the server (port 1416 by default) and deploys every folder. The request model for `POST /weather_agent/run` is generated from the `run_api_async` signature (`{"question": "..."}`), and `run_chat_completion_async` adds an OpenAI-compatible `POST /v1/chat/completions` endpoint (use the folder name as `model`) that streams tokens and tool calls. With `pip install "hayhooks[mcp]"`, `hayhooks mcp run` exposes the same wrappers as MCP tools, using the docstring of `run_api_async` (or `run_api`) as the tool description. The endpoints are not authenticated by default, so put the server behind your gateway.
+`hayhooks run --pipelines-dir pipelines` starts the server (port 1416 by default) and deploys every folder. The request model for `POST /weather_agent/run` is generated from the `run_api_async` signature (`{"question": "..."}`), and `run_chat_completion_async` adds an OpenAI-compatible `POST /v1/chat/completions` endpoint (use the folder name as `model`) that streams tokens and tool calls. With `pip install "hayhooks[mcp]"`, `hayhooks mcp run` exposes the same wrappers as MCP tools, using the docstring of `run_api_async` (or `run_api`) as the tool description. A running server can also be changed without a restart: `hayhooks pipeline deploy-files <dir>` deploys a wrapper folder, `hayhooks pipeline deploy-yaml` deploys a serialised pipeline, `hayhooks pipeline undeploy <name>` removes one, and `hayhooks status` reports the server's status. The endpoints are not authenticated by default, so put the server behind your gateway.
 
 ---
 
@@ -335,7 +335,7 @@ def test_agent_calls_weather_tool():
 
 ### Evaluating quality
 
-The core package ships evaluators in `haystack.components.evaluators`: retrieval metrics (`DocumentMRREvaluator`, `DocumentRecallEvaluator`, `DocumentMAPEvaluator`, `DocumentNDCGEvaluator`), answer metrics (`AnswerExactMatchEvaluator`, `SASEvaluator`) and model-judged metrics (`FaithfulnessEvaluator`, `ContextRelevanceEvaluator`, and `LLMEvaluator` for your own rubric). Run them over a small golden set of questions with known relevant documents:
+The core package ships evaluators in `haystack.components.evaluators`: retrieval metrics (`DocumentMRREvaluator`, `DocumentRecallEvaluator`, `DocumentMAPEvaluator`, `DocumentNDCGEvaluator`), answer metrics (`AnswerExactMatchEvaluator`, and `SASEvaluator`, which needs `pip install sentence-transformers` and downloads a model) and model-judged metrics (`FaithfulnessEvaluator`, `ContextRelevanceEvaluator`, and `LLMEvaluator` for your own rubric). Run them over a small golden set of questions with known relevant documents:
 
 ```python
 from haystack import Document
@@ -373,7 +373,7 @@ report = EvaluationRunResult(
 print(report.aggregated_report())          # one score per metric; detailed_report() gives per-question rows
 ```
 
-Each evaluator returns an overall `score` and `individual_scores`. In CI, run the golden set on every change to prompts, models or retrieval settings and fail the job when a score drops below your baseline. The model-judged evaluators make one model call per item, so keep the golden set small for per-commit runs and run a larger one nightly.
+Each evaluator returns an overall `score` and `individual_scores`; the model-judged ones also return per-item `results` and the model `meta`. To exercise the evaluation code path without an API key, pass a `MockChatGenerator` as the judge; for `FaithfulnessEvaluator` it must reply with JSON of the form `{"statements": [...], "statement_scores": [1, 0, ...]}`, for example `MockChatGenerator(response_fn=lambda messages: '{"statements": ["You have 30 days."], "statement_scores": [1]}')`. That checks wiring, not quality. In CI, run the golden set on every change to prompts, models or retrieval settings and fail the job when a score drops below your baseline. The model-judged evaluators make one model call per item, so keep the golden set small for per-commit runs and run a larger one nightly.
 
 ---
 

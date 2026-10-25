@@ -58,6 +58,10 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Multi-agent pipelines" href="/haystack-guide/haystack_comprehensive_guide/#multi-agent-pipeline-design-patterns" />
   <LinkCard title="Retries & fallbacks" href="/haystack-guide/haystack_observability_python/#retries-and-fallbacks" />
   <LinkCard title="Context management" href="/haystack-guide/haystack_comprehensive_guide/#context-management" />
+  <LinkCard title="Document stores & retrievers" href="/haystack-guide/haystack_comprehensive_guide/#document-stores-and-retrievers" />
+  <LinkCard title="Branching & async pipelines" href="/haystack-guide/haystack_comprehensive_guide/#branching-inside-a-pipeline" />
+  <LinkCard title="MCP tools" href="/haystack-guide/haystack_comprehensive_guide/#mcp-tools" />
+  <LinkCard title="Structured output" href="/haystack-guide/haystack_advanced_agents_python/#structured-output" />
   <LinkCard title="Testing & evaluation" href="/haystack-guide/haystack_production_guide/#testing-and-evaluation" />
   <LinkCard title="Security" href="/haystack-guide/haystack_production_guide/#security" />
   <LinkCard title="SearchableToolset & SkillToolset" href="/haystack-guide/haystack_comprehensive_guide/#searchabletoolset-and-skilltoolset" />
@@ -124,7 +128,7 @@ Ready? **[Start Zero → Hero Step 1 →](/haystack-guide/haystack_comprehensive
 
 | Date | Version | Changes |
 |------|---------|---------|
-| %%versions-checked%% | %%version=haystack-ai%% | Guide moved from Haystack 2.x to 3.x. Code across all pages rewritten against the installed package; version references now come from the site's version data. |
+| %%versions-checked%% | %%version=haystack-ai%% | Guide moved from Haystack 2.x to 3.x. Code across all pages rewritten against the installed package; version references now come from the site's version data. Re-audited against the installed package: added document-store, branching, async, MCP, human-in-the-loop, structured-output and span-recording examples. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management, token budgets, `SkillToolset`, images and files; security, cost, testing, evaluation and Hayhooks on the production page; unsafe `inputs_from_state` tenant advice replaced; diagrams redrawn from real classes; duplicated multi-agent and resilience material consolidated. |
 | 2026-06-04 | 2.30.0 | Last 2.x revision. |
 | 2026-04-21 | 2.28.0 | Index redesigned with Zero → Hero + Jump-to-topic grid. |

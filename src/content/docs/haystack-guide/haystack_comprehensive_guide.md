@@ -27,6 +27,7 @@ Haystack 3 is a consolidation release rather than a rewrite. The component and p
    - [Installation and Setup](#installation-and-setup)
    - [Haystack 3 Architecture Overview](#haystack-3-architecture-overview)
    - [Components and Pipelines](#components-and-pipelines)
+   - [Document Stores and Retrievers](#document-stores-and-retrievers)
    - [Agent Concepts in Haystack](#agent-concepts-in-haystack)
    - [Provider-Agnostic Design Philosophy](#provider-agnostic-design-philosophy)
    - [Configuration Patterns and Best Practices](#configuration-patterns-and-best-practices)
@@ -201,7 +202,7 @@ Rules worth remembering:
 
 - Inputs are the parameters of `run()`. A parameter with a default is optional.
 - Outputs must be declared with `@component.output_types(...)` and returned as a dict with exactly those keys.
-- Init parameters should be JSON-serialisable values so the component can be saved with `Pipeline.dumps()`; if they are not, implement `to_dict()` / `from_dict()`.
+- Serialisation reads each `__init__` parameter back from the attribute of the same name (`self.min_length` for `min_length`) and falls back to the parameter's default if there is no such attribute. So store every parameter under its own name: a component with `def __init__(self, n=2): self.limit = n` built with `n=5` is saved with `n: 2`, with no error. Values must be JSON-serialisable; if a parameter is not (a client object, a callable), implement `to_dict()` / `from_dict()` yourself, or `Pipeline.dumps()` raises `SerializationError`.
 - For async support, add `async def run_async(...)` with the same signature.
 
 #### Creating Pipelines
@@ -296,6 +297,216 @@ print(router.run(query="I want a refund"))  # {'billing': 'I want a refund'}
 
 In a pipeline, connect `router.billing` and `router.general` to different downstream components; only the branch that receives input runs. Use `BranchJoiner` to merge branches back into one stream, and `DocumentJoiner`, `AnswerJoiner`, `ListJoiner` or `StringJoiner` to combine outputs that arrive together.
 
+#### Branching inside a pipeline
+
+A component runs once all of its mandatory inputs have arrived. A router sends its value to exactly one output socket, so the components wired to the other sockets never receive input and never run. This example routes short and long questions to different handlers and merges them again with a `BranchJoiner`:
+
+```python
+from haystack import Pipeline, component
+from haystack.components.joiners import BranchJoiner
+from haystack.components.routers import ConditionalRouter
+
+
+@component
+class Tag:
+    def __init__(self, label: str):
+        self.label = label
+
+    @component.output_types(text=str)
+    def run(self, text: str):
+        return {"text": f"[{self.label}] {text}"}
+
+
+routes = [
+    {"condition": "{{ query | length > 20 }}", "output": "{{ query }}", "output_name": "long", "output_type": str},
+    {"condition": "{{ query | length <= 20 }}", "output": "{{ query }}", "output_name": "short", "output_type": str},
+]
+
+branching = Pipeline()
+branching.add_component("router", ConditionalRouter(routes=routes))
+branching.add_component("quick", Tag("quick path"))
+branching.add_component("thorough", Tag("thorough path"))
+branching.add_component("joiner", BranchJoiner(str))
+
+branching.connect("router.short", "quick.text")
+branching.connect("router.long", "thorough.text")
+branching.connect("quick.text", "joiner")
+branching.connect("thorough.text", "joiner")
+
+print(branching.run({"router": {"query": "hi"}}))
+# {'joiner': {'value': '[quick path] hi'}}
+print(branching.run({"router": {"query": "a considerably longer question than twenty characters"}}))
+# {'joiner': {'value': '[thorough path] a considerably longer question than twenty characters'}}
+```
+
+Without the joiner, `run()` returns the output of whichever branch ran, keyed by that component's name (for example `{"quick": {"text": "[quick path] hi"}}`).
+
+#### Merging inputs and running branches concurrently
+
+A component whose `run()` parameter is typed `Variadic[...]` accepts any number of incoming connections and receives their values as one iterable. Independent branches overlap when you call `run_async()`; `concurrency_limit` (default 4) bounds how many components run at once. A component with an `async def run_async()` is awaited directly, and one without it is run in a worker thread, so blocking code still overlaps but a real coroutine is cheaper.
+
+```python
+import asyncio
+import time
+
+from haystack import Pipeline, component
+from haystack.core.component.types import Variadic
+
+
+@component
+class SlowLookup:
+    """Stands in for a call to a slow service; has a sync and an async implementation."""
+
+    def __init__(self, source: str, delay: float = 0.3):
+        self.source, self.delay = source, delay
+
+    @component.output_types(result=str)
+    def run(self, query: str):
+        time.sleep(self.delay)
+        return {"result": f"{self.source}: {query}"}
+
+    @component.output_types(result=str)
+    async def run_async(self, query: str):
+        await asyncio.sleep(self.delay)
+        return {"result": f"{self.source}: {query}"}
+
+
+@component
+class Collect:
+    @component.output_types(results=list[str])
+    def run(self, results: Variadic[str]):
+        return {"results": sorted(results)}
+
+
+fan_out = Pipeline()
+for name in ("docs", "wiki", "tickets"):
+    fan_out.add_component(name, SlowLookup(name))
+fan_out.add_component("collect", Collect())
+for name in ("docs", "wiki", "tickets"):
+    fan_out.connect(f"{name}.result", "collect.results")
+
+data = {name: {"query": "refund policy"} for name in ("docs", "wiki", "tickets")}
+
+start = time.perf_counter()
+fan_out.run(data)                                    # one after another: about 0.9 s (the first call adds start-up cost)
+print(f"run:       {time.perf_counter() - start:.1f}s")
+
+start = time.perf_counter()
+result = asyncio.run(fan_out.run_async(data))        # all three at once: about 0.3 s
+print(f"run_async: {time.perf_counter() - start:.1f}s")
+print(result["collect"]["results"])
+# ['docs: refund policy', 'tickets: refund policy', 'wiki: refund policy']
+```
+
+`concurrency_limit=1` makes `run_async()` sequential again, which is useful when a downstream service has a strict rate limit.
+
+### Document Stores and Retrievers
+
+A **document store** holds `Document`s (content, `meta`, an optional embedding). A **retriever** is a component that queries one store. Every store implements the same small protocol (`write_documents`, `filter_documents`, `count_documents`, `delete_documents`); searching is done by store-specific retrievers, so a BM25 retriever and an embedding retriever can share one store. `InMemoryDocumentStore` needs no server and is the right choice for tests, notebooks and small corpora. Production deployments swap in an integration store (Elasticsearch, Qdrant and others) and its retrievers without changing the rest of the pipeline.
+
+Embedding retrieval needs two components: a **document embedder** at indexing time and a **text embedder** at query time, both using the same model. The example below uses a deliberately crude hashing embedder so that it runs offline; replace `HashDocumentEmbedder` and `HashTextEmbedder` with `OpenAIDocumentEmbedder` and `OpenAITextEmbedder` (or an integration embedder) for real use, and keep the rest as is.
+
+```python
+import hashlib
+import math
+
+from haystack import Document, Pipeline, component
+from haystack.components.joiners import DocumentJoiner
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever, InMemoryEmbeddingRetriever
+from haystack.components.writers import DocumentWriter
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+from haystack.document_stores.types import DuplicatePolicy
+
+DIM = 256
+
+
+def hash_embed(text: str) -> list[float]:
+    """Toy bag-of-words embedding: hash each word into one of DIM buckets, then normalise."""
+    vec = [0.0] * DIM
+    for word in text.lower().split():
+        vec[int(hashlib.md5(word.encode()).hexdigest(), 16) % DIM] += 1.0
+    norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+    return [v / norm for v in vec]
+
+
+@component
+class HashTextEmbedder:
+    @component.output_types(embedding=list[float])
+    def run(self, text: str):
+        return {"embedding": hash_embed(text)}
+
+
+@component
+class HashDocumentEmbedder:
+    @component.output_types(documents=list[Document])
+    def run(self, documents: list[Document]):
+        return {"documents": [
+            Document(content=d.content, meta=d.meta, embedding=hash_embed(d.content or "")) for d in documents
+        ]}
+
+
+store = InMemoryDocumentStore(embedding_similarity_function="cosine")
+
+indexing = Pipeline()
+indexing.add_component("embed", HashDocumentEmbedder())
+indexing.add_component("write", DocumentWriter(document_store=store, policy=DuplicatePolicy.OVERWRITE))
+indexing.connect("embed.documents", "write.documents")
+indexing.run({"embed": {"documents": [
+    Document(content="Returns are accepted within 30 days", meta={"lang": "en", "year": 2024}),
+    Document(content="Shipping takes five to seven days", meta={"lang": "en", "year": 2023}),
+    Document(content="Les retours sont acceptes sous 30 jours", meta={"lang": "fr", "year": 2024}),
+]}})
+print(store.count_documents())   # 3
+
+# Hybrid retrieval: BM25 and embeddings over the same store, fused with reciprocal rank fusion
+hybrid = Pipeline()
+hybrid.add_component("embed", HashTextEmbedder())
+hybrid.add_component("bm25", InMemoryBM25Retriever(document_store=store, top_k=3))
+hybrid.add_component("dense", InMemoryEmbeddingRetriever(document_store=store, top_k=3))
+hybrid.add_component("join", DocumentJoiner(join_mode="reciprocal_rank_fusion", top_k=2))
+hybrid.connect("embed.embedding", "dense.query_embedding")
+hybrid.connect("bm25.documents", "join.documents")
+hybrid.connect("dense.documents", "join.documents")
+
+question = "how many days for returns"
+result = hybrid.run({"embed": {"text": question}, "bm25": {"query": question}})
+print([d.content for d in result["join"]["documents"]])
+# ['Returns are accepted within 30 days', 'Shipping takes five to seven days']
+
+# Metadata filters can be passed to each retriever at run time
+french = {"field": "meta.lang", "operator": "==", "value": "fr"}
+result = hybrid.run({
+    "embed": {"text": question},
+    "bm25": {"query": "retours jours", "filters": french},
+    "dense": {"filters": french},
+})
+print([d.content for d in result["join"]["documents"]])
+# ['Les retours sont acceptes sous 30 jours']
+```
+
+The same filters work directly on the store:
+
+```python
+recent_english = {
+    "operator": "AND",
+    "conditions": [
+        {"field": "meta.lang", "operator": "==", "value": "en"},
+        {"field": "meta.year", "operator": ">=", "value": 2024},
+    ],
+}
+print([d.content for d in store.filter_documents(filters=recent_english)])
+# ['Returns are accepted within 30 days']
+```
+
+#### Things worth knowing
+
+- **Filter syntax.** A filter is either a comparison, `{"field": "meta.year", "operator": ">=", "value": 2024}`, or a logical group, `{"operator": "AND", "conditions": [...]}`. Comparison operators are `==`, `!=`, `>`, `>=`, `<`, `<=`, `in` and `not in`; logical operators are `AND`, `OR` and `NOT`. Fields inside `meta` are addressed as `meta.<name>`.
+- **Duplicates.** `DocumentWriter` takes a `DuplicatePolicy`: `NONE` (the default) uses the store's default, which for `InMemoryDocumentStore` is to raise `DuplicateDocumentError`; `SKIP` ignores documents whose ID already exists; `OVERWRITE` replaces them; `FAIL` raises. A document's ID is a hash of its content, `meta`, blob and embeddings, so re-indexing identical documents is detected automatically (and a document that gains an embedding gets a new ID).
+- **Filter policy.** Retrievers accept `filters` at construction and at run time. By default (`FilterPolicy.REPLACE`) the run-time filters replace the constructor's; pass `filter_policy=FilterPolicy.MERGE` (from `haystack.document_stores.types`) to combine them instead.
+- **Scores.** `InMemoryBM25Retriever` uses the `BM25L` variant by default (`bm25_algorithm` on the store also accepts `BM25Okapi` and `BM25Plus`). `InMemoryEmbeddingRetriever` scores with the store's `embedding_similarity_function`, `"dot_product"` unless you choose `"cosine"`. Scores from different retrievers are not comparable, which is why the example fuses by rank.
+- **Persistence.** The in-memory store lives in the process. `store.save_to_disk(path)` and `InMemoryDocumentStore.load_from_disk(path)` write and restore it as JSON, embeddings included; use an integration store when several processes need the same data.
+- **Experimental helpers.** `TextEmbeddingRetriever` (wraps a text embedder and an embedding retriever into one component) and `MultiRetriever` (runs several text retrievers in parallel and merges their results) are in `haystack.components.retrievers`. `MultiRetriever` is marked experimental in the source and may change without a deprecation cycle.
+
 ### Agent Concepts in Haystack
 
 The `Agent` component (`haystack.components.agents.Agent`) runs this loop:
@@ -372,7 +583,7 @@ generator = OpenAIChatGenerator(
 
 #### Document stores
 
-All document stores implement the `DocumentStore` protocol (`write_documents`, `filter_documents`, `count_documents`, `delete_documents`). Retrieval is done by store-specific **retriever components**, not by methods on the store:
+All document stores implement the `DocumentStore` protocol (`write_documents`, `filter_documents`, `count_documents`, `delete_documents`). Retrieval is done by store-specific **retriever components**, not by methods on the store. [Document Stores and Retrievers](#document-stores-and-retrievers) covers filters, hybrid retrieval and an offline example; this snippet shows how integration stores slot in:
 
 ```python
 # pip install elasticsearch-haystack qdrant-haystack
@@ -657,6 +868,8 @@ web_search = ComponentTool(
 
 #### MCP tools
 
+`mcp-haystack` connects an Agent to any [Model Context Protocol](https://modelcontextprotocol.io) server. `MCPToolset` loads every tool the server offers (or the ones named in `tool_names`) and `MCPTool` wraps a single named tool. The server is described by `StdioServerInfo` (a subprocess), `StreamableHttpServerInfo` (a URL) or `SSEServerInfo` (legacy SSE endpoints).
+
 ```python
 # pip install mcp-haystack
 from haystack_integrations.tools.mcp import MCPToolset, StdioServerInfo, StreamableHttpServerInfo
@@ -670,6 +883,78 @@ remote_tools = MCPToolset(server_info=StreamableHttpServerInfo(url="http://local
 
 agent = Agent(chat_generator=OpenAIChatGenerator(model="%%model=openai-small%%"), tools=fs_tools)
 ```
+
+To try MCP without Node or a network service, write a small server with the MCP Python SDK (installed with `mcp-haystack`). This one is `calc_server.py`:
+
+```python
+# calc_server.py
+from mcp.server.mcpserver import MCPServer   # in mcp 1.x: from mcp.server.fastmcp import FastMCP
+
+server = MCPServer("calc")
+
+
+@server.tool()
+def add(a: int, b: int) -> int:
+    """Add two integers."""
+    return a + b
+
+
+@server.tool()
+def shout(text: str) -> str:
+    """Upper-case some text."""
+    return text.upper()
+
+
+if __name__ == "__main__":
+    server.run(transport="stdio")
+```
+
+and the client runs it as a subprocess. The reply here is scripted with `MockChatGenerator`, so the example needs no API key:
+
+```python
+import json
+import sys
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage, ToolCall
+from haystack_integrations.tools.mcp import MCPToolset, StdioServerInfo
+
+server = StdioServerInfo(command=sys.executable, args=["calc_server.py"])
+
+
+def text_only(result: str) -> str:
+    # By default the tool result sent to the model is the whole MCP CallToolResult as JSON
+    return json.loads(result)["content"][0]["text"]
+
+
+tools = MCPToolset(
+    server_info=server,
+    tool_names=["add"],
+    eager_connect=True,                               # connect now instead of at warm-up
+    outputs_to_string={"add": {"handler": text_only}},  # keyed by tool name
+)
+print([t.name for t in tools])   # ['add']
+
+llm = MockChatGenerator(responses=[
+    ChatMessage.from_assistant(tool_calls=[ToolCall(tool_name="add", arguments={"a": 2, "b": 3})]),
+    "2 + 3 = 5",
+])
+agent = Agent(chat_generator=llm, tools=tools)
+result = agent.run(messages=[ChatMessage.from_user("What is 2 + 3?")])
+
+print(result["messages"][-2].tool_call_result.result)   # 5
+print(result["last_message"].text)                      # 2 + 3 = 5
+tools.close()
+```
+
+Points that catch people out:
+
+- **Connection is lazy by default.** Without `eager_connect=True` the toolset connects when the Agent warms up. Until then, iterating over it yields a single placeholder tool called `mcp_not_connected_placeholder_...`, so list or filter tools only after connecting.
+- **Results are JSON.** The default string passed to the model is the full `CallToolResult` (content blocks, `structuredContent`, `isError`). Use `outputs_to_string` to pass only what the model needs.
+- **Close what you open.** Call `close()` on the toolset or tool when you have finished with it, or the subprocess and connection stay alive.
+- **Timeouts.** `connection_timeout` and `invocation_timeout` default to 30 seconds. `StdioServerInfo` and the HTTP server infos retry connections (`max_retries`, `base_delay`, `max_delay`).
+- **Trust.** A stdio server runs with your privileges, and an MCP server's tool descriptions and outputs are untrusted input. Prefer an allow-list in `tool_names` and see [Security](/haystack-guide/haystack_production_guide/#security).
 
 #### Tool errors
 
@@ -1024,7 +1309,69 @@ agent = Agent(
 )
 ```
 
-`AskOncePolicy` and `NeverAskPolicy` are also available; write your own `ConfirmationUI` for web front ends.
+`AskOncePolicy` (ask the first time a tool is used, then remember the answer) and `NeverAskPolicy` are also available.
+
+For a web front end or an automated reviewer, write your own UI. A `ConfirmationUI` is any object with a `get_user_confirmation(tool_name, tool_description, tool_params)` method that returns a `ConfirmationUIResult` whose `action` is `"confirm"`, `"reject"` or `"modify"`. This one approves small refunds, trims medium ones to a limit and rejects large ones; the model is scripted with `MockChatGenerator` so the example runs offline:
+
+```python
+from typing import Annotated, Any
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage, ToolCall
+from haystack.hooks.human_in_the_loop import (
+    AlwaysAskPolicy,
+    BlockingConfirmationStrategy,
+    ConfirmationHook,
+    ConfirmationUIResult,
+)
+from haystack.tools import tool
+
+
+@tool
+def issue_refund(order_id: Annotated[str, "Order ID"], amount: Annotated[float, "Amount in GBP"]) -> str:
+    """Issue a refund. This moves money."""
+    return f"Refunded £{amount:.2f} for {order_id}"
+
+
+class LimitUI:
+    """Approves small refunds, trims medium ones to the limit and rejects large ones."""
+
+    def __init__(self, limit: float = 100.0):
+        self.limit = limit
+
+    def get_user_confirmation(
+        self, tool_name: str, tool_description: str, tool_params: dict[str, Any]
+    ) -> ConfirmationUIResult:
+        amount = tool_params["amount"]
+        if amount <= self.limit:
+            return ConfirmationUIResult(action="confirm")
+        if amount <= 3 * self.limit:
+            return ConfirmationUIResult(action="modify", new_tool_params={**tool_params, "amount": self.limit})
+        return ConfirmationUIResult(action="reject", feedback="Refunds above 300 need a manager.")
+
+
+hook = ConfirmationHook(confirmation_strategies={
+    "issue_refund": BlockingConfirmationStrategy(confirmation_policy=AlwaysAskPolicy(), confirmation_ui=LimitUI()),
+})
+
+for amount in (50, 200, 900):
+    llm = MockChatGenerator(responses=[
+        ChatMessage.from_assistant(tool_calls=[
+            ToolCall(tool_name="issue_refund", arguments={"order_id": "ORD-1", "amount": amount})
+        ]),
+        "Done.",
+    ])
+    agent = Agent(chat_generator=llm, tools=[issue_refund], hooks={"before_tool": [hook]})
+    result = agent.run(messages=[ChatMessage.from_user("Please refund ORD-1.")])
+    tool_message = next(m for m in result["messages"] if m.tool_call_result)
+    print(amount, "->", tool_message.tool_call_result.result)
+# 50 -> Refunded £50.00 for ORD-1
+# 200 -> Refunded £100.00 for ORD-1
+# 900 -> Tool execution for 'issue_refund' was rejected by the user. With user feedback: Refunds above 300 need a manager.
+```
+
+On a reject the tool does not run and `tool_call_counts` stays at zero for it; the model receives the rejection text as the tool result and can explain or try something else. On a modify the tool runs with `new_tool_params`. The protocol classes (`ConfirmationUI`, `ConfirmationPolicy`, `ConfirmationStrategy`) live in `haystack.hooks.human_in_the_loop.types` if you want to type-annotate against them. In a service, pass request-scoped objects such as a websocket through `hook_context`; a strategy receives them as `confirmation_strategy_context`, and `BlockingConfirmationStrategy` also has an async path for `Agent.run_async`.
 
 ### Error Handling and Resilience
 
@@ -1320,7 +1667,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 
 | Date | Version | Changes |
 |------|---------|---------|
-| %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. |
+| %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
 | June 2026 | 2.30.0 | Last 2.x revision. |
 | November 2025 | 2.20.0 | First documented version. |
