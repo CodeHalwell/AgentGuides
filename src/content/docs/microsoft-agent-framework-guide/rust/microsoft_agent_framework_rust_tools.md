@@ -1669,8 +1669,8 @@ impl ShellExecutor for FakeSandbox {
         _timeout: Option<Duration>,
     ) -> std::result::Result<ShellResult, ShellError> {
         let (stdout, exit_code) = match command {
-            c if c.starts_with("echo \"VERSION=") => ("VERSION=5.2.21\nCWD=/sandbox".to_string(), 0),
-            "git --version" => ("git version 2.47.0".to_string(), 0),
+            c if c.starts_with("echo \"VERSION=") => ("VERSION=dev\nCWD=/sandbox".to_string(), 0),
+            "git --version" => ("git version 2.x".to_string(), 0),
             _ => (String::new(), 127),
         };
         Ok(ShellResult { stdout, exit_code, ..Default::default() })
@@ -1730,13 +1730,13 @@ async fn main() -> Result<()> {
 ```text
 You are an operator.
 ## Shell environment
-You are operating a POSIX shell 5.2.21 session on a Linux microVM.
+You are operating a POSIX shell dev session on a Linux microVM.
 Use POSIX shell idioms (bash/sh).
 - Set environment variables for the next command with `export NAME=value`.
 - Reference environment variables as `$NAME` or `${NAME}`.
 - Paths use `/` separators.
 Working directory: /sandbox
-Available CLIs: git (git version 2.47.0)
+Available CLIs: git (git version 2.x)
 Not installed: cargo
 Never run destructive commands.
 ```
