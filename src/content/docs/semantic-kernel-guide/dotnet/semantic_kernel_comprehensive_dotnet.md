@@ -480,12 +480,13 @@ dotnet add package CommunityToolkit.VectorData.InMemory
 using CommunityToolkit.VectorData.InMemory;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.VectorData;
+using Microsoft.SemanticKernel.Data;
 
 public sealed class FaqEntry
 {
     [VectorStoreKey] public string Id { get; set; } = "";
     [VectorStoreData(IsFullTextIndexed = true)] public string Question { get; set; } = "";
-    [VectorStoreData] public string Answer { get; set; } = "";
+    [VectorStoreData, TextSearchResultValue] public string Answer { get; set; } = "";   // TextSearchResultValue: used by the search plugin below
 
     // A string-typed vector property is embedded automatically by the store's generator
     [VectorStoreVector(1536)] public string Embedding => $"{Question} {Answer}";
@@ -516,7 +517,7 @@ var textSearch = new VectorStoreTextSearch<FaqEntry>(faq);
 kernel.Plugins.Add(textSearch.CreateWithGetTextSearchResults("FaqSearch"));
 ```
 
-Records need a text result mapping (`[TextSearchResultValue]` on the answer property, or a custom mapper) for `CreateWithGetTextSearchResults`. The old `ISemanticTextMemory` / `IMemoryStore` API is obsolete.
+`CreateWithGetTextSearchResults` needs a text result mapping on the record: `[TextSearchResultValue]` on the answer property (as above) or a custom mapper. Without one the call fails at run time with "Value property of FaqEntry cannot be null". The old `ISemanticTextMemory` / `IMemoryStore` API is obsolete.
 
 ---
 
@@ -678,6 +679,7 @@ See Microsoft's [migration guide](https://learn.microsoft.com/agent-framework/mi
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 1.81.0 | All blocks compiled against 1.81.0. Vector store example gains `[TextSearchResultValue]` (the search plugin failed at run time without it). |
 | 2026-10-21 | 1.81.0 | Package status corrected (A2A, Copilot Studio and Bedrock agents are `-alpha`), vector store package names corrected. Added input encoding (4.3), Responses and Azure AI agent examples, memory providers and history reducers (6.5). Section 13 trimmed to the hosting pattern; resilience and telemetry code is in the production guide. |
 | 2026-10-21 | 1.81.0 | Rewritten. The previous edition documented planners and the `SemanticTextMemory` API as current, invented MCP and Agent Framework types (`MCPClient`, `MCPServer`, `UnifiedAgent`, `AgentRegistry`) and listed .NET 6 as supported. Now covers orchestrations, `Microsoft.Extensions.VectorData` with the `CommunityToolkit.VectorData` connectors, MCP via the official SDK, A2A agents, OpenTelemetry, and `AsAIAgent()` for migration. Version banner tracks the site's version registry. |
 | April 2026 | 1.74.0 | Previous edition. |

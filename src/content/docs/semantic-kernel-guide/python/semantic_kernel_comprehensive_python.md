@@ -235,14 +235,28 @@ prompts/
     │   ├── skprompt.txt
     │   └── config.json    (execution settings, input variables)
     └── Tagline/
-        └── skprompt.txt
+        ├── skprompt.txt
+        └── config.json
 ```
+
+Both files are required. A function folder without `config.json` (or without `skprompt.txt`) is skipped with only a logged warning, so the function is simply missing from the plugin. A minimal `config.json`:
+
+```json
+{
+  "schema": 1,
+  "description": "Write a tagline for a product.",
+  "execution_settings": {"default": {"max_tokens": 60, "temperature": 0.7}},
+  "input_variables": [{"name": "product", "description": "What to write about", "is_required": true}]
+}
+```
+
+Plugin folders can also hold `.yaml` prompt-function files and `.py` files with `@kernel_function` classes.
 
 ```python
 kernel.add_plugin(parent_directory="./prompts", plugin_name="WriterPlugin")
 ```
 
-`parent_directory` is the folder that *contains* the plugin folder; `plugin_name` names the plugin folder.
+`parent_directory` is the folder that *contains* the plugin folder; `plugin_name` names the plugin folder. Invoke a function with `await kernel.invoke(plugin_name="WriterPlugin", function_name="Tagline", product="kettles")`.
 
 ### 4.5 Input encoding and prompt injection
 
@@ -445,7 +459,7 @@ All share `get_response`, `invoke` and `invoke_stream`, and each has a matching 
 ```python
 from semantic_kernel.agents import OpenAIResponsesAgent
 
-client = OpenAIResponsesAgent.create_client()          # reads OPENAI_API_KEY
+client = OpenAIResponsesAgent.create_client(ai_model_id="%%model=openai-small%%")   # API key from OPENAI_API_KEY
 agent = OpenAIResponsesAgent(
     ai_model_id="%%model=openai-small%%",
     client=client,
@@ -460,7 +474,7 @@ follow_up = await agent.get_response(messages="And tomorrow?", thread=response.t
 print(follow_up.message.content)
 ```
 
-`AzureResponsesAgent` is the Azure OpenAI equivalent (`AzureResponsesAgent.create_client(...)`). Plugins work as for `ChatCompletionAgent`: SK runs the function calls locally and sends the results back.
+`create_client()` raises `AgentInitializationException` if it has no model ID, either from `ai_model_id=` or the `OPENAI_RESPONSES_MODEL_ID` environment variable (`OPENAI_CHAT_MODEL_ID` is not used). `AzureResponsesAgent` is the Azure OpenAI equivalent (`AzureResponsesAgent.create_client(...)`). Plugins work as for `ChatCompletionAgent`: SK runs the function calls locally and sends the results back.
 
 **Azure AI Foundry agent.** The agent definition and its threads are created in an Azure AI Foundry project.
 
@@ -538,6 +552,28 @@ asyncio.run(main())
 | Hand-off | `HandoffOrchestration(handoffs=OrchestrationHandoffs()...)` | Agents transfer control to each other; optional `human_response_function` for human input |
 | Magentic | `MagenticOrchestration(manager=StandardMagenticManager(...))` | A manager agent plans and delegates (from the Magentic-One design) |
 
+**Concurrent example.** Every member receives the same task; `get()` returns a list with one message per agent.
+
+```python
+from semantic_kernel.agents import ConcurrentOrchestration
+
+physics = ChatCompletionAgent(name="Physics", description="Physicist",
+    instructions="Answer as a physicist.", service=service)
+chemistry = ChatCompletionAgent(name="Chemistry", description="Chemist",
+    instructions="Answer as a chemist.", service=service)
+
+async def ask_both():
+    orchestration = ConcurrentOrchestration(members=[physics, chemistry])
+    runtime = InProcessRuntime()
+    runtime.start()
+    result = await orchestration.invoke(task="What is temperature?", runtime=runtime)
+    for message in await result.get(timeout=120):
+        print(f"{message.name}: {message.content}")
+    await runtime.stop_when_idle()
+```
+
+For group chat, `GroupChatOrchestration(members=[...], manager=RoundRobinGroupChatManager(max_rounds=4))` is used the same way; a custom manager that stops early is in the [advanced multi-agent page](/semantic-kernel-guide/python/semantic_kernel_advanced_multi_agent_python/#1-group-chat-with-a-custom-manager).
+
 **Hand-off example**
 
 ```python
@@ -553,9 +589,9 @@ tech = ChatCompletionAgent(name="Tech", description="Technical support", service
 
 handoffs = (
     OrchestrationHandoffs()
-    .add(source_agent=triage.name, target_agent=billing.name, description="Billing questions")
-    .add(source_agent=triage.name, target_agent=tech.name, description="Technical issues")
-    .add(source_agent=billing.name, target_agent=triage.name, description="Anything else")
+    .add(source_agent=triage, target_agent=billing, description="Billing questions")
+    .add(source_agent=triage, target_agent=tech, description="Technical issues")
+    .add(source_agent=billing, target_agent=triage, description="Anything else")
 )
 
 orchestration = HandoffOrchestration(
@@ -564,6 +600,8 @@ orchestration = HandoffOrchestration(
     human_response_function=lambda: ChatMessageContent(role=AuthorRole.USER, content=input("> ")),
 )
 ```
+
+Pass the agent objects, not their names, to `OrchestrationHandoffs.add()`: in 1.45.0 a `description` is silently dropped when `target_agent` is a string (the description then comes out empty). With an agent object, `description` is used if given, otherwise the agent's own `description`. `add_many(source_agent, {name: description})` keeps descriptions with names.
 
 `agent_response_callback=` on any orchestration receives every agent message — use it for logging or a live transcript. `input_transform` / `output_transform` convert between your own types and chat messages.
 
@@ -647,7 +685,7 @@ Swap `InMemoryCollection` for another connector without changing the record clas
 | Redis | `semantic_kernel.connectors.redis.RedisJsonCollection` / `RedisHashsetCollection` |
 | Chroma, Pinecone, Weaviate, MongoDB Atlas, Cosmos DB, SQL Server, FAISS | `semantic_kernel.connectors.<name>` |
 
-(`semantic_kernel.connectors.memory` re-exports them all.) Filtering uses Python lambdas, e.g. `collection.search("...", filter=lambda r: r.category == "billing")`, which each connector translates to its native filter syntax. `hybrid_search` is available on stores that support it.
+(`semantic_kernel.connectors.memory` is meant to re-export these classes, but in 1.45.0 `from semantic_kernel.connectors.memory import QdrantCollection` raises `ModuleNotFoundError` because its lazy loader resolves names relative to a module that is not a package. Import from the specific module instead.) Filtering uses Python lambdas, e.g. `collection.search("...", filter=lambda r: r.category == "billing")`, which each connector translates to its native filter syntax. `hybrid_search` is available on stores that support it.
 
 **Search as a plugin (RAG for agents)**
 
@@ -879,6 +917,7 @@ See Microsoft's [migration guide](https://learn.microsoft.com/agent-framework/mi
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 1.45.0 | Audit against an installed copy. Prompt-file folders need `config.json` (example added). `OpenAIResponsesAgent.create_client()` needs a model ID. `connectors.memory` re-export is broken in 1.45.0. `OrchestrationHandoffs.add()` drops descriptions for string targets. Added a concurrent orchestration example. |
 | 2026-10-21 | 1.45.0 | Agent Framework bridge: `as_agent_framework_tool()` documented as broken against GA Agent Framework, with a working wrapper. OpenAPI example fixed (`operations_to_exclude`, `server_url_override`) and run against the live API. Added input encoding (4.5), worked Responses and Azure AI agent examples (with the `azure-ai-projects<2` pin), and a note on memory providers. Fragments made self-contained. |
 | 2026-10-21 | 1.45.0 | Rewritten. The previous edition documented planners removed in 1.33.0, a pre-1.34 vector store API, and several modules that never existed (`semantic_kernel.interop.a2a`, `semantic_kernel.connectors.a2a`, `MCPClient`/`MCPServer`, `connectors.ai.azure_open_ai`). It also claimed `pip install --pre` was required, which is not the case. All examples now use APIs verified against an installed copy; added orchestrations, the Process framework and the Agent Framework migration path. |
 | 2026-06-04 | 1.43.0 | Version bump (unverified). |

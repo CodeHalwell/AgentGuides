@@ -90,8 +90,8 @@ handoffs = (
         billing.name: "Billing, invoices, refunds",
         tech.name: "Errors, outages, how-to questions",
     })
-    .add(source_agent=billing.name, target_agent=triage.name, description="Not a billing issue")
-    .add(source_agent=tech.name, target_agent=triage.name, description="Not a technical issue")
+    .add(source_agent=billing, target_agent=triage, description="Not a billing issue")
+    .add(source_agent=tech, target_agent=triage, description="Not a technical issue")
 )
 
 def ask_human() -> ChatMessageContent:
@@ -103,6 +103,8 @@ support = HandoffOrchestration(
     human_response_function=ask_human,     # called when an agent needs more input
 )
 ```
+
+`add()` needs agent objects (not names) for `target_agent` if you want its `description` kept; with a string target the description is dropped in 1.45.0. `add_many()` with a name-to-description dict is fine.
 
 In a web service, `human_response_function` can await a queue that your HTTP handler fills, instead of `input()`.
 
@@ -154,7 +156,7 @@ debate = ConcurrentOrchestration[str, Opinions](members=[optimist, sceptic], out
 ## 5. Resilience
 
 - **Timeouts.** Always pass `timeout=` to `result.get()`; an orchestration waiting on a model that never answers otherwise waits forever. `result.cancel()` stops it.
-- **Retries.** Put retries in plugins (e.g. `tenacity`) for flaky tools; the OpenAI connector already retries rate-limit and 5xx responses.
+- **Retries.** Put retries in plugins (e.g. `tenacity`) for flaky tools; the `openai` client under the OpenAI connectors already retries 429 and 5xx responses (two retries by default).
 - **Loop limits.** Set `max_rounds` on group-chat managers; for hand-offs, keep hand-off descriptions specific so agents do not bounce requests between each other.
 - **Idempotent tools.** A retried or repeated tool call must not double-charge or double-send.
 
@@ -170,4 +172,5 @@ debate = ConcurrentOrchestration[str, Opinions](members=[optimist, sceptic], out
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-25 | 1.45.0 | Hand-off `add()` example passes agent objects so descriptions are kept; retry claim corrected. |
 | 2026-10-21 | 1.45.0 | Rewritten on the orchestration API and run against a stub chat service. |
