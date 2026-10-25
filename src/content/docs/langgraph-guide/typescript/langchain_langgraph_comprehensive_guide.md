@@ -3412,6 +3412,8 @@ The reducer must give the same result however the writes are batched (`reducer(r
 - **`GraphCallbackHandler`** (1.4.17): callback handler with `handleInterrupt` and `handleResume` hooks; see [Observability](/langgraph-guide/typescript/langgraph_observability_typescript/#interrupt-and-resume-events).
 - **`RemoteGraph` v3 streaming** (1.4.0).
 - **1.5.0** orders parallel writes by task path (matching Python) and fixes a series of `DeltaChannel`, durability and node-cache persistence edge cases. No API removals.
+- **`@langchain/core` 1.3.0 streams tool-call arguments as `tool-call-delta` slices.** Chat models that support the new protocol (the OpenAI-compatible providers, OpenAI and xAI Responses, Anthropic, Bedrock Converse) now send only the new part of a tool call's arguments in each event, rather than a `block-delta` snapshot of the arguments so far. The call's `id`, `name` and `index` arrive on `content-block-start`. This only matters if you read raw protocol events or write agent stream transformers that read `block-delta` `fields.args`; `await stream`, `.toolCalls` and the assembled message are unchanged. Upgrade clients first: `@langchain/langgraph-sdk` 1.12.6 or later, and `langchain-core` 1.6.13 or later for Python clients. To hold back, pin `@langchain/core` below 1.3.0.
+- **`langchain` 1.5.19** sends each parallel tool call only its own call, instead of a copy of the whole agent state, and restores state from the graph channels. Checkpoints saved by older versions still resume. It also adds guidance to the default `todoListMiddleware` prompt to write the final answer after the last `write_todos` call.
 
 ---
 
@@ -3419,6 +3421,7 @@ The reducer must give the same result however the writes are batched (`reducer(r
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5.2 | 2026-10-25 | `@langchain/core` 1.3.0 and `langchain` 1.5.19 checked: install line and peer dependencies resolve, examples type-check under `strict`; added a note on `tool-call-delta` streaming and the lighter parallel tool tasks. |
 | 1.5.2 | 2026-10-25 | "Recent features" section expanded with runnable `RunControl`/`GraphDrained` and `DeltaValue`/`MessagesDeltaValue` examples; per-node `tracePolicy` removed (not in any released version); `setNodeDefaults` placement clarified. |
 | 1.5.2 | 2026-10-21 | All examples now type-check under `strict`: builders are chained so node names are tracked, `addSequence` steps are typed, a subclassed tool that used `this` before `super()` replaced with a `tool()` factory, `config.writer` replaced with `getWriter()`, a duplicate `addNode` removed. Recommended `tsconfig` updated (ES2022, bundler resolution, `tsx`). `@langchain/community` (deprecated) removed. Hand-rolled hook, cache and memory frameworks cut in favour of middleware, `cachePolicy` and the Store. Interrupts, `Command`, `Send`, subgraphs, Functional API and time travel added on [their own page](/langgraph-guide/typescript/langgraph_control_flow_typescript/). |
 | 1.5.2 | 2026-10-21 | Replaced invented or removed APIs (`AgentExecutor`, `createOpenAIFunctionsAgent`, `@langgraphjs/toolkit`, `value_type` channels, `cache`/`cacheKey`/`cacheTTL`/`deferred` node options, `ZodOutputParser`) with real ones; fixed `tool()` argument order and `.stream()` chunk shapes. |
