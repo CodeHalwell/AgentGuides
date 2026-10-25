@@ -10,7 +10,7 @@ sidebar:
 
 Verified against `mistralai` %%version=mistralai%% (checked %%versions-checked%%). Upstream: [client-python](https://github.com/mistralai/client-python) · [PyPI](https://pypi.org/project/mistralai/) · [docs](https://docs.mistral.ai).
 
-Not every agent needs the stateful Agents API. When you hold the conversation yourself (for example, inside an existing chat backend), `chat.complete()` with function tools is the lighter option. Since SDK v3 the built-in tools (`web_search`, `code_interpreter` and friends) are not accepted there; use [Conversations](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/) for those.
+Not every agent needs the stateful Agents API. When you hold the conversation yourself (for example, inside an existing chat backend), `chat.complete()` with function tools is the lighter option. Since SDK v3 `web_search`, `web_search_premium` and `code_interpreter` are not accepted there (the SDK's tool types for `chat.complete()` are function tools, `image_generation`, `document_library` and connectors); use [Conversations](/mistral-agents-api-guide/mistral_agents_api_comprehensive_guide/) for the search and code tools.
 
 ## Patterns
 
@@ -46,7 +46,7 @@ def get_weather(city: str) -> dict:
 messages: list = [{"role": "user", "content": "What's the weather in Paris and in Lyon?"}]
 
 for _ in range(5):                                    # bound the loop
-    response = client.chat.complete(model="mistral-medium-latest", messages=messages, tools=tools)
+    response = client.chat.complete(model="%%model=mistral%%", messages=messages, tools=tools)
     message = response.choices[0].message
     if not message.tool_calls:
         print(message.content)
@@ -66,7 +66,7 @@ for _ in range(5):                                    # bound the loop
         })
 ```
 
-`parallel_tool_calls=False` forces one call at a time; `tool_choice="any"` forces a tool call.
+`parallel_tool_calls=False` asks for at most one tool call per turn. `tool_choice` takes `"auto"` (the default), `"none"`, `"any"` or `"required"`; the last two force the model to call a tool.
 
 ## Structured outputs
 
@@ -80,7 +80,7 @@ class Invoice(BaseModel):
 
 parsed = client.chat.parse(
     response_format=Invoice,
-    model="mistral-small-latest",
+    model="%%model=mistral-small%%",
     messages=[{"role": "user", "content": "Extract: ACME SARL invoice, 1,240.50 EUR due 2026-11-30."}],
 )
 invoice = parsed.choices[0].message.parsed
@@ -101,14 +101,14 @@ async def summarise_all(texts: list[str], concurrency: int = 8) -> list[str]:
         async def one(text: str) -> str:
             async with limit:
                 r = await client.chat.complete_async(
-                    model="mistral-small-latest",
+                    model="%%model=mistral-small%%",
                     messages=[{"role": "user", "content": f"Summarise in one sentence:\n\n{text}"}],
                 )
                 return r.choices[0].message.content
         return await asyncio.gather(*(one(t) for t in texts))
 ```
 
-For thousands of independent requests, the Batch API (`client.batch.jobs.create(...)`) is cheaper and avoids rate limits.
+For thousands of independent requests, the Batch API (`client.batch.jobs.create(...)`, which takes `endpoint`, `model` and `input_files` or `requests`) is cheaper (Mistral's batch documentation advertises a 50% discount) and moves the work off your synchronous rate limits.
 
 ## Retries and timeouts per call
 
@@ -118,7 +118,7 @@ from mistralai.client.utils import BackoffStrategy, RetryConfig
 patient = RetryConfig("backoff", BackoffStrategy(1000, 30_000, 2.0, 180_000), retry_connection_errors=True)
 
 response = client.chat.complete(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     messages=[{"role": "user", "content": "Draft a release note for v4.2."}],
     retries=patient,
     timeout_ms=120_000,
@@ -129,7 +129,7 @@ response = client.chat.complete(
 
 ```python
 with client.chat.stream(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     messages=[{"role": "user", "content": "Explain idempotency keys."}],
 ) as stream:
     for event in stream:

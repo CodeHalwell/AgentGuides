@@ -46,7 +46,7 @@ Small agents with one job each are easier to prompt, test and price than one age
 
 ```python
 researcher = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="researcher",
     description="Finds current information on the web and cites sources.",
     instructions="Search the web. Return findings as bullet points, each with a source URL.",
@@ -54,7 +54,7 @@ researcher = client.beta.agents.create(
 )
 
 analyst = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="analyst",
     description="Analyses data with Python and produces charts.",
     instructions="Use the code interpreter for every number. Show the code you ran.",
@@ -62,7 +62,7 @@ analyst = client.beta.agents.create(
 )
 
 writer = client.beta.agents.create(
-    model="mistral-small-latest",
+    model="%%model=mistral-small%%",
     name="writer",
     description="Turns notes into a short, clear report.",
     instructions="Write in plain British English. Lead with the conclusion. No more than 400 words.",
@@ -102,7 +102,7 @@ class Route(BaseModel):
     reason: str
 
 router = client.beta.agents.create(
-    model="mistral-small-latest",
+    model="%%model=mistral-small%%",
     name="router",
     description="Classifies requests.",
     instructions=(
@@ -168,18 +168,18 @@ Handoffs let the model route mid-conversation. Configure who may hand off to who
 
 ```python
 billing = client.beta.agents.create(
-    model="mistral-small-latest", name="billing",
+    model="%%model=mistral-small%%", name="billing",
     description="Invoices, refunds, payment methods.",
     instructions="Resolve billing questions. Ask for the invoice number if needed.",
 )
 technical = client.beta.agents.create(
-    model="mistral-medium-latest", name="technical",
+    model="%%model=mistral%%", name="technical",
     description="Bugs, errors, configuration and integration problems.",
     instructions="Troubleshoot step by step. Search the web for error messages you do not recognise.",
     tools=[{"type": "web_search"}],
 )
 frontdesk = client.beta.agents.create(
-    model="mistral-small-latest", name="frontdesk",
+    model="%%model=mistral-small%%", name="frontdesk",
     description="First point of contact for customers.",
     instructions="Greet briefly, work out what the customer needs, and hand off to billing or technical.",
     handoffs=[billing.id, technical.id],
@@ -256,7 +256,7 @@ from mistralai.client.models import FunctionCallEntry, FunctionResultEntry
 WORKERS = {"researcher": researcher.id, "analyst": analyst.id, "writer": writer.id}
 
 manager = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="manager",
     description="Plans work and delegates to specialists.",
     instructions=(

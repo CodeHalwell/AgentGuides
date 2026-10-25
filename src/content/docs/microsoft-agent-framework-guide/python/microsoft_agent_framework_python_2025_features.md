@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Feature tour"
+  order: 41
 ---
 
 ## Package status
@@ -29,6 +30,7 @@ Checked %%versions-checked%% by installing `agent-framework` %%version=agent-fra
 | `agent-framework-azurefunctions` | Beta |
 | `agent-framework-durabletask` | Beta |
 | `agent-framework-redis` | Beta |
+| `agent-framework-devui`, `agent-framework-azure-cosmos`, `agent-framework-azure-ai-search`, `agent-framework-foundry-local`, `agent-framework-purview`, `agent-framework-chatkit`, `agent-framework-hyperlight` and the other integration packages | Beta |
 
 The `agent-framework` meta package installs core plus the provider packages above in one go — including the beta ones, so no `--pre` flag is needed for the meta package. When you're ready to prune dependencies, install the sub-packages directly (stable ones plainly, beta ones with `--pre`, e.g. `pip install agent-framework-foundry` and `pip install --pre agent-framework-mem0`).
 
@@ -149,29 +151,23 @@ from agent_framework.foundry import FoundryChatClient
 from azure.identity.aio import DefaultAzureCredential
 
 @chat_middleware
-async def logging_middleware(context: ChatContext, next):
+async def logging_middleware(context: ChatContext, call_next):
     print(f"before: {len(context.messages)} messages")
-    await next(context)
+    await call_next()  # takes no arguments
     print(f"after: {context.result}")
 
 agent = Agent(
     client=FoundryChatClient(credential=DefaultAzureCredential(), model="%%model=openai%%"),
     instructions="You are a helpful assistant.",
-    middleware=[logging_middleware],  # must be a list in 2026 releases
+    middleware=[logging_middleware],
 )
 ```
 
-Breaking changes in the 2026 beta line (verified against release notes):
-
-- `display_name` parameter removed from agents.
-- `context_providers` (plural list) renamed to `context_provider` (singular; only one provider allowed).
-- `middleware` now requires a list — no longer accepts a single instance.
-- `AgentRunResponse` / `AgentRunResponseUpdate` renamed to `AgentResponse` / `AgentResponseUpdate`.
-- `AggregateContextProvider` removed — build your own aggregator from examples.
+The middleware callable's second parameter is `call_next` and is awaited with no arguments (the pre-GA `next(context)` form is gone). Renames such as `ChatAgent` → `Agent`, `AgentRunResponse` → `AgentResponse` and the removal of `display_name` and `AggregateContextProvider` are listed under [breaking changes worth knowing](/microsoft-agent-framework-guide/python/#breaking-changes-worth-knowing). `context_providers=` takes a list, and several providers can be combined. See [middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) for the full reference.
 
 ## OpenTelemetry observability
 
-`agent-framework-core` emits OpenTelemetry traces and metrics out of the box. Wire it up with the standard OTel SDK:
+`agent-framework-core` emits OpenTelemetry traces and metrics through the global providers (instrumentation is on unless `ENABLE_INSTRUMENTATION=false`). Wire it up with the standard OTel SDK, or call `agent_framework.observability.configure_otel_providers()`:
 
 ```python
 from opentelemetry.sdk.trace import TracerProvider
@@ -183,7 +179,7 @@ trace.get_tracer_provider().add_span_processor(
     BatchSpanProcessor(ConsoleSpanExporter())
 )
 
-# Framework code from here on emits agent_framework.* spans
+# Agent runs now emit invoke_agent, chat and execute_tool spans (GenAI semantic conventions)
 ```
 
 For Azure Monitor, use `azure.monitor.opentelemetry.configure_azure_monitor(connection_string=...)`.
@@ -193,21 +189,26 @@ For Azure Monitor, use `azure.monitor.opentelemetry.configure_azure_monitor(conn
 Content safety is **not** a framework-specific wrapper class. Call Azure AI Content Safety directly from a middleware:
 
 ```python
-from agent_framework import chat_middleware, ChatContext
+from agent_framework import ChatContext, ChatResponse, Message, MiddlewareTermination, chat_middleware
 from azure.ai.contentsafety.aio import ContentSafetyClient
+from azure.ai.contentsafety.models import AnalyzeTextOptions
 from azure.core.credentials import AzureKeyCredential
 
 cs_client = ContentSafetyClient("https://<region>.cognitiveservices.azure.com/",
                                 AzureKeyCredential("<key>"))
 
 @chat_middleware
-async def safety_guard(context: ChatContext, next):
+async def safety_guard(context: ChatContext, call_next):
+    # Don't name the parameter `next`: it would shadow the built-in used below.
     last_user = next((m for m in reversed(context.messages) if m.role == "user"), None)
-    if last_user:
-        verdict = await cs_client.analyze_text(text=last_user.content)
-        if verdict.categories_analysis[0].severity > 2:
-            raise ValueError("Blocked by content safety")
-    await next(context)
+    if last_user and last_user.text:
+        verdict = await cs_client.analyze_text(AnalyzeTextOptions(text=last_user.text))
+        if any((c.severity or 0) > 2 for c in verdict.categories_analysis):
+            context.result = ChatResponse(
+                messages=[Message(role="assistant", contents=["I can't help with that request."])]
+            )
+            raise MiddlewareTermination("blocked by content safety")
+    await call_next()
 ```
 
 ## Async patterns
@@ -216,8 +217,8 @@ The framework is async-first:
 
 - Agents expose `await agent.run(...)` and `async for update in agent.run(..., stream=True): ...`.
 - Chat clients implement the `SupportsChatGetResponse` protocol — `await client.get_response(...)`.
-- Checkpoint storage (`FileCheckpointStorage`, `InMemoryCheckpointStorage`) exposes awaitable `save` / `load` / `get_latest`.
-- `A2AAgent` uses `httpx.AsyncClient` under the hood; pass your own if you need custom TLS / retry / auth.
+- Checkpoint storage (`FileCheckpointStorage`, `InMemoryCheckpointStorage`) exposes awaitable `save`, `load`, `get_latest`, `list_checkpoints`, `list_checkpoint_ids` and `delete`.
+- `A2AAgent` uses `httpx.AsyncClient` under the hood; pass your own with `http_client=` for custom TLS or retries, or `auth_interceptor=` for auth.
 
 ## Mem0 — semantic long-term memory
 
@@ -242,6 +243,7 @@ agent = Agent(
         FileHistoryProvider(storage_path="./sessions"),     # short-term
         memory,                                              # long-term semantic recall
     ],
+    default_options={"store": False},   # keep history in the file, not also server-side
 )
 
 async with memory:                                           # opens the underlying Mem0 client
@@ -253,7 +255,7 @@ async with memory:                                           # opens the underly
 
 `Mem0ContextProvider` accepts either an `AsyncMemoryClient` (cloud Mem0 platform) or `AsyncMemory` (open-source Mem0 instance). Pass `mem0_client=` when you've already constructed one in your app — the provider will not close a client it didn't create.
 
-Filtering is enforced at construction time: at least one of `user_id`, `agent_id`, or `application_id` must be set, otherwise `_validate_filters` raises before the first search hits Mem0. Use `application_id` for tenant scoping, `user_id` for per-end-user memory, and `agent_id` when multiple agents share the same user.
+At least one of `user_id`, `agent_id` or `application_id` must be set. The check runs at the start of each `before_run` and `after_run`, not in the constructor, so a missing filter surfaces as a `ValueError` on the first `agent.run`. Use `application_id` for tenant scoping, `user_id` for per-end-user memory, and `agent_id` when multiple agents share the same user.
 
 ## Local interactive testing — DevUI
 
@@ -285,8 +287,8 @@ serve(
 Three knobs that matter when deploying beyond localhost:
 
 - `mode="developer"` (default) returns full error tracebacks and exposes admin APIs. Use `mode="user"` for shareable demos — it returns generic errors and locks down the management endpoints.
-- `auth_enabled=True` requires a Bearer token on every request. Without `auth_token=`, the server auto-generates one and prints it on startup; in CI / production, set `DEVUI_AUTH_TOKEN` in the environment so it's stable across restarts.
-- Network-exposing the server (`host="0.0.0.0"`) without `auth_enabled=True` triggers a startup warning — DevUI is not a hardened production runtime, it's a developer harness.
+- Bearer-token auth is on by default (`auth_enabled=True`). Without `auth_token=` or `DEVUI_AUTH_TOKEN`, a loopback server generates a token and logs it at start-up; set `DEVUI_AUTH_TOKEN` to keep it stable across restarts.
+- `auth_enabled=False` is only allowed on loopback hosts. Binding to a network address such as `host="0.0.0.0"` without a token raises `ValueError` at start-up. DevUI is a developer harness, not a hardened production runtime.
 
 For directory-based discovery (one folder per agent), point at the directory instead of passing instances:
 
@@ -294,7 +296,7 @@ For directory-based discovery (one folder per agent), point at the directory ins
 serve(entities_dir="./agents", port=8080)
 ```
 
-The dev server is also runnable from the CLI: `devui ./agents --port 8080 --auth`.
+The dev server is also runnable from the CLI: `devui ./agents --port 8080` (auth is on by default; `--auth-token`, `--no-auth` and `--mode user` are the related flags).
 
 ## Production patterns
 
@@ -313,7 +315,11 @@ from agent_framework import Agent, AgentSession, FileHistoryProvider
 from agent_framework.openai import OpenAIChatClient
 
 history = FileHistoryProvider(storage_path="./sessions", skip_excluded=True)
-agent = Agent(client=OpenAIChatClient(), context_providers=[history])
+agent = Agent(
+    client=OpenAIChatClient(),
+    context_providers=[history],
+    default_options={"store": False},   # otherwise the Responses API also keeps the history
+)
 
 session = agent.create_session(session_id="user-42")        # picks up ./sessions/user-42.jsonl
 await agent.run("Continue the chat", session=session)
@@ -375,12 +381,12 @@ For hosted MCP (the provider runs the MCP client server-side), feature-detect vi
 
 ## Magentic — manager + workers + replanning
 
-`MagenticBuilder` is the most sophisticated of the orchestration patterns: a manager agent maintains a task ledger, dispatches to workers, and can replan when a stall is detected.
+`MagenticBuilder` is the most involved of the orchestration patterns: a manager agent maintains a task ledger, dispatches to workers, and can replan when a stall is detected.
 
 ```python
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient
-from agent_framework_orchestrations import MagenticBuilder
+from agent_framework.orchestrations import MagenticBuilder
 
 manager = Agent(
     client=OpenAIChatClient(),
@@ -433,3 +439,9 @@ The `with_text` helper on `AgentExecutorResponse` matters when you transform age
 - [Microsoft Learn — Agent Framework](https://learn.microsoft.com/agent-framework/)
 - [Migration from Semantic Kernel](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/)
 - [Source (microsoft/agent-framework)](https://github.com/microsoft/agent-framework)
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-25 | 1.22.0 | Middleware examples now use `call_next()` (the `next(context)` form no longer works, and naming the parameter `next` broke the built-in `next()` in the content-safety example). Replaced an incorrect breaking-changes list (`context_providers` was never made singular) with a link to the current list. Corrected the Mem0 filter check (it runs per run, not at construction), DevUI auth (on by default; non-loopback without a token raises) and CLI flags, span names, and checkpoint storage methods. History-provider examples on `OpenAIChatClient` now set `store=False`. |

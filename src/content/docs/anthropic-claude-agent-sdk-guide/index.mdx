@@ -40,6 +40,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="5 · Tools" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#tools--integration" description="Built-in tools and @tool custom tools · 20 min" />
   <LinkCard title="6 · Permissions" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#permissions" description="Modes, can_use_tool, sandboxing · 20 min" />
   <LinkCard title="7 · Hooks" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#hooks" description="PreToolUse, PostToolUse and friends · 15 min" />
+  <LinkCard title="7b · Skills, commands, plugins" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#skills-slash-commands-and-plugins" description="SKILL.md, /commands, local plugins · 10 min" />
   <LinkCard title="8 · User input and approvals" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#user-input-and-approvals" description="AskUserQuestion, always-allow rules · 10 min" />
   <LinkCard title="9 · Multi-agent systems" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#multi-agent-systems" description="Subagents and orchestration in code · 20 min" />
   <LinkCard title="10 · MCP" href="/anthropic-claude-agent-sdk-guide/anthropic_claude_agent_sdk_comprehensive_guide/#model-context-protocol-mcp" description="stdio, HTTP, SSE and in-process servers · 15 min" />
@@ -123,6 +124,7 @@ Ready? **[Start Zero → Hero step 1 →](/anthropic-claude-agent-sdk-guide/anth
 
 | Date | Version | Summary |
 |------|---------|---------|
+| 2026-10-25 | %%version=claude-agent-sdk%% | Audit against the installed package: added hook patterns (input rewriting, prompt screening, Stop hook) and a skills, slash commands and plugins section; `autoCompactThreshold` read with `.get()` because the key is optional. |
 | 2026-10-21 | %%version=claude-agent-sdk%% | Failure handling corrected: the SDK yields the error `ResultMessage` before raising `ResultError`, so the retry helpers now keep reading and decide from `subtype` / `api_error_status` (tested against a stub CLI). Corrected the `setting_sources` default (all sources), hooks vs pre-approved tools, `load_timeout_ms`, `usage` vs `model_usage`; replaced `TodoWrite` with the Task tools. Added user input and approvals, image prompts, a SQLite `SessionStore` with its conformance test, a stub-CLI testing recipe and a FastAPI SSE recipe; rewrote the diagrams page. |
 | 2026-10-21 | 0.2.170 | Guide rewritten as Python-only and re-verified against the installed package: removed TypeScript duplicates and invented options (`api_provider`, `checkpoint_dir`, `enable_subagents`, `temperature`, `permission_prompt_tool_callback`), fixed `query()` keyword-only usage and `isinstance`-based message handling, added permissions, hooks, structured output, session stores and file checkpointing, updated models to the Claude 5 family. |
 | 2026-05-19 | 0.2.82 | 0.1.x → 0.2.x series. |

@@ -35,7 +35,7 @@ import { writeFile } from "node:fs/promises";
 import { client, textOf } from "./common.js";
 
 const analyst = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "data-analyst",
   description: "Writes and runs Python to answer quantitative questions.",
   instructions: "Use the code interpreter for any calculation. Show the code you ran and explain the result.",
@@ -72,7 +72,7 @@ for (const entry of response.outputs) {
 import { client } from "./common.js";
 
 const illustrator = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "illustrator",
   description: "Creates illustrations from descriptions.",
   instructions: "Generate one image per request. Describe what you generated in one sentence.",
@@ -94,7 +94,7 @@ The image arrives as a `tool_file` chunk; download it as in the code interpreter
 import { client } from "./common.js";
 
 const researcher = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "researcher",
   description: "Answers questions with current, cited information.",
   instructions: "Search before answering anything time-sensitive. Prefer primary sources.",
@@ -147,7 +147,7 @@ for (const documentId of uploaded) {
 }
 
 const support = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "handbook-support",
   description: "Answers questions from the product handbook.",
   instructions: "Answer only from the handbook. If it does not cover the question, say so.",
@@ -184,7 +184,7 @@ async function getOrderStatus({ orderId }: z.infer<typeof OrderStatusArgs>) {
 }
 
 const support = await client.beta.agents.create({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   name: "order-support",
   instructions: "Use get_order_status for any question about an order.",
   tools: [
@@ -242,7 +242,7 @@ import type { FunctionCallEntry, ToolCallConfirmation } from "@mistralai/mistral
 import { client, textOf } from "./common.js";
 
 const response = await client.beta.conversations.start({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   inputs: "Add a comment to ticket T-42 saying the fix is deployed.",
   tools: [
     {
@@ -286,20 +286,20 @@ An agent can pass the conversation to the agents listed in its `handoffs`:
 import { client, textOf } from "./common.js";
 
 const billing = await client.beta.agents.create({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   name: "billing",
   description: "Invoices, refunds, payment methods.",
   instructions: "Resolve billing questions. Ask for the invoice number if needed.",
 });
 const technical = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "technical",
   description: "Bugs, errors, configuration and integration problems.",
   instructions: "Troubleshoot step by step. Search the web for error messages you do not recognise.",
   tools: [{ type: "web_search" }],
 });
 const frontdesk = await client.beta.agents.create({
-  model: "mistral-small-latest",
+  model: "%%model=mistral-small%%",
   name: "frontdesk",
   description: "First point of contact for customers.",
   instructions: "Work out what the customer needs and hand off to billing or technical. Do not answer yourself.",
@@ -422,7 +422,7 @@ async function ask(agentId: string, task: string): Promise<string> {
 }
 
 const manager = await client.beta.agents.create({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   name: "manager",
   description: "Plans work and delegates to specialists.",
   instructions:
@@ -493,7 +493,7 @@ const tools = await client.beta.connectors.listTools({ connectorIdOrName: "deepw
 console.log(tools.length, "tools");
 
 const response = await client.beta.conversations.start({
-  model: "mistral-medium-latest",
+  model: "%%model=mistral%%",
   inputs: "Using deepwiki, explain how the sqlite/sqlite repository is organised.",
   tools: [
     {
@@ -575,7 +575,7 @@ try {
   }));
 
   let response = await client.beta.conversations.start({
-    model: "mistral-medium-latest",
+    model: "%%model=mistral%%",
     instructions: "Use the ticket tools to answer.",
     inputs: "Are there open tickets about login failures on Android?",
     tools: functionTools,

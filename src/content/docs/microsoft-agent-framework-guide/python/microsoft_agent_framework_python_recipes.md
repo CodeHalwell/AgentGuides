@@ -5,6 +5,7 @@ framework: "microsoft-agent-framework"
 language: "python"
 sidebar:
   label: "Recipes"
+  order: 80
 ---
 
 Practical, runnable patterns for the real `agent_framework` package. Every recipe targets the public surface of the latest release; nothing here relies on private modules.
@@ -91,7 +92,7 @@ if __name__ == "__main__":
 
 ### Recipe 3 — A tool with typed arguments and error handling
 
-`@tool` builds a JSON schema from your signature. Raise on bad inputs — the exception message becomes the model's tool-call result so it can recover.
+`@tool` builds a JSON schema from your signature. Raise on bad inputs: the tool loop catches the exception and sends the model a function result of `Error: Function failed.` so it can recover. Pass `function_invocation_configuration={"include_detailed_errors": True}` to the client to include the exception message as well.
 
 ```python
 # typed_tool.py
@@ -187,6 +188,7 @@ async def main() -> None:
         client=OpenAIChatClient(),
         instructions="You are a customer-service agent.",
         context_providers=[history],
+        default_options={"store": False},   # the file is the history; don't also store it server-side
     )
 
     # Stable id — same conversation across process restarts.
@@ -202,7 +204,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`FileHistoryProvider` rejects `session_id`s that escape the storage root (`../etc/passwd` and Windows reserved stems are rewritten or rejected). For multi-host deployments use the Redis or Cosmos DB providers — the JSONL implementation only locks within a single process.
+`FileHistoryProvider` never lets a `session_id` escape the storage root: ids that are not safe file names (`../etc/passwd`, Windows reserved stems) are encoded into a `~session-…` file name instead. For multi-host deployments use the Redis or Cosmos DB providers — the JSONL implementation only locks within a single process.
 
 ### Recipe 6 — Encrypt session history at rest
 
@@ -399,7 +401,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-For LLM-as-judge or weighted scoring patterns see the [evaluation guide](./microsoft_agent_framework_python_evaluation/).
+For LLM-as-judge or weighted scoring patterns see the [evaluation guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/).
 
 ### Recipe 10 — Skills for progressive-disclosure knowledge
 
@@ -459,7 +461,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`**kwargs` in the resource signature opts the function in to runtime data the model never sees (tenant id, request id, user id). Without `**kwargs` the framework calls the resource with no args. See the [skills guide](./microsoft_agent_framework_python_skills/) for file-based skills, executable scripts, and approval gates.
+`**kwargs` in the resource signature opts the function in to runtime data the model never sees (tenant id, request id, user id). Without `**kwargs` the framework calls the resource with no args. See the [skills guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) for file-based skills, executable scripts, and approval gates.
 
 ---
 
@@ -467,7 +469,7 @@ if __name__ == "__main__":
 
 ### Recipe 11 — MCP stdio + HTTP composition
 
-Combine a local MCP server (filesystem) with a remote one (Microsoft Learn). Each tool's exposed functions are namespaced by its `name=`.
+Combine a local MCP server (filesystem) with a remote one (Microsoft Learn). `name=` only labels the connection; the model sees the server's own tool names unless you set `tool_name_prefix=`, as here.
 
 ```python
 # multi_mcp.py
@@ -483,12 +485,14 @@ async def main() -> None:
             command="npx",
             args=["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
             description="Local filesystem under /tmp",
+            tool_name_prefix="fs",     # tools become fs_read_file, fs_list_directory, ...
         ) as fs,
         MCPStreamableHTTPTool(
             name="learn",
             url="https://learn.microsoft.com/api/mcp",
             description="Microsoft Learn documentation search",
             request_timeout=30,
+            tool_name_prefix="learn",
         ) as learn,
     ):
         agent = Agent(
@@ -510,7 +514,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`MCPStdioTool` spawns a subprocess; `async with` cleans it up deterministically. For long-running servers, manage `connect()` / `close()` explicitly so the same MCP session survives across many agent runs (see the [MCP guide](./microsoft_agent_framework_python_mcp/)).
+`MCPStdioTool` spawns a subprocess; `async with` cleans it up deterministically. For long-running servers, manage `connect()` / `close()` explicitly so the same MCP session survives across many agent runs (see the [MCP guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/)).
 
 ### Recipe 12 — Per-tenant MCP via `header_provider`
 
@@ -527,8 +531,8 @@ from agent_framework.openai import OpenAIChatClient
 # (`MCPSpecificApproval` is a TypedDict in agent_framework._mcp; the dict
 # below is structurally typed so the import isn't required at runtime.)
 billing_approval = {
-    "always_require_approval": ["billing.refund", "billing.void"],
-    "never_require_approval": ["billing.list_invoices", "billing.get_invoice"],
+    "always_require_approval": ["refund", "void_invoice"],
+    "never_require_approval": ["list_invoices", "get_invoice"],
 }
 
 
@@ -555,7 +559,7 @@ async def serve_tenant(tenant_token: str, query: str) -> str:
 asyncio.run(serve_tenant("tk_live_abc", "List my open invoices."))
 ```
 
-`MCPSpecificApproval` is a typed dict — IDEs autocomplete the two valid keys. Tools listed in **both** lists require approval (the safe default).
+`MCPSpecificApproval` is a typed dict — IDEs autocomplete the two valid keys. Use the server's raw tool names (without any `tool_name_prefix`). A tool in **both** lists requires approval; a tool in neither list runs **without** approval, so list every write operation explicitly.
 
 ### Recipe 13 — Workflow with checkpointing
 
@@ -609,7 +613,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Checkpoints are keyed on the workflow definition, not the instance — any process running the same `WorkflowBuilder` output can resume. For Cosmos DB, install `agent-framework-azure-cosmos`; for Redis, `agent-framework-redis`.
+Checkpoints are keyed on the workflow name and checked against a hash of the graph, so any process that builds the same workflow can resume. For Cosmos DB, install `agent-framework-azure-cosmos` (`CosmosCheckpointStorage`). There is no Redis checkpoint storage; `agent-framework-redis` provides history and context providers only.
 
 ### Recipe 14 — Function middleware: cache + retry
 
@@ -624,7 +628,6 @@ from agent_framework import (
     Agent,
     FunctionMiddleware,
     FunctionInvocationContext,
-    MiddlewareTermination,
     tool,
 )
 from agent_framework.openai import OpenAIChatClient
@@ -646,7 +649,10 @@ class IdempotentCache(FunctionMiddleware):
             return
         key = self._key(context.function.name, dict(context.arguments or {}))
         if key in self._cache:
-            raise MiddlewareTermination("cache hit", result=self._cache[key])
+            # Short-circuit: set the result and return without calling the tool.
+            # (MiddlewareTermination here would end the whole tool loop instead.)
+            context.result = self._cache[key]
+            return
         await call_next()
         if context.result is not None:
             self._cache[key] = context.result
@@ -694,7 +700,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Outer-to-inner: `IdempotentCache` wraps `RetryOnError` wraps the tool. The cache short-circuits via `MiddlewareTermination` so the retry layer doesn't even fire on a hit.
+Outer-to-inner: `IdempotentCache` wraps `RetryOnError` wraps the tool. On a hit the cache sets `context.result` and returns without calling `call_next()`, so the retry layer and the tool never run. `kind="readonly"` is just a label the middleware reads; the framework itself only interprets `kind="shell"`.
 
 ### Recipe 15 — Agent middleware: budgets and policy gates
 
@@ -722,7 +728,8 @@ class BudgetGuard(AgentMiddleware):
         self.quotas = dict(quotas)
 
     async def process(self, context: AgentContext, call_next) -> None:
-        tenant = context.kwargs.get("tenant_id", "default")
+        # Pass with agent.run(..., function_invocation_kwargs={"tenant_id": "acme"}).
+        tenant = (context.function_invocation_kwargs or {}).get("tenant_id", "default")
         if self.quotas.get(tenant, 0) <= 0:
             # The agent pipeline returns context.result; set it before raising.
             context.result = AgentResponse(
@@ -753,7 +760,7 @@ agent = Agent(
 )
 ```
 
-Setting `context.result` and raising `MiddlewareTermination` returns a synthetic response without invoking the model. In agent middleware the exception's own `result=` argument is ignored, so set `context.result` first. See the [middleware guide](./microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
+Setting `context.result` and raising `MiddlewareTermination` returns a synthetic response without invoking the model. In agent middleware the exception's own `result=` argument is ignored, so set `context.result` first. See the [middleware guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/) for streaming hooks, `ChatMiddleware`, and observability spans.
 
 ### Recipe 16 — Expose an agent over MCP
 
@@ -788,7 +795,7 @@ async def main() -> None:
 anyio.run(main)
 ```
 
-Other agents (or Claude Desktop, an LLM IDE, …) can now consume your agent via `MCPStdioTool(name="docs", command="python", args=["mcp_server.py"])`. Image and audio outputs are dropped with a warning — only text content is forwarded over the MCP server path.
+Other agents (or Claude Desktop, an LLM IDE, …) can now consume your agent via `MCPStdioTool(name="docs", command="python", args=["mcp_server.py"])`. The server exposes one tool named after the agent (`docs_agent`) with a single `task` string argument. Image and audio outputs are dropped with a warning — only text content is forwarded over the MCP server path.
 
 ---
 
@@ -823,6 +830,7 @@ async def lifespan(app: FastAPI):
         client=OpenAIChatClient(),
         instructions="You are a helpful API assistant.",
         context_providers=[state.history],
+        default_options={"store": False},
     )
     yield
     # Add explicit cleanup here if you need it (close clients, flush metrics).
@@ -861,12 +869,13 @@ import logging
 import azure.functions as func
 from agent_framework import Agent
 from agent_framework.foundry import FoundryChatClient
+from azure.identity.aio import DefaultAzureCredential
 
 
 app = func.FunctionApp()
 
 # Module-level construction → warm-start reuse across invocations.
-_client = FoundryChatClient()
+_client = FoundryChatClient(credential=DefaultAzureCredential())  # FOUNDRY_PROJECT_ENDPOINT, FOUNDRY_MODEL
 _agent = Agent(
     client=_client,
     instructions="You process queued tasks. Reply with the action plan only.",
@@ -1010,6 +1019,7 @@ async def turn(blob: str | None, message: str) -> tuple[str, str]:
         client=OpenAIChatClient(),
         instructions="You are a customer-service agent.",
         context_providers=[InMemoryHistoryProvider()],
+        default_options={"store": False},   # keep the messages in the session blob
     )
     session = AgentSession.from_dict(json.loads(blob)) if blob else AgentSession()
     response = await agent.run(message, session=session)
@@ -1029,11 +1039,11 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-For custom types in `session.state`, register them once at module import via `register_state_type(...)` so cold-starts work even before the model is serialised. See the [sessions guide](./microsoft_agent_framework_python_sessions/) for the full contract.
+For custom types in `session.state`, register them once at module import via `register_state_type(...)` so cold-starts work even before the model is serialised. See the [sessions guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/) for the full contract.
 
 ### Recipe 22 — Agent todo list with `TodoProvider`
 
-Give the agent a persistent task list. The provider exposes `todos_add`, `todos_complete`, `todos_get_remaining`, and `todos_remove` tools and injects usage instructions into the system prompt automatically.
+Give the agent a persistent task list. The provider exposes `todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining` and `todos_get_all` tools and injects usage instructions into the system prompt automatically.
 
 ```python
 # todo_agent.py
@@ -1043,7 +1053,7 @@ from agent_framework.openai import OpenAIChatClient
 
 
 async def main() -> None:
-    # TodoFileStore persists todos under ./todos/<session_id>/todos.json
+    # TodoFileStore persists todos in ./todos/<session_id>/todos.todo.json
     store = TodoFileStore(base_path="./todos")
 
     agent = Agent(
@@ -1053,6 +1063,7 @@ async def main() -> None:
             "Break every task into trackable todo items."
         ),
         context_providers=[TodoProvider(store=store)],
+        default_options={"store": False},
     )
 
     # Reuse the same session_id to accumulate todos across runs
@@ -1232,59 +1243,51 @@ Key points:
 
 See the [comprehensive guide's FIDES section](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#prompt-injection-defence-fides) for the constructor reference table.
 
-### Recipe 25 — `FunctionExecutor` data pipeline
+### Recipe 25 — `@executor` data pipeline
 
-Chain multiple `@executor`-decorated functions into a multi-step processing workflow using `WorkflowBuilder`. Sync functions run automatically in a thread pool via `asyncio.to_thread`.
+Chain `@executor`-decorated functions into a multi-step processing workflow with `WorkflowBuilder`. Each executor passes data on with `ctx.send_message(...)` and produces workflow output with `ctx.yield_output(...)`; a function's return value is not forwarded. Because both calls are coroutines, executors that emit anything must be `async`.
 
 ```python
 # executor_pipeline.py
 import asyncio
-from agent_framework import FunctionExecutor, WorkflowBuilder, WorkflowViz, executor, WorkflowContext
+from typing_extensions import Never
+from agent_framework import WorkflowBuilder, WorkflowContext, WorkflowViz, executor
 
 
-# Step 1 — normalise whitespace and capitalise
+# Step 1 — normalise whitespace and capitalise, then pass the text on.
 @executor(id="normalise")
-async def normalise(text: str) -> None:
-    return " ".join(text.split()).capitalize()
+async def normalise(text: str, ctx: WorkflowContext[str]) -> None:
+    await ctx.send_message(" ".join(text.split()).capitalize())
 
 
-# Step 2 — split into sentences and emit each one downstream
+# Step 2 — split into sentences and emit each one downstream.
 @executor(id="splitter")
 async def splitter(text: str, ctx: WorkflowContext[str]) -> None:
     for sentence in text.split("."):
         stripped = sentence.strip()
         if stripped:
-            await ctx.send_message(stripped)
+            await ctx.send_message(stripped.capitalize())
 
 
-# Step 3 — count words per sentence (sync function runs in asyncio.to_thread automatically)
-def word_count(sentence: str) -> str:
-    count = len(sentence.split())
-    return f"{count} word(s): {sentence}"
+# Step 3 — count words per sentence and yield a workflow output for each.
+@executor(id="word_counter")
+async def word_counter(sentence: str, ctx: WorkflowContext[Never, str]) -> None:
+    await ctx.yield_output(f"{len(sentence.split())} word(s): {sentence}")
 
 
-counter = FunctionExecutor(word_count, id="word_counter")
-
-
-# Wire the three steps into a linear pipeline
 workflow = (
     WorkflowBuilder(start_executor=normalise, name="text-pipeline")
     .add_edge(normalise, splitter)
-    .add_edge(splitter, counter)
+    .add_edge(splitter, word_counter)
     .build()
 )
 
 
 async def main() -> None:
-    # Visualise the graph before running
-    viz = WorkflowViz(workflow)
     print("--- Mermaid diagram ---")
-    print(viz.to_mermaid())
-    print()
+    print(WorkflowViz(workflow).to_mermaid())
 
-    result = await workflow.run(
-        "hello world. this is a test. agent framework is great."
-    )
+    result = await workflow.run("hello   world. this is a test. agent framework is great.")
 
     print("--- Outputs ---")
     for output in result.get_outputs():
@@ -1295,17 +1298,19 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-Expected output:
+Output:
 
 ```
 --- Mermaid diagram ---
-graph LR
-  normalise --> splitter
-  splitter --> word_counter
-
+flowchart TD
+  normalise["normalise (Start)"];
+  splitter["splitter"];
+  word_counter["word_counter"];
+  normalise --> splitter;
+  splitter --> word_counter;
 --- Outputs ---
-3 word(s): Hello world
-5 word(s): This is a test
+2 word(s): Hello world
+4 word(s): This is a test
 4 word(s): Agent framework is great
 ```
 
@@ -1317,7 +1322,7 @@ graph LR
 
 Long-running agents accumulate tool chatter fast. This recipe uses the `CompactionProvider` context provider to apply a **two-phase compaction pipeline**:
 - **before**: trim what the model sees each turn using a token-budget strategy that collapses old tool-call groups first, then shrinks the sliding window.
-- **after**: compact the stored history so the *next* session starts leaner.
+- **after**: compact the stored history after each reply, so later turns load less.
 
 ```python
 # compaction_provider.py
@@ -1416,7 +1421,7 @@ async def main() -> None:
 
     provider = MemoryContextProvider(
         store=store,
-        recent_turns=3,       # also inject 3 most-recent transcript turns each call
+        recent_turns=3,       # also inject the 3 most recent transcript turns each call
         max_extractions=5,    # extract up to 5 facts per turn into topic files
     )
 
@@ -1467,8 +1472,9 @@ if __name__ == "__main__":
 | `store` | required | `MemoryFileStore` or custom `MemoryStore` subclass |
 | `recent_turns` | `0` | Inject N most-recent transcript turns alongside MEMORY.md |
 | `max_extractions` | `5` | Maximum facts extracted from a single turn |
-| `selection_limit` | `10` | Maximum topic files auto-loaded per turn |
-| `consolidation_interval` | 7 days | How often topic files are consolidated |
+| `selection_limit` | `3` | Maximum topic files auto-loaded per turn |
+| `consolidation_interval` | 1 day | Minimum time between consolidation passes |
+| `consolidation_min_sessions` | `5` | Sessions needed before a consolidation pass runs |
 | `consolidation_client` | None (uses agent client) | Cheaper model for the consolidation pass |
 
 **`MemoryFileStore` constructor reference:**
@@ -1502,19 +1508,19 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | MCP remote HTTP | `MCPStreamableHTTPTool(name=, url=, header_provider=)` |
 | Per-tool approval | `approval_mode="always_require"` or per-tool dict (`{"always_require_approval": [...], "never_require_approval": [...]}`) |
 | Tool retries | `FunctionMiddleware` subclass, `await call_next()` in a loop |
-| Run-level guards | `AgentMiddleware` subclass, raise `MiddlewareTermination(result=...)` |
+| Run-level guards | `AgentMiddleware` subclass: set `context.result`, then raise `MiddlewareTermination` |
 | Workflow checkpoints | `FileCheckpointStorage(storage_path=...)` + `WorkflowBuilder(checkpoint_storage=)` |
 | Skills | `SkillsProvider(my_skill)` or `SkillsProvider([skill_a, skill_b])` — takes a positional `source` (single `Skill`, list of `Skill`, or a `SkillsSource`) |
 | Eval gates | `LocalEvaluator(*checks)` + `evaluate_agent(...)` |
-| Agent todo list (exp.) | `TodoProvider(store=TodoFileStore(...))` |
+| Agent todo list | `TodoProvider(store=TodoFileStore(...))` |
 | Cross-session memory (exp.) | `MemoryContextProvider(store=MemoryFileStore(..., owner_state_key=...))` |
 | Compact context via provider | `CompactionProvider(before_strategy=..., after_strategy=..., history_source_id=...)` |
 | Drop old tool-call groups | `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Summarise old tool results | `ToolResultCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Token-budget composition | `TokenBudgetComposedStrategy(token_budget=N, tokenizer=..., strategies=[...])` |
-| Plan / execute modes (exp.) | `AgentModeProvider(mode_instructions={...})` |
+| Plan / execute modes | `AgentModeProvider(mode_instructions={...})` |
 | Prompt injection defense (exp.) | `SecureAgentConfig(...)` from `agent_framework.security` |
-| Function-based workflow nodes | `@executor` / `FunctionExecutor(func, id=)` |
+| Function-based workflow nodes | `@executor` (async; emit with `ctx.send_message` / `ctx.yield_output`) |
 | Visualise a workflow | `WorkflowViz(workflow).to_mermaid()` / `.to_digraph()` / `.export(format="svg")` |
 | In-memory skill source | `InMemorySkillsSource([skill_a, skill_b])` |
 | Custom composable skill source | Subclass `DelegatingSkillsSource(inner_source)` |
@@ -1522,6 +1528,12 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Intercept agent.run() | Subclass `AgentMiddleware`, override `async process(context, call_next)` |
 | Intercept LLM calls | Subclass `ChatMiddleware`, override `async process(context, call_next)` |
 | Intercept tool calls | Subclass `FunctionMiddleware`, override `async process(context, call_next)` |
-| Early-exit from middleware | `raise MiddlewareTermination(result=AgentResponse(...))` |
+| Early exit from middleware | Agent and chat middleware: set `context.result`, raise `MiddlewareTermination`. Function middleware: set `context.result` and return without `call_next()` |
 
-For more detail see the framework's other Python guides: [agent harness](./microsoft_agent_framework_python_harness/), [tools](./microsoft_agent_framework_python_tools/), [sessions](./microsoft_agent_framework_python_sessions/), [middleware](./microsoft_agent_framework_python_middleware/), [MCP](./microsoft_agent_framework_python_mcp/), [skills](./microsoft_agent_framework_python_skills/), [evaluation](./microsoft_agent_framework_python_evaluation/), [checkpointing](./microsoft_agent_framework_python_checkpointing/), and [orchestration](./microsoft_agent_framework_python_orchestration/).
+For more detail see the framework's other Python guides: [agent harness](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_harness/), [tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/), [sessions](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/), [middleware](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/), [MCP](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/), [skills](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/), [evaluation](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_evaluation/), [checkpointing](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_checkpointing/), and [orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/).
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-25 | 1.22.0 | Rewrote recipe 25: `@executor` return values are not forwarded, so the old pipeline produced no output, and the shown Mermaid output was wrong. The function-middleware cache now sets `context.result` and returns (raising `MiddlewareTermination` there ends the tool loop). Fixed MCP naming (`name=` is not a prefix; added `tool_name_prefix`) and approval behaviour for unlisted tools, tool error text, the agent-middleware kwargs source, Redis checkpointing (does not exist; Cosmos does), `FoundryChatClient` credentials, the todo file path and `MemoryContextProvider` defaults. Recipes that keep history locally on `OpenAIChatClient` now set `store=False`. |

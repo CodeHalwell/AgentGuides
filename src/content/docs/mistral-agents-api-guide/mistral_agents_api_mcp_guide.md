@@ -66,7 +66,7 @@ Attach it to an agent, optionally limiting which tools are exposed:
 
 ```python
 triager = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="ticket-triager",
     description="Finds and summarises related tickets.",
     instructions="Search tickets before answering. Never post comments without being asked.",
@@ -111,7 +111,7 @@ async def main() -> None:
         name="filesystem",
     )
 
-    async with RunContext(model="mistral-medium-latest") as run_ctx:
+    async with RunContext(model="%%model=mistral%%") as run_ctx:
         await run_ctx.register_mcp_client(
             mcp_client=filesystem,
             tool_configuration={"include": ["list_directory", "read_text_file"]},
@@ -147,7 +147,7 @@ legacy = MCPClientSSE(sse_params=SSEServerParams(url="https://legacy.internal.ex
 
 Register several at once with `await run_ctx.register_mcp_clients([inventory, legacy])`. `MCPClientSSE` also accepts `oauth_params` for servers that implement MCP's OAuth flow.
 
-`StreamableHTTPServerParams` does not follow redirects by default, so the `headers` you set are never forwarded to another host; leave `follow_redirects=False` unless every redirect target is trusted.
+`StreamableHTTPServerParams` does not follow redirects by default, so the `headers` you set are never forwarded to another host; leave `follow_redirects=False` unless every redirect target is trusted. Its `timeout` (30 seconds) and `sse_read_timeout` (five minutes) are in seconds. `trust_env` defaults to `True`, so the client honours `HTTP(S)_PROXY` and certificate variables; set `trust_env=False` to reach an in-cluster URL directly when external egress goes through a proxy.
 
 ### Mixing MCP, your functions and built-in tools
 
@@ -168,7 +168,7 @@ def convert_currency(amount: float, rate: float) -> float:
 
 async def main() -> None:
     client = Mistral(api_key=os.environ["MISTRAL_API_KEY"])
-    async with RunContext(model="mistral-medium-latest") as run_ctx:
+    async with RunContext(model="%%model=mistral%%") as run_ctx:
         await run_ctx.register_mcp_client(mcp_client=inventory)   # from the previous example
         run_ctx.register_func(convert_currency)
         result = await client.beta.conversations.run_async(
@@ -207,7 +207,7 @@ def issue_refund(order_id: str, amount: float) -> str:
     return f"Refunded {amount:.2f} EUR on {order_id}"
 
 async def first_turn(client: Mistral) -> dict | None:
-    async with RunContext(model="mistral-medium-latest") as run_ctx:
+    async with RunContext(model="%%model=mistral%%") as run_ctx:
         run_ctx.register_func(issue_refund, requires_confirmation=True)
         try:
             result = await client.beta.conversations.run_async(
@@ -227,7 +227,7 @@ async def resume(client: Mistral, state: dict, approved: bool) -> None:
     for call in deferred.deferred_calls:
         inputs.append(call.confirm() if approved else call.reject("Refund declined by a supervisor"))
 
-    async with RunContext(model="mistral-medium-latest") as run_ctx:
+    async with RunContext(model="%%model=mistral%%") as run_ctx:
         run_ctx.conversation_id = deferred.conversation_id
         run_ctx.register_func(issue_refund, requires_confirmation=True)
         result = await client.beta.conversations.run_async(run_ctx=run_ctx, inputs=inputs)
@@ -253,7 +253,7 @@ Registered connectors and built-in tools run on Mistral's side, so the approval 
 from mistralai.client.models import FunctionCallEntry
 
 response = client.beta.conversations.start(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     inputs="Add a comment to ticket T-42 saying the fix is deployed.",
     tools=[{
         "type": "connector",

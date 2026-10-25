@@ -145,7 +145,7 @@ Because the instrumentation is standard OpenTelemetry, you can also send spans t
 - `compress_tool_results=True` (or a `CompressionManager`) has a model shorten long tool results.
 - `offload_tool_results=True` stores results longer than 16,000 characters as files and leaves a short reference the model can read back in pages.
 - `compaction=True` replaces old messages with a summary once a session grows past a threshold.
-- `store_tool_messages=False` and `store_history_messages=False` (the default) keep stored runs small.
+- `store_history_messages` is `False` by default, so each stored run holds only its own messages and history is rebuilt from earlier runs (storage grows linearly; `True` stores the full context in every run and grows quadratically). `store_tool_messages=False` (default `True`) additionally leaves tool results out of stored runs.
 - `Model(cache_response=True)` caches identical requests on disk: useful in development and tests, not for live traffic.
 
 These options were checked to exist on `Agent`; their effect on real conversations was not measured for this guide.

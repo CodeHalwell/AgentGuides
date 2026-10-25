@@ -19,7 +19,7 @@ The agent loop, built-in tools and conversation storage run on Mistral's side, s
 ```bash
 # Credentials (one of)
 MISTRAL_API_KEY=...
-MISTRAL_SA_TOKEN_PATH=/var/run/secrets/mistral/token   # Mistral service-account token file; wins over MISTRAL_API_KEY
+MISTRAL_SA_TOKEN_PATH=/var/run/secrets/mistral/token   # token file the SDK re-reads on every request; wins over MISTRAL_API_KEY
 
 # Your service
 AGENT_ID_SUPPORT=ag_...           # created by a deploy script, not at request time
@@ -291,8 +291,8 @@ Keep a small set of live tests as well, run against a staging agent version befo
 
 ## 5. Cost
 
-- **Model tokens.** `usage.prompt_tokens` and `usage.completion_tokens` are billed at the agent's model rate. Routers, classifiers and extractors rarely need more than `mistral-small-latest`.
-- **Tool tokens and calls.** `usage.connector_tokens` counts the tokens that tool results (search results, retrieved passages, code output) added to the context; they are included in `total_tokens`. `usage.connectors` counts calls per tool (for example `{"web_search": 1}`). Built-in tools are also priced per call (image generation per image) on top of tokens; check Mistral's pricing page.
+- **Model tokens.** `usage.prompt_tokens` and `usage.completion_tokens` are billed at the agent's model rate. Routers, classifiers and extractors rarely need more than `%%model=mistral-small%%`.
+- **Tool tokens and calls.** `usage.connector_tokens` counts the tokens that tool results (search results, retrieved passages, code output) added to the context; they are included in `total_tokens`. `usage.connectors` counts calls per tool (for example `{"web_search": 1}`). Built-in tools may carry their own charges on top of tokens; Mistral's tool documentation states none, so check its pricing page for web search, code execution and image generation before estimating.
 - **History grows.** Stored conversations save you resending the transcript, but the model still reads the whole history on every `append()`, so prompt tokens rise with each turn. Start a new conversation, or `restart()` from an earlier entry, when the topic changes.
 - **Cap the work.** Set `completion_args={"max_tokens": ...}` on agents, bound function-call loops, and give each agent only the tools it needs (every tool definition is sent on every turn).
 - **Batch offline work.** The Batch API (`client.batch.jobs`) is priced below synchronous requests and suits bulk classification or extraction with no tools or conversation state.
@@ -357,8 +357,8 @@ In a multi-instance deployment, keep the buckets in Redis.
 ## 8. Performance
 
 - **Stream** with `start_stream_async()` for user-facing requests; time to first token matters more than total time.
-- **Choose models per agent.** Routers and classifiers rarely need more than `mistral-small-latest`.
-- **Keep instructions stable** so the platform can cache the prompt; put per-request data in `inputs`, not `instructions`.
+- **Choose models per agent.** Routers and classifiers rarely need more than `%%model=mistral-small%%`.
+- **Keep instructions stable.** Put per-request data in `inputs`, not `instructions`, so an agent's definition changes only through a new version that you can test, alias and roll back.
 - **Trim tools.** Every tool definition costs prompt tokens on every turn.
 - **Use `store=False`** for one-shot requests you will never append to.
 
@@ -366,7 +366,7 @@ In a multi-instance deployment, keep the buckets in Redis.
 
 ## 9. Security
 
-- **Secrets.** Prefer Mistral service-account tokens (`MISTRAL_SA_TOKEN_PATH`, re-read on every request so rotation needs no restart) over long-lived API keys. If the variable is set but the file is missing, every request fails with `ServiceAccountTokenError`; unset it rather than leaving it dangling.
+- **Secrets.** Keep `MISTRAL_API_KEY` in a secret manager and out of images and source control. The SDK can also read a service-account token from the file named by `MISTRAL_SA_TOKEN_PATH`, re-reading it on every request so rotation needs no restart; Mistral documents that mechanism for its managed workflow deployments, which mount the token for you. A key passed to `Mistral(api_key=...)` outranks the token file, so construct the client without one to use it. If the variable is set but the file is missing or empty, every request fails with `ServiceAccountTokenError`; unset it rather than leaving it dangling.
 - **Data residency.** Use `server="eu"` or `server="us"` to pin the region.
 - **Guardrails.** Attach `GuardrailConfig` with `ModerationLlmv2Config` to public-facing agents.
 - **Prompt injection.** Web search results, documents and connector outputs are untrusted. Use `requires_confirmation` on tools that write or send, and never put credentials in instructions.
@@ -391,7 +391,7 @@ EXPOSE 8000
 CMD ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-On Kubernetes, mount the Mistral service-account token from a Secret as a file and point `MISTRAL_SA_TOKEN_PATH` at it:
+On Kubernetes, the straightforward set-up is the API key from a Secret (`secretKeyRef`, shown after the manifest). If you hold a Mistral service-account token, you can instead mount it from a Secret as a file and point `MISTRAL_SA_TOKEN_PATH` at it, as here:
 
 ```yaml
 apiVersion: apps/v1
@@ -426,7 +426,16 @@ spec:
             items: [{ key: token, path: token }]
 ```
 
-The token is a Mistral service-account token (see `client.beta.service_accounts`), not the pod's own Kubernetes service-account token, which Mistral does not accept. Kubernetes updates a mounted Secret in place (unless it is mounted with `subPath`), and the SDK re-reads the file on each request, so rotating the Secret needs no restart. With an API key instead, set `MISTRAL_API_KEY` from a `secretKeyRef`.
+The token must be a Mistral service-account token, not the pod's own Kubernetes service-account token (Mistral has no documented way to accept that). `client.beta.service_accounts` manages service accounts and their roles; it has no call that issues a token, and no public documentation for issuing one outside managed deployments was found, so confirm how your organisation obtains one. Kubernetes updates a mounted Secret in place (unless it is mounted with `subPath`), and the SDK re-reads the file on each request, so rotating the Secret needs no restart. With an API key instead, drop the volume and set the variable from a Secret:
+
+```yaml
+          env:
+            - name: MISTRAL_API_KEY
+              valueFrom:
+                secretKeyRef: { name: mistral-api-key, key: apiKey }
+```
+
+In both cases construct the client with `Mistral()` and no `api_key` argument, so the SDK picks the credential up itself.
 
 Because the heavy work happens at Mistral, instances are light: scale on concurrent requests and keep `MISTRAL_MAX_CONCURRENCY` × replicas below your workspace rate limit.
 

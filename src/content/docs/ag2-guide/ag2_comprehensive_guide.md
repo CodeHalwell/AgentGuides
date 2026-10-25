@@ -409,17 +409,18 @@ async def main() -> None:
     config = OpenAIConfig(model="%%model=openai-small%%")
     hub = await Hub.open(MemoryKnowledgeStore(), ttl_sweep_interval=0)
 
+    requester = await hub.register(Agent("requester", prompt="You commission short pieces.", config=config))
     researcher = await hub.register(Agent("researcher", prompt="You gather facts.", config=config))
     writer = await hub.register(Agent("writer", prompt="You turn facts into a short draft.", config=config))
     editor = await hub.register(Agent("editor", prompt="You tighten drafts.", config=config))
 
-    graph = TransitionGraph.sequence([researcher.agent_id, writer.agent_id, editor.agent_id])
-    channel = await researcher.open(
+    graph = TransitionGraph.sequence([requester.agent_id, researcher.agent_id, writer.agent_id, editor.agent_id])
+    channel = await requester.open(
         type="workflow",
-        target=[writer.agent_id, editor.agent_id],
+        target=[researcher.agent_id, writer.agent_id, editor.agent_id],
         knobs={"graph": graph.to_dict()},
     )
-    await channel.send("Topic: how does HTTPS work?")
+    await channel.send("Topic: how does HTTPS work?")   # this message is the requester's turn
 
     # Wait for the graph to finish, then replay the exchange from the WAL.
     while not any(e.event_type == EV_CHANNEL_CLOSED for e in await hub.read_wal(channel.channel_id)):

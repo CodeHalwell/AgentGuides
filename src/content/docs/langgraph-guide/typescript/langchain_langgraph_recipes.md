@@ -700,7 +700,7 @@ import { StateGraph, START, END, Annotation } from '@langchain/langgraph';
 import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { MemoryVectorStore } from '@langchain/classic/vectorstores/memory'; // npm install @langchain/classic
 import { Document } from '@langchain/core/documents';
-import Redis from 'ioredis';
+import { Redis } from 'ioredis';
 
 interface RAGState {
   query: string;

@@ -51,7 +51,7 @@ Runs model-written Python in an isolated sandbox: calculations, data analysis, c
 
 ```python
 analyst = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="data-analyst",
     description="Writes and runs Python to answer quantitative questions.",
     instructions="Use the code interpreter for any calculation. Show the code you ran and explain the result.",
@@ -83,7 +83,7 @@ for entry in response.outputs:
                     f.write(data)
 ```
 
-Practicalities: the sandbox has no access to your network or files, so pass data in the prompt or have the agent fetch public data with web search first. Ask for printed results as well as charts, so the answer is checkable.
+Practicalities: Mistral describes the tool as running code in an isolated container on its side, so the code cannot read files on your machine; pass data in the prompt, or upload it as a document and let the agent retrieve it. Ask for printed results as well as charts, so the answer is checkable. The `tool.execution` entry for the interpreter carries the tool's `arguments`, which is what to log when a number looks wrong.
 
 ---
 
@@ -91,7 +91,7 @@ Practicalities: the sandbox has no access to your network or files, so pass data
 
 ```python
 designer = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="illustrator",
     description="Creates illustrations from descriptions.",
     instructions="Generate one image per request. Describe what you generated in one sentence.",
@@ -104,7 +104,7 @@ response = client.beta.conversations.start(
 )
 ```
 
-The image arrives as a `ToolFileChunk`; download it exactly as in the code interpreter example. Image generation is billed per image in addition to tokens.
+The image arrives as a `ToolFileChunk` with a `file_id`, `file_name` and `file_type` (Mistral's example shows `png`); download it exactly as in the code interpreter example, because the response holds a reference and not the image bytes. Mistral's page for the tool gives no pricing or limits, so check the pricing page before putting it in a loop.
 
 ---
 
@@ -116,7 +116,7 @@ The image arrives as a `ToolFileChunk`; download it exactly as in the code inter
 from mistralai.client.models import MessageOutputEntry, TextChunk, ToolReferenceChunk
 
 researcher = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="researcher",
     description="Answers questions with current, cited information.",
     instructions="Search before answering anything time-sensitive. Prefer primary sources.",
@@ -138,7 +138,7 @@ for entry in response.outputs:
 print()
 ```
 
-At the May 2025 launch Mistral reported SimpleQA accuracy rising from 23% to 75% for Mistral Large and from 22% to 82% for Mistral Medium with web search enabled. Treat those as an indication of the effect, not a figure for current models.
+In its 27 May 2025 launch post Mistral reported SimpleQA accuracy rising from 23% to 75% for Mistral Large and from 22.08% to 82.32% for Mistral Medium with web search enabled. Treat those as an indication of the effect on those models at the time, not a figure for current ones. Web search is only available through Conversations and Agents; Mistral's page for it says chat completions cannot return the search-result references the tools produce.
 
 ---
 
@@ -169,7 +169,7 @@ for doc in docs:
     print(doc.name, status.process_status)   # "todo", "in_progress", "done" or "error", among others
 
 support = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="handbook-support",
     description="Answers questions from the product handbook.",
     instructions="Answer only from the handbook. If it does not cover the question, say so.",
@@ -180,7 +180,14 @@ response = client.beta.conversations.start(agent_id=support.id, inputs="What is 
 print(text_of(response))
 ```
 
-`libraries.create()` also accepts `chunk_size`. Documents can be listed (`documents.list(library_id=..., search=...)`), updated, reprocessed and deleted; `documents.text_content()` returns the extracted text, which is useful for checking what the retriever sees.
+`libraries.create()` also accepts `chunk_size`. `process_status` can be `todo`, `in_progress`, `done`, `error`, `missing_content`, `waiting_for_capacity`, `noop` or `self_managed`; the recipes page polls until a document is `done`, `error` or `missing_content`. Documents can be listed (`documents.list(library_id=..., search=...)`), updated, reprocessed and deleted. `documents.text_content()` returns the extracted text, which is the quickest way to see what the retriever has to work with when answers look wrong:
+
+```python
+extracted = client.beta.libraries.documents.text_content(library_id=library.id, document_id=docs[0].id)
+print(extracted.text[:500])
+```
+
+Answers drawn from a library carry `ToolReferenceChunk`s in the same way as web search, so the citation loop in section 3 works unchanged and shows which document supported a statement.
 
 ---
 
@@ -202,7 +209,7 @@ connector = client.beta.connectors.create(
 tools = client.beta.connectors.list_tools(connector_id_or_name="deepwiki")
 
 response = client.beta.conversations.start(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     inputs="Using deepwiki, explain how the sqlite/sqlite repository is organised.",
     tools=[{
         "type": "connector",
@@ -253,7 +260,18 @@ async def check_connector() -> None:
 asyncio.run(check_connector())
 ```
 
-`connectors.call_tool()` still exists but is deprecated and will be removed. Pass `credentials_name=` to use a stored credential other than the default.
+`connectors.call_tool()` still exists but is deprecated and will be removed. Pass `credentials_name=` to use a stored credential other than the default. `mcp_client()` needs only the lighter `mistralai[mcp]` extra (`mistralai[agents]` includes it).
+
+Other connector management calls, all on `client.beta.connectors`:
+
+| Call | Purpose |
+|---|---|
+| `list(query_filters=..., cursor=..., page_size=...)`, `get(connector_id_or_name=...)` | Find and inspect registered connectors |
+| `update(connector_id=..., request_body=...)`, `delete(connector_id=...)` | Change or remove a connector |
+| `get_authentication_methods(connector_id_or_name=...)` | Which auth types the server supports |
+| `list_user_credentials(...)`, `list_workspace_credentials(...)`, `list_organization_credentials(...)`, `update_credentials(...)`, `delete_credentials(..., consumer_scope=...)` | Manage stored credentials per scope |
+| `share(...)`, `unshare(...)`, `share_to_organization(...)`, `unshare_from_organization(...)` | Control who can use a connector |
+| `activate_for_consumer(...)`, `deactivate_for_consumer(...)` | Turn a connector on or off for a consumer scope |
 
 For MCP servers that should run inside your own process or network (local stdio servers, private services), use the client-side MCP support in `mistralai.extra` instead; see the [MCP guide](/mistral-agents-api-guide/mistral_agents_api_mcp_guide/).
 
@@ -280,7 +298,7 @@ Use `store=False` on `start()` for requests that must not be kept. Long-term mem
 
 ```python
 assistant = client.beta.agents.create(
-    model="mistral-medium-latest",
+    model="%%model=mistral%%",
     name="analyst-plus",
     description="Researches, computes and illustrates.",
     instructions=(

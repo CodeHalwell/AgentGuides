@@ -214,7 +214,7 @@ with agent.run_stream_sync('hi') as stream:
     final = stream.get_output()
 ```
 
-Under the hood this wraps the async streamer in `sync_async_iterator`; don't call it from within an already-running event loop.
+Under the hood a `SyncStreamBridge` keeps the async stream open in a long-lived task on the calling thread's event loop; don't call it from within an already-running event loop.
 
 ## Debouncing and partial validation
 

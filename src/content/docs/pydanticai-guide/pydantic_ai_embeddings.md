@@ -42,6 +42,8 @@ print(result.embeddings[0][:5])
 ## Provider prefixes
 
 ```python
+from pydantic_ai import Embedder
+
 # OpenAI
 Embedder('openai:text-embedding-3-small')
 Embedder('openai:text-embedding-3-large')
@@ -91,6 +93,8 @@ The `input_type` distinction tells the model whether the text is a *search query
 
 ```python
 import asyncio
+import math
+
 from pydantic_ai import Embedder
 
 embedder = Embedder('cohere:embed-v4.0')
@@ -104,11 +108,11 @@ async def main():
     d_result = await embedder.embed_documents(docs)
 
     # Compute cosine similarity
-    import numpy as np
-    q_vec = np.array(q_result.embeddings[0])
+    q_vec = q_result.embeddings[0]
     for i, doc_vec in enumerate(d_result.embeddings):
-        sim = float(np.dot(q_vec, doc_vec) / (np.linalg.norm(q_vec) * np.linalg.norm(doc_vec)))
-        print(f'doc[{i}] similarity: {sim:.4f}')
+        dot = sum(a * b for a, b in zip(q_vec, doc_vec))
+        norm = math.sqrt(sum(a * a for a in q_vec)) * math.sqrt(sum(b * b for b in doc_vec))
+        print(f'doc[{i}] similarity: {dot / norm:.4f}')
 
 asyncio.run(main())
 ```
@@ -160,6 +164,9 @@ print(max_tokens)
 ## `EmbeddingResult` — what you get back
 
 ```python
+from pydantic_ai import Embedder
+
+embedder = Embedder('openai:text-embedding-3-small')
 result = embedder.embed_query_sync('test')
 
 result.embeddings        # Sequence[Sequence[float]] — one vector per input text
@@ -168,7 +175,7 @@ result.input_type        # 'query' or 'document'
 result.model_name        # e.g. 'text-embedding-3-small'
 result.provider_name     # e.g. 'openai'
 result.usage             # RequestUsage (input_tokens, …)
-result.cost()            # estimated price, via genai-prices
+result.cost()            # estimated price via genai-prices (LookupError if it has no price for the model)
 result.provider_details  # raw provider details, if available
 ```
 
@@ -201,28 +208,40 @@ def test_my_pipeline():
 
 ## Custom `EmbeddingModel` — implementing your own
 
+Subclass `EmbeddingModel` and implement `model_name`, `system` and `embed()`; `prepare_embed()` normalises the inputs and merges settings for you. This one is a dependency-free feature-hashing model, handy as a deterministic stand-in or for keyword-style similarity:
+
 ```python
+import hashlib
+import math
 from collections.abc import Sequence
+
+from pydantic_ai import Embedder
 from pydantic_ai.embeddings.base import EmbeddingModel
 from pydantic_ai.embeddings.result import EmbeddingResult, EmbedInputType
 from pydantic_ai.embeddings.settings import EmbeddingSettings
 
-class LocalFaissModel(EmbeddingModel):
-    """Embedding model backed by a local FAISS index."""
 
-    def __init__(self, index_path: str, dim: int = 768):
+class HashingEmbeddingModel(EmbeddingModel):
+    """Bag-of-words feature hashing: each word adds 1 to one of `dim` buckets."""
+
+    def __init__(self, dim: int = 256):
         super().__init__()
-        import faiss
-        self._index = faiss.read_index(index_path)
         self._dim = dim
 
     @property
     def model_name(self) -> str:
-        return 'local-faiss'
+        return f'hashing-{self._dim}'
 
     @property
     def system(self) -> str:
-        return 'faiss'
+        return 'local'
+
+    def _vector(self, text: str) -> list[float]:
+        vec = [0.0] * self._dim
+        for word in text.lower().split():
+            vec[int(hashlib.md5(word.encode()).hexdigest(), 16) % self._dim] += 1.0
+        norm = math.sqrt(sum(v * v for v in vec)) or 1.0
+        return [v / norm for v in vec]
 
     async def embed(
         self,
@@ -232,18 +251,19 @@ class LocalFaissModel(EmbeddingModel):
         settings: EmbeddingSettings | None = None,
     ) -> EmbeddingResult:
         texts, _ = self.prepare_embed(inputs, settings)
-        # Replace with actual embedding call
-        import numpy as np
-        vecs = [np.random.rand(self._dim).tolist() for _ in texts]
         return EmbeddingResult(
-            vecs,
+            [self._vector(t) for t in texts],
             inputs=texts,
             input_type=input_type,
             model_name=self.model_name,
             provider_name=self.system,
         )
 
-embedder = Embedder(LocalFaissModel('/path/to/index'))
+
+embedder = Embedder(HashingEmbeddingModel())
+result = embedder.embed_documents_sync(['the cat sat', 'a dog barked'])
+print(len(result.embeddings), len(result.embeddings[0]))
+#> 2 256
 ```
 
 ## OpenTelemetry instrumentation
@@ -330,7 +350,7 @@ asyncio.run(run_and_embed('Summarise the Python programming language in one sent
 VoyageAI offers specialised embedding models for code, legal text, and finance:
 
 ```python
-# pip install voyageai
+# pip install "pydantic-ai-slim[voyageai]"   (needs VOYAGE_API_KEY)
 import asyncio
 from pydantic_ai import Embedder
 

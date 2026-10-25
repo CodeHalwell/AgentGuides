@@ -3,6 +3,9 @@ title: "Microsoft Agent Framework (Python) — Advanced Patterns"
 description: "Custom BaseChatClient / BaseEmbeddingClient implementations, custom ContextProvider subclasses, capability protocols (SupportsMCPTool, SupportsFileSearchTool), and the feature_stage gating system."
 framework: "microsoft-agent-framework"
 language: "python"
+sidebar:
+  label: "Advanced patterns"
+  order: 40
 ---
 
 This page covers the extensibility hooks in `agent-framework-core` that the feature-level pages gloss over: writing your own chat client, embedding client, or context provider, feature-detecting clients at runtime via the `Supports*` protocols, and opting into experimental/RC APIs.
@@ -11,15 +14,15 @@ Verified against `agent-framework` %%version=agent-framework%% (re-checked %%ver
 
 ## Custom agent — `BaseAgent` and `RawAgent`
 
-`Agent` (the everyday class) is `RawAgent` wrapped with middleware, telemetry, and deduping layers. The hierarchy:
+`Agent` (the everyday class) is `RawAgent` with two layers mixed in: `AgentMiddlewareLayer` and `AgentTelemetryLayer`. The hierarchy:
 
 ```
 BaseAgent              ← ABC: id, name, description, context_providers, middleware, sessions
 └── RawAgent           ← Chat-loop implementation (no telemetry/middleware wrapping)
-    └── Agent          ← What you import — adds telemetry + middleware layer wrapping
+    └── Agent          ← What you import — adds agent middleware and the invoke_agent span
 ```
 
-Reach for `BaseAgent` directly when you need a non-chat agent — for example, an agent that delegates to a workflow, an external HTTP service, or a deterministic rules engine. Reach for `RawAgent` when you want chat semantics but **without** any of the wrapping layers — handy for benchmarking the raw client cost or for embedding inside another agent that already provides telemetry.
+Reach for `BaseAgent` directly when you need a non-chat agent — for example, an agent that delegates to a workflow, an external HTTP service, or a deterministic rules engine. Reach for `RawAgent` when you want chat semantics without the agent-level layers — handy for benchmarking or for embedding inside another agent that already provides telemetry.
 
 ### `BaseAgent` subclass — non-chat agent over a workflow
 
@@ -131,14 +134,17 @@ If you supply `stream_callback=`, the supervisor invokes the specialist with `st
 
 ### `RawAgent` vs `Agent` — when to skip the wrapper
 
-Reach for `RawAgent` when you want chat semantics but no middleware/telemetry overhead — typically a benchmark harness or a load-test client. Otherwise stick with `Agent`.
+Reach for `RawAgent` when you want chat semantics without agent middleware or the agent span — typically a benchmark harness or a load-test client. Otherwise stick with `Agent`.
+
+The chat-level layers (`ChatMiddlewareLayer`, `FunctionInvocationLayer` and the `chat` span) belong to the client, not the agent, so they still run under `RawAgent`. To remove those too, use a raw client class such as `RawOpenAIChatClient`.
 
 ```python
 from agent_framework import RawAgent
 from agent_framework.openai import OpenAIChatClient
 
 # Identical surface to Agent (run, run with stream=True, sessions, tools).
-# Skips the AgentMiddlewareLayer, ChatMiddlewareLayer, and OTel span emission.
+# Skips AgentMiddlewareLayer and AgentTelemetryLayer (the invoke_agent span).
+# Chat middleware, the tool loop and chat spans come from the client and still run.
 raw = RawAgent(
     client=OpenAIChatClient(),
     instructions="You are a benchmark target.",
@@ -148,7 +154,7 @@ raw = RawAgent(
 response = await raw.run("hello")
 ```
 
-When the docs mention `Agent`, every example works unchanged with `RawAgent` — only the wrapping layers change.
+Examples that do not rely on agent middleware work unchanged with `RawAgent`; agent middleware passed to `RawAgent` is not run.
 
 ## Custom chat client — `BaseChatClient`
 
@@ -207,9 +213,22 @@ response = await agent.run("Hello")
 assert response.text == "Hello"
 ```
 
-What you get for free by subclassing:
+`BaseChatClient` on its own is a raw client: it has no tool loop, chat middleware or telemetry. `Agent` warns "The provided chat client does not support function invoking" and any function call the model returns is left unexecuted. The first-party clients get those behaviours by mixing layers in front of the raw class (`OpenAIChatClient` is `FunctionInvocationLayer`, `ChatMiddlewareLayer`, `ChatTelemetryLayer`, `RawOpenAIChatClient`). Do the same for your own client:
 
-- **Middleware, telemetry, and tool loop** all wrap your implementation automatically — you never implement the function-calling protocol.
+```python
+from agent_framework import ChatMiddlewareLayer, FunctionInvocationLayer
+from agent_framework.observability import ChatTelemetryLayer
+
+
+class EchoClientWithTools(
+    FunctionInvocationLayer, ChatMiddlewareLayer, ChatTelemetryLayer, EchoChatClient
+):
+    """EchoChatClient plus the tool loop, chat middleware and chat spans."""
+```
+
+Keep that order: the tool loop outermost, telemetry innermost, as in the first-party clients.
+
+What you get from `BaseChatClient` itself:
 - `_build_response_stream(...)` returns the right `ResponseStream` shape that the upstream layers expect.
 - `_prepare_messages_for_model_call` handles compaction when a `compaction_strategy` is attached.
 - `to_dict()` / serialisation falls out of `SerializationMixin`.
@@ -245,7 +264,7 @@ final = ChatResponseUpdate(
 Two practical things every custom-streaming-client implementation hits:
 
 - **`text` ignores non-text content.** The property concatenates `content.text` only for `content.type == "text"` items. Function calls and image content remain in `update.contents` but don't pollute `update.text`.
-- **Long-running operations resume via `continuation_token`.** When a hosted backend pauses (background job, deferred completion), set `continuation_token=ContinuationToken(...)` on the update. The agent loop sees the token, stores it, and the consumer can resume by passing it back into the next `run(...)` call.
+- **Long-running operations resume via `continuation_token`.** When a hosted backend pauses (background job, deferred completion), set `continuation_token=` on the update (`ContinuationToken` is a `TypedDict`; each provider adds its own fields). The token surfaces on the response, and the consumer resumes with `agent.run(session=session, options={"continuation_token": token})`.
 
 Round-tripping is symmetric — useful for testing, replay, and persisted streams:
 
@@ -284,6 +303,10 @@ A thin subclass can memoise chat calls by key:
 ```python
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
+from typing import Any, ClassVar
+from agent_framework import Agent, BaseChatClient, ChatResponse, Message
+
 
 class CachingChatClient(BaseChatClient):
     OTEL_PROVIDER_NAME: ClassVar[str] = "caching"
@@ -297,6 +320,7 @@ class CachingChatClient(BaseChatClient):
         blob = json.dumps(
             {"m": [m.text for m in messages], "o": dict(options)},
             sort_keys=True,
+            default=str,  # options can hold tool objects that json cannot encode
         )
         return hashlib.sha256(blob.encode()).hexdigest()
 
@@ -329,6 +353,8 @@ from agent_framework.openai import OpenAIChatClient
 cached = CachingChatClient(OpenAIChatClient(model="%%model=openai%%"))
 agent = Agent(client=cached, instructions="…")
 ```
+
+`CachingChatClient` calls the inner client's raw `_inner_get_response`, so the inner client's tool loop and middleware are bypassed, and the cache itself has none. That is fine for an agent without tools. If the agent has tools, mix the layers into the cache class as shown above (`class CachingChatClient(FunctionInvocationLayer, ChatMiddlewareLayer, ChatTelemetryLayer, BaseChatClient)`), so the tool loop runs outside the cache.
 
 ## Custom embedding client — `BaseEmbeddingClient`
 
@@ -631,30 +657,32 @@ def build_tools(client) -> list:
     return tools
 
 
-# OpenAI → web search + file search + code interpreter available.
-# Anthropic → only MCP tool supported.
+# OpenAIChatClient → web search, file search, code interpreter, image generation, MCP, shell.
+# AnthropicClient → web search, code interpreter, MCP, shell (no file search or image generation).
 for client in [OpenAIChatClient(), AnthropicClient()]:
     agent = Agent(client=client, tools=build_tools(client))
 ```
 
-Why protocols instead of inheritance? Each provider implements a disjoint set of hosted tools — OpenAI exposes file search and code interpreter via the Responses API, Anthropic exposes MCP natively, Bedrock exposes guardrails. A single inheritance hierarchy would force everyone to stub everything; protocols give precise, runtime-checkable capability negotiation.
+Why protocols instead of inheritance? Each provider implements a different set of hosted tools — OpenAI's Responses API has file search and image generation, Anthropic has none of those but does have web search, code execution and MCP, and Bedrock has none of these protocols at all. A single inheritance hierarchy would force everyone to stub everything; protocols give precise, runtime-checkable capability negotiation.
 
 The full list of capability protocols:
 
 | Protocol | What it guarantees |
 |---|---|
 | `SupportsChatGetResponse` | Non-streaming chat — the universal protocol every chat client satisfies |
-| `SupportsAgentRun` | The agent-level run protocol (implemented by `Agent`, `ChatAgent`, `WorkflowAgent`, `FoundryAgent`, `CopilotStudioAgent`) |
+| `SupportsAgentRun` | The agent-level run protocol (implemented by `Agent`, `RawAgent`, `WorkflowAgent`, `FoundryAgent`, `CopilotStudioAgent`) |
 | `SupportsGetEmbeddings` | The embedding protocol every `*EmbeddingClient` satisfies |
 | `SupportsMCPTool` | Client can produce an MCP tool descriptor |
 | `SupportsFileSearchTool` | Client supports file search against vector stores |
 | `SupportsWebSearchTool` | Client supports hosted web search |
 | `SupportsCodeInterpreterTool` | Client supports hosted code interpreter |
 | `SupportsImageGenerationTool` | Client supports hosted image generation |
+| `SupportsShellTool` | Client supports a hosted or local shell tool |
+| `SupportsVectorSearch` / `SupportsVectorUpsert` | Vector-store collections that can be searched or written to (used by the vector store connectors, not chat clients) |
 
 ## Feature stages — experimental and release-candidate APIs
 
-Parts of agent-framework are gated behind stages. Using a staged API emits a `FeatureStageWarning` (subclass `ExperimentalWarning` for experimental, a sibling category for release-candidate) **once per feature ID per process** — the framework dedupes so you get one warning at startup, not one per call. The `__feature_stage__` and `__feature_id__` attributes on the decorated class or function carry the metadata.
+Parts of agent-framework are gated behind stages. Using a staged API emits a `FeatureStageWarning` (a `FutureWarning` subclass; experimental APIs use the `ExperimentalWarning` subclass of it) **once per feature ID per process** — the framework dedupes so you get one warning at startup, not one per call. The `__feature_stage__` and `__feature_id__` attributes on the decorated class or function carry the metadata.
 
 ```python
 import warnings
@@ -682,10 +710,10 @@ The currently gated features (verified against `agent-framework` %%version=agent
 | Experimental | `ExperimentalFeature.FUNCTIONAL_WORKFLOWS` | `@workflow`, `@step`, `RunContext`, `FunctionalWorkflow`, `FunctionalWorkflowAgent` |
 | Experimental | `ExperimentalFeature.FILE_HISTORY` | `FileHistoryProvider` |
 | Experimental | `ExperimentalFeature.HARNESS` | `MemoryContextProvider`, `MemoryStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider`, `AgentLoopMiddleware` |
-| Experimental | `ExperimentalFeature.FIDES` | `SecureAgentConfig`, `SecureMCPToolProxy`, label-tracking middleware |
+| Experimental | `ExperimentalFeature.FIDES` | `agent_framework.security`: `SecureAgentConfig`, `SecureMCPToolProxy`, `ContentVariableStore`, label-tracking middleware |
 | Experimental | `ExperimentalFeature.SESSION_STORE` | `SessionStore`, `FileSessionStore` |
 | Experimental | `ExperimentalFeature.VECTOR_STORES` | `InMemoryStore`, `InMemoryCollection`, `Filter`, `FilterGroup` |
-| Experimental | `ExperimentalFeature.MCP_SKILLS`, `MCP_LONG_RUNNING_TASKS`, `AGENT_HOOKS`, `COMPUTER_USE`, ... | MCP-backed skills, MCP task options, AGENT-HOOKS middleware, computer-use safety checks |
+| Experimental | `MCP_SKILLS`, `MCP_LONG_RUNNING_TASKS`, `AGENT_HOOKS`, `COMPUTER_USE`, `DECLARATIVE_AGENTS`, `FOUNDRY_TOOLS`, `FOUNDRY_PREVIEW_TOOLS`, `PROGRESSIVE_TOOLS`, `TO_PROMPT_AGENT` | MCP-backed skills, MCP task options, agent hooks, computer-use safety checks, declarative agents, Foundry tool helpers, progressive tool disclosure |
 | Release candidate | *(empty)* | The enum exists but has no members in this release. |
 
 Skills (`InlineSkill`, `SkillsProvider`, ...) left the experimental tier in 1.11.0, and `TodoProvider` / `AgentModeProvider` in 1.12.0.
@@ -696,7 +724,8 @@ Both enums are stage-scoped inventories, not stable introspection surfaces. Memb
 from agent_framework import ExperimentalFeature, ReleaseCandidateFeature
 
 print([f.value for f in ExperimentalFeature])
-# ['AGENT_HOOKS', 'COMPUTER_USE', 'DECLARATIVE_AGENTS', 'EVALS', 'FILE_HISTORY', 'FIDES', ...]
+# ['AGENT_HOOKS', 'COMPUTER_USE', 'DECLARATIVE_AGENTS', 'EVALS', 'FILE_HISTORY', 'FIDES',
+#  'FOUNDRY_TOOLS', 'FOUNDRY_PREVIEW_TOOLS', 'FUNCTIONAL_WORKFLOWS', 'HARNESS', ...]
 
 print([f.value for f in ReleaseCandidateFeature])
 # []  ← non-empty only in releases that have RC features queued
@@ -823,10 +852,12 @@ AgentFrameworkException                    # base — every framework error
 │   ├── AgentInvalidResponseException
 │   └── AgentContentFilterException
 ├── ChatClientException                    # raised by chat clients
+│   ├── ResponseInvalidatedException
 │   ├── ChatClientInvalidAuthException
 │   ├── ChatClientInvalidRequestException
 │   ├── ChatClientInvalidResponseException
 │   └── ChatClientContentFilterException
+│       └── OpenAIContentFilterException
 ├── IntegrationException                   # external service / dependency
 │   ├── IntegrationInitializationError
 │   ├── IntegrationInvalidAuthException
@@ -839,7 +870,8 @@ AgentFrameworkException                    # base — every framework error
 │   ├── ToolExecutionException
 │   └── UserInputRequiredException        # tool needs HITL input to proceed
 ├── MiddlewareException
-│   └── MiddlewareTermination             # control-flow exit from a middleware pipeline
+│   ├── MiddlewareTermination             # graceful exit from a middleware pipeline
+│   └── MiddlewareFailure                 # fail-closed abort; propagates to the caller
 ├── SettingNotFoundError                   # config not resolvable from env / kwargs
 └── WorkflowException
     ├── WorkflowValidationError
@@ -862,8 +894,9 @@ from agent_framework import (
 
 log = logging.getLogger(__name__)
 
-# MiddlewareTermination is not caught here: agent.run() absorbs it and returns
-# the termination's result= (or None when none was attached).
+# MiddlewareTermination is not caught here: in agent middleware, agent.run() absorbs it
+# and returns whatever context.result holds at that point (None if nothing set it;
+# the exception's own result= argument is not used by the agent pipeline).
 try:
     response = await agent.run("Hello")
 except MiddlewareException as exc:
@@ -925,8 +958,8 @@ The validation types currently emitted:
 Three composable layers:
 
 - **Per-tool circuit breaker** — `FunctionTool(max_invocation_exceptions=5)` stops calling a flapping tool.
-- **Per-request retry** — `FunctionMiddleware` with exponential backoff (see [Middleware → Retrying](./microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
-- **Per-run budget** — `AgentMiddleware` raising `MiddlewareTermination` when a usage cap is hit.
+- **Per-request retry** — `FunctionMiddleware` with exponential backoff (see [Middleware → Retrying](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/#retrying-a-failed-tool-call)).
+- **Per-run budget** — `AgentMiddleware` that refuses new runs once a usage cap has been passed.
 
 Example combining all three:
 
@@ -934,10 +967,13 @@ Example combining all three:
 from agent_framework import (
     Agent,
     AgentMiddleware,
+    AgentResponse,
     FunctionMiddleware,
+    Message,
     MiddlewareTermination,
     tool,
 )
+from agent_framework.openai import OpenAIChatClient
 import asyncio
 
 @tool(max_invocation_exceptions=5)
@@ -963,13 +999,16 @@ class TokenBudget(AgentMiddleware):
         self.ceiling = ceiling
 
     async def process(self, context, call_next):
+        # Check before the run: raising after call_next() would not stop anything,
+        # because the response has already been produced.
+        if self.used > self.ceiling:
+            context.result = AgentResponse(
+                messages=[Message(role="assistant", contents=["Token budget exhausted."])]
+            )
+            raise MiddlewareTermination(f"token budget {self.ceiling} exceeded")
         await call_next()
         usage = getattr(context.result, "usage_details", None) or {}
         self.used += int(usage.get("total_token_count", 0) or 0)
-        if self.used > self.ceiling:
-            raise MiddlewareTermination(
-                f"token budget {self.ceiling} exceeded (used {self.used})"
-            )
 
 
 agent = Agent(
@@ -981,8 +1020,14 @@ agent = Agent(
 
 ## When to reach for each pattern
 
-- Building an **integration with a new provider** that isn't in the first-party list → subclass `BaseChatClient` + optionally `BaseEmbeddingClient`. You inherit the tool loop, middleware, telemetry, and serialisation for free.
+- Building an **integration with a new provider** that isn't in the first-party list → subclass `BaseChatClient` (and optionally `BaseEmbeddingClient`), then mix in `FunctionInvocationLayer`, `ChatMiddlewareLayer` and `ChatTelemetryLayer` to get the tool loop, middleware and telemetry.
 - Adding **cross-cutting behaviour** to an existing client (caching, request coalescing, shadow traffic) → wrap the client with a thin `BaseChatClient` subclass that delegates to `_inner_get_response`.
 - Injecting **domain context per run** (retrieved docs, tenant prefixes, entitlements) → subclass `ContextProvider`.
 - Switching **implementations at runtime** based on capability → `isinstance(client, Supports*)` guards.
 - Gating **in-development APIs** in CI → turn `FeatureStageWarning` into an error in `conftest.py` (`warnings.simplefilter("error", FeatureStageWarning)`) and silence only the specific staged APIs you have chosen to depend on.
+
+## Revision history
+
+| Date | Version | Changes |
+|---|---|---|
+| 2026-10-25 | 1.22.0 | Corrected the claim that a `BaseChatClient` subclass gets the tool loop, middleware and telemetry for free (they come from layer mixins; added the pattern). `RawAgent` skips only the agent-level layers, not chat middleware. Fixed the `Supports*` examples (Anthropic supports web search, code interpreter, MCP and shell) and added the missing protocols; removed `ChatAgent`, which no longer exists. Completed the experimental feature list and exception tree. The token-budget middleware now checks before the run (raising `MiddlewareTermination` after `call_next()` stopped nothing), and the note on what `agent.run()` returns after a termination is corrected. Added missing imports to the caching client. |

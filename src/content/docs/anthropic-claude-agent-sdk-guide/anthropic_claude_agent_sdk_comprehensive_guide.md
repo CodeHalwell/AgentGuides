@@ -20,16 +20,17 @@ The TypeScript package has its own guide: [Claude Agent SDK (TypeScript)](/anthr
 5. [Tools & integration](#tools--integration)
 6. [Permissions](#permissions)
 7. [Hooks](#hooks)
-8. [User input and approvals](#user-input-and-approvals)
-9. [Multi-agent systems](#multi-agent-systems)
-10. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
-11. [Structured output](#structured-output)
-12. [Session management](#session-management)
-13. [Thinking and effort](#thinking-and-effort)
-14. [File checkpointing and rewind](#file-checkpointing-and-rewind)
-15. [Context usage, budgets and limits](#context-usage-budgets-and-limits)
-16. [Error handling](#error-handling)
-17. [API reference](#api-reference)
+8. [Skills, slash commands and plugins](#skills-slash-commands-and-plugins)
+9. [User input and approvals](#user-input-and-approvals)
+10. [Multi-agent systems](#multi-agent-systems)
+11. [Model Context Protocol (MCP)](#model-context-protocol-mcp)
+12. [Structured output](#structured-output)
+13. [Session management](#session-management)
+14. [Thinking and effort](#thinking-and-effort)
+15. [File checkpointing and rewind](#file-checkpointing-and-rewind)
+16. [Context usage, budgets and limits](#context-usage-budgets-and-limits)
+17. [Error handling](#error-handling)
+18. [API reference](#api-reference)
 
 ---
 
@@ -555,6 +556,161 @@ A hook returns a dict. Common keys are `continue_` (set `False` to stop the run;
 
 All matchers registered for an event fire concurrently, so do not rely on ordering between them.
 
+### Hook patterns
+
+The first example annotates its callbacks as `dict[str, Any]`, which is what they receive at runtime. A strict type checker prefers the SDK's own aliases: `HookInput` for the argument (a union of per-event `TypedDict`s) and `HookJSONOutput` for the return value. Narrow the input with `cast` or by checking `hook_event_name`. The three hooks below use that style and change what the agent does rather than only observing it. They were exercised by calling them directly with sample input, and they type-check under pyright.
+
+```python
+import re
+from typing import Any, cast
+from claude_agent_sdk import ClaudeAgentOptions, HookContext, HookInput, HookJSONOutput, HookMatcher
+
+SECRET = re.compile(r"(?i)(api[_-]?key|token|password)\s*[=:]\s*\S+")
+
+
+async def add_dry_run(input_data: HookInput, tool_use_id: str | None,
+                      context: HookContext) -> HookJSONOutput:
+    """Rewrite `terraform apply` to `terraform plan` before it runs."""
+    data = cast(dict[str, Any], input_data)
+    command = data["tool_input"].get("command", "")
+    if command.startswith("terraform apply"):
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "allow",
+                "updatedInput": {**data["tool_input"], "command": command.replace("apply", "plan", 1)},
+                "additionalContext": "apply was downgraded to plan; ask the user before applying.",
+            }
+        }
+    return {}
+
+
+async def screen_prompt(input_data: HookInput, tool_use_id: str | None,
+                        context: HookContext) -> HookJSONOutput:
+    """Refuse prompts that contain credentials; otherwise add context for the model."""
+    data = cast(dict[str, Any], input_data)
+    if SECRET.search(data["prompt"]):
+        return {"decision": "block", "reason": "Remove credentials from the prompt and try again."}
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "UserPromptSubmit",
+            "additionalContext": "Current ticket: PAY-142 (refund rounding).",
+        }
+    }
+
+
+async def require_tests(input_data: HookInput, tool_use_id: str | None,
+                        context: HookContext) -> HookJSONOutput:
+    """Push back once if the agent tries to finish without mentioning a test run."""
+    data = cast(dict[str, Any], input_data)
+    if data.get("stop_hook_active"):          # already pushed back once: let it stop
+        return {}
+    if "pytest" not in data.get("last_assistant_message", ""):
+        return {"decision": "block", "reason": "Run pytest and report the result before finishing."}
+    return {}
+
+
+options = ClaudeAgentOptions(
+    allowed_tools=["Read", "Edit", "Bash"],
+    hooks={
+        "PreToolUse": [HookMatcher(matcher="Bash", hooks=[add_dry_run])],
+        "UserPromptSubmit": [HookMatcher(hooks=[screen_prompt])],
+        "Stop": [HookMatcher(hooks=[require_tests])],
+    },
+)
+```
+
+What each one relies on:
+
+- `PreToolUse` with `updatedInput` changes the arguments the tool receives; the model is not told unless you also add `additionalContext`.
+- `UserPromptSubmit` can block a prompt (`decision: "block"`) or add context. `UserPromptSubmitHookSpecificOutput` also has `sessionTitle`.
+- `Stop` fires when the agent is about to finish. Returning `decision: "block"` with a `reason` keeps the loop going with that reason as feedback. `stop_hook_active` is `True` on the re-entry after a block, so check it or the hook can loop for as long as it keeps objecting. `last_assistant_message` is the text of the final message.
+- `decision` only accepts `"block"`. To approve or deny a tool call, use `permissionDecision` inside `hookSpecificOutput`.
+- For a hook that should not hold up the run, return `{"async_": True}` (converted to `"async"` for the CLI, like `continue_`), with an optional `asyncTimeout` in milliseconds.
+- `ClaudeAgentOptions(include_hook_events=True)` adds hook lifecycle messages to the stream, which is useful when debugging why a hook did not fire.
+
+---
+
+## Skills, slash commands and plugins
+
+Skills are the one extension point that lives on disk rather than in code. A skill is a directory with a `SKILL.md` file whose frontmatter `description` tells the model when to use it; the SDK has no API for registering one programmatically (subagents, by contrast, can be defined in `agents=`).
+
+```text
+.claude/skills/security-check/SKILL.md
+---
+name: security-check
+description: Run a security vulnerability scan
+---
+Analyse the codebase for SQL injection, XSS, exposed credentials and insecure configuration.
+```
+
+Two options control them:
+
+- `setting_sources` decides where skills, `.claude/commands/` files and `CLAUDE.md` are read from. Leaving it unset loads user, project and local sources. If you set it explicitly, keep `"project"` for `<cwd>/.claude/skills/` (and parent directories up to the repository root) and `"user"` for `~/.claude/skills/`. `setting_sources=[]` finds no skills.
+- `skills=` scopes which discovered skills the model may invoke: `"all"`, a list of names (the directory name, or `plugin:skill` for a plugin's skill), or `[]` for none. Setting it adds matching `Skill(name)` allow rules (or the `Skill` tool for `"all"`) for you. If you also pass `tools=`, include `"Skill"` there. Names are validated; wildcards such as `"*"` or `"plugin:*"` raise `ValueError` (0.2.129+).
+
+```python
+import asyncio
+from claude_agent_sdk import ClaudeAgentOptions, ResultMessage, SystemMessage, query
+
+
+async def main() -> None:
+    options = ClaudeAgentOptions(
+        cwd="/srv/repos/payments",           # .claude/skills/ here or in a parent directory
+        setting_sources=["user", "project"],
+        skills=["security-check"],
+        allowed_tools=["Read", "Grep", "Glob"],
+        max_turns=10,
+    )
+    async for message in query(prompt="Check this project for security issues", options=options):
+        if isinstance(message, SystemMessage) and message.subtype == "init":
+            # Confirm the skill was found before the model starts working.
+            print("skills:", message.data["skills"])
+            print("commands:", message.data["slash_commands"])
+        elif isinstance(message, ResultMessage):
+            print(message.result)
+
+
+asyncio.run(main())
+```
+
+The list in `init` contains user-invocable skills only. A skill that sets `user-invocable: false` in its frontmatter still loads for the model but is not listed.
+
+**Slash commands.** Putting `/<name>` at the start of a prompt dispatches a command: a built-in (`/compact`, `/clear`, `/context`), a bundled skill, one of your user-invocable skills, or a flat Markdown file in `.claude/commands/`. Dispatch does not depend on the `skills=` list. A name that matches nothing is not an error; the text goes to the model as an ordinary prompt with a note that the command did not run. If a prompt may contain untrusted text, set `verbatim_prompts=True` (0.2.158+) so that neither `/command` nor `@file` is interpreted.
+
+```python
+import asyncio
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, SystemMessage
+
+
+async def compact_after(question: str) -> None:
+    async with ClaudeSDKClient(ClaudeAgentOptions(max_turns=5)) as client:
+        await client.query(question)
+        async for _ in client.receive_response():
+            pass
+        await client.query("/compact")        # needs history to summarise
+        async for message in client.receive_response():
+            if isinstance(message, SystemMessage) and message.subtype == "compact_boundary":
+                meta = message.data["compact_metadata"]
+                print("compacted from", meta["pre_tokens"], "tokens, trigger:", meta["trigger"])
+
+
+asyncio.run(compact_after("Explain what this project does."))
+```
+
+**Plugins.** A plugin bundles skills, commands, agents, hooks and MCP servers in a folder. Load one from a local path with `plugins=`; only the `"local"` type exists:
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions
+
+options = ClaudeAgentOptions(
+    plugins=[{"type": "local", "path": "./plugins/payments-tools"}],
+    skills=["payments-tools:reconcile"],      # plugin skills are namespaced plugin:skill
+)
+```
+
+The `init` message lists loaded plugins in `data["plugins"]` and, when something failed to load, `data["plugin_errors"]`. These three snippets need a real CLI and skills on disk, so they were checked for option names and the CLI flags the SDK builds from them, and against the official skills documentation for the `init` and `compact_boundary` fields, but not run against a model.
+
 ---
 
 ## User input and approvals
@@ -1007,7 +1163,7 @@ async def report_context(client: ClaudeSDKClient) -> None:
     for category in usage["categories"]:
         print(f"  {category['name']}: {category['tokens']:,}")
     if usage["isAutoCompactEnabled"]:
-        print("auto-compact at", usage["autoCompactThreshold"])
+        print("auto-compact at", usage.get("autoCompactThreshold"))
 ```
 
 ### Limits

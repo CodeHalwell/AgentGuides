@@ -1,6 +1,6 @@
 ---
 title: "PydanticAI: Built-in Native Tools & Common Tools"
-description: "Provider-native tools (WebSearchTool, CodeExecutionTool, ImageGenerationTool, …) and local common tools (web_fetch_tool, duckduckgo_search_tool) — what each does and which providers support it."
+description: "Provider-native tools (WebSearchTool, CodeExecutionTool, ImageGenerationTool, …) and local common tools (web_fetch_tool, duckduckgo_search_tool, tavily_search_tool) — what each does and which providers support it."
 framework: "pydanticai"
 language: "python"
 sidebar:
@@ -180,12 +180,14 @@ Fields (`native_tools/__init__.py`, `ImageGenerationTool`):
 
 | Field               | Type / Default                        | Notes                                                |
 | ------------------- | ------------------------------------- | ---------------------------------------------------- |
+| `action`            | `'generate' | 'edit' | 'auto'` (`'auto'`) | Generate a new image or edit one supplied in the prompt |
+| `model`             | image model name or `None`            | Which image model the provider should use           |
 | `background`        | `'transparent' | 'opaque' | 'auto'`   | OpenAI Responses; transparent only for png/webp      |
 | `input_fidelity`    | `'high' | 'low' | None`               | OpenAI Responses (facial features etc.)              |
 | `moderation`        | `'auto' | 'low'`                      | OpenAI Responses                                     |
 | `output_compression`| `int | None`                          | OpenAI jpeg/webp; Google jpeg                        |
 | `output_format`     | `'png' | 'webp' | 'jpeg' | None`      | —                                                    |
-| `partial_images`    | `0-3`                                 | OpenAI streaming mode                                |
+| `partial_images`    | `0`–`3` (`0`)                          | OpenAI streaming mode                                |
 | `quality`           | `'low' | 'medium' | 'high' | 'auto'`  | OpenAI Responses                                     |
 | `size`              | `'1024x1024'...'4K'` literal          | See class for the accepted set per provider          |
 | `aspect_ratio`      | `ImageAspectRatio | None`             | Google, OpenAI (mapped to supported sizes)           |
@@ -277,6 +279,8 @@ Fields (with validation in `__post_init__`):
 - `enable_image_understanding`, `enable_video_understanding`
 - `include_output` — emit raw search results as `NativeToolReturnPart` (otherwise the model only uses them internally).
 
+The `XSearch` capability wraps this tool. On xAI models it uses X search natively; on any other model you must give it `fallback_subagent_model='xai:grok-4.3'` (or another xAI model), and searches are delegated to a sub-agent running on that model — there is no default.
+
 ## `AdvisorTool` — let a cheap model consult a strong one
 
 A native Anthropic tool (OpenRouter supports a compatible subset): a fast executor model decides on its own when to consult a stronger advisor model, and the round trip happens at the provider, not in your code.
@@ -349,7 +353,12 @@ The lower-level `pydantic_ai.common_tools.image_generation.image_generation_tool
 Native tool calls appear as `NativeToolCallPart` and `NativeToolReturnPart` in the message history, distinct from `ToolCallPart` / `ToolReturnPart` (which are for your function tools). There are no dedicated streaming events for them: since 2.0 they surface only through the standard `PartStartEvent` / `PartDeltaEvent` (the V1 `BuiltinToolCallEvent` / `BuiltinToolResultEvent` were removed).
 
 ```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
 from pydantic_ai.messages import NativeToolCallPart
+
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[WebSearch(max_uses=3)])
+result = agent.run_sync('Who won the most recent Booker Prize?')
 
 for m in result.all_messages():
     for p in m.parts:
@@ -363,25 +372,29 @@ for m in result.all_messages():
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import WebSearch
 
+PRODUCTS = {'A-1': {'name': 'Widget', 'price': 9.99}}   # stands in for your database
+
 agent = Agent(
     'anthropic:%%model=anthropic%%',
     capabilities=[WebSearch(max_uses=2)],
 )
 
+
 @agent.tool
 def internal_lookup(ctx: RunContext, sku: str) -> dict:
-    return db.get(sku)  # your own data access
+    """Look up one of our own products."""
+    return PRODUCTS.get(sku, {})
 ```
 
-The model sees both flavours. Native tool calls don't consume your function-tool retry budget.
+The model sees both flavours. Native tools run at the provider, so PydanticAI's tool retries, tool hooks and `tool_calls_limit` apply only to your function tools.
 
 ## Gotchas
 
 - **`builtin_tools=` is gone.** Since 2.0 use `capabilities=[NativeTool(...)]` or the wrappers (`WebSearch`, `WebFetch`, `ImageGeneration`, `MCP`).
 - **The wrappers are native-only by default.** `WebSearch()` / `WebFetch()` raise on models without native support unless you pass `local=...`; `MCP(url=...)` runs the server locally unless you pass `native=True`.
-- **`defer_model_check=False`** (default) validates the native tool list against the model at construction. If you swap models via `agent.override(model=...)` to one that doesn't support the tools, you'll hit `UserError` at run time.
+- **Unsupported native tools fail at request time.** If the model in use (including one swapped in with `agent.override(model=...)` or `run(model=...)`) does not support a native tool, the request raises `UserError` before anything is sent.
 - **Field support varies by provider** even on "supported" tools. The docstrings list per-field support; unsupported fields are silently ignored by some providers and raise on others.
-- **Native tool usage is counted against provider quotas, not PydanticAI's `tool_calls_limit`**. Use `max_uses` where available.
+- **Native tool usage is billed and limited by the provider**, not by PydanticAI's `tool_calls_limit`. Use `max_uses` where available.
 - **`MCPServerTool` vs. `pydantic_ai.mcp`**: the former is the provider's remote MCP client; the latter is a local MCP client. Don't register the same server twice under both — you'd get duplicate tools.
 
 ## Patterns
@@ -425,24 +438,41 @@ agent = Agent('openai-responses:%%model=openai%%',
 ### 4. RAG via `FileSearchTool` + fallback to local embeddings
 
 ```python
-from pydantic_ai import Agent, FileSearchTool
+from pydantic_ai import Agent, FileSearchTool, RunContext
 from pydantic_ai.capabilities import NativeTool
 
-agent = Agent('openai-responses:%%model=openai%%',
-              capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_prod']))])
+ARCHIVE = ['2019 pricing policy: discounts capped at 10%.', '2020 refund policy: 30 days.']   # not in the vector store
+
+agent = Agent(
+    'openai-responses:%%model=openai%%',
+    instructions='Search the file store first; use search_archive only for documents older than 2021.',
+    capabilities=[NativeTool(FileSearchTool(file_store_ids=['vs_prod']))],
+)
+
 
 @agent.tool
-async def fallback_search(ctx, query: str) -> list[str]:
-    # Only called if the built-in search misses
-    return await embedder_search(query)
+async def search_archive(ctx: RunContext, query: str) -> list[str]:
+    """Keyword search over the pre-2021 archive."""
+    words = query.lower().split()
+    return [doc for doc in ARCHIVE if any(w in doc.lower() for w in words)]
 ```
+
+The model decides which to call; nothing makes the function tool run "only when the native search misses", so say in the instructions when each is appropriate.
 
 ### 5. Inspect what the model actually searched
 
 Native tool calls stream as ordinary parts, so match on the part type inside `PartStartEvent`:
 
 ```python
+import asyncio
+
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import WebSearch
 from pydantic_ai.messages import NativeToolCallPart, NativeToolReturnPart, PartStartEvent
+
+agent = Agent('anthropic:%%model=anthropic%%', capabilities=[WebSearch(max_uses=3)])
+prompt = 'What changed in the latest Python release?'
+
 
 async def main():
     async with agent.run_stream_events(prompt) as events:
@@ -452,6 +482,9 @@ async def main():
                     print(f'[native call] {event.part.tool_name}({event.part.args_as_json_str()})')
                 elif isinstance(event.part, NativeToolReturnPart):
                     print(f'[native result] {str(event.part.content)[:200]}')
+
+
+asyncio.run(main())
 ```
 
 ---
@@ -539,6 +572,8 @@ agent = Agent('openai:%%model=openai%%', tools=[safe_fetcher])
 ```
 
 ```python
+from pydantic_ai.common_tools.web_fetch import web_fetch_tool
+
 # Block specific domains (social media, tracking sites, etc.)
 filtered_fetcher = web_fetch_tool(
     blocked_domains=['facebook.com', 'twitter.com', 'x.com', 'linkedin.com'],
@@ -706,6 +741,37 @@ result = agent.run_sync('Research the current state of async Python frameworks i
 print(result.output)
 ```
 
+### `tavily_search_tool` — Tavily search API
+
+**Source**: `common_tools/tavily.py`
+**Install**: `pip install "pydantic-ai-slim[tavily]"` (installs `tavily-python`); needs a Tavily API key.
+
+A hosted search API built for LLM use: results come back as titles, URLs and content snippets ranked for relevance. Unlike DuckDuckGo it needs a key, but it supports news and finance topics, date ranges and domain filters, and is not rate-limited in the same way.
+
+```python
+import os
+
+from pydantic_ai import Agent
+from pydantic_ai.common_tools.tavily import tavily_search_tool
+
+agent = Agent(
+    'openai:%%model=openai%%',
+    tools=[
+        tavily_search_tool(
+            os.environ['TAVILY_API_KEY'],
+            max_results=5,
+            topic='news',
+            time_range='week',
+            include_domains=['reuters.com', 'apnews.com'],
+        )
+    ],
+)
+result = agent.run_sync('What were the main technology headlines this week?')
+print(result.output)
+```
+
+The keyword arguments fix the search parameters for every call. Any you leave out are exposed to the model as tool parameters instead, so it can choose, say, the `topic` per query. Pass `client=AsyncTavilyClient(...)` to reuse a client.
+
 #### Note on rate limiting
 
 DuckDuckGo's unofficial API has no authentication but may rate-limit aggressive usage. For production workloads consider:
@@ -722,3 +788,5 @@ DuckDuckGo's unofficial API has no authentication but may rate-limit aggressive 
 - `WebSearch`, `WebFetch`, `MCP`, `NativeTool` capabilities — `capabilities/`
 - `web_fetch_tool`, `WebFetchResult` — `common_tools/web_fetch.py`
 - `duckduckgo_search_tool`, `DuckDuckGoResult` — `common_tools/duckduckgo.py`
+- `tavily_search_tool` — `common_tools/tavily.py`
+- `XSearch` capability — `capabilities/x_search.py`; `ExaToolset` (`common_tools/exa.py`) is deprecated in favour of the Pydantic AI Harness `ExaSearch` capability
