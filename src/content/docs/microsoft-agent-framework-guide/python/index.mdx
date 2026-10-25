@@ -40,7 +40,7 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
 <CardGrid>
   <LinkCard title="Model providers" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/" description="OpenAI, Azure OpenAI, Foundry, Anthropic, Bedrock, Ollama, Gemini, Claude Agent SDK, GitHub Copilot." />
   <LinkCard title="Tools" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/" description="@tool, FunctionTool, approval, schemas, runtime context." />
-  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/" description="Stdio, streamable HTTP and websocket MCP tools; approval and headers." />
+  <LinkCard title="MCP" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/" description="Stdio and streamable HTTP MCP tools, your own mcp.Client, approval, headers, serving an agent over MCP." />
   <LinkCard title="Skills" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/" description="Progressive-disclosure knowledge with SkillsProvider." />
   <LinkCard title="Middleware" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_middleware/" description="Agent, chat and function middleware; caching, retries, redaction." />
   <LinkCard title="Sessions and history" href="/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_sessions/" description="AgentSession, history providers, audit copies, cross-process sessions." />
@@ -83,6 +83,9 @@ Since GA:
 - Skills (1.11.0): `require_script_approval=` replaced by `disable_load_skill_approval` / `disable_read_skill_resource_approval` / `disable_run_skill_script_approval`; every skill tool needs approval unless you opt out.
 - Functional workflows (1.14.0): `@workflow` returns a definition; call `.build()` before `.run()`.
 - `AzureOpenAIChatClient` removed: use `OpenAIChatClient(azure_endpoint=..., credential=...)`.
+- MCP (1.23.0, 2026-10-22): moved to MCP Python SDK 2.x (`mcp>=2.2,<3`). The WebSocket transport and MCP tasks are gone (`MCPWebsocketTool`, `MCPTaskOptions` and `task_options=` remain as deprecated stubs); `mcp` types use snake_case attributes; `http_client=` takes an `httpx2.AsyncClient`; `MCPTool.session` is deprecated (use `mcp_client=`); pruned installs also need `tenacity`. See the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/).
+- AG-UI (since 1.23.0): `add_agent_framework_fastapi_endpoint()` needs `authorization_scope_resolver=` or `single_user=True` (see the [production guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_production_guide/#ag-ui-front-ends)).
+- Docker shell tool (since 1.23.0, `agent-framework-tools`): `DockerShellTool(extra_run_args=...)` renamed `unsafe_extra_run_args=`.
 
 Migrating from Semantic Kernel or AutoGen? See Microsoft's [migration guide](https://learn.microsoft.com/agent-framework/migration-guide/from-semantic-kernel/).
 
@@ -109,6 +112,7 @@ Next: the [installation and quick start](/microsoft-agent-framework-guide/python
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | Updated for 1.23.0: MCP SDK 2.x migration (MCP, skills, tools, recipes, feature tour, comprehensive and advanced pages; examples re-run against local MCP servers), AG-UI endpoint authorization (production guide), alpha `agent-framework-hosting-mcp`. Breaking changes listed above. |
 | 2026-10-25 | 1.22.0 | Audit of every Python page: each block run against 1.22.0 with a fake chat client. Fixed wrong APIs and behaviour on the tools, middleware, sessions, compaction, MCP, skills, checkpointing, HITL, harness, evaluation, observability, advanced, feature-tour and recipes pages (details in each page's revision history); added sidebar order to every page. |
 | 2026-10-21 | 1.22.0 | Comprehensive guide rewritten (class reference replaced by an API map; duplicated sections removed); A2A serving documented; broken HITL, streaming, routing, A2A, provider and evaluation examples fixed; status labels corrected. |
 | 2026-10-21 | 1.22.0 | Per-class pages merged into the topic pages; examples re-checked against 1.22.0. |

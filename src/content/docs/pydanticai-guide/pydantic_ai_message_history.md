@@ -40,10 +40,12 @@ print(result2.output)
 
 | Type            | Direction      | Notable parts inside                                      |
 | --------------- | -------------- | --------------------------------------------------------- |
-| `ModelRequest`  | client → model | `SystemPromptPart`, `UserPromptPart`, `ToolReturnPart`, `RetryPromptPart`, `InstructionDeltaPart` / `InstructionBaselinePart`, `ToolAvailabilityDeltaPart`, `SpeechPart` |
+| `ModelRequest`  | client → model | `SystemPromptPart`, `UserPromptPart`, `ToolReturnPart`, `RetryFeedbackPart`, `InstructionDeltaPart` / `InstructionBaselinePart`, `ToolAvailabilityDeltaPart`, `SpeechPart` |
 | `ModelResponse` | model → client | `TextPart`, `ThinkingPart`, `ToolCallPart`, `NativeToolCallPart`, `NativeToolReturnPart`, `FilePart`, `CompactionPart`, `SpeechPart` |
 
 `NativeToolCallPart` / `NativeToolReturnPart` were called `BuiltinToolCallPart` / `BuiltinToolReturnPart` in V1; their serialised `part_kind` is still `'builtin-tool-call'` / `'builtin-tool-return'`, so histories stored under V1 load unchanged.
+
+`RetryPromptPart` is deprecated (2.60). A retry that answers a tool call is now that call's `ToolReturnPart` with `outcome='retried'`; one that answers no call is a `RetryFeedbackPart`. Histories stored with the old part still load, as whichever of the two they meant, without a warning. `TextPart` has an optional `citations` list for providers that return them.
 
 Every part has a `part_kind` discriminator; delta events (`TextPartDelta`, `ThinkingPartDelta`, `ToolCallPartDelta`) exist for streaming and carry `part_delta_kind`.
 

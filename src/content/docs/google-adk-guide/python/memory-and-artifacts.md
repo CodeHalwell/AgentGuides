@@ -8,7 +8,7 @@ sidebar:
   order: 70
 ---
 
-Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; the Vertex AI and Cloud Storage examples need a Google Cloud project and were not run.
+Verified against `google-adk` %%version=google-adk%% (`google/adk/memory/`, `google/adk/artifacts/`), checked %%versions-checked%%. The examples were run against a stub model that stands in for Gemini; the Vertex AI and Cloud Storage examples need a Google Cloud project and were not run. `MongoDbMemoryService` was checked against its signature only, not a live MongoDB.
 
 Both memory and artifacts are **per-runner services**: you pass an instance when constructing the `Runner` (or rely on `InMemoryRunner`'s built-in in-memory pair). Memory is for searchable long-term context across sessions; artifacts are versioned file storage tied to sessions or users.
 
@@ -48,13 +48,15 @@ runner = Runner(
 | `add_events_to_memory(*, app_name, user_id, events, session_id=None, custom_metadata=None)` | Incremental add — last turn only, for example |
 | `add_memory(*, app_name, user_id, memories, custom_metadata=None)` | Write explicit `MemoryEntry` items directly |
 | `search_memory(*, app_name, user_id, query)` | Semantic / keyword search — returns `SearchMemoryResponse` |
+| `delete_memory(*, app_name, user_id, memory_id=None)` | Delete one memory by the `MemoryEntry.id` that `search_memory` returned (2.13.0). Also available as `delete_memory(memory_id)` on `ToolContext` and `CallbackContext` |
 
-Not every service implements every method; the unsupported ones raise `NotImplementedError`:
+Not every service implements every method; the unsupported ones raise `NotImplementedError`. `delete_memory` is implemented only by `InMemoryMemoryService` in 2.13.0; the SQLite, MongoDB, Memory Bank and RAG services raise `NotImplementedError` for it.
 
 | Service | `add_session_to_memory` | `add_events_to_memory` | `add_memory` | Search |
 |---|---|---|---|---|
 | `InMemoryMemoryService` | yes | yes | no | word overlap |
 | `SqliteMemoryService` | yes | yes | no | SQLite full-text search (FTS5) when available, else word matching |
+| `MongoDbMemoryService` (experimental, 2.13.0) | yes | yes | no | Keyword match, no embedding model or vector index |
 | `VertexAiMemoryBankService` | yes | yes | yes | semantic, server-side |
 | `VertexAiRagMemoryService` | yes | no | no | vector similarity |
 
@@ -64,6 +66,7 @@ Not every service implements every method; the unsupported ones raise `NotImplem
 |---|---|---|---|
 | `InMemoryMemoryService()` | Python dict, keyed by `(app_name, user_id)` | Case-insensitive word overlap | None |
 | `SqliteMemoryService(db_path, *, fts="auto", max_event_bytes=262144, max_results=50)` | Local SQLite file (2.11.0) | Full-text search | None; call `close()` on shutdown |
+| `MongoDbMemoryService(*, database_name, connection_string=None, mongo_client=None, memories_collection="memories", stop_words=None, max_results=50, ensure_indexes=True)` | MongoDB collection (added in 2.13.0, experimental) | Keyword match on extracted keywords | `pip install "google-adk[mongodb]"`; works on any MongoDB deployment, and creates an `app_user_keywords` index on first use unless `ensure_indexes=False`; call `close()` on shutdown |
 | `VertexAiMemoryBankService(project, location, agent_engine_id, *, express_mode_api_key=None, credentials=None)` | GCP Agent Engine Memory Bank | Semantic (Vertex-side) | Enable Agent Engine in your GCP project; pass the engine's numeric ID (not the full resource path) |
 | `VertexAiRagMemoryService(rag_corpus, similarity_top_k=None, vector_distance_threshold=10)` | Vertex AI RAG corpus | Vector similarity | Create a RAG corpus in advance; format `projects/.../ragCorpora/{id}` or just the id |
 
@@ -170,6 +173,39 @@ async def main():
     for entry in found.memories:
         print(entry.author, "->", entry.content.parts[0].text)
     await memory.close()
+
+
+asyncio.run(main())
+```
+
+### Deleting a memory
+
+Each `MemoryEntry` returned by `search_memory` carries an `id`. Pass it to `delete_memory` to remove that memory (2.13.0). This runs against `InMemoryMemoryService`; other services raise `NotImplementedError`.
+
+```python
+import asyncio
+from google.adk.events import Event
+from google.adk.memory import InMemoryMemoryService
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+
+
+async def main():
+    sessions = InMemorySessionService()
+    memory = InMemoryMemoryService()
+    session = await sessions.create_session(app_name="app", user_id="u1")
+    await sessions.append_event(session, Event(
+        author="user",
+        content=types.Content(role="user", parts=[types.Part(text="The office moves to Leeds in March.")]),
+    ))
+    session = await sessions.get_session(app_name="app", user_id="u1", session_id=session.id)
+    await memory.add_session_to_memory(session)
+
+    found = await memory.search_memory(app_name="app", user_id="u1", query="office")
+    await memory.delete_memory(app_name="app", user_id="u1", memory_id=found.memories[0].id)
+
+    found = await memory.search_memory(app_name="app", user_id="u1", query="office")
+    print(len(found.memories))   # 0
 
 
 asyncio.run(main())

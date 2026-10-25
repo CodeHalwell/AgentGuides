@@ -609,6 +609,29 @@ For streaming: `async with await client.beta.conversations.start_stream_async(..
 - **Connectors (beta).** `delete_user_credentials` / `delete_workspace_credentials` / `delete_organization_credentials` became `delete_credentials(..., consumer_scope=...)`; `list_tools()` lost `page`.
 - **Other beta areas moved too** (observability, workflows). They are outside this guide; read the SDK's `MIGRATION.md` before upgrading code that uses them.
 
+### Added in 3.4.0: the stateless Responses API
+
+`mistralai` 3.4.0 (23 October 2026) added `client.responses`, an OpenAI-style Responses endpoint (`POST /v1/responses`). It is separate from agents and conversations: the SDK describes it as stateless, so you send the full history in `input` each time, nothing is stored, and only client-executed function tools are supported. Use it for plain model calls with typed output items; use Conversations when you want hosted state, hosted tools or handoffs. The Python and TypeScript (3.2.0) clients are otherwise unchanged for agents and conversations.
+
+```python
+from mistralai.client import Mistral
+
+client = Mistral(api_key="...")
+
+response = client.responses.create(
+    model="%%model=mistral%%",
+    input="What is the capital of France?",
+    instructions="Answer in one word.",
+)
+message = response.output[0]            # a "message" item; reasoning and function-call items also appear in output
+print(message.content[0].text)
+print(client.responses.count_input_tokens(model="%%model=mistral%%", input="What is the capital of France?").input_tokens)
+```
+
+We ran this against a scripted `httpx2.MockTransport`, not the live API, so the output shape is the SDK's model rather than a recorded reply. `stream=True` returns server-sent events, and `previous_response_id`, `conversation` and `prompt` are accepted by the signature but we did not exercise them. The TypeScript equivalent is `await client.responses.create({ model, input, instructions })`.
+
+Two smaller 3.4.0 changes sit outside this guide: `audio_agents.create()` now requires `configuration` (it was optional), and `KeywordRetriever` gained an `operator` field (`"or"` by default, or `"and"`).
+
 Upgrading from v1 as well? v2 moved every import from `mistralai` to `mistralai.client`, and Azure/GCP clients to `mistralai.azure.client` / `mistralai.gcp.client`.
 
 ### Earlier history

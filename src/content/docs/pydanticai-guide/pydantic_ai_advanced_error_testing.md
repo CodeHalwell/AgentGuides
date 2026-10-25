@@ -439,7 +439,7 @@ print(result.output, calls)
 #> ok 2
 ```
 
-A `ModelRetry` from this hook adds a `RetryPromptPart` to the history before the repeat request, so the model sees that a retry happened. For plain transport problems (429, 5xx, timeouts) the HTTP-level retries [below](#transport-level-http-retries) are cleaner: they repeat the request without touching the conversation.
+A `ModelRetry` from this hook adds a `RetryFeedbackPart` to the history before the repeat request (a `ModelRetry` raised in a tool is recorded differently: as that call's `ToolReturnPart` with `outcome='retried'`), so the model sees that a retry happened. For plain transport problems (429, 5xx, timeouts) the HTTP-level retries [below](#transport-level-http-retries) are cleaner: they repeat the request without touching the conversation.
 
 ---
 

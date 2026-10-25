@@ -77,7 +77,8 @@ Fields defined on `BaseAgent` — the ones you'll touch most:
 | `step_callback` | `Callable \| None` | `None` | Step hook. What it receives depends on how the model is called; see [Callbacks and observability](#callbacks-and-observability). |
 | `system_template` / `prompt_template` / `response_template` | `str \| None` | `None` | Override the built-in prompt strings. |
 | `checkpoint` | `CheckpointConfig \| bool \| None` | `None` | Opt the agent into checkpointing. |
-| `executor_class` | `type[CrewAgentExecutor] \| type[AgentExecutor]` | `AgentExecutor` | The newer `AgentExecutor` (from `crewai.experimental`) is now the default; pass `CrewAgentExecutor` to get the older loop back. |
+| `executor_class` | `type[AgentExecutor]` | `AgentExecutor` | The executor that runs the agent loop. Since 1.15.30 it lives in `crewai.agents.agent_executor` (also exported from `crewai.agents`), and `CrewAgentExecutor` has been removed: passing it raises a validation error, and `crewai.experimental.AgentExecutor` no longer imports. |
+| `use_better_compaction` | `bool` | `True` | On the native function-calling path, a tool result too large for the model's context is saved to a temporary file; the agent gets a preview and a built-in tool that reads it in bounded line ranges. Files are deleted when the run ends. `result_as_answer` tool results are never deferred. Set `False` to keep large results inline. |
 | `from_repository` | `str \| None` | `None` | Load base config from the user's CrewAI repository. |
 
 ## Deprecated fields

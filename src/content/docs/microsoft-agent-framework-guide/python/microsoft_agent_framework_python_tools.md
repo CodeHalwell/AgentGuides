@@ -580,7 +580,7 @@ agent = Agent(client=OpenAIChatClient(), tools=[get_weather])
 await agent.run("Find a Thai restaurant near me", tools=[search_restaurants])
 ```
 
-`tools=` accepts a single tool or a list mixing `@tool` functions, plain callables, `FunctionTool` instances, MCP tools (`MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`), provider-hosted tool descriptors and tool collections such as a Foundry toolbox, which is flattened into its tools.
+`tools=` accepts a single tool or a list mixing `@tool` functions, plain callables, `FunctionTool` instances, MCP tools (`MCPStdioTool`, `MCPStreamableHTTPTool`), provider-hosted tool descriptors and tool collections such as a Foundry toolbox, which is flattened into its tools.
 
 ## Provider-hosted tools
 
@@ -721,7 +721,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-The `mcp` package is installed with `agent-framework-core[all]` (and so with `agent-framework`); with a bare `agent-framework-core`, `as_mcp_server()` raises `ModuleNotFoundError` telling you to install it. Serving over streamable HTTP is shown in [recipe 16](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_recipes/#recipe-16--expose-an-agent-over-mcp).
+The `mcp` package is installed with `agent-framework-core[all]` (and so with `agent-framework`); with a bare `agent-framework-core`, `as_mcp_server()` raises `ModuleNotFoundError` telling you to install it. Serving over streamable HTTP is shown on the [MCP page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/#serving-over-http). Since 1.23.0 the `mcp` package is version 2.x; the stdio example above runs unchanged.
 
 ## Patterns
 
@@ -737,4 +737,5 @@ The `mcp` package is installed with `agent-framework-core[all]` (and so with `ag
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.23.0 | `MCPWebsocketTool` dropped from the accepted tool types (the transport was removed); the HTTP serving link now points to a working example. |
 | 2026-10-24 | 1.22.0 | Corrected the error behaviour (the model sees "Error: Function failed." unless `include_detailed_errors=True`), the approval flow (no `responses=` argument on `Agent.run`), the meaning of `kind` (only `"shell"` is interpreted), `Content.from_error` parameters and the tool-loop configuration table (added `max_duration_seconds`, `allow_concurrent_invocation`, `disable_approval_response_binding`). Added sync-in-thread behaviour, the default result conversion table, provider-hosted tools and runnable examples throughout. Removed an invented "streaming tool outputs" section and the workflow executor and visualisation sections, which were wrong (return values of `@executor` functions are not sent downstream) and are covered on the comprehensive guide. |

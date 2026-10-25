@@ -217,6 +217,6 @@ The code was written for a 2025 preview. Those names were renamed before 1.0: `C
 - [Comprehensive guide](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/) — configuration, agents, streaming, sessions, workflows and more on one page
 - [Model providers](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_model_providers/) — all chat client constructors with real signatures
 - [Tools](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_tools/) — `@tool`, `FunctionTool`, approval gates, schemas, runtime context
-- [MCP integration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) — `MCPStdioTool`, `MCPStreamableHTTPTool`, `MCPWebsocketTool`
+- [MCP integration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_mcp/) — `MCPStdioTool`, `MCPStreamableHTTPTool`, `as_mcp_server()`
 - [Multi-agent orchestration](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_orchestration/) — `WorkflowBuilder`, sequential, concurrent, handoff, group chat
 - [API map](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_comprehensive_guide/#api-map) — which page documents each class

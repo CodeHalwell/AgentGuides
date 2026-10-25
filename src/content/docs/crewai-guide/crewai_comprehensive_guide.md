@@ -56,7 +56,7 @@ gemini = LLM(model="gemini/%%model=gemini%%")                   # needs crewai[g
 local = LLM(model="ollama/llama3.1:8b", base_url="http://localhost:11434")
 ```
 
-API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` (or `MODEL_NAME`, `OPENAI_MODEL_NAME`) environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in 1.15.28), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
+API keys come from the usual environment variables (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` or `GEMINI_API_KEY`, …). An agent without `llm=` reads the `MODEL` (or `MODEL_NAME`, `OPENAI_MODEL_NAME`) environment variable and otherwise uses CrewAI's built-in default (`gpt-4.1-mini` in %%version=crewai%%), so set the model explicitly in anything you deploy. Routing rules, reasoning settings and custom providers are on [LLM providers](/crewai-guide/crewai_llm_providers_python/).
 
 ## Simple agents
 
@@ -167,7 +167,7 @@ print(result.pydantic.headline)      # final task's model
 print(result.tasks_output[0].raw)    # raw text of any task
 ```
 
-`output_pydantic` puts the schema in the prompt, asks the provider for structured output where it can, and parses the answer into `.pydantic`; `output_json` does the same but keeps a dict in `json_dict`. `response_model` only asks the provider for structured output: in 1.15.28 it leaves `.pydantic` empty and `.raw` holds the JSON, so prefer `output_pydantic` when you want a model instance. A `CrewOutput` is not a string or a dict: read `.raw`, `.pydantic` or `.json_dict`. Guardrails, conditional tasks, file inputs and `human_input` are covered on the [Task API](/crewai-guide/crewai_task_api_python/) page.
+`output_pydantic` puts the schema in the prompt, asks the provider for structured output where it can, and parses the answer into `.pydantic`; `output_json` does the same but keeps a dict in `json_dict`. `response_model` only asks the provider for structured output: in %%version=crewai%% it leaves `.pydantic` empty and `.raw` holds the JSON, so prefer `output_pydantic` when you want a model instance. A `CrewOutput` is not a string or a dict: read `.raw`, `.pydantic` or `.json_dict`. Guardrails, conditional tasks, file inputs and `human_input` are covered on the [Task API](/crewai-guide/crewai_task_api_python/) page.
 
 ## Crews and processes
 
@@ -330,6 +330,7 @@ CrewAI AMP is CrewAI's hosted platform for deploying, tracing and evaluating cre
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-10-25 | 1.15.30 | Patch release. Version-specific statements re-checked against 1.15.30; see the [guide index](/crewai-guide/) for what changed. |
 | 2026-10-21 | 1.15.28 | Rewritten against 1.15.28: required `backstory`/`expected_output` everywhere, hierarchical example with a manager, `CrewOutput` attributes, `kickoff_for_each`/`akickoff`, `Agent.kickoff`, MCP via `mcps=`, yanked releases. Removed the invented "Custom Process" and `share_crew_state`, the MCP stub, the duplicated Flows chapter (now on the Flows page) and the UV and backstory padding. |
 | 2026-05-28 | 1.14.6 | Patch release. |
 | 2026-04-17 | 1.14.2 | Checkpoint forking; `from_checkpoint` on `kickoff`; checkpoint CLI; reasoning and cache-creation token tracking. |

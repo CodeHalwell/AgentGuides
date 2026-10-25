@@ -101,7 +101,7 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 | Key | Notes |
 |---|---|
 | `max_tokens`, `temperature`, `top_p`, `top_k`, `seed`, `stop_sequences`, `presence_penalty`, `frequency_penalty`, `logit_bias` | The usual sampling controls. |
-| `thinking` | `ThinkingLevel = bool \| Literal['minimal', 'low', 'medium', 'high', 'xhigh']`. `True` = provider default effort; `False` disables thinking where the model allows it (always-on reasoning models ignore it); unmapped levels round to the nearest the provider has. |
+| `thinking` | `ThinkingLevel = bool \| Literal['minimal', 'low', 'medium', 'high', 'xhigh', 'max']`. `True` = provider default effort; `False` disables thinking where the model allows it (on models that cannot switch it off, 2.61 sends the lowest level they accept); unmapped levels round to the nearest the provider has. |
 | `service_tier` | `ServiceTier = Literal['auto', 'default', 'flex', 'priority']`. Provider-specific keys (`openai_service_tier`, …) take precedence. |
 | `cache` | Library-managed prompt caching: `True`, `False`, a retention (`'5m'`, `'30m'`, `'1h'`) or `CacheConfig(retention=..., messages=False)`. Provider-specific cache keys win if set. See also `CachePoint` in the [message history guide](/pydanticai-guide/pydantic_ai_message_history/). |
 | `tool_choice` | `None`/`'auto'`, `'none'`, `'required'`, a list of tool names, or `ToolOrOutput(function_tools=[...])`. |
@@ -161,7 +161,7 @@ These capabilities change *which* model is used or *how* it is called, without t
 |---|---|
 | `Thinking(effort=True)` | Sets `thinking` portably; provider-specific thinking settings still win. |
 | `Caching(retention=True, messages=True)` | Sets `cache` (library-managed prompt caching). |
-| `SelectModel(selector)` | Picks the model before each model-request step from a `ModelSelectionContext` (`deps`, `prompt`, `messages`, `usage`, `run_step`, the lower-precedence `model`). |
+| `SelectModel(selector)` | Picks the model before each model-request step from a `ModelSelectionContext` (`deps`, `prompt`, `messages`, `usage`, `run_step`, `usage_limits`, `deadline`, `run_id`, `conversation_id`, the lower-precedence `model`). |
 | `ResolveModelId(resolver)` | Turns a model-ID string into a `Model` (custom names, per-tenant credentials); return `None` to fall through to the normal lookup. Replaces Temporal's old `provider_factory=`. |
 | `RaiseContentFilterError()` | Raises `ContentFilterError` (an `UnexpectedModelBehavior`) when a response finishes with `finish_reason='content_filter'`, instead of returning an empty or partial output. |
 
