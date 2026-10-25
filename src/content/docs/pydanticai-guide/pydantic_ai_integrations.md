@@ -130,6 +130,8 @@ from pydantic_ai.capabilities import MCP
 # Runs a local MCP client against the URL (the default since 2.0)
 agent = Agent('anthropic:%%model=anthropic%%', capabilities=[MCP('https://mcp.example.com/mcp')])
 
+# The capability's default id is the URL's hostname, so give two servers on one host explicit ids
+
 # Ask the provider to call the server itself (V1's default behaviour)
 agent = Agent(
     'anthropic:%%model=anthropic%%',

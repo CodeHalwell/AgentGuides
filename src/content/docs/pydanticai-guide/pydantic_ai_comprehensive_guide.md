@@ -1062,7 +1062,7 @@ Capabilities bundle behaviour (hooks, instructions, tools, settings) and attach 
 | `HandleDeferredToolCalls` | `pydantic_ai.capabilities` | [Recipes](/pydanticai-guide/pydantic_ai_recipes/) |
 | `WebSearch`, `WebFetch`, `ImageGeneration`, `XSearch`, `MCP`, `NativeTool`, `NativeOrLocalTool`, `Thinking` | `pydantic_ai.capabilities` | [Built-in tools](/pydanticai-guide/pydantic_ai_builtin_tools/) |
 | `SelectModel`, `ResolveModelId` | `pydantic_ai.capabilities` | [Choosing the model per step](#choosing-the-model-per-step) |
-| `RaiseContentFilterError`, `UseThreadExecutor`, `Caching`, `LocalWorkspace` | `pydantic_ai.capabilities` | [upstream capabilities docs](https://pydantic.dev/docs/ai/capabilities/overview/) |
+| `RaiseContentFilterError`, `UseThreadExecutor`, `Caching`, `LocalWorkspace`, `Citations`, `FileUnderstanding` | `pydantic_ai.capabilities` | [upstream capabilities docs](https://pydantic.dev/docs/ai/capabilities/overview/) |
 | `TemporalDurability`, `DBOSDurability`, `PrefectDurability` | `pydantic_ai.durable_exec.<engine>` | [Durable execution](/pydanticai-guide/pydantic_ai_durable_execution/) |
 | `OnlineEvaluation` | `pydantic_evals.online_capability` | [Evals](/pydanticai-guide/pydantic_ai_evals/#8-online-evaluation--sampling-production-traffic) |
 
@@ -1206,6 +1206,7 @@ The framework's own history is in the [upstream changelog](https://pydantic.dev/
 
 | Date | Change |
 |---|---|
+| 2026-10-25 | Version bump to pydantic-ai %%version=pydantic-ai%%: added `Citations` and `FileUnderstanding` to the API map. |
 | 2026-10-25 | Re-audited against pydantic-ai %%version=pydantic-ai%%: corrected the instructions-versus-history note, `UnsupportedSettingWarning` scope, the start of V2 deprecation warnings (1.95.0), `agent.iter()` hook behaviour and the `OnlineEvaluation` module; added `Conversation` to the run reference and fuller exception tree. |
 | 2026-10-21 | Rewritten. The 4,700-line class reference (much of it private internals and repeats of topic pages) replaced by an [Agent reference](#agent-reference) and an [API map](#api-map) that links to the topic pages. Corrected the `end_strategy` default (`'graceful'`), the `AgentRetries` keys, the removed `MCPServer*` classes and the native-tool support table; fixed the tutorial examples (`instructions=` per run, `stream_output()` for structured streaming, `min_length=`, imports). |
 | 2026-08-21 | Class & API Reference section added, consolidating the earlier per-class pages. |
