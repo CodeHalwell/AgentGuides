@@ -231,7 +231,7 @@
     },
     "@anthropic-ai/claude-agent-sdk": {
       "registry": "npm",
-      "version": "0.3.310",
+      "version": "0.3.311",
       "guide": "anthropic-claude-agent-sdk-typescript-guide"
     },
     "mistralai": {
