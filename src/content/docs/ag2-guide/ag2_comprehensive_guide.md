@@ -455,7 +455,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-`approval_required()` accepts `message=`, `denied_message=`, `timeout=` and `allow_always=`. A denied call returns `denied_message` to the model as the tool result. Answering `always` skips the question for later calls of the same tool in that conversation. `LoopDetector` emits a warning alert after `repeat_threshold` consecutive identical tool calls; it does not stop the turn, so a policy that should stop it belongs in middleware or the tool.
+`approval_required()` accepts `message=`, `denied_message=`, `timeout=` and `allow_always=`. A denied call returns `denied_message` to the model as the tool result. Answering `always` skips the question for later calls of the same tool in that conversation. `LoopDetector` emits a warning alert after `repeat_threshold` consecutive identical tool calls; it does not stop the turn, so a policy that should stop it belongs in middleware or the tool. Built-in observers (`LoopDetector`, `TokenMonitor`) and any `BaseObserver` take `timeout=` (seconds, default `None`), a per-call limit on the observer's `process` method.
 
 ## Knowledge, memory and compaction
 
@@ -489,7 +489,6 @@ agent = Agent(
 ## Sub-tasks and evaluation
 
 - `tasks=TaskConfig(...)` gives an agent `run_subtask(task)` and `run_subtasks(tasks, parallel=True)` tools for delegating work to sub-agents. The sub-agents inherit its tools, narrowed with `include_tools=` / `exclude_tools=`, and cannot delegate further. `TaskConfig(config=...)` picks a cheaper model for them, `extra_tools=` adds tools only they have, and `max_concurrency=` bounds how many run at once. `agent.task(...)` is the lifecycle handle for tracking a unit of work yourself.
-- `ag2.eval` runs agents offline against datasets with scorers (`Suite`, `Scorer`), replays model output deterministically with `TestConfig` cassettes, and saves run JSON for run-against-run diffs.
 
 ```python
 import asyncio
@@ -518,6 +517,66 @@ lead = Agent(
 
 print(asyncio.run(lead.ask("How many words are in each of these: 'a b c' and 'd e'?")).body)
 ```
+
+### Evaluating an agent
+
+`ag2.eval` runs an agent over a `Suite` of tasks and grades each run with scorers. `run_agent` asks the agent each task's `inputs["input"]`, records the turn as a `Trace` (it needs OpenTelemetry, so install `ag2[tracing]`), and passes that trace to your scorers. Scorers are plain functions decorated with `@scorer`; the parameters they name (`trace`, `inputs`, `outputs`, `reference_outputs`, `task`) are injected. A `bool` or number becomes a score, a `str` becomes a category, and a scorer that raises is recorded as an unscored result rather than failing the run. With `store_dir=` the run is saved as `<run_id>.json`, which `load_run` reads back and which can be diffed against another run.
+
+```python
+import asyncio
+import json
+import tempfile
+from pathlib import Path
+
+from ag2 import Agent, tool
+from ag2.eval import Suite, load_run, run_agent, scorer
+from ag2.events import ToolCallEvent
+from ag2.testing import TestConfig
+
+
+@tool
+def lookup(order_id: str) -> str:
+    """Look up an order."""
+    return f"Order {order_id} has shipped."
+
+
+agent = Agent(
+    "support",
+    config=TestConfig(ToolCallEvent(name="lookup", arguments='{"order_id": "42"}'), "It has shipped."),
+    tools=[lookup],
+)
+
+suite = Suite.from_list(
+    [
+        {"inputs": {"input": "Where is order 42?"}, "reference_outputs": {"order_id": "42"}},
+        {"inputs": {"input": "Has order 42 gone out yet?"}, "reference_outputs": {"order_id": "42"}},
+    ],
+    name="order-status",
+)
+
+
+@scorer
+def looked_up_right_order(trace, reference_outputs):
+    calls = trace.events_of(ToolCallEvent, name="lookup")
+    return bool(calls) and json.loads(calls[0].arguments)["order_id"] == reference_outputs["order_id"]
+
+
+async def main():
+    with tempfile.TemporaryDirectory() as store:
+        result = await run_agent(suite, agent=agent, scorers=[looked_up_right_order], store_dir=store)
+        print(result.aggregates.pass_rate)  # {'looked_up_right_order': 1.0}
+        saved = load_run(next(Path(store).glob("*.json")))
+        print(len(saved.tasks))  # 2
+
+
+asyncio.run(main())
+```
+
+Notes from running it:
+
+- `ToolCallEvent.arguments` is a JSON string, so decode it in a scorer.
+- A `TestConfig` script starts again from the beginning for each task, so a scripted agent gives every task the same turn. Use a real model, or `run_agent(..., model_config=...)`, when tasks need different behaviour.
+- `Suite.from_jsonl(path)` loads the same task shape from a file. `run_variants` compares several agent or model variants on one suite, `run_pairwise` and `evaluate_pairwise` compare two runs with a judge, and `evaluate_traces` grades traces you already hold.
 
 ## Multi-agent: the Network
 
