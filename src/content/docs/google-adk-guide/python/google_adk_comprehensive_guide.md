@@ -667,7 +667,7 @@ adk eval my_agent my_agent/tests/smoke.evalset.json --config_file_path my_agent/
 
 with `test_config.json` setting the pass thresholds, for example `{"criteria": {"tool_trajectory_avg_score": 1.0, "response_match_score": 0.8}}`. Metrics range from exact tool-trajectory matching and ROUGE through LLM-judged response quality, rubrics, hallucination and safety checks to multi-turn user simulation. See [Evaluation](/google-adk-guide/python/evaluation/).
 
-`adk optimize` (and the `google.adk.optimization` module) rewrites the root agent's instruction with the GEPA optimiser, scoring each candidate on your eval sets. Treat its output as a proposal to review, not a change to ship unread.
+`adk optimize` (and the `google.adk.optimization` module) rewrites the root agent's instruction with the GEPA optimiser, scoring each candidate on your eval sets; see [Optimising the instruction with GEPA](/google-adk-guide/python/evaluation/#optimising-the-instruction-with-gepa). Treat its output as a proposal to review, not a change to ship unread.
 
 ## Deployment
 

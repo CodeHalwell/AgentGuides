@@ -739,6 +739,48 @@ AgentEvaluator.migrate_eval_data_to_new_schema(
 )
 ```
 
+## Optimising the instruction with GEPA
+
+`adk optimize` searches for a better root-agent instruction, using your eval sets as the score. It needs the `eval` extra (`pip install "google-adk[eval]"`, which brings in `gepa`). It takes two JSON files.
+
+The sampler config names the eval sets (a `LocalEvalSamplerConfig`). `app_name` must equal the agent folder's name, or the command stops with an error:
+
+```json
+{
+  "eval_config": {
+    "criteria": {"tool_trajectory_avg_score": 1.0, "response_match_score": 0.7}
+  },
+  "app_name": "my_agent",
+  "train_eval_set": "train",
+  "validation_eval_set": "val"
+}
+```
+
+`validation_eval_set` is optional; without it the training cases are also used for validation, which rewards overfitting. `train_eval_case_ids` and `validation_eval_case_ids` narrow either set to named cases.
+
+The optimiser config is optional (a `GEPARootAgentPromptOptimizerConfig`):
+
+```json
+{"max_metric_calls": 60, "reflection_minibatch_size": 3, "run_dir": "gepa_runs"}
+```
+
+`max_metric_calls` (default 100) caps the number of evaluations and so the cost; each is a full agent run plus its metrics. `optimizer_model` (default `gemini-2.5-flash`) writes the candidate instructions. `run_dir` keeps intermediate results.
+
+```bash
+adk optimize my_agent \
+  --sampler_config_file_path sampler.json \
+  --optimizer_config_file_path optimizer.json \
+  --print_detailed_results
+```
+
+The command prints the best instruction and does not edit your files. Limits worth knowing:
+
+- Only the root agent's `instruction` is changed. Sub-agents are left alone (the optimiser logs a warning), and the instruction must be a plain string, not an instruction provider function.
+- Overlap between training and validation case IDs is logged as a warning, because scores for the shared cases are no longer independent.
+- The same pieces are available from Python: `LocalEvalSampler(config, eval_sets_manager)` and `GEPARootAgentPromptOptimizer(config).optimize(agent, sampler)`, which returns candidates in `optimized_agents`, each an `AgentWithScores` with `optimized_agent` and `overall_score`. To use a different search strategy, subclass `AgentOptimizer`.
+
+Review the winning instruction as you would any prompt change, and re-run the full eval suite on cases that were in neither set.
+
 ## Patterns
 
 ### 1 — CI gate on tool trajectory
