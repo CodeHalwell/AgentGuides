@@ -493,7 +493,7 @@ class DeltaChannel(BaseChannel):
         reducer: Callable[[Any, Sequence[Any]], Any],
         typ: type | None = None,          # inferred from the Annotated type
         *,
-        snapshot_frequency: int = 1000,
+        snapshot_frequency: int = 100,
     ) -> None: ...
 ```
 
@@ -504,7 +504,7 @@ Two things differ from `BinaryOperatorAggregate`:
 - The reducer receives the current value and the **whole batch** of writes for the step (`reducer(state, writes)`), not one write at a time.
 - The reducer must be **batching-invariant**, so that replay can fold writes in larger batches: `reducer(reducer(s, xs), ys) == reducer(s, xs + ys)`.
 
-To bound replay depth, a full snapshot blob is written every `snapshot_frequency` updates, or after `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` supersteps (default 5000, env `LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`). Lower `snapshot_frequency` for high-write channels to keep replay short. `Overwrite(...)` works as it does on `BinaryOperatorAggregate`: it becomes the new base, and later writes fold on top of it.
+To bound replay depth, a full snapshot blob is written every `snapshot_frequency` updates, or after `DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT` supersteps (default 5000, env `LANGGRAPH_DELTA_MAX_SUPERSTEPS_SINCE_SNAPSHOT`). The default is 100 (it was 1000 before 1.2.18). Lower `snapshot_frequency` for high-write channels to keep replay short. `Overwrite(...)` works as it does on `BinaryOperatorAggregate`: it becomes the new base, and later writes fold on top of it.
 
 ```python
 from typing import Annotated
