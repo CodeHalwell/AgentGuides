@@ -242,6 +242,23 @@ local = OpenAIModel(model_id="Qwen/Qwen3-14B", api_base="http://localhost:8000/v
 
 `OpenAIServerModel` and `AzureOpenAIServerModel` remain as older aliases.
 
+#### Rate limits and retries
+
+`OpenAIModel`, `AzureOpenAIModel`, `LiteLLMModel`, `LiteLLMRouterModel`, `InferenceClientModel` and `AmazonBedrockModel` share a base class, `ApiModel`, which adds two constructor arguments:
+
+```python
+model = OpenAIModel(
+    model_id="%%model=openai-small%%",
+    requests_per_minute=30,   # spaces calls at least two seconds apart; None (default) means no limit
+    retry=True,               # default; False makes a single attempt
+)
+```
+
+- `requests_per_minute` sleeps before each model call so that calls are at least `60 / requests_per_minute` seconds apart. It is per model instance, so agents that share one model object share the limit.
+- With `retry=True`, a call that fails with an error whose text contains `429`, `rate limit` or `too many requests` is retried up to three attempts in total. The first wait is 60 seconds, doubled each time with jitter. Other errors are raised immediately. The wait is blocking, so a rate-limited run can pause for minutes without output; set `retry=False` if you would rather handle it yourself, as in the [retry wrapper](#error-handling--recovery) above.
+
+`custom_role_conversions` (same classes) maps smolagents' internal message roles onto the roles an API accepts. By default `tool-call` becomes `assistant` and `tool-response` becomes `user`. A mapping you pass **replaces** that default instead of extending it, so include both entries (`{"tool-call": "assistant", "tool-response": "user"}`) plus whatever you change; a role left out is sent as it is, and most APIs reject `tool-call`. `flatten_messages_as_text=True` sends message content as plain strings instead of lists of typed parts, which some OpenAI-compatible servers require; `TransformersModel` and `MLXModel` choose this themselves for text-only models.
+
 ### TransformersModel: Local Inference
 
 ```python
@@ -1114,6 +1131,7 @@ Historical changes that affect code you may find elsewhere:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-28 | 1.26.0 | Added `requests_per_minute`, `retry` and the retry rules of the API model classes, and the exact behaviour of `custom_role_conversions` and `flatten_messages_as_text`. |
 | 2026-10-24 | 1.26.0 | Audited against the installed package. Corrected: the `InferenceClientModel` endpoint example (`base_url` alone raises), step callbacks given as a list (they run for `ActionStep` only), `GradioUI.launch()` (defaults to a public share link), Docker image rebuilds, and step counting from `RunResult.steps`. Added: memory and steps, planning, MCP details, local-executor limits, saving agents and tools, delegation behaviour and a `ToolCallingAgent` manager example. |
 | 2026-10-21 | 1.26.0 | Corrected where tools run under remote executors, the `LogLevel` values and the quantisation example; current, served model IDs; added the CLI, `from_mcp`, `visualize()`, `AgentImage`/`AgentAudio` and `PromptTemplates`. |
 | 2026-10-21 | 1.26.0 | Rewritten against the installed package. Removed fabricated APIs (`push_to_hub()` function, `load_agent`, `run(image=/audio=/video=)`, `VideoTranscriptionTool`, `TranscriptionTool`, `memory_size`, `timeout`, `AgentRunResult.success/errors/execution_time`, `Model.generate_text`), the `"wasm"` executor, invented efficiency figures and placeholder text. Corrected `HfApiModel` history (removed in 1.19.0, not 1.24.0) and the default-model change (1.23.0). Added `RunResult`, streaming events, final-answer checks, step callbacks, MCP, executors and version notes. |
