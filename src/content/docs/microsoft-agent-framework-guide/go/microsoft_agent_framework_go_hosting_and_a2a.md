@@ -366,6 +366,8 @@ cfg := a2aprovider.ExecutorConfig{
 
 A task that is waiting for input (`TASK_STATE_INPUT_REQUIRED`) is different: the client links the next message to that task directly, which is how a hosted agent's tool approval or follow-up question is answered over A2A.
 
+When you call a remote A2A agent with `a2aprovider`, a task status that carries a message is surfaced in the response as an assistant message, whatever the state, apart from routine progress (`submitted`, `working`) and `completed`. Since 0.2.1 that covers failed, rejected and cancelled tasks as well as `INPUT_REQUIRED`, so an explanation from the remote agent is no longer dropped.
+
 ## Session stores and tenants
 
 `a2aprovider.SessionStore` has two methods, `Get(ctx, contextID)` and `Save(ctx, contextID, session)`. `Get` returns `nil, nil` for an unknown context, and both must be safe for concurrent calls. Sessions are JSON-serialisable, so any key-value store will do. This one keeps one file per context, which survives a restart:
