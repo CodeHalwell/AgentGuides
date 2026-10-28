@@ -46,7 +46,7 @@ Use it when you want an agent that reads and edits files, runs commands and call
 
 ### Installation
 
-Node.js 18 or later. Zod 4 is a peer dependency, used to define custom tool schemas.
+Node.js 18.14 or later (the minimum was 18.0.0 before 0.3.311). Zod 4 is a peer dependency, used to define custom tool schemas.
 
 ```bash
 npm install @anthropic-ai/claude-agent-sdk@%%version=@anthropic-ai/claude-agent-sdk%% zod
@@ -239,6 +239,8 @@ for (const [model, usage] of Object.entries(result.modelUsage)) {
   );
 }
 ```
+
+Cache writes are also split by lifetime: `cacheCreationEphemeral5mInputTokens` and `cacheCreationEphemeral1hInputTokens` (added in 0.3.311) are both counted inside `cacheCreationInputTokens`. They are optional, and can sum to less than the total when a response does not report the cache lifetime, so treat them as a breakdown rather than a replacement.
 
 With streaming input, each result carries the running total so far: read the latest one rather than adding them up.
 
@@ -1126,3 +1128,4 @@ From the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-typ
 - **0.3.280** — `verbatimPrompts`.
 - **0.3.282** — `@anthropic-ai/claude-agent-sdk/core`, a smaller entry point for bundled apps; `prewarm()` (alpha).
 - **0.3.301** — `BUILTIN_TOOL_NAMES` and `LEGACY_TOOL_NAME_ALIASES`; per-tool permission policies on SDK MCP servers.
+- **0.3.311** — `cacheCreationEphemeral5mInputTokens` and `cacheCreationEphemeral1hInputTokens` in `ModelUsage`; minimum Node.js raised to 18.14.0.
