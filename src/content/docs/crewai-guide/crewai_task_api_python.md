@@ -55,7 +55,7 @@ print(out.tasks_output[0].pydantic.headline)
 | `tools` | `list[BaseTool] \| None` | `[]` | Restrict the tools available **for this task only**. |
 | `tool_failure_policy` | `"ignore" \| "warn" \| "raise" \| None` | `None` | Overrides the agent's policy for tools that run but report failure, for this task only. |
 | `callback` | `Callable \| None` | `None` | Called with the `TaskOutput` on completion. |
-| `output_file` | `str \| None` | `None` | File path (template vars allowed) for raw output. |
+| `output_file` | `str \| None` | `None` | File path (template vars allowed) for raw output. Paths containing `..`, shell expansion (`$HOME`) or shell special characters (`;`) are rejected when the task is built, and again after `{placeholders}` are filled in. |
 | `create_directory` | `bool \| None` | `True` | Create the parent dir of `output_file` if missing. |
 | `markdown` | `bool` | `False` | Add a Markdown format instruction to the prompt. |
 | `human_input` | `bool` | `False` | Pause after this task and ask the user to accept/modify. |
@@ -305,7 +305,7 @@ final = Task(
 )
 ```
 
-`{topic}` in the file path interpolates from crew inputs.
+`output_file` is validated: a path with `..`, `$` expansion or shell characters raises a `ValueError` on construction. The check runs again after interpolation, so `kickoff(inputs={"topic": "../../etc/x"})` against `reports/{topic}.md` raises `Interpolated output_file path failed validation` instead of writing outside the folder (the post-interpolation check is listed in the 1.15.31 security fixes). `{topic}` in the file path interpolates from crew inputs.
 
 ### 2. Retry-on-failure with strict JSON
 

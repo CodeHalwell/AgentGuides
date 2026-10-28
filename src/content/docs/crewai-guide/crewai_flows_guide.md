@@ -448,6 +448,7 @@ print(len(chat.state.messages), chat.state.last_intent)                         
 - `session_id` becomes `state.id`; with `@persist`, a later `handle_turn` on a new instance with the same id continues the conversation.
 - `ConversationState` holds `messages`, `last_user_message`, `last_intent`, `ended` and private `events`/`agent_threads`. A user message routed to the built-in `end` label sets `ended=True`.
 - `chat.chat()` runs a terminal REPL around `handle_turn`; `stream_turn()` streams a turn as frames. Pass a `RouterConfig` to `ConversationConfig(router=...)` to change the routing prompt, give explicit route descriptions or set a fallback intent; override `route_turn()` to route without an LLM.
+- `ConversationConfig(respect_context_window=True)` is the default: before each built-in chat or router LLM call, a long history is summarised with the model's summariser, and a provider context-limit error gets one compact-and-retry. The transcript in `state.messages` is not changed. Pass `False` to send the full history as it is (compaction was added in 1.15.31).
 - Conversational flows emit `ConversationTurnStartedEvent`, `ConversationRouteSelectedEvent`, `ConversationTurnCompletedEvent` and related events for listeners.
 
 ## Declarative flows
