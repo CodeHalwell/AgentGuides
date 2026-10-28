@@ -72,6 +72,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
   <LinkCard title="Concurrency limiting" href="./pydantic_ai_concurrency/" />
   <LinkCard title="Embeddings" href="./pydantic_ai_embeddings/" />
   <LinkCard title="Direct API (no agent)" href="./pydantic_ai_direct_api/" />
+  <LinkCard title="Batch processing" href="./pydantic_ai_batch/" />
   <LinkCard title="Graph support" href="./pydantic_ai_graph_support/" />
   <LinkCard title="Durable execution" href="./pydantic_ai_durable_execution/" />
   <LinkCard title="Evals" href="./pydantic_ai_evals/" />
@@ -108,6 +109,7 @@ Condensed version history. The upstream [changelog](https://pydantic.dev/docs/ai
 | 2.51–2.59 | Sep–Oct 2026 | `Caching` and `LocalWorkspace` capabilities. |
 | 2.60 | Oct 2026 | `RetryPromptPart` deprecated for `ToolReturnPart(outcome='retried')` and `RetryFeedbackPart`; `'max'` thinking level; `FileUnderstanding` capability; `ModelSelectionContext` gains `usage_limits`, `deadline`, `run_id`, `conversation_id`. |
 | 2.61 | Oct 2026 | `Citations` capability and `TextPart.citations`; `thinking=False` sends the lowest accepted level on models that cannot disable thinking; async `auth` functions for hosted MCP capabilities. |
+| 2.62–2.63 | Oct 2026 | `BatchModelRequests` capability and `model_request_batch` for provider batch APIs; `PendingModelResponse`; `OpenAICompatibleProvider`; `ModelAuthenticationError`, `ModelNotFoundError` and `ModelRequestRejectedError`. |
 
 Version ranges are where a feature first appears in the published wheels; the changelog has exact versions.
 

@@ -92,7 +92,7 @@ Useful when you need to:
 - Share a single SDK client across many agents.
 - Point at a self-hosted OpenAI-compatible endpoint (pass `base_url=` to `OpenAIProvider`).
 
-OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1', api_key='...')`) unlock vLLM, LM Studio, oobabooga, or any homegrown server.
+OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1', api_key='...')`) unlock vLLM, LM Studio, oobabooga, or any homegrown server. For a service with no provider of its own, `OpenAICompatibleProvider` is the better fit: see [Any OpenAI-compatible service](#any-openai-compatible-service).
 
 ## `ModelSettings` — provider-agnostic knobs
 
@@ -585,6 +585,21 @@ model = OpenAIChatModel(
     provider=OpenAIProvider(base_url='http://localhost:8000/v1', api_key='x'),
 )
 ```
+
+### Any OpenAI-compatible service
+
+`OpenAICompatibleProvider` (`pydantic_ai.providers.openai_compatible`) is for a hosted gateway or server that speaks the OpenAI API but is not OpenAI. Unlike `OpenAIProvider`, it takes a required `name`, and a `vendor/model` name such as `qwen/qwen3-coder` gets that vendor's model profile.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.providers.openai_compatible import OpenAICompatibleProvider
+
+provider = OpenAICompatibleProvider('my-gateway', base_url='https://gateway.example.com/v1', api_key='...')
+agent = Agent(OpenAIChatModel('qwen/qwen3-coder', provider=provider))
+```
+
+The name identifies the service in message history and telemetry. Stateful data such as response and file IDs, and signed or encrypted data such as encrypted reasoning, is only sent back to a provider with a matching name (or `canonical_system`), so renaming it later stops history recorded under the old name from being replayed that way. Use `OpenAIResponsesModel` instead of `OpenAIChatModel` if the service implements the Responses API.
 
 `OpenAIProvider` injects `api_key='api-key-not-set'` when you pass `base_url` without a key, which keeps the OpenAI SDK happy against local servers that don't require auth.
 

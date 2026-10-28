@@ -30,7 +30,9 @@ RuntimeError
 │       ├── ModelHTTPError        # non-2xx HTTP from provider (has .status_code)
 │       ├── ModelRateLimitError, ModelQuotaExceededError, ModelServerError,
 │       │   ModelUnavailableError (→ ModelOverloadedError),
-│       │   ModelContextWindowExceededError, ModelConnectionError (→ ModelTimeoutError)
+│       │   ModelConnectionError (→ ModelTimeoutError),
+│       │   ModelRequestRejectedError (→ ModelAuthenticationError, ModelNotFoundError,
+│       │   ModelContextWindowExceededError)
 │       └── ...                   # HTTP errors are also raised as the matching category
 └── UserError                     # programming error (bad arguments, unsupported combination)
 
@@ -42,6 +44,17 @@ Exception
 ```
 
 The categorised `ModelAPIError` subclasses let you catch "rate limited" or "context window exceeded" without inspecting status codes per provider: a 429 from any provider is both a `ModelHTTPError` and a `ModelRateLimitError`.
+
+`ModelRequestRejectedError` covers requests the provider refused outright, where sending the same request again will not help. Its subclasses say why: `ModelAuthenticationError` (401/403, a bad or expired key), `ModelNotFoundError` (404, an unknown model name or a wrong base URL) and `ModelContextWindowExceededError`. `FallbackModel` falls back on all of them by default, since another provider may accept the request. `ModelHTTPError.for_category` builds one of these for tests and custom models:
+
+```python
+from pydantic_ai import ModelHTTPError
+from pydantic_ai.exceptions import ModelAuthenticationError, ModelRequestRejectedError
+
+error = ModelHTTPError.for_category(ModelAuthenticationError, status_code=401, model_name='my-model')
+print(isinstance(error, ModelHTTPError), isinstance(error, ModelRequestRejectedError))
+#> True True
+```
 
 ---
 

@@ -481,7 +481,7 @@ attempts = 0
 
 
 def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
-    # Keep calling the tool until it returns; a ModelRetry arrives as a RetryPromptPart, not a ToolReturnPart
+    # Keep calling the tool until it returns; a ModelRetry raised in a tool is recorded as a ToolReturnPart with outcome='retried'
     if any(isinstance(p, ToolReturnPart) for m in messages for p in m.parts):
         return ModelResponse(parts=[TextPart('recovered')])
     return ModelResponse(parts=[ToolCallPart('flaky', {})])
