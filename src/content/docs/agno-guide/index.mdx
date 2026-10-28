@@ -137,7 +137,7 @@ Condensed release history; dates are first PyPI uploads. Agno was previously pub
 | **2.0.0** | **Sep 2025** | **Major version.** `agno.storage` classes became `agno.db` classes, one instance shared by agents, teams and workflows; Playground replaced by AgentOS; Apps renamed Interfaces; Workflows rebuilt around steps; Memory, Knowledge, Teams and metrics reworked. |
 | 2.1–2.9 | Oct 2025 – Aug 2026 | Minor releases in the 2.x line (2.9.0 on 13 Aug 2026). |
 | **3.0.0** | **Aug 2026** | **Major version.** Runs stored one row per run (`agno_runs`) with `MigrationManager`; `user_id` isolation across memories, knowledge, evals, metrics and schedules; durable background queue (`QueueConfig`); workflow HITL moved to `HumanReview`; `reasoning=True`, `MultiMCPTools`, culture and several deprecated parameters removed. See [Upgrading from v2](/agno-guide/agno_comprehensive_guide/#upgrading-from-v2). |
-| 3.1.0 | Oct 2026 | Minor release, followed by patch releases up to 3.1.10 (23 Oct 2026). |
+| 3.1.0 | Oct 2026 | Minor release, followed by patch releases up to %%version=agno%%. |
 
 ---
 
@@ -146,3 +146,4 @@ Condensed release history; dates are first PyPI uploads. Agno was previously pub
 | Date | Summary |
 |------|---------|
 | 2026-10-24 | Guide written for agno %%version=agno%%: overview, comprehensive guide, teams, workflows, AgentOS, recipes, production and diagrams. Examples run offline with a scripted model. |
+| 2026-10-28 | Updated to agno %%version=agno%%. Added Skills, user-control-flow and user-feedback tools, chunking strategies and the recency and MMR rerankers to the comprehensive guide. Scripts and the offline knowledge examples were run; no vector database was available, so `Knowledge.insert(reader=...)` with a store was not run. |
