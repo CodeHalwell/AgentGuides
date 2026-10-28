@@ -24,7 +24,7 @@ A run passes through these layers, outermost first:
 1. **The run logger**, if `Config.Logger` is set (and `DisableRunLogs` is not). It logs `run invoked`, `run completed` with the duration, and `run failed` at error level; messages, options and updates only with `LogSensitiveData`.
 2. **`Config.Middlewares`**, in order: the first is outermost.
 3. **The agent lifecycle**: the history provider loads history, then each context provider adds context. After the provider finishes, history is stored and context providers are told the outcome.
-4. **Provider middleware**, inside the lifecycle: for the OpenAI, Foundry, Anthropic and Gemini providers this is the `toolautocall` tool loop, followed by message injection, per-call history persistence and structured-output decoding when configured.
+4. **Provider middleware**, inside the lifecycle: for the OpenAI, Foundry, Anthropic and Gemini providers structured-output decoding comes first when configured, so it reads the final response once the layers below it have finished (since 0.2.1, after the tool loop has completed successfully). Below that sit the `toolautocall` tool loop, message injection and per-call history persistence.
 5. **The provider's `Run`**, which calls the model.
 
 Function middleware is applied to every tool the loop executes, in registration order, first outermost.

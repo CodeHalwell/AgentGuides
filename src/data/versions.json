@@ -39,7 +39,7 @@
     },
     "github.com/microsoft/agent-framework-go": {
       "registry": "go",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "guide": "microsoft-agent-framework-guide"
     },
     "agent-framework-rs": {

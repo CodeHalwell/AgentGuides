@@ -785,7 +785,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// In v0.2.0 the response carries each request twice (once from the workflow,
+	// As of v0.2.1 the response carries each request twice (once from the workflow,
 	// once from the participant), so answer each tool call once.
 	var answers []message.Content
 	seen := map[string]bool{}
