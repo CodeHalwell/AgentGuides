@@ -892,16 +892,20 @@ run = agent.run("Book me a flight", session_id="s1")
 while run.is_paused:
     for req in run.active_requirements:
         if req.needs_user_feedback:       # ask_user: multiple choice
-            print([(q.header, q.question, [o.label for o in q.options]) for q in req.user_feedback_schema])
-            req.provide_user_feedback({"Which seat?": ["Window"]})   # keyed by question text
+            # answer every question the model asked, keyed by its text
+            req.provide_user_feedback({
+                q.question: [input(f"{q.question} {[o.label for o in q.options]}: ")]
+                for q in req.user_feedback_schema
+            })
         elif req.needs_user_input:        # get_user_input: free-form fields
-            print([(f.name, f.field_type, f.description) for f in req.user_input_schema])
-            req.provide_user_input({"city": "Leeds"})
+            req.provide_user_input({
+                f.name: input(f"{f.description or f.name}: ") for f in req.user_input_schema
+            })
     run = agent.continue_run(run_id=run.run_id, requirements=run.requirements, session_id="s1")
 ```
 
 - `UserControlFlowTools` adds `get_user_input(user_input_fields)`; the model lists the fields (name, type, description) it needs, as a form.
-- `UserFeedbackTools` adds `ask_user(questions)`; each `AskUserQuestion` has a `header`, the `question`, two to four `options` and `multi_select`. Selections are passed to `provide_user_feedback()` as `{question_text: [option_labels]}`.
+- `UserFeedbackTools` adds `ask_user(questions)`; each `AskUserQuestion` has a `header`, the `question`, two to four `options` and `multi_select`. Selections are passed to `provide_user_feedback()` as `{question_text: [option_labels]}`. Build both answers from the schemas on the requirement, as above: the model chooses the questions and fields, and a key that doesn't match one is ignored, leaving the requirement unanswered.
 - Check `needs_user_feedback` before `needs_user_input`: an `ask_user` requirement also reports `needs_user_input`, with no `user_input_schema`.
 
 `continue_run()` also takes `stream=True`, and `acontinue_run()` is the async form. In AgentOS the same flow is `POST /agents/{agent_id}/runs/{run_id}/continue`. Workflows have their own pause mechanism, `HumanReview`: see [Workflows](/agno-guide/agno_workflows/#human-review).
