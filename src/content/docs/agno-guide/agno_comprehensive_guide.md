@@ -607,6 +607,32 @@ Two retrieval styles:
 
 Readers for PDFs, Word, CSV, Markdown, web pages and more are chosen by file extension and live in `agno.knowledge.reader` (several need extras such as `agno[pdf]`). Embedders live in `agno.knowledge.embedder` (OpenAI, Gemini, Cohere, Mistral, Ollama, Voyage, sentence-transformers, …); vector stores in `agno.vectordb` (PgVector, LanceDB, Qdrant, Chroma, Pinecone, Weaviate, Milvus, MongoDB, Redis, …). A reranker can be set on `Knowledge(reranker=...)`.
 
+### Chunking and reranking
+
+Each reader splits documents with a chunking strategy from `agno.knowledge.chunking`, and you can pass your own to a reader and hand the reader to `insert()`:
+
+```python
+from agno.knowledge.chunking.recursive import RecursiveChunking
+from agno.knowledge.reader.text_reader import TextReader
+from agno.knowledge.reranker.recency import RecencyReranker
+
+reader = TextReader(chunking_strategy=RecursiveChunking(chunk_size=800, overlap=80))
+knowledge.insert(path="handbook.txt", reader=reader)
+
+knowledge.reranker = RecencyReranker(half_life_days=14, weight=0.5)
+knowledge.insert(
+    name="policy-2026",
+    text_content="Leave policy: 25 days.",
+    metadata={"updated_at": "2026-10-01T00:00:00+00:00"},
+)
+```
+
+- `FixedSizeChunking`, `RecursiveChunking` and `DocumentChunking` take `chunk_size` (default 5000 characters) and `overlap`; `overlap` must be smaller than `chunk_size`, and `RecursiveChunking` warns above 15%. `MarkdownChunking(split_on_headings=1..6)` splits at headings (it needs `pip install unstructured markdown`). `CodeChunking`, `RowChunking`, `SemanticChunking` and `AgenticChunking` are also in the package; the last two call an embedder or a model while ingesting.
+- `RecencyReranker` blends the search score with an exponential decay on a timestamp, so a superseded document ranks below its replacement unless it is clearly the better match. It reads `updated_at` from the document metadata (ISO-8601, `datetime` or epoch seconds) by default; change it with `timestamp_key`. `weight` is the share given to recency (0.3 by default) and `half_life_days` the age at which that share halves. If no result carries a timestamp it logs a warning and leaves the order unchanged.
+- `MMRReranker(lambda_mult=0.5)` drops near-duplicate results: it needs the vector store to return embeddings, which not every store does (see its docstring for the list).
+- Set the reranker on `Knowledge`, not on the vector database: the vector-db `reranker=` argument is deprecated. If both are set Agno logs a warning and applies only the one on `Knowledge`.
+
+
 ### Without embeddings
 
 `agno.knowledge.FileSystemKnowledge(base_dir=...)` searches a local directory with grep instead of a vector store, so it needs no embedder, vector database or ingestion step. `include_patterns` and `exclude_patterns` (defaults skip `.git`, `__pycache__`, `node_modules`, `.venv`, `venv`) choose the files, and `max_results` caps matches. It works as agentic RAG as soon as you pass it as `knowledge=`:
@@ -634,7 +660,7 @@ run = agent.run("How much annual leave do I get?")
 print([(t.tool_name, t.tool_args) for t in run.tools])   # [('search_knowledge_base', {'query': 'annual leave'})]
 ```
 
-In this release the agent's `search_knowledge_base(query)` tool calls the class's `retrieve()`, which greps the files and returns each matching file as a document. Two details checked against 3.1.10:
+In this release the agent's `search_knowledge_base(query)` tool calls the class's `retrieve()`, which greps the files and returns each matching file as a document. Two details checked against 3.1.11:
 
 - The class also defines three richer tools, `grep_file(query)`, `list_files(pattern)` and `get_file(path)`, and its `build_context()` text tells the model to use them. `Agent` does not register them for you, so with the code above the model is told about tools it does not have. To give it those tools, pass them yourself and switch the generic search tool off:
 
@@ -650,6 +676,35 @@ In this release the agent's `search_knowledge_base(query)` tool calls the class'
 
   The model can then list the folder, grep it and read a whole file. `FileSystemKnowledge` paths are resolved inside `base_dir`; a path that escapes it (`../secret.txt`) is reported as not found.
 - The same applies to your own classes. Anything implementing `agno.knowledge.protocol.KnowledgeProtocol` (`build_context`, `get_tools`, `aget_tools`, and optionally `retrieve` / `aretrieve`) can be passed as `knowledge=`. The agent adds `build_context()` to the system message and uses `retrieve()` for `search_knowledge_base` and for `add_knowledge_to_context=True`; it does not call `get_tools()`, so register those functions with `tools=` as above.
+
+## Skills
+
+A skill is a folder with a `SKILL.md` (YAML frontmatter with `name` and `description`, then instructions), plus optional `references/` documents and `scripts/` files. `agno.skills.Skills` loads them and gives the agent three tools. Only the names and descriptions go into the system message; the model loads the instructions when a task matches, which keeps the prompt short when you have many skills.
+
+```
+skills/
+  release-notes/
+    SKILL.md
+    references/style.md
+    scripts/lint.py        # needs a shebang line and the executable bit
+```
+
+```python
+from agno.agent import Agent
+from agno.models.openai import OpenAIResponses
+from agno.skills import LocalSkills, Skills
+
+agent = Agent(
+    model=OpenAIResponses(id="%%model=openai%%"),
+    skills=Skills(loaders=[LocalSkills("skills")]),
+)
+agent.run("Tidy these release notes: ...")
+```
+
+- `LocalSkills(path)` accepts one skill folder or a folder of skill folders. With `validate=True` (the default) a malformed skill raises `SkillValidationError` when the agent is built; the skill's `name` must match its folder name.
+- The tools are `get_skill_instructions(skill_name)`, `get_skill_reference(skill_name, reference_path)` and `get_skill_script(skill_name, script_path, execute=False, args=None, timeout=30)`. A script is only read unless the model passes `execute=True`.
+- Scripts run directly as subprocesses (the result carries `stdout`, `stderr` and `returncode`), so a script without a shebang line fails with `Exec format error`. A script is a way to let the model run code on the host: only load skill folders you trust.
+- `Skills(...).reload()` re-reads the folders; `get_skill_names()` lists what loaded.
 
 ## Reasoning
 
@@ -820,6 +875,34 @@ run = agent.continue_run(run_id=run.run_id, requirements=run.requirements, sessi
 
 - `requires_user_input`: the fields in `user_input_fields` are left for the user to supply; the others are filled by the model.
 - `external_execution`: Agno never calls the function. Your code runs the action and passes the result with `set_external_execution_result()`.
+
+Two toolkits let the *model* decide to ask, instead of you marking a function in advance. Both pause the run in the same way and are answered through `run.active_requirements`:
+
+```python
+from agno.tools.user_control_flow import UserControlFlowTools
+from agno.tools.user_feedback import UserFeedbackTools
+
+agent = Agent(
+    model=OpenAIResponses(id="%%model=openai%%"),
+    tools=[UserControlFlowTools(), UserFeedbackTools()],
+    db=SqliteDb(db_file="agno.db"),
+)
+
+run = agent.run("Book me a flight", session_id="s1")
+while run.is_paused:
+    for req in run.active_requirements:
+        if req.needs_user_feedback:       # ask_user: multiple choice
+            print([(q.header, q.question, [o.label for o in q.options]) for q in req.user_feedback_schema])
+            req.provide_user_feedback({"Which seat?": ["Window"]})   # keyed by question text
+        elif req.needs_user_input:        # get_user_input: free-form fields
+            print([(f.name, f.field_type, f.description) for f in req.user_input_schema])
+            req.provide_user_input({"city": "Leeds"})
+    run = agent.continue_run(run_id=run.run_id, requirements=run.requirements, session_id="s1")
+```
+
+- `UserControlFlowTools` adds `get_user_input(user_input_fields)`; the model lists the fields (name, type, description) it needs, as a form.
+- `UserFeedbackTools` adds `ask_user(questions)`; each `AskUserQuestion` has a `header`, the `question`, two to four `options` and `multi_select`. Selections are passed to `provide_user_feedback()` as `{question_text: [option_labels]}`.
+- Check `needs_user_feedback` before `needs_user_input`: an `ask_user` requirement also reports `needs_user_input`, with no `user_input_schema`.
 
 `continue_run()` also takes `stream=True`, and `acontinue_run()` is the async form. In AgentOS the same flow is `POST /agents/{agent_id}/runs/{run_id}/continue`. Workflows have their own pause mechanism, `HumanReview`: see [Workflows](/agno-guide/agno_workflows/#human-review).
 
