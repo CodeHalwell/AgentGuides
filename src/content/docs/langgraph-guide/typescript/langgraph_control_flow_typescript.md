@@ -93,6 +93,48 @@ console.log(done.messages.at(-1)?.content);     // Done.
 
 Each decision is `{ type: 'approve' }`, `{ type: 'edit', editedAction: { name, args } }`, `{ type: 'reject', message }` or `{ type: 'respond', message }`, one per pending tool call. More middleware is on the [middleware page](/langgraph-guide/typescript/langgraph_middleware_typescript/).
 
+### One interrupt per tool call
+
+By default the middleware raises a single interrupt for all gated calls in a model turn. Pass `interruptMode: 'per_call'` to raise one interrupt per gated call instead, so each can be answered separately (added in `langchain` 1.5.18). Each interrupt value has `type: 'tool_approval'`, plus `tool_call_id`, `name`, `args` and `description`. Filter them with `isToolApprovalInterrupt`, and resume with a map from interrupt ID to a single decision:
+
+```typescript
+import { createAgent, humanInTheLoopMiddleware, isToolApprovalInterrupt, tool, fakeModel } from 'langchain';
+import { AIMessage } from '@langchain/core/messages';
+import { Command, MemorySaver } from '@langchain/langgraph';
+import { z } from 'zod';
+
+const sendEmail = tool(async ({ to }) => `sent to ${to}`, {
+  name: 'send_email',
+  description: 'Send an e-mail',
+  schema: z.object({ to: z.string(), body: z.string() }),
+});
+
+const model = fakeModel()
+  .respondWithTools([
+    { name: 'send_email', args: { to: 'sam@example.com', body: 'Hi' } },
+    { name: 'send_email', args: { to: 'kim@example.com', body: 'Hi' } },
+  ])
+  .respond(new AIMessage('Done.'));
+
+const agent = createAgent({
+  model,
+  tools: [sendEmail],
+  middleware: [humanInTheLoopMiddleware({ interruptOn: { send_email: true }, interruptMode: 'per_call' })],
+  checkpointer: new MemorySaver(),
+});
+
+const config = { configurable: { thread_id: 'hitl-2' } };
+const paused = await agent.invoke({ messages: [{ role: 'user', content: 'Mail both' }] }, config);
+const pending = (paused.__interrupt__ ?? []).filter(isToolApprovalInterrupt);
+console.log(pending.length);   // 2
+
+const resume = Object.fromEntries(pending.map((i) => [i.id, { type: 'approve' }]));
+const done = await agent.invoke(new Command({ resume }), config);
+console.log(done.messages.at(-1)?.content);   // Done.
+```
+
+In this mode the middleware checks each answer before saving it. An `edit` decision (`{ type: 'edit', edited_action: { name, args } }`, with a snake-case key) cannot change the tool name, and its `args` must match the tool's schema. An invalid answer throws a `ZodError` and is not saved, so the interrupt can be answered again. If you send several answers together and one is invalid, the tools for the others may already have run, so validate first or answer one at a time. List this middleware before any tool-retry or error-handling middleware, and keep earlier middleware free of side effects, because it runs again for each paused call on resume.
+
 ## Routing with `Command`
 
 A node can return a `Command` that updates state and chooses the next node in one step. Declare the possible targets with `ends` so the builder can type-check the graph and draw the edges:
