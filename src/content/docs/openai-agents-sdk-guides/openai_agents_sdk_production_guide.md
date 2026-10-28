@@ -340,6 +340,8 @@ asyncio.run(main())
 
 Two SDK-level levers reduce cost: route simple work to a smaller model (`model="%%model=openai-small%%"` on that agent), and keep stable instructions and tool definitions at the start of the prompt so prompt caching applies (`ModelSettings(prompt_cache_retention=...)` extends how long cached prefixes live).
 
+Long runs also pay for old tool output on every turn. `ToolOutputTrimmer` trims oversized results from earlier turns before each model call; see [Trimming old tool output](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#trimming-old-tool-output). For agents with many tools, `ToolSearchTool()` with deferred tools keeps unused definitions out of the prompt; see [Tool search and namespaces](/openai-agents-sdk-guides/openai_agents_sdk_comprehensive_guide/#tool-search-and-namespaces).
+
 ## Testing without the API
 
 `agents.testing` (since 0.21) provides `ScriptedModel`, a deterministic `Model` that returns the steps you give it and records every call. Tests run offline, in milliseconds, and can assert on exactly which tools the agent called and what it sent to the model.

@@ -1344,6 +1344,35 @@ async def main():
 asyncio.run(main())
 ```
 
+### Deciding When a Tool Result Ends the Run
+
+By default the model sees every tool result and decides what to do next (`tool_use_behavior="run_llm_again"`). For a fixed rule, pass `"stop_on_first_tool"` or `{"stop_at_tool_names": [...]}`. For anything else, pass a function that receives the run context and the list of `FunctionToolResult`s from that turn and returns a `ToolsToFinalOutputResult`. It may be async.
+
+```python
+from agents import Agent, Runner, function_tool
+from agents.agent import ToolsToFinalOutputResult
+
+@function_tool
+def lookup(order_id: str) -> str:
+    """Look up an order."""
+    return f"order {order_id}: shipped"
+
+def finish_when_shipped(ctx, results):
+    for result in results:
+        if "shipped" in str(result.output):
+            return ToolsToFinalOutputResult(is_final_output=True, final_output=str(result.output))
+    return ToolsToFinalOutputResult(is_final_output=False)  # let the model continue
+
+agent = Agent(
+    name="Orders",
+    instructions="Answer questions about orders.",
+    tools=[lookup],
+    tool_use_behavior=finish_when_shipped,
+)
+```
+
+When `is_final_output` is true, `final_output` becomes `result.final_output` without another model call, so it must match the agent's `output_type` if one is set. `Agent.reset_tool_choice` (default `True`) resets a forced `tool_choice` after a tool call, which stops a forced tool from looping.
+
 ### Error Handling in Tools
 
 Handle tool errors gracefully:
@@ -1461,6 +1490,39 @@ print(result.final_output)
 ```
 
 `@tool` (from `agents.decorators`, also 0.19) is an alias for `@function_tool`.
+
+### Tool Search and Namespaces
+
+An agent with many tools pays for every definition on every call. On OpenAI Responses models you can instead hide tools until the model asks for them. Mark function tools `defer_loading=True`, or group them with `tool_namespace(...)`, and add one `ToolSearchTool()` so the model can search and load them:
+
+```python
+from agents import Agent, ToolSearchTool, function_tool, tool_namespace
+
+@function_tool(defer_loading=True)
+def get_invoice(invoice_id: str) -> str:
+    """Fetch an invoice."""
+    return f"invoice {invoice_id}"
+
+@function_tool(defer_loading=True)
+def refund_invoice(invoice_id: str) -> str:
+    """Refund an invoice."""
+    return f"refunded {invoice_id}"
+
+agent = Agent(
+    name="Billing",
+    model="%%model=openai%%",
+    tools=[
+        *tool_namespace(
+            name="billing",
+            description="Look up and refund invoices.",
+            tools=[get_invoice, refund_invoice],
+        ),
+        ToolSearchTool(),
+    ],
+)
+```
+
+`tool_namespace` returns copies of the tools tagged with the namespace; it takes a non-empty `name` and `description` and accepts only `FunctionTool`s. The SDK checks the combination when the request is built: a deferred tool without `ToolSearchTool()` raises `UserError`, as does `ToolSearchTool()` with nothing searchable, or more than one of it. Hosted MCP servers can be deferred too, with `tool_config={..., "defer_loading": True}`. These features are Responses-only, so they are rejected on Chat Completions models. `ToolSearchTool(execution="client")` is for manual Responses orchestration; the standard runner does not execute client-side searches.
 
 ---
 
@@ -2533,6 +2595,26 @@ async def main():
 asyncio.run(main())
 ```
 
+### Trimming Old Tool Output
+
+Long runs accumulate large tool results (search hits, command output) that the model rarely needs again. `ToolOutputTrimmer` is a ready-made `call_model_input_filter` that replaces oversized outputs from older turns with a short preview before each model call. It does not modify the stored history, only what is sent.
+
+```python
+from agents import RunConfig
+from agents.extensions import ToolOutputTrimmer
+
+config = RunConfig(
+    call_model_input_filter=ToolOutputTrimmer(
+        recent_turns=2,          # the last two user messages and everything after stay intact
+        max_output_chars=500,    # outputs longer than this are candidates
+        preview_chars=200,       # characters kept from a trimmed output
+        trimmable_tools={"search"},  # None means every tool; "namespace.name" also works
+    ),
+)
+```
+
+A trimmed output reads `[Trimmed: search output — 5000 chars → 200 char preview]` followed by the preview. Structured outputs keep their text parts and drop images and files, and deferred-tool search results lose long descriptions and schema prose. Use your own filter if you need different rules; the callback receives `CallModelData` and returns `ModelInputData`.
+
 ---
 
 ## Responses API Integration
@@ -3167,6 +3249,7 @@ To switch transport globally instead, call `set_default_openai_responses_transpo
 
 | Version | Date | Changes |
 |---------|------|---------|
+| %%version=openai-agents%% | %%versions-checked%% | Added custom `tool_use_behavior` functions, tool search and namespaces, and `ToolOutputTrimmer`. |
 | %%version=openai-agents%% | 2026-10-24 | Audit: wrapped the run-result snippet in an async function; removed an incorrect claim that the cheap-model example used the SDK default model; noted the sandbox example's `data/` prerequisite. |
 | %%version=openai-agents%% | %%versions-checked%% | Fixed hosted-tool examples (`tool_config` is required for code interpreter and image generation), non-strict output types (`AgentOutputSchema`), the MCP Git server and GitHub MCP URL, and a session example that indexed a coroutine. Replaced the abstract custom-MCP-server class with a real MCP server, the placeholder voice and CLI examples with `RealtimeAgent` and `VoicePipeline`, and the hand-rolled retry and live-API tests with `ModelSettings.retry` and `ScriptedModel`. Added handoff input filters, hosted MCP, programmatic tool calling and Chat Completions. Moved the release table to the overview. Earlier in the same revision: re-verified against the current release (first written for 0.6.x, last revised for 0.17.4). Replaced APIs that never existed or were removed (`InMemorySession`, `ComputerControlTool`, `get_trace_context`, `result.output_reasoning`/`.messages`/`.agent`/`.usage`, `temperature`/`max_tokens` on `Agent`, `response_format` on `ModelSettings`, `agents.transports`); rewrote the Sandbox Agents and WebSocket sections against the real API; replaced the breaking-changes table with the upstream changelog (0.4–0.22); updated model names and install extras. |
 | 0.17.4 | May 27, 2026 | Version bump; key symbols re-checked. |
