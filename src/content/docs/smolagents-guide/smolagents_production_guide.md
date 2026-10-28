@@ -380,7 +380,7 @@ def resilient_run(task: str, attempts: int = 3):
             raise                                # interrupted or unrecoverable: do not retry blindly
 ```
 
-For provider failover, use `LiteLLMRouterModel` with several deployments, or catch `AgentGenerationError` and rebuild the agent with a fallback model.
+Rate-limit errors (`429`, "rate limit", "too many requests") are already retried by the API model classes: three attempts, starting with a 60-second wait that doubles each time. That wait blocks the run, so for latency-sensitive services pass `retry=False` and handle it here, and cap throughput with `requests_per_minute` (see [rate limits and retries](/smolagents-guide/smolagents_comprehensive_guide/#rate-limits-and-retries)). For provider failover, use `LiteLLMRouterModel` with several deployments, or catch `AgentGenerationError` and rebuild the agent with a fallback model.
 
 ---
 
