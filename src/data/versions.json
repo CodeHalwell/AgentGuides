@@ -146,12 +146,12 @@
     },
     "crewai": {
       "registry": "pypi",
-      "version": "1.15.30",
+      "version": "1.15.32",
       "guide": "crewai-guide"
     },
     "crewai-tools": {
       "registry": "pypi",
-      "version": "1.15.30",
+      "version": "1.15.32",
       "guide": "crewai-guide"
     },
     "ag2": {
