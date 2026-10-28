@@ -156,7 +156,7 @@
     },
     "ag2": {
       "registry": "pypi",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "guide": "ag2-guide"
     },
     "autogen": {
