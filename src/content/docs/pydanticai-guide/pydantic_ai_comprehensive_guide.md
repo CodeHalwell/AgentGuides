@@ -1018,6 +1018,7 @@ The public API grouped by area, with the page that covers each part. Everything 
 | `CancellationToken`, `RunCancelled`, `RunTimedOut` | `pydantic_ai`, `pydantic_ai.exceptions` | [Error handling](/pydanticai-guide/pydantic_ai_advanced_error_testing/#cancellation-and-timeouts--runcancelled--runtimedout) |
 | `capture_run_messages` | `pydantic_ai` | [Message history](/pydanticai-guide/pydantic_ai_message_history/#capture_run_messages--inspect-mid-failure) |
 | `model_request`, `model_request_sync`, `model_request_stream`, `model_request_stream_sync` | `pydantic_ai.direct` | [Direct API](/pydanticai-guide/pydantic_ai_direct_api/) |
+| `model_request_batch`, `BatchModelRequests`, `PendingModelResponse` | `pydantic_ai.direct`, `pydantic_ai.capabilities`, `pydantic_ai` | [Batch processing](/pydanticai-guide/pydantic_ai_batch/) |
 
 ### Models and providers
 
@@ -1103,7 +1104,8 @@ AgentRunError (RuntimeError)
     │   └── ModelTimeoutError
     ├── ModelRequestTimeout
     └── ModelRateLimitError, ModelQuotaExceededError, ModelServerError,
-        ModelContextWindowExceededError, ModelUnavailableError (└── ModelOverloadedError)
+        ModelRequestRejectedError (→ ModelAuthenticationError, ModelNotFoundError,
+        ModelContextWindowExceededError), ModelUnavailableError (└── ModelOverloadedError)
         — when one comes from an HTTP response it is also a ModelHTTPError
 UserError (RuntimeError)          — a programming mistake, raised before or during a run
 FallbackExceptionGroup            — every model in a FallbackModel failed
