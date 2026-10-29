@@ -507,6 +507,77 @@ print([d.content for d in store.filter_documents(filters=recent_english)])
 - **Persistence.** The in-memory store lives in the process. `store.save_to_disk(path)` and `InMemoryDocumentStore.load_from_disk(path)` write and restore it as JSON, embeddings included; use an integration store when several processes need the same data.
 - **Experimental helpers.** `TextEmbeddingRetriever` (wraps a text embedder and an embedding retriever into one component) and `MultiRetriever` (runs several text retrievers in parallel and merges their results) are in `haystack.components.retrievers`. `MultiRetriever` is marked experimental in the source and may change without a deprecation cycle.
 
+#### Chunking, context windows and routing
+
+Small chunks retrieve precisely but read poorly. Two retrievers widen the context after the match, and two routers decide what to index or search in the first place. All four run offline.
+
+`SentenceWindowRetriever` takes the documents a first-stage retriever returned and fetches their neighbours from the store. It relies on the `source_id` and `split_id` metadata that `DocumentSplitter` writes, so index with a splitter and keep the same store:
+
+```python
+from haystack import Document
+from haystack.components.preprocessors import DocumentSplitter
+from haystack.components.retrievers import SentenceWindowRetriever
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+text = ". ".join(f"Sentence {i} about topic{i}" for i in range(1, 9)) + "."
+chunk_store = InMemoryDocumentStore()
+chunk_store.write_documents(
+    DocumentSplitter(split_by="period", split_length=1, split_overlap=0).run([Document(content=text)])["documents"]
+)
+
+hit = InMemoryBM25Retriever(document_store=chunk_store, top_k=1).run(query="topic4")["documents"]
+window = SentenceWindowRetriever(document_store=chunk_store, window_size=1)
+print(window.run(retrieved_documents=hit)["context_windows"])
+# [' Sentence 3 about topic3. Sentence 4 about topic4. Sentence 5 about topic5.']
+```
+
+`window_size=1` adds one neighbour on each side. The output also has `context_documents`, the same documents in order. `split_by="sentence"` works too but needs `pip install nltk`.
+
+`HierarchicalDocumentSplitter` and `AutoMergingRetriever` solve the same problem differently. The splitter writes a tree: the whole document at level 0, then one level per entry in `block_sizes`, each chunk recording `__parent_id` and `__children_ids`. You index the whole tree, but retrieve only the leaves. When more than `threshold` of a parent's leaves are retrieved, the retriever returns the parent instead:
+
+```python
+from haystack.components.preprocessors import HierarchicalDocumentSplitter
+from haystack.components.retrievers import AutoMergingRetriever
+
+text = " ".join(f"w{i}" for i in range(1, 13))
+tree = HierarchicalDocumentSplitter(block_sizes={6, 3}, split_by="word").run([Document(content=text)])["documents"]
+tree_store = InMemoryDocumentStore()
+tree_store.write_documents(tree)
+
+leaves = [d for d in tree if d.meta["__level"] == 2]
+merger = AutoMergingRetriever(document_store=tree_store, threshold=0.5)
+print([d.content for d in merger.run(documents=leaves[:2])["documents"]])  # both children of one parent
+# ['w1 w2 w3 w4 w5 w6 ']
+print([d.content for d in merger.run(documents=leaves[:1])["documents"]])  # half is not above 0.5
+# ['w1 w2 w3 ']
+```
+
+In a real pipeline, point an embedding or BM25 retriever at a store holding only the leaves' embeddings (or filter on `meta.__level`), and keep the parents in a second store that `AutoMergingRetriever` reads.
+
+`MetadataRouter` sends documents to named outputs using the filter syntax above, and anything matching no rule goes to `unmatched`. `FileTypeRouter` does the same for files by MIME type, which is how an indexing pipeline sends PDFs and plain text to different converters:
+
+```python
+from haystack.components.routers import FileTypeRouter, MetadataRouter
+from haystack.dataclasses import ByteStream
+
+by_lang = MetadataRouter(rules={"en": {"field": "meta.lang", "operator": "==", "value": "en"}})
+routed = by_lang.run(documents=[Document(content="a", meta={"lang": "en"}), Document(content="b", meta={"lang": "fr"})])
+print({name: [d.content for d in docs] for name, docs in routed.items()})
+# {'en': ['a'], 'unmatched': ['b']}
+
+files = FileTypeRouter(mime_types=["text/plain", "application/pdf"])
+out = files.run(sources=[
+    ByteStream.from_string("hello", mime_type="text/plain"),
+    ByteStream(data=b"%PDF-", mime_type="application/pdf"),
+    ByteStream(data=b"\x89PNG", mime_type="image/png"),
+])
+print({name: len(items) for name, items in out.items()})
+# {'text/plain': 1, 'application/pdf': 1, 'unclassified': 1}
+```
+
+`FileTypeRouter` accepts paths as well as `ByteStream`s. A path that does not exist goes to a `failed` output, or raises if you pass `raise_on_failure=True`.
+
 ### Agent Concepts in Haystack
 
 The `Agent` component (`haystack.components.agents.Agent`) runs this loop:
@@ -1667,7 +1738,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 
 | Date | Version | Changes |
 |------|---------|---------|
-| %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. |
+| %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. Added chunking and routing: `SentenceWindowRetriever`, `HierarchicalDocumentSplitter` with `AutoMergingRetriever`, `MetadataRouter` and `FileTypeRouter`. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
 | June 2026 | 2.30.0 | Last 2.x revision. |
 | November 2025 | 2.20.0 | First documented version. |
