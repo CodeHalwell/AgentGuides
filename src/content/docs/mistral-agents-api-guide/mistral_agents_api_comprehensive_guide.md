@@ -179,11 +179,17 @@ versions = client.beta.agents.list_versions(agent_id=agent.id)
 client.beta.agents.update_version(agent_id=agent.id, version=0)        # roll back
 client.beta.agents.create_version_alias(agent_id=agent.id, alias="prod", version=1)
 
+client.beta.agents.get_version(agent_id=agent.id, version="1")         # one version (version is a string here)
+client.beta.agents.list_version_aliases(agent_id=agent.id)             # every alias and the version it points to
+client.beta.agents.delete_version_alias(agent_id=agent.id, alias="prod")
+
 # Start a conversation on a specific version or alias
 response = client.beta.conversations.start(
     agent_id=agent.id, agent_version="prod", inputs="What changed in EU AI rules this month?"
 )
 ```
+
+`list_versions()` is offset-paginated (`page`, `page_size`, default 20) and returns a plain list of `Agent` objects, newest first. Note that `update_version()` takes an integer `version`, whereas `get_version()` takes a string.
 
 ---
 

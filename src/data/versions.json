@@ -1,6 +1,6 @@
 {
   "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
-  "checked": "2026-10-28",
+  "checked": "2026-10-29",
   "packages": {
     "agent-framework": {
       "registry": "pypi",
@@ -236,12 +236,12 @@
     },
     "mistralai": {
       "registry": "pypi",
-      "version": "3.5.0",
+      "version": "3.6.0",
       "guide": "mistral-agents-api-guide"
     },
     "@mistralai/mistralai": {
       "registry": "npm",
-      "version": "3.3.0",
+      "version": "3.4.0",
       "guide": "mistral-agents-api-guide"
     },
     "boto3": {
