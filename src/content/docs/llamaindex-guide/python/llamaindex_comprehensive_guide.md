@@ -1697,7 +1697,7 @@ engine = RetrieverQueryEngine.from_args(retriever)
 
 ### 19.10 Document summary index
 
-`DocumentSummaryIndex` asks the LLM for one summary per document at build time, then retrieves whole documents by matching the query against those summaries. It costs one summarisation call per document up front, which suits a modest collection of long documents where chunk-level retrieval loses the document's theme:
+`DocumentSummaryIndex` asks the LLM for one summary per document at build time, then retrieves whole documents by matching the query against those summaries. It stores one summary per document, but producing it costs at least one LLM call per document up front, and several for a document too long for the context window (`tree_summarize` summarises each chunk, then summarises those summaries). That suits a modest collection of long documents where chunk-level retrieval loses the document's theme:
 
 ```python
 from llama_index.core import DocumentSummaryIndex, get_response_synthesizer
