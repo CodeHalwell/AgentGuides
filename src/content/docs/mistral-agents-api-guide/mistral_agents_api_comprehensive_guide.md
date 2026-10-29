@@ -185,6 +185,16 @@ response = client.beta.conversations.start(
 )
 ```
 
+Other version calls:
+
+```python
+client.beta.agents.get_version(agent_id=agent.id, version="1")         # one version (version is a string here)
+client.beta.agents.list_version_aliases(agent_id=agent.id)             # every alias and the version it points to
+client.beta.agents.delete_version_alias(agent_id=agent.id, alias="staging")
+```
+
+`list_versions()` is offset-paginated (`page`, `page_size`, default 20) and returns a plain list of `Agent` objects. Note that `update_version()` takes an integer `version`, whereas `get_version()` takes a string.
+
 ---
 
 ## 5. Conversations
