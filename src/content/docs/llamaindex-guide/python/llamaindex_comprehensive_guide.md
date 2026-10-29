@@ -1667,6 +1667,58 @@ for i, source in enumerate(response.source_nodes, start=1):
 
 The model decides where to place markers, so check that cited numbers exist before showing them to users, and do not treat a marker as proof that the cited text supports the claim; `FaithfulnessEvaluator` (section 21.1) tests that.
 
+### 19.9 Recursive retrieval over summaries
+
+`IndexNode` is a node that points at something else by `index_id`. Index short summaries (or table captions, or questions a chunk answers) at the top level, and `RecursiveRetriever` follows the matching pointer to a query engine or retriever that holds the detail. Use it when whole documents are too large to embed usefully but a summary identifies them well:
+
+```python
+from llama_index.core import VectorStoreIndex
+from llama_index.core.query_engine import RetrieverQueryEngine
+from llama_index.core.retrievers import RecursiveRetriever
+from llama_index.core.schema import IndexNode, TextNode
+
+keys_engine = VectorStoreIndex([TextNode(text="Rotate keys every 90 days.")]).as_query_engine()
+billing_engine = VectorStoreIndex([TextNode(text="Invoices are issued monthly.")]).as_query_engine()
+
+top = VectorStoreIndex([
+    IndexNode(text="Key rotation and credential policy", index_id="keys"),
+    IndexNode(text="Billing and invoices", index_id="billing"),
+])
+
+retriever = RecursiveRetriever(
+    "root",
+    retriever_dict={"root": top.as_retriever(similarity_top_k=1)},
+    query_engine_dict={"keys": keys_engine, "billing": billing_engine},
+)
+engine = RetrieverQueryEngine.from_args(retriever)
+```
+
+`index_id` values must match a key in `query_engine_dict` (the target is queried and its answer returned as a node) or in `retriever_dict` (the target is retrieved from and its nodes returned). A chain of `IndexNode`s can be followed more than one level deep. Pass `verbose=True` to print each hop while tuning.
+
+### 19.10 Document summary index
+
+`DocumentSummaryIndex` asks the LLM for one summary per document at build time, then retrieves whole documents by matching the query against those summaries. It costs one summarisation call per document up front, which suits a modest collection of long documents where chunk-level retrieval loses the document's theme:
+
+```python
+from llama_index.core import DocumentSummaryIndex, get_response_synthesizer
+from llama_index.core.indices.document_summary import DocumentSummaryIndexLLMRetriever
+
+summary_index = DocumentSummaryIndex.from_documents(
+    documents,                       # give each Document a stable doc_id
+    response_synthesizer=get_response_synthesizer(response_mode="tree_summarize", use_async=True),
+    show_progress=True,
+)
+print(summary_index.get_document_summary(documents[0].doc_id))
+
+# Default retriever: embeds the query and compares it with the summaries
+retriever = summary_index.as_retriever(similarity_top_k=2)
+
+# Alternative: let the LLM choose among summaries (more calls, no embeddings involved)
+llm_retriever = DocumentSummaryIndexLLMRetriever(summary_index, choice_batch_size=10, choice_top_k=2)
+```
+
+Retrieval returns the chunks of the chosen documents, so pair it with a post-processor or a small `similarity_top_k` if the documents are long. The summaries are persisted with the index; re-ingesting a changed document means re-summarising it.
+
 ---
 
 ## 20. Prompts
@@ -1793,6 +1845,7 @@ Notes:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-10-29 | 0.14.25 / workflows 2.26.1 | Added recursive retrieval with `IndexNode` and `RecursiveRetriever` (19.9) and `DocumentSummaryIndex` (19.10). |
 | 2026-10-24 | 0.14.25 / workflows 2.26.1 | Added response modes and explicit query-engine assembly (3.7), chat engine modes and streaming (3.8), metadata filter operators (3.6), chunking strategies and metadata extractors (3.11), sentence-window and auto-merging retrieval (19.6), HyDE query transformation (19.7) and citation query engine (19.8). Documented `max_iterations` default and `early_stopping_method`, and the `refresh_ref_docs` behaviour after `from_vector_store`. |
 | 2026-10-24 | 0.14.25 / workflows 2.26.1 | Section 13 cut to an introduction; Workflows now have their own [page](/llamaindex-guide/python/llamaindex_workflows/). Its retry example used the deprecated `ConstantDelayRetryPolicy`. |
 | 2026-10-21 | 0.14.25 | Added property graphs (3.9), multimodal (3.10), `WorkflowServer`/`WorkflowClient`/`llamactl` serving (14), LlamaParse via the `llama-cloud` SDK (18.2) and evaluation datasets (21.2). `SubQuestionQueryEngine` example now passes `question_gen` (the default needs a package that cannot be installed with current releases). |
