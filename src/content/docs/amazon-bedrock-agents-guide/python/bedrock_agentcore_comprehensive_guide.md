@@ -949,6 +949,31 @@ control.update_agent_runtime(
 control.delete_agent_runtime(agentRuntimeId=runtime_id)
 ```
 
+### Waiting for a runtime with the SDK client
+
+`create_agent_runtime` returns while the runtime is still `CREATING`, so a script that invokes it straight away can fail. Rather than writing a polling loop, use `AgentCoreRuntimeClient` from `bedrock-agentcore`, which wraps the control plane with `*_and_wait` methods. They accept the same arguments as the boto3 calls, in snake case or camel case, and an optional `WaitConfig`:
+
+```python
+from bedrock_agentcore.runtime import AgentCoreRuntimeClient, WaitConfig
+
+client = AgentCoreRuntimeClient(region_name="us-west-2")
+
+runtime = client.create_agent_runtime_and_wait(
+    wait_config=WaitConfig(max_wait=600, poll_interval=15),
+    agent_runtime_name="DataAnalysisAgent",
+    agent_runtime_artifact={
+        "containerConfiguration": {
+            "containerUri": "111122223333.dkr.ecr.us-west-2.amazonaws.com/data-analysis-agent:latest"
+        }
+    },
+    role_arn="arn:aws:iam::111122223333:role/AgentRuntimeRole",
+    network_configuration={"networkMode": "PUBLIC"},
+)
+print(runtime["status"])  # READY
+```
+
+`WaitConfig` defaults to `max_wait=300` and `poll_interval=10` (both in seconds, and both must be at least 1). The method returns the runtime description once it is `READY`. It raises `RuntimeError` if the runtime reaches `CREATE_FAILED` or `UPDATE_FAILED`, and `TimeoutError` if `max_wait` passes first. The same pattern exists as `update_agent_runtime_and_wait`, `delete_agent_runtime_and_wait`, `create_agent_runtime_endpoint_and_wait` and `update_agent_runtime_endpoint_and_wait`. `teardown_endpoint_and_runtime(agent_runtime_id, endpoint_name="DEFAULT")` deletes the endpoint and then the runtime, and ignores `ResourceNotFoundException` for either, which makes it safe for test clean-up. Other clients in the SDK, such as the gateway and evaluation clients, take the same `WaitConfig`.
+
 ---
 
 ## Integration Patterns
