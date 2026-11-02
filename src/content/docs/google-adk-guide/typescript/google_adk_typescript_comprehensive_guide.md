@@ -352,7 +352,7 @@ export const shopAssistant = new LlmAgent({
 });
 ```
 
-Gemini does not accept every built-in tool alongside function tools in one request. Wrapping the searching agent in `AgentTool`, as here, is the dependable way to combine them. `AgentToolConfig` also accepts `skipSummarization`, but 2.3.0 stores the flag without acting on it.
+Gemini does not accept every built-in tool alongside function tools in one request. Wrapping the searching agent in `AgentTool`, as here, is the dependable way to combine them. `AgentToolConfig` also accepts `skipSummarization`, but 2.4.0 stores the flag without acting on it.
 
 Other ready-made tools in the package: `LOAD_MEMORY` and `PRELOAD_MEMORY` ([Memory](#memory)), `LoadArtifactsTool` ([Artifacts](#artifacts)), `EXIT_LOOP` (for the deprecated `LoopAgent`), `LOAD_WEB_PAGE`, `OpenAPIToolset` (tools from an OpenAPI spec), `APIHubToolset`, `ApplicationIntegrationToolset`, the Google API toolsets (`bigqueryToolSet`, `calendarToolSet`, `gmailToolSet` and others), `MCPToolset` ([MCP](#mcp)) and `SkillToolset` for skill folders.
 
@@ -515,7 +515,7 @@ export const coordinator = new LlmAgent({
 
 ## Workflows
 
-A `Workflow` is a graph of nodes. Agents, tools and plain functions can all be nodes, and `FunctionNode` names a function. Edges are arrays: a chain of nodes, with a nested array for a parallel fan-out and an object for routing. `Workflow` is marked experimental in 2.3.0 and logs a warning when constructed.
+A `Workflow` is a graph of nodes. Agents, tools and plain functions can all be nodes, and `FunctionNode` names a function. Edges are arrays: a chain of nodes, with a nested array for a parallel fan-out and an object for routing. `Workflow` is marked experimental in 2.4.0 and logs a warning when constructed.
 
 Each node receives the previous node's output as its input and produces an output of its own; an agent node's output is its final reply. The first node after `START` receives the user's message text. Events from nodes carry the output in `event.output`.
 
@@ -706,7 +706,7 @@ for await (const event of runner.runAsync({
 
 With `rerunOnResume: true` the node runs again and finds the answer in `ctx.resumeInputs[interruptId]`. Without it (the default), the answer itself becomes the node's output and the workflow moves on to the next node. Pausing only works with `runAsync` on a stored session, because the resumed run reads the paused one from the session's events; use a persistent session service if the answer can arrive after a restart.
 
-Two limits in 2.3.0: a `Workflow` cannot be an `LlmAgent` sub-agent (use it as the root of a `Runner` or `App`, or as a node in another workflow), and agent nodes in `mode: 'task'` get a `finish_task` tool and keep going until they call it, which is how you get multi-turn work out of a node.
+Two limits, observed in 2.3.0: a `Workflow` is not meant to be an `LlmAgent` sub-agent (the constructor accepts it in 2.4.0, but this has not been run end to end; use it as the root of a `Runner` or `App`, or as a node in another workflow), and agent nodes in `mode: 'task'` get a `finish_task` tool and keep going until they call it, which is how you get multi-turn work out of a node.
 
 ## Sessions and state
 
