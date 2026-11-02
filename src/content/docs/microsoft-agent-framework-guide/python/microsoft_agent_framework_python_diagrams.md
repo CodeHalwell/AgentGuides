@@ -10,7 +10,7 @@ sidebar:
 
 This document provides visual references for the architecture, data flow, and deployment topology of Python-based agent systems.
 
-**Target Platform:** Python 3.10+
+**Target Platform:** Python 3.11+
 
 ---
 

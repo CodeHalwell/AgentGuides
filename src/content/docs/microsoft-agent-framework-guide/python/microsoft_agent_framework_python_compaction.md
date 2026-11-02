@@ -10,7 +10,7 @@ sidebar:
 
 Long-running agents blow through the context window. Compaction strategies decide which messages to keep, which to drop, and which to replace with shorter summaries — **per turn**, before the messages reach the model.
 
-Seven first-class strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.6.0) (`agent_framework._compaction`).
+Seven general-purpose strategies ship in `agent_framework`, plus a `CompactionProvider` that plugs any strategy into the session pipeline. Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.6.0) (`agent_framework._compaction`).
 
 ## Mental model
 
@@ -27,6 +27,7 @@ Compaction sees your conversation as an ordered list of **message groups** (user
 | `SummarizationStrategy` | LLM-summarise older groups into a single message | Long chats where earlier context still matters |
 | `TokenBudgetComposedStrategy` | Run other strategies until a token budget is met | Hard limit per turn; compose lighter strategies first |
 | `ContextWindowCompactionStrategy` | Two thresholds derived from the model's window: collapse old tool results, then truncate | You know the model's context and output limits and want a sensible default |
+| `AgentTriggeredCompactionStrategy` (experimental) | Wraps another strategy and runs it only after the model calls a trigger tool | The agent knows best when a phase of work is finished |
 
 All implement `CompactionStrategy`:
 
@@ -490,6 +491,47 @@ agent = Agent(
 ```
 
 Use `TokenBudgetComposedStrategy` instead when you want summarisation in the pipeline or a custom ordering. This strategy never calls a model.
+
+## Letting the agent trigger compaction (experimental)
+
+Added in 1.24.0. Every strategy above runs on a threshold the framework checks. `AgentTriggeredCompactionStrategy` instead wraps an existing strategy and runs it only after the model has called a trigger tool, for example once a research phase is finished and its tool output is no longer needed. Both classes are marked experimental and emit an `ExperimentalWarning` when constructed.
+
+```python
+from agent_framework import Agent, AgentTriggeredCompactionStrategy, ToolResultCompactionStrategy, tool
+from agent_framework.openai import OpenAIChatClient
+
+
+@tool(approval_mode="never_require")
+def search_docs(query: str) -> str:
+    """Search the documentation."""
+    return f"Results for {query}"
+
+
+compaction = AgentTriggeredCompactionStrategy(
+    ToolResultCompactionStrategy(keep_last_tool_call_groups=1),
+    # tool_name="compact_context", approval_mode="never_require", exclude_trigger=False  (defaults)
+)
+
+agent = Agent(
+    client=OpenAIChatClient(model="%%model=openai%%"),
+    tools=[search_docs, compaction.tool],      # the trigger tool is registered explicitly
+    compaction_strategy=compaction,
+    default_options={"store": False},          # required: history must be client-managed
+)
+```
+
+The strategy does not add its tool for you: pass `compaction.tool` in `tools`. When the model has called it and the call has completed, the wrapped strategy runs once before the next model call. The trigger call is consumed, so it does not fire again on later turns. With `exclude_trigger=False` (the default) the call and its result stay in the history so the model can see that compaction happened.
+
+The requirement for client-managed history is enforced: a chat client rejects the strategy when service-side storage or a conversation ID is in use. The tool description asks the model to call it on its own, not in parallel with other tools.
+
+A wrapped strategy can supply its own trigger tool by defining `create_trigger_tool()`. `UnloadSkillsCompactionStrategy` does this: its tool is `unload_skill`, which takes an optional `skill_name` (a string or list; omit it to unload everything) and excludes the matching `load_skill` and `read_skill_resource` groups so that skill bodies stop occupying the context. Wrap it the same way and register `.tool`; see [Skills](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_skills/) for loading them.
+
+```python
+from agent_framework import AgentTriggeredCompactionStrategy, UnloadSkillsCompactionStrategy
+
+unload = AgentTriggeredCompactionStrategy(UnloadSkillsCompactionStrategy())
+print(unload.tool.name)   # unload_skill
+```
 
 ## Wiring compaction into an agent
 
@@ -1323,4 +1365,5 @@ CompactionProvider(
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-02 | 1.24.0 | Added `AgentTriggeredCompactionStrategy` and `UnloadSkillsCompactionStrategy` (both experimental). |
 | 2026-10-24 | 1.22.0 | Corrected the grouping model (a user message and its reply are separate groups) and the sliding-window example output; replaced an `annotate_message_groups` example that read non-existent keys; documented that `after_strategy` only works on history in `session.state` (not file, Redis or Cosmos history) and the `store=False` requirement with Responses-API clients; fixed the lifecycle diagram's method names, the per-client `compaction_strategy` claim (only `OpenAIChatClient` and `FoundryChatClient` take it; use `Agent(compaction_strategy=...)`), and the tiktoken example (`encoding_for_model` fails for current model names). Added `preserve_first_user_group` and `max_summary_input_tokens`. |

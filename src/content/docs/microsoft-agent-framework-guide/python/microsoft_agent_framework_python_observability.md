@@ -484,6 +484,8 @@ Two ways to attach business attributes — pick the one that matches lifetime:
 1. **Per request** — open your own span around `agent.run(...)` with the request ID as an attribute (see [custom spans](#custom-spans-around-business-logic)); the framework's spans become its children, so the whole tree is found by that ID.
 2. **Per-process resource attributes** — set `OTEL_RESOURCE_ATTRIBUTES=team=payments,env=prod,deployment.version=build-4821` before launching your service. The framework attaches them to every span/metric/log automatically.
 
+Since 1.24.0 the framework also adds `microsoft.agent-framework="True"` to the resource of its logs, traces and metrics, so you can pick out its telemetry in a backend shared with other services. A value you set yourself for that key in `OTEL_RESOURCE_ATTRIBUTES` takes precedence.
+
 ```python
 import os
 os.environ["OTEL_RESOURCE_ATTRIBUTES"] = "team=payments,env=prod,deployment.version=build-4821"
@@ -612,4 +614,5 @@ def no_telemetry():
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-02 | 1.24.0 | Noted the default `microsoft.agent-framework` resource attribute. |
 | 2026-10-24 | 1.22.0 | Corrected span names (they carry a suffix, e.g. `invoke_agent weather`, `chat gpt-4o-mini`), so the span processor, exporter filter and Application Insights queries now match on prefixes or `gen_ai.operation.name`; fixed the user-agent opt-out variable (`AGENT_FRAMEWORK_USER_AGENT_DISABLED`); removed the claim that `additional_properties` sets `gen_ai.conversation.id`. |

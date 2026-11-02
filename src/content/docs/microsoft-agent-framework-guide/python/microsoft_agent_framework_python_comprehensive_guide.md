@@ -8,7 +8,7 @@ sidebar:
   order: 2
 ---
 
-**Version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep), checked %%versions-checked%%. Python 3.10+.
+**Version:** `agent-framework` %%version=agent-framework%% (`agent-framework-core` is released in lockstep), checked %%versions-checked%%. Python 3.11+.
 
 This page covers the parts of the framework most applications use, in the order you meet them. Each section ends with a link to the topic page that goes deeper. The [API map](#api-map) at the end lists where every major class is documented.
 
@@ -524,7 +524,7 @@ class Counter(Executor):
 
 When annotations are inconvenient (forward references, dynamically built executors), give the types to the decorator instead: `@handler(input=str | int, output=bool, workflow_output=str)` or `@executor(id=..., input=..., output=...)`. Once any explicit type is given, annotations are ignored, so give all of them.
 
-An executor that only yields output uses `Never` (from `typing`, or `typing_extensions` on Python 3.10) as the first type parameter: `WorkflowContext[Never, str]`.
+An executor that only yields output uses `Never` (from `typing`) as the first type parameter: `WorkflowContext[Never, str]`.
 
 ### Routing: fan-out, fan-in, switch-case, multi-selection
 

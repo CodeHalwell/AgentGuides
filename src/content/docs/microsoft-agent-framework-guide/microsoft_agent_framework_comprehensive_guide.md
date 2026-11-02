@@ -78,7 +78,7 @@ The framework is layered, and each layer is replaceable:
 
 ### Installation
 
-**Python** (3.10+):
+**Python** (3.11+):
 
 ```bash
 pip install agent-framework==%%version=agent-framework%%   # core plus the common integrations

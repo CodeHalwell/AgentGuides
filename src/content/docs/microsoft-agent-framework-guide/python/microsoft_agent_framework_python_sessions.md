@@ -469,6 +469,8 @@ agent = Agent(client=OpenAIChatCompletionClient(), context_providers=[redis_hist
 
 Both take the same `load_messages` / `store_*` flags as the built-in providers. `RedisHistoryProvider` defaults to port 6380 with TLS when you give `host=` instead of `redis_url=`. The Redis package also has `RedisContextProvider` (RedisVL semantic recall of stored context) and `RedisStore` for the vector-store layer.
 
+> **Upgrading `RedisContextProvider` to 1.24.0:** the provider now keeps scope identity (case and punctuation) exactly and rejects an index created with the old raw-scope schema. Delete the old context index and its context hashes, let the provider create a new index, and re-ingest the content. This affects the context provider only, not `RedisHistoryProvider`.
+
 ## Sessions across processes — request handlers and queues
 
 Stateless workers (Lambda, Cloud Run, Container Apps) need to pull the conversation in, run a turn, and push state back out. Two patterns work well.
@@ -772,4 +774,5 @@ The trade-off: every model call now incurs a history write. For short, single-tu
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-02 | 1.24.0 | Added the `RedisContextProvider` index migration note. |
 | 2026-10-24 | 1.22.0 | Added "where history lives by default" (Responses-API clients store server-side; others get an automatic `InMemoryHistoryProvider`), packaged Redis and Cosmos DB providers, and `register_state_type(type_id=, encoder=, decoder=)`. Corrected the in-memory storage key (`state["in_memory"]["messages"]`), the path-traversal behaviour (unsafe ids are encoded, not rejected), and the compaction advice: `after_strategy` has no effect on file or Redis history. |

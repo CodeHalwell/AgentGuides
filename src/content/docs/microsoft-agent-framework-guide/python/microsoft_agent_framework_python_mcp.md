@@ -200,6 +200,7 @@ from agent_framework._mcp import MCPSpecificApproval  # TypedDict, not re-export
 git_approval: MCPSpecificApproval = {
     "always_require_approval": ["git_push", "git_reset", "git_force_push"],
     "never_require_approval": ["git_status", "git_diff", "git_log"],
+    "default": "always_require",   # every tool named in neither list
 }
 
 mcp = MCPStdioTool(
@@ -210,7 +211,9 @@ mcp = MCPStdioTool(
 )
 ```
 
-Names are the server's own tool names (or the prefixed names, when the raw name is already in normalised form). Tools listed in **both** lists require approval. Tools in **neither** list run without approval, so list every tool you consider risky, or use `"always_require"` and put the safe ones in `never_require_approval`.
+Names are the server's own tool names (or the prefixed names, when the raw name is already in normalised form). A tool resolves in this order: a name in `always_require_approval` requires approval (so a tool in **both** lists requires it); otherwise a name in `never_require_approval` does not; otherwise `default` applies.
+
+`default` (added in 1.24.0) takes `"always_require"` or `"never_require"` and also covers MCP prompts. Without it, tools in neither list still run without approval, which remains the framework default. Setting `never_require_approval` without `default` now emits a `FutureWarning`, because that fallback may change in a later release. Set `default` explicitly: `"always_require"` makes new server tools opt-in, which is the safer choice for a server you do not control. Hosted MCP tools do not read `default`.
 
 When a tool requires approval, the run stops with a `function_approval_request` in `response.user_input_requests`. Answer with `request.to_function_approval_response(approved=True)` on the same session; the loop is the same as for any tool, see the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval).
 

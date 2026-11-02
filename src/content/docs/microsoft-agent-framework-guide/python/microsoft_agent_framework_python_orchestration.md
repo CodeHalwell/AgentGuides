@@ -1081,7 +1081,7 @@ builder = (
 )
 ```
 
-The framework `await`s the coroutine and treats the boolean result as the routing decision. Wrap the lookup in a cache or short timeout — predicates run on the hot path between supersteps, so a slow predicate stalls the entire workflow.
+Async predicates in switch-case groups work from 1.24.0 (they were previously only handled on plain conditional edges). The framework `await`s the coroutine and treats the boolean result as the routing decision. Wrap the lookup in a cache or short timeout — predicates run on the hot path between supersteps, so a slow predicate stalls the entire workflow.
 
 ### Building edge groups directly — `SwitchCaseEdgeGroup`, `FanOutEdgeGroup`, `FanInEdgeGroup`
 

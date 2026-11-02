@@ -12,7 +12,7 @@ Practical, runnable patterns for the real `agent_framework` package. Every recip
 
 - **Package:** `agent-framework` (the umbrella distribution that pulls in `agent-framework-core` plus every official provider). Imports root at `agent_framework`.
 - **Pinned version:** `agent-framework==%%version=agent-framework%%` (re-checked %%versions-checked%%; the recipes were first written for 1.10.0). Check the latest with `pip index versions agent-framework`.
-- **Python:** 3.10+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
+- **Python:** 3.11+ — the entire package uses `from __future__ import annotations`, the `|` union syntax, and modern asyncio.
 - **Verified APIs:** `Agent`, `RawAgent`, `AgentSession`, `FileHistoryProvider`, `FileCheckpointStorage`, `MCPStdioTool`, `MCPStreamableHTTPTool`, `AgentMiddleware`, `ChatMiddleware`, `FunctionMiddleware`, `SkillsProvider`, `InlineSkill`, `ClassSkill`, `FileSkillsSource`, `LocalEvaluator`, `WorkflowBuilder`, `CompactionProvider`, `ToolResultCompactionStrategy`, `SelectiveToolCallCompactionStrategy`, `TokenBudgetComposedStrategy`, `TodoProvider`, `TodoFileStore`, `MemoryContextProvider`, `MemoryFileStore`.
 
 ```bash
