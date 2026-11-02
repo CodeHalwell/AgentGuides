@@ -113,6 +113,7 @@ Later 2.x releases added planners (`BuiltInPlanner`, `PlanReActPlanner`), `Conta
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-02 | 2.4.0 | Re-verified against the npm release: `AgentToolConfig.skipSummarization` is still stored but unused, and `Workflow` is still experimental. |
 | 2026-10-24 | current | Added the [comprehensive guide](/google-adk-guide/typescript/google_adk_typescript_comprehensive_guide/) and [production guide](/google-adk-guide/typescript/google_adk_typescript_production_guide/); the tools, sessions, multi-agent and workflow examples moved there. Noted that the npm `adk` command needs `@google/adk-devtools` installed. |
 | 2026-10-21 | current | Added tools, sessions, multi-agent and workflow examples, each type-checked with `tsc --strict` and run against a stub model. Dropped the unsupported Node.js version claim. |
 | 2026-10-21 | 2.3.0 | Re-verified against the current npm release. Replaced the minimal example, which called a non-existent `agent.run()`, with a type-checked `InMemoryRunner.runEphemeral` example; added the 2.x changes; version now read from the site's version data. |

@@ -60,7 +60,7 @@
     },
     "@google/adk": {
       "registry": "npm",
-      "version": "2.3.0",
+      "version": "2.4.0",
       "guide": "google-adk-guide"
     },
     "google.golang.org/adk": {
