@@ -3307,6 +3307,12 @@ async function myNode(state: { messages: BaseMessage[] }, config: LangGraphRunna
 }
 ```
 
+Called from a node inside a subgraph, `pushMessage` follows the `subgraphs` option of the stream, as ordinary model tokens do. With `subgraphs: false` (the default) the parent's stream does not show it; with `subgraphs: true` it arrives with the subgraph's namespace (for example `["sub:<task id>"]`) beside the parent's own messages. The handling was reworked in 1.6.0.
+
+### Tool names in drawn graphs
+
+`graph.getGraphAsync()` followed by `drawMermaid()` now labels a node that wraps a `ToolNode` with the names of its tools (for example `__tools = lookup`), so the diagram shows what the node can call. This was added in 1.6.0 and needs no configuration.
+
 ---
 
 ## Node policies, draining and other recent features
@@ -3421,6 +3427,7 @@ The reducer must give the same result however the writes are batched (`reducer(r
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.6.0 | 2026-11-02 | Release checked: `pushMessage` in subgraphs now honours the stream's `subgraphs` option; Mermaid diagrams list `ToolNode` tool names. Both verified by running them. |
 | 1.5.2 | 2026-10-25 | `@langchain/core` 1.3.0 and `langchain` 1.5.19 checked: install line and peer dependencies resolve, examples type-check under `strict`; added a note on `tool-call-delta` streaming and the lighter parallel tool tasks. |
 | 1.5.2 | 2026-10-25 | "Recent features" section expanded with runnable `RunControl`/`GraphDrained` and `DeltaValue`/`MessagesDeltaValue` examples; per-node `tracePolicy` removed (not in any released version); `setNodeDefaults` placement clarified. |
 | 1.5.2 | 2026-10-21 | All examples now type-check under `strict`: builders are chained so node names are tracked, `addSequence` steps are typed, a subclassed tool that used `this` before `super()` replaced with a `tool()` factory, `config.writer` replaced with `getWriter()`, a duplicate `addNode` removed. Recommended `tsconfig` updated (ES2022, bundler resolution, `tsx`). `@langchain/community` (deprecated) removed. Hand-rolled hook, cache and memory frameworks cut in favour of middleware, `cachePolicy` and the Store. Interrupts, `Command`, `Send`, subgraphs, Functional API and time travel added on [their own page](/langgraph-guide/typescript/langgraph_control_flow_typescript/). |

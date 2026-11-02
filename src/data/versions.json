@@ -1,6 +1,6 @@
 {
   "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
-  "checked": "2026-10-30",
+  "checked": "2026-11-02",
   "packages": {
     "agent-framework": {
       "registry": "pypi",
@@ -70,12 +70,12 @@
     },
     "langgraph": {
       "registry": "pypi",
-      "version": "1.2.18",
+      "version": "1.2.19",
       "guide": "langgraph-guide"
     },
     "@langchain/langgraph": {
       "registry": "npm",
-      "version": "1.5.3",
+      "version": "1.6.0",
       "guide": "langgraph-guide"
     },
     "langgraph-checkpoint": {
@@ -85,7 +85,7 @@
     },
     "langgraph-checkpoint-sqlite": {
       "registry": "pypi",
-      "version": "3.1.2",
+      "version": "3.1.3",
       "guide": "langgraph-guide"
     },
     "langgraph-checkpoint-postgres": {
@@ -100,7 +100,7 @@
     },
     "langgraph-sdk": {
       "registry": "pypi",
-      "version": "0.4.10",
+      "version": "0.4.11",
       "guide": "langgraph-guide"
     },
     "langgraph-cli": {
@@ -115,7 +115,7 @@
     },
     "langchain-core": {
       "registry": "pypi",
-      "version": "1.7.1",
+      "version": "1.7.3",
       "guide": "langgraph-guide"
     },
     "langchainjs": {
@@ -126,12 +126,12 @@
     },
     "@langchain/core": {
       "registry": "npm",
-      "version": "1.3.1",
+      "version": "1.3.2",
       "guide": "langgraph-guide"
     },
     "@langchain/langgraph-checkpoint": {
       "registry": "npm",
-      "version": "1.2.1",
+      "version": "1.2.2",
       "guide": "langgraph-guide"
     },
     "openai-agents": {

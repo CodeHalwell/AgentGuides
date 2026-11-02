@@ -712,6 +712,8 @@ for chunk in graph.stream(
 
 The stream shows `Working on it...` first, then the final answer. Because `state_key` defaulted to `"messages"`, the status message is also left in the thread's history; pass `state_key=None` if it should not be.
 
+**In subgraphs.** `push_message` follows the stream's `subgraphs` flag. With `subgraphs=False` (the default), a message pushed inside a subgraph does not reach the parent's `messages` stream. With `subgraphs=True` each item arrives as `(namespace, (message, metadata))`, and the namespace is `()` for the parent's own messages and `("sub:<task id>",)` for the subgraph's. This handling was reworked in 1.2.19.
+
 > **When to use this:** a complete message you want the user to see before the node finishes, such as a status line during a slow call. For arbitrary progress payloads that are not chat messages, use `get_stream_writer()` and `stream_mode="custom"` ([Chapter 6](/langgraph-guide/python/chapter-06-streaming-and-debugging/)).
 
 ---
