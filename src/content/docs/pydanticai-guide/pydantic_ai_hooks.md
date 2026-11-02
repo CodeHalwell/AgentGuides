@@ -212,7 +212,7 @@ except HookTimeoutError as exc:   # an AgentRunError and a TimeoutError
 - `after_model_request`, to reject a response the model did return;
 - `prepare_model_request`, to send the attempt to another model before anything is sent.
 
-Raising it from `before_model_request` or `wrap_model_request` is a `UserError`, since those run once per request, not per attempt. Pass a model to switch to it, or nothing to try the same one again. Each attempt re-runs `prepare_model_request` for the model serving it. `request_context.attempt` counts attempts.
+Raising it from `before_model_request` or `wrap_model_request` is a `UserError`, since those run once per request, not per attempt. Pass a model to switch to it, or nothing to try the same one again. Nothing in the hook bounds the retries except your own condition, so re-raise the error once your budget is spent, as the example does. Each attempt re-runs `prepare_model_request` for the model serving it. `request_context.attempt` counts attempts.
 
 ```python
 from pydantic_ai import Agent, ModelResponse, RetryModelRequest, RunContext
@@ -229,7 +229,9 @@ class RetryOnOverload(AbstractCapability[None]):
             raise error
         if request_context.attempt == 1:
             raise RetryModelRequest()   # the same model again
-        raise RetryModelRequest('anthropic:%%model=anthropic%%')   # then a different one
+        if request_context.attempt == 2:
+            raise RetryModelRequest('anthropic:%%model=anthropic%%')   # then a different one
+        raise error   # the budget is spent: surface the provider's error
 
 
 agent = Agent('openai:%%model=openai%%', capabilities=[RetryOnOverload()])
