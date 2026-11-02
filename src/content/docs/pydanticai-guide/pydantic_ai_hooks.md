@@ -204,6 +204,39 @@ except HookTimeoutError as exc:   # an AgentRunError and a TimeoutError
     print('hook timed out:', exc)
 ```
 
+## `RetryModelRequest` — retry a model request without telling the model
+
+`ModelRetry` asks the *model* to try again, adding a retry prompt to the history. `RetryModelRequest` (added in 2.64.0, importable from `pydantic_ai`) retries the *request*: the agent stays on the same step, nothing is added to the history, and the model never learns an earlier attempt happened. Raise it from:
+
+- `on_model_request_error`, to retry after a failed attempt;
+- `after_model_request`, to reject a response the model did return;
+- `prepare_model_request`, to send the attempt to another model before anything is sent.
+
+Raising it from `before_model_request` or `wrap_model_request` is a `UserError`, since those run once per request, not per attempt. Pass a model to switch to it, or nothing to try the same one again. Each attempt re-runs `prepare_model_request` for the model serving it. `request_context.attempt` counts attempts.
+
+```python
+from pydantic_ai import Agent, ModelResponse, RetryModelRequest, RunContext
+from pydantic_ai.capabilities import AbstractCapability
+from pydantic_ai.exceptions import ModelOverloadedError
+from pydantic_ai.models import ModelRequestContext
+
+
+class RetryOnOverload(AbstractCapability[None]):
+    async def on_model_request_error(
+        self, ctx: RunContext[None], *, request_context: ModelRequestContext, error: Exception
+    ) -> ModelResponse:
+        if not isinstance(error, ModelOverloadedError):
+            raise error
+        if request_context.attempt == 1:
+            raise RetryModelRequest()   # the same model again
+        raise RetryModelRequest('anthropic:%%model=anthropic%%')   # then a different one
+
+
+agent = Agent('openai:%%model=openai%%', capabilities=[RetryOnOverload()])
+```
+
+For plain failover between models, [`ModelFallback`](/pydanticai-guide/pydantic_ai_model_providers/#modelfallback--fallback-inside-an-agent) is built on this mechanism and needs no custom capability.
+
 ## Wrapping hooks — full control of the call chain
 
 `wrap_*` variants give you a `handler` callable to invoke the original operation, enabling retry decorators, circuit-breakers, and tracing:

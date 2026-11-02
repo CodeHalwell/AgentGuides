@@ -108,6 +108,7 @@ OpenAI-compatible providers (`OpenAIProvider(base_url='http://localhost:8000/v1'
 | `parallel_tool_calls` | `False` asks the model for one tool call per response. |
 | `timeout` | Per-attempt timeout applied by the provider client. |
 | `request_timeout` | One deadline, enforced by PydanticAI, covering every SDK retry and the whole streamed response. |
+| `first_event_timeout` | Added in 2.64.0. A deadline for a *streamed* request to produce its first output (a part or a delta, thinking included); provider events that carry no output do not count. It stops applying once the first event arrives, so long responses are not cut off. On expiry the request is cancelled and `ModelRequestTimeout` is raised with `setting == 'first_event_timeout'`; `FallbackModel` and `ModelFallback` fall back by default. Ignored for non-streamed requests, where `request_timeout` covers the wait. |
 | `max_retries` | Override the provider SDK's retry count for one request (`0` = single attempt). |
 | `extra_headers`, `extra_body` | Escape hatches for provider features without a first-class key. |
 
@@ -197,6 +198,35 @@ agent = Agent(
 ```
 
 Capabilities can also be passed per run (`agent.run(..., capabilities=[Thinking(effort='xhigh')])`) for a one-off change.
+
+## `ModelFallback` — fallback inside an agent
+
+From 2.64.0, `pydantic_ai.capabilities.ModelFallback` does the same job as `FallbackModel` as a capability. The chain is the model selected for the step, followed by the models you list, so it composes with the agent's own model and with `SelectModel`. The package documentation recommends it over `FallbackModel` inside an agent; `FallbackModel` remains the way to get the behaviour from a bare `Model` outside a run.
+
+```python
+from pydantic_ai import Agent
+from pydantic_ai.capabilities import ModelFallback
+from pydantic_ai.exceptions import ModelAPIError
+
+agent = Agent(
+    'openai:%%model=openai%%',
+    capabilities=[
+        ModelFallback(
+            'anthropic:%%model=anthropic%%',
+            fallback_on=(ModelAPIError,),   # the default; the same forms as FallbackModel
+            sticky=True,
+        )
+    ],
+)
+```
+
+- With no agent model, the first model you list serves the first attempt.
+- A model already tried in the step is skipped, so repeating the agent's own model in the list is harmless.
+- Each attempt re-runs `prepare_model_request` for the model about to serve it. `before_model_request` and `wrap_model_request` run once, and the model never sees a retry prompt.
+- `sticky=True` keeps a conversation that fell back on the model that answered, in later steps and in later runs that continue the message history. That keeps the provider's prompt cache warm and avoids asking the failing model first every step.
+- Response handlers in `fallback_on` apply to non-streamed requests only. A streamed response has already reached the caller by the time it could be judged, so it is accepted with a `UserWarning`. A stream that fails to open, or errors before its first event, still falls back.
+
+Checked with two `FunctionModel`s, the first raising `ModelOverloadedError`: the run returns the second model's answer.
 
 ## `FallbackModel` — wrap primaries with backups
 
