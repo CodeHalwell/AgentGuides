@@ -533,7 +533,7 @@ from agent_framework.openai import OpenAIChatClient
 billing_approval = {
     "always_require_approval": ["refund", "void_invoice"],
     "never_require_approval": ["list_invoices", "get_invoice"],
-    "default": "always_require",   # anything else the server adds needs approval
+    "default": "never_require",    # explicit: unlisted tools run, so list every write operation above
 }
 
 
@@ -560,7 +560,7 @@ async def serve_tenant(tenant_token: str, query: str) -> str:
 asyncio.run(serve_tenant("tk_live_abc", "List my open invoices."))
 ```
 
-`MCPSpecificApproval` is a typed dict with three keys: `always_require_approval`, `never_require_approval` and `default` (1.24.0). Use the server's raw tool names (without any `tool_name_prefix`). A tool in **both** lists requires approval; a tool in neither list follows `default`. Leaving `default` out means such tools run **without** approval and, when `never_require_approval` is set, emits a `FutureWarning`, so set it explicitly.
+`MCPSpecificApproval` is a typed dict with three keys: `always_require_approval`, `never_require_approval` and `default` (1.24.0). Use the server's raw tool names (without any `tool_name_prefix`). A tool in **both** lists requires approval; a tool in neither list follows `default`. Leaving `default` out means such tools run **without** approval and, when `never_require_approval` is set, emits a `FutureWarning`, so set it explicitly. This recipe uses `"never_require"` because `serve_tenant` returns only the final text and does not handle approval requests; with `"always_require"`, read `response.user_input_requests` and resume on the same session, as on the [Human-in-the-loop page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_hitl/#tool-approval).
 
 ### Recipe 13 — Workflow with checkpointing
 
