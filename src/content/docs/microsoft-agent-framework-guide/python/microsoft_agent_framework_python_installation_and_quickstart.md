@@ -19,7 +19,7 @@ This guide covers everything you need to get your first agent running in Python 
 | Package name | `agent-framework` |
 | Current version | `%%version=agent-framework%%` |
 | Import root | `agent_framework` |
-| Python requirement | 3.10 or later |
+| Python requirement | 3.11 or later (Python 3.10 still installs with 1.24.0 but is not supported; the next release is due to drop it from `Requires-Python`) |
 
 ```bash
 pip install agent-framework
@@ -35,7 +35,7 @@ pip install agent-framework-a2a --pre      # A2A protocol (beta)
 pip install agent-framework-declarative    # Declarative YAML agents
 ```
 
-The import paths are the same either way (`agent_framework.openai`, `agent_framework.foundry`, ...); a namespace whose package is not installed raises a `ModuleNotFoundError` naming the package to install. Two integrations have platform limits: `agent-framework-github-copilot` needs Python 3.11+, and `agent-framework-hyperlight` installs only on Linux x86-64 and Windows AMD64.
+The import paths are the same either way (`agent_framework.openai`, `agent_framework.foundry`, ...); a namespace whose package is not installed raises a `ModuleNotFoundError` naming the package to install. Two integrations have platform limits: `agent-framework-github-copilot` needs Python 3.11+ (now the baseline for everything), and `agent-framework-hyperlight` installs only on Linux x86-64 and Windows AMD64.
 
 ---
 

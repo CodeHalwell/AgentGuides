@@ -380,6 +380,7 @@ mcp = MCPStdioTool(
     approval_mode={
         "always_require_approval": ["git_push", "git_reset"],
         "never_require_approval": ["git_status", "git_diff"],
+        "default": "always_require",
     },
 )
 ```
