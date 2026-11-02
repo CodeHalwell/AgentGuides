@@ -9,7 +9,7 @@
     },
     "Microsoft.Agents.AI": {
       "registry": "nuget",
-      "version": "1.27.0",
+      "version": "1.26.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "xunit.v3": {

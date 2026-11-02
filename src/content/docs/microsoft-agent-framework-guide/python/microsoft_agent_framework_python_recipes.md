@@ -533,6 +533,7 @@ from agent_framework.openai import OpenAIChatClient
 billing_approval = {
     "always_require_approval": ["refund", "void_invoice"],
     "never_require_approval": ["list_invoices", "get_invoice"],
+    "default": "always_require",   # anything else the server adds needs approval
 }
 
 
@@ -559,7 +560,7 @@ async def serve_tenant(tenant_token: str, query: str) -> str:
 asyncio.run(serve_tenant("tk_live_abc", "List my open invoices."))
 ```
 
-`MCPSpecificApproval` is a typed dict — IDEs autocomplete the two valid keys. Use the server's raw tool names (without any `tool_name_prefix`). A tool in **both** lists requires approval; a tool in neither list runs **without** approval, so list every write operation explicitly.
+`MCPSpecificApproval` is a typed dict with three keys: `always_require_approval`, `never_require_approval` and `default` (1.24.0). Use the server's raw tool names (without any `tool_name_prefix`). A tool in **both** lists requires approval; a tool in neither list follows `default`. Leaving `default` out means such tools run **without** approval and, when `never_require_approval` is set, emits a `FutureWarning`, so set it explicitly.
 
 ### Recipe 13 — Workflow with checkpointing
 

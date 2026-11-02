@@ -469,7 +469,7 @@ agent = Agent(client=OpenAIChatCompletionClient(), context_providers=[redis_hist
 
 Both take the same `load_messages` / `store_*` flags as the built-in providers. `RedisHistoryProvider` defaults to port 6380 with TLS when you give `host=` instead of `redis_url=`. The Redis package also has `RedisContextProvider` (RedisVL semantic recall of stored context) and `RedisStore` for the vector-store layer.
 
-> **Upgrading `RedisContextProvider` to 1.24.0:** the provider now keeps scope identity (case and punctuation) exactly and rejects an index created with the old raw-scope schema. Delete the old context index and its context hashes, let the provider create a new index, and re-ingest the content. This affects the context provider only, not `RedisHistoryProvider`.
+> **Upgrading `RedisContextProvider` to 1.24.0:** the provider now keeps scope identity (case and punctuation) exactly and rejects an index created with the old raw-scope schema. The context hashes hold the stored content itself, so export or back them up first (or make sure you can rebuild them from another source). Then delete the old context index and its hashes, let the provider create a new index, and re-ingest the content from that backup or source. This affects the context provider only, not `RedisHistoryProvider`.
 
 ## Sessions across processes — request handlers and queues
 
