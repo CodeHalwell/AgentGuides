@@ -229,6 +229,8 @@ except FallbackExceptionGroup as group:   # every model failed
         print(type(exc).__name__, exc)
 ```
 
+Inside an agent, from 2.64.0 the [`ModelFallback` capability](/pydanticai-guide/pydantic_ai_model_providers/#modelfallback--fallback-inside-an-agent) is preferred over wrapping a model, and adds `sticky=True`. For streamed requests, set `model_settings={'first_event_timeout': 10}` so a provider that accepts the connection but never produces output fails over quickly.
+
 `fallback_on=` also accepts a function that inspects the `ModelResponse` and rejects weak or truncated replies. The [model providers page](/pydanticai-guide/pydantic_ai_model_providers/#fallbackmodel--wrap-primaries-with-backups) covers handlers in detail. Model settings are passed to whichever model handles the request, so keep them to keys every provider accepts.
 
 ## Concurrency limits
