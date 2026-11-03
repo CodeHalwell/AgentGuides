@@ -114,6 +114,7 @@ Tool names are normalised before the model sees them: any character outside `A-Z
 | `never_require_all()` | No tool needs approval (the default) |
 | `always_require_all()` | Every tool needs approval |
 | `per_tool(["name", ...])` | Only the named (normalised) tools need approval |
+| `per_tool_except(["name", ...])` | Every tool needs approval except the named (normalised) ones |
 
 A tool that needs approval pauses the run exactly as a local one does, with a `FunctionApprovalRequestContent` returned by `user_input_requests()`; the answer goes back on the same session. The [tool approvals](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_comprehensive_guide/#tool-approvals) section explains the round trip. This example takes a snapshot, so the approval flags can be printed before the run:
 
@@ -163,7 +164,23 @@ async fn main() -> Result<()> {
 }
 ```
 
-Python's `approval_mode` mapping has both an `always_require_approval` and a `never_require_approval` list, because its approval setting can be unset. Rust's `ApprovalMode` has no unset state, so `per_tool` needs only the list of tools that require approval. This `McpApprovalMode` is not the core `agent_framework::tools::McpApprovalMode` (`Always`, `Never`, `PerTool`), which configures [hosted MCP](#hosted-mcp) tools that the model provider calls; the two are easy to confuse because both are called `McpApprovalMode`.
+`per_tool_except` is the safer policy for a server you do not control: a tool the server adds later, or one that appears after a reload, is gated instead of running unasked. It is `per_tool` with a `default` of `ApprovalMode::AlwaysRequire`. The pieces compose on a `per_tool` policy: `with_never_require([...])` adds names that never need approval, and `with_default(ApprovalMode::...)` sets what a tool named in neither list resolves to. A name resolves in this order: the always list, then the never list, then the default, and finally `NeverRequire` when no default is set. A name in both lists therefore needs approval. `with_never_require` has no effect unless the default requires approval, and neither method does anything on `never_require_all()` or `always_require_all()`, which already answer for every tool. `ApprovalMode` is the core `agent_framework::tools::ApprovalMode`. This matches Python's `always_require_approval`, `never_require_approval` and `default` keys (Python adds a `FutureWarning` when `never_require_approval` is set without `default`; Rust has no such warning).
+
+```rust
+use agent_framework::mcp::McpApprovalMode;
+use agent_framework::prelude::*;
+
+fn main() {
+    let mcp = McpStdioTool::new("everything", "npx")
+        .args(["-y", "@modelcontextprotocol/server-everything"])
+        .inherit_parent_environment(true)
+        // get-sum runs unasked; every other tool, including ones added later, pauses for approval.
+        .approval_mode(McpApprovalMode::per_tool_except(["get-sum"]));
+    let _ = mcp;
+}
+```
+
+Before 0.15.0 a `per_tool` policy had only the always list, so "approve everything except these" could not be written. This `McpApprovalMode` is not the core `agent_framework::tools::McpApprovalMode` (`Always`, `Never`, `PerTool`), which configures [hosted MCP](#hosted-mcp) tools that the model provider calls; the two are easy to confuse because both are called `McpApprovalMode`.
 
 ## Tool results
 
@@ -472,8 +489,34 @@ A tool type owns one lazily created session. Behaviour worth knowing:
 - **Spawn failures** surface on first use as `Error::Service("failed to start MCP server '...': ...")`.
 - **A server that dies** fails every request still waiting with "MCP server closed the connection before responding" (stdio), or with the HTTP error (HTTP). There is no automatic reconnection.
 - **`close()` is final.** It kills the stdio child (or deletes the HTTP session) but does not reset the tool, so later calls reuse the dead session and fail. To reconnect, build a new tool and a new agent (or a new tool source). With launchers such as `npx`, `close()` kills the launcher, and the real server, its child, exits when its stdin closes, which happens when the tool is dropped.
+- **A zero timeout is refused.** `request_timeout(Duration::ZERO)` makes every request time out as it is sent, so `connect` now returns a configuration error instead of the first call failing. Leave the timeout unset for no limit.
+- **Tools that need the Tasks extension are not offered.** This client does not implement MCP tasks, so a server tool that requires them is left out of the definitions rather than failing when the model calls it.
 - **Timeouts** are per request. A timed-out request is removed from the pending table, so a late reply is discarded rather than delivered to a later call.
 - **Drop** kills a stdio child (`kill_on_drop`), so a process does not outlive its tool.
+
+### Protocol mode
+
+The 2026-07-28 revision of MCP replaces the `initialize` handshake with a `server/discover` probe, and sends the protocol version, client info and capabilities in the `_meta` of every request (and an `MCP-Protocol-Version` header over HTTP). `McpProtocolMode`, set with `protocol_mode(...)` on `McpClient` and on the tools, picks the era:
+
+| Mode | Behaviour |
+| --- | --- |
+| `Auto` (default) | Probe with `server/discover`; use the modern era if the server offers it, otherwise fall back to the handshake |
+| `Legacy` | Always use the `initialize` handshake |
+| `Modern` | Require the modern era; fail if the server does not offer it |
+
+```rust
+use agent_framework::mcp::McpProtocolMode;
+use agent_framework::prelude::*;
+
+fn main() {
+    // Pin an older server to the handshake and skip the discovery probe.
+    let mcp = McpStdioTool::new("everything", "npx")
+        .args(["-y", "@modelcontextprotocol/server-everything"])
+        .inherit_parent_environment(true)
+        .protocol_mode(McpProtocolMode::Legacy);
+    let _ = mcp;
+}
+```
 
 In a long-running service, keep the tool behind something you can replace: hold the agent in a `RwLock<Arc<Agent>>`, and on a connection error from `run`, build a fresh `McpStdioTool` and agent and swap them in. Because the tool list is resolved per run, a tool source picks the new server's tools up without further work.
 

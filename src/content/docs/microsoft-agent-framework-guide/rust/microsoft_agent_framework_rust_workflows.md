@@ -18,7 +18,7 @@ Most types are in the prelude (`use agent_framework::prelude::*`). The rest are 
 
 ## Messages are JSON values
 
-The biggest difference from the Python and .NET engines is typing. There, an executor declares typed handlers, a message is routed to the handler whose input type matches, and the builder checks that connected executors agree on types. Here there are no typed handlers: every message, output and request payload is a `serde_json::Value`. An executor receives a `Value`, decides what it means, and sends `Value`s on. Validation therefore checks the shape of the graph but not the types flowing along it, and a mismatch shows up at run time.
+The biggest difference from the Python and .NET engines is typing. There, an executor declares typed handlers, a message is routed to the handler whose input type matches, and the builder checks that connected executors agree on types. Here there are no typed handlers: every message, output and request payload is a `serde_json::Value`. An executor receives a `Value`, decides what it means, and sends `Value`s on. Validation therefore checks the shape of the graph but not the types flowing along it, and a mismatch shows up at run time, unless both ends of an edge opt in to [declared message types](#declaring-message-types) (added in 0.15.0).
 
 In return, nothing needs registering for serialisation: checkpoints are plain JSON, and any `Serialize` type can be sent with `serde_json::to_value`. The usual pattern is to keep your own structs at the edges of each executor, deserialise on the way in and serialise on the way out. A short generic helper gives you executors with typed inputs, and a wrong-shaped payload fails the run with an error that names the executor:
 
@@ -280,6 +280,8 @@ Inside an executor, the `WorkflowContext` is how it acts on the run. None of its
 | `yield_output(value)` | Emit a workflow output (see [outputs](#outputs)) |
 | `request_info(value)` | Ask the caller for input; the answer comes back to this executor (see [human in the loop](#human-in-the-loop)) |
 | `add_event(event)` | Put an event on the stream, normally `WorkflowEvent::Custom(value)` |
+| `add_warning(message)` | Report a non-fatal problem as `WorkflowEvent::Warning`; a nested workflow's warnings reach the parent as `SubworkflowWarning` |
+| `request_halt()` | Stop the run once the current superstep completes. This superstep's effects are applied, but the messages it sent are dropped, not delivered |
 | `shared_state()` | The run's [shared state](#shared-state) |
 | `executor_id()` | This executor's id |
 | `source_executor_ids()` | Who sent the current message: one id, all the sources for a fan-in delivery, or `"__start__"` for the workflow input |
@@ -303,6 +305,7 @@ Inside an executor, the `WorkflowContext` is how it acts on the run. None of its
 | `set_max_iterations(n)` | Superstep limit, default 100; values below 1 become 1 ([loops](#loops-and-the-superstep-limit)) |
 | `name(s)`, `description(s)` | Metadata, returned by `Workflow::name()` and `description()` |
 | `with_checkpointing(storage)` | Save a checkpoint after every superstep ([checkpointing](#checkpointing)) |
+| `with_telemetry(options)` | Choose which workflow spans are emitted ([observability](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_observability/#workflow-spans)) |
 | `output_from(ids)`, `intermediate_output_from(ids)` | Which executors' yields count as outputs ([outputs](#outputs)) |
 | `build()` | [Validate](#validation) and return a `Workflow` |
 
@@ -330,8 +333,49 @@ Methods that take several ids accept any iterator: `vec!["a".to_string()]`, `["a
 | `pending_requests()` | Open requests, ordered by request id |
 | `send_response(id, value)`, `send_responses(map)` | Answer requests and continue the run |
 | `shared_state()` | The run's shared state, still readable after it finishes |
+| `session_id()` | The run's id (also on `WorkflowRunStream`) |
+
+To stop a streamed run from outside, call `cancel()` on the `WorkflowRunStream`. The run's task is aborted at its next await point, the stream ends, and `into_run()` then returns an error ("workflow task failed: ... cancelled"). Work an executor already started outside the runtime, such as a request in flight, is not undone. From inside an executor, use `ctx.request_halt()` instead, which ends the run cleanly after the superstep. An executor instance is shared by every run, so one that keeps per-run state in its own fields can clear it in the defaulted `Executor::reset`, which is called on every executor at the start of a fresh run (not when resuming from a checkpoint).
 
 `WorkflowRunState` has the same values as Python's enum (and serialises to the same `SCREAMING_SNAKE_CASE` strings): `Started`, `InProgress`, `InProgressPendingRequests` (still working, with requests already raised), `Idle` (finished), `IdleWithPendingRequests` (paused, resumable), `Failed` and `Cancelled`. A finished run is `Idle` or `IdleWithPendingRequests`; a failed one returns `Err` from `run`, so you see `Failed` only through events or a run that failed while resuming. `Cancelled` exists for parity but nothing in this release produces it: runs cannot be cancelled.
+
+### Declaring message types
+
+Added in 0.15.0. Messages stay JSON values, but an executor can declare the message types it accepts, sends and yields, as names of your choosing (`"Order"`) or JSON type names (`"string"`). Executors that declare nothing accept everything, as before, so the check binds only where both ends of an edge are declared.
+
+```rust
+use std::sync::Arc;
+
+use agent_framework::prelude::*;
+use agent_framework::workflow::{FunctionExecutor, ProtocolBuilder};
+
+fn main() -> Result<()> {
+    let intake = FunctionExecutor::new("intake", |message, ctx| async move {
+        ctx.send_message(message).await?;
+        Ok(())
+    })
+    .with_protocol(ProtocolBuilder::default().accepts_all().sends_message_type("Order").build());
+
+    let billing = FunctionExecutor::new("billing", |message, ctx| async move {
+        ctx.yield_output(message).await?;
+        Ok(())
+    })
+    .with_protocol(ProtocolBuilder::default().accepts("Order").yields_output_type("Receipt").build());
+
+    let workflow = WorkflowBuilder::new()
+        .add_executor(Arc::new(intake))
+        .add_executor(Arc::new(billing))
+        .set_start("intake")
+        .add_edge("intake", "billing")
+        .build()?; // an edge whose source sends nothing its target accepts is refused here
+
+    println!("{:?}", workflow.describe_protocol());
+    println!("{:?} {:?}", workflow.reflect_executors(), workflow.reflect_edges());
+    Ok(())
+}
+```
+
+If `billing` accepted only `"Invoice"`, `build()` would fail with `[TYPE_COMPATIBILITY] executor 'intake' sends ["Order"], none of which executor 'billing' accepts (["Invoice"])`. `ValidationType` gained a `TypeCompatibility` variant for this, so an exhaustive `match` on it needs a new arm. `Workflow::describe_protocol()` reports what the start executor accepts and what the output executors yield (every executor's, when none is designated); `reflect_executors()` returns the ids sorted, `reflect_edges()` the `(source, target)` pairs in declaration order, and `reflect_ports()` the request ports. A custom `Executor` declares its protocol by overriding `describe_protocol`; `RequestInfoExecutor::with_types(request, response)` names a request port's types.
 
 ## Routing: conditions, switch-case and fan-out
 
@@ -1057,14 +1101,16 @@ Every run records a sequence of `WorkflowEvent`s, available as `run.events()` af
 | `ExecutorInvoked { executor_id }`, `ExecutorCompleted { executor_id }` | Around each successful invocation | `ExecutorInvokedEvent` / `ExecutorCompletedEvent` |
 | `ExecutorFailed { executor_id, error }` | An executor returned `Err` | `ExecutorFailedEvent` |
 | `AgentRunUpdate { executor_id, update }` | A streamed chunk from an agent node, as a serialised `AgentResponseUpdate` | `AgentRunUpdateEvent` |
-| `AgentRun { executor_id, response }` | An agent node finished, as a serialised `AgentResponse` | `AgentRunEvent` |
+| `AgentRun { executor_id, response, input }` | An agent node finished: `response` is a serialised `AgentResponse`, `input` the conversation it ran over (`null` from producers that do not record it) | `AgentRunEvent` |
 | `Output { data, source_executor_id }` | A terminal yield | `WorkflowOutputEvent` |
 | `Intermediate { data, source_executor_id }` | A non-terminal yield | |
 | `RequestInfo { request_id, source_executor_id, request_data }` | A request for outside input | `RequestInfoEvent` |
 | `Custom(Value)` | Added by an executor with `ctx.add_event` | custom `WorkflowEvent` subclasses |
 | `Failed { error }` | The run failed | `WorkflowFailedEvent` |
+| `Warning { message }` | An executor called `ctx.add_warning` | `WorkflowWarningEvent` |
+| `SubworkflowWarning { sub_workflow_id, message }` | A nested workflow reported a warning, forwarded by its `WorkflowExecutor` | `SubworkflowWarningEvent` |
 
-`as_output()`, `as_intermediate()`, `as_request_info()` and `as_status()` pick the data out of the matching variant. The enum derives `Serialize` and `Deserialize`, so events can be logged or sent to a browser as JSON.
+`as_output()`, `as_intermediate()`, `as_request_info()` and `as_status()` pick the data out of the matching variant. `Warning`, `SubworkflowWarning` and the `input` field of `AgentRun` were added in 0.15.0, so a `match` on `WorkflowEvent` with no wildcard arm needs arms for the first two, and an `AgentRun { executor_id, response }` pattern needs a `..`. The enum derives `Serialize` and `Deserialize`, so events can be logged or sent to a browser as JSON.
 
 Within an executor's invocation the order is fixed: `ExecutorInvoked`, its outputs, its added events (including agent updates), its requests (each `RequestInfo`, plus `Status(InProgressPendingRequests)` the first time in a run), then `ExecutorCompleted`. So an agent executor's `Output` appears before the `AgentRunUpdate` events that led to it. `ctx.add_event` accepts any variant, not only `Custom`; nothing stops an executor emitting a misleading `Output` event that is not a real yield, so stick to `Custom` for your own events.
 
@@ -1096,6 +1142,8 @@ fn trace(event: &WorkflowEvent) -> String {
         WorkflowEvent::Custom(data) => format!("  Custom({data})"),
         WorkflowEvent::RequestInfo { request_id, .. } => format!("  RequestInfo({request_id})"),
         WorkflowEvent::Failed { error } => format!("Failed({error})"),
+        WorkflowEvent::Warning { message } => format!("  Warning({message})"),
+        WorkflowEvent::SubworkflowWarning { sub_workflow_id, message } => format!("  SubworkflowWarning({sub_workflow_id}): {message}"),
     }
 }
 
@@ -1489,7 +1537,7 @@ Things that are not checkpointed:
 
 - State in a `FunctionExecutor`'s closure, or in a custom executor that does not implement `snapshot_state`.
 - The child runs of a [sub-workflow](#sub-workflows). `WorkflowExecutor` keeps a paused child run in memory and does not snapshot it, so a request raised inside a sub-workflow cannot be answered after a restart.
-- The prebuilt orchestrations, whose builders have no `with_checkpointing`. See [checkpointing orchestrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_orchestrations/#checkpointing-an-approval-gate) for the part you can rebuild by hand.
+- Hand-built graphs of agent executors, unless you add `with_checkpointing` yourself. The prebuilt orchestration builders take `with_checkpointing(storage)` since 0.15.0; see [checkpointing orchestrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_orchestrations/#checkpointing-an-approval-gate).
 
 The library has no checkpoint-backed resume of a streamed run either: `run_from_checkpoint` does not stream.
 
@@ -1713,7 +1761,7 @@ async fn main() -> Result<()> {
 
     let run = workflow.run("Why Rust has no garbage collector").await?;
     for event in run.events() {
-        if let WorkflowEvent::AgentRun { executor_id, response } = event {
+        if let WorkflowEvent::AgentRun { executor_id, response, .. } = event {
             let response: AgentResponse = serde_json::from_value(response.clone())?;
             println!("{executor_id}: {}", response.text());
         }
@@ -1835,11 +1883,9 @@ Gotchas:
 
 Compared with the Python engine, this release does not have:
 
-- typed executor handlers, routing by message type, or type checking between connected executors (see [above](#messages-are-json-values));
+- typed executor handlers or routing by message type (see [above](#messages-are-json-values)); the opt-in [protocol declarations](#declaring-message-types) check edges only where both ends declare types;
 - upstream's agent envelopes (`AgentExecutorRequest`, `AgentExecutorResponse`), `context_mode` and per-executor agent sessions;
 - interception of sub-workflow requests by the parent, and checkpointing of paused sub-workflow runs;
-- run cancellation, or any way to stop a run between supersteps;
-- workflow-level OpenTelemetry spans (agents inside a workflow are traced as usual; see the [observability page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_observability/));
 - functional (`@workflow` / `@step`) workflows, listed as `FUNCTIONAL_WORKFLOWS` in the crate's feature-stage table as not ported;
 - the Power Fx declarative workflow language. The declarative crate loads its own Rust-native workflow format onto this engine instead (see the [integrations page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_integrations/)).
 

@@ -125,7 +125,7 @@ An `Agent`'s id is a random UUID unless you set one with `Agent::builder(...).id
 
 `ConcurrentBuilder` fans the input out to every participant and gathers the replies through a fan-in. The participants run in the same superstep, so their model calls overlap. It has the same `participants`, `add`, `name`, `output_from`, `intermediate_output_from` and `with_request_info` methods as `SequentialBuilder`.
 
-The built-in aggregator merges the participants' conversations into one: the conversation from the first participant minus its last message (normally just the prompt), followed by the last message of each participant, in participant order. If an agent's reply spans several messages (a tool call, its result and the answer, say), only the final message survives. There is no option to plug in a different aggregator (Python's `with_aggregator` is not ported), but the same shape is a few lines of `WorkflowBuilder`: a dispatch node, an `AgentExecutor` per participant, and a fan-in into your own function executor, which receives one conversation per participant in declared order.
+The built-in aggregator merges the participants' conversations into one: the conversation from the first participant minus its last message (normally just the prompt), followed by the last message of each participant, in participant order. If an agent's reply spans several messages (a tool call, its result and the answer, say), only the final message survives. Since 0.15.0, `with_aggregator(|conversations: Vec<Vec<Message>>| -> Vec<Message> { ... })` replaces it: the closure receives one conversation per participant, in participant order, and returns the messages the workflow outputs. Before that, the same shape took a few lines of `WorkflowBuilder`, and still does if you need a graph the builder does not produce: a dispatch node, an `AgentExecutor` per participant, and a fan-in into your own function executor, which receives one conversation per participant in declared order.
 
 ```rust
 use std::sync::Arc;
@@ -560,7 +560,20 @@ user: Thanks, bye
 
 When `max_iterations` agent turns pass without a final answer (agents handing off back and forth, say), the workflow finishes with the conversation so far; it is not an error. The count restarts with each user message. The paused conversation is kept in the run's shared state under `_handoff_state`.
 
-Two differences from Python: autonomous mode completes on the first answer that is not a handoff, where Python re-prompts the same agent until a turn limit; and turn limits are global, where Python's `with_autonomous_mode(agents=..., turn_limits=...)` sets them per agent.
+`autonomous()` completes the workflow on the first answer that is not a handoff. Since 0.15.0, `with_autonomous_mode(AutonomousMode)` is Python's `with_autonomous_mode(agents=..., prompts=..., turn_limits=...)`: when an enabled agent answers without handing off, it is re-run with a continuation prompt as a user turn, up to its turn limit, and only then does the interaction mode's own step follow (asking the user, or completing). A handoff resets that agent's count.
+
+```rust
+use agent_framework::workflow::AutonomousMode;
+
+fn main() {
+    let _mode = AutonomousMode::new()
+        .for_agents(["researcher"])                       // omit to enable every participant
+        .prompt("researcher", "Keep going until the summary is complete.")
+        .turn_limit("researcher", 5);                     // default 50; 0 turns continuation off for that agent
+}
+```
+
+Pass it to `HandoffBuilder::with_autonomous_mode(...)`. The default prompt is `"User did not respond. Continue assisting autonomously."` (`DEFAULT_AUTONOMOUS_PROMPT`). The builder's own `max_iterations` cap on agent turns per user message still applies.
 
 ## Magentic
 
@@ -900,7 +913,7 @@ The group chat, handoff and Magentic builders have no `with_request_info`. Hando
 
 ### Checkpointing an approval gate
 
-The orchestration builders have no `with_checkpointing`, so a paused orchestration lives only in memory. `AgentApprovalExecutor` is public, though, and keeps everything it needs in the request payload, so a hand-built graph of approval gates can be checkpointed and answered after a restart without running the agent again:
+Since 0.15.0 the sequential, concurrent, group chat, handoff and Magentic builders take `with_checkpointing(storage)`, the same as `WorkflowBuilder`, so an orchestration paused for approval can be saved and resumed. Before that, a paused orchestration lived only in memory, and the pattern below, building the gate by hand from `AgentApprovalExecutor`, was the way to get a durable one. It is still useful for a graph the builders do not produce. `AgentApprovalExecutor` is public and keeps everything it needs in the request payload, so a hand-built graph of approval gates can be checkpointed and answered after a restart without running the agent again:
 
 ```rust
 use std::sync::Arc;
@@ -909,8 +922,7 @@ use agent_framework::prelude::*;
 use agent_framework::workflow::{AgentApprovalExecutor, ApprovalRequest};
 use serde_json::json;
 
-/// The approval gate built by hand, so the graph can be checkpointed: the
-/// orchestration builders have no with_checkpointing.
+/// The approval gate built by hand, so the graph can be checkpointed.
 fn build(client: &OpenAIChatCompletionClient, storage: Arc<dyn CheckpointStorage>) -> Result<Workflow> {
     let writer: Arc<dyn SupportsAgentRun> = Arc::new(
         Agent::builder(client.clone()).name("writer").instructions("Draft a one-line announcement.").build(),
@@ -1030,10 +1042,6 @@ Compared with the Python orchestrations, this release does not have:
 
 - the multi-executor graph shape for group chat, handoff and Magentic (see [above](#how-the-rust-orchestrations-differ)), and so no per-participant executor ids or checkpoints for them;
 - automatic injection of handoff tools into participants; attach `handoff_tool_spec` yourself;
-- per-agent autonomous turn limits for handoff, and autonomous re-prompting of the same agent;
-- a pluggable aggregator for `ConcurrentBuilder` (build the graph by hand, as [above](#concurrent));
-- `SequentialBuilder::ensure_trailing_user_turn`;
-- `with_checkpointing` on any orchestration builder;
 - a progress-ledger retry back-off (retries are immediate);
 - orchestration telemetry beyond the agents' own spans.
 

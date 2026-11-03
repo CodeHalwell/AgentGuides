@@ -554,7 +554,45 @@ async fn main() -> Result<()> {
 
 ## Vector stores
 
-The `experimental-vector-stores` feature adds a provider-neutral vector store API in `agent_framework::vectors`. `VectorStoreField::key`, `data` and `vector(name, dimensions)` describe fields (`with_type`, `indexed`, `full_text_indexed`, `with_index_kind`, `with_distance_function`, `with_storage_name`); `VectorStoreCollectionDefinition::new` validates them (one key, at least one vector, no duplicates). A `VectorStore` hands out `VectorCollection`s, which `ensure_collection_exists`, `upsert`, `get`, `delete` and `search(vector, &VectorSearchOptions)`. Records are `serde_json::Value` objects keyed by field name, so a typed struct converts with `serde_json::to_value`, and both traits are object-safe, so `Box<dyn VectorCollection>` swaps between providers. The implementations are `InMemoryVectorStore` (brute force, for tests), `CosmosVectorStore` and `AzureAISearchStore`; upstream's PostgreSQL, Qdrant, Redis, SQL Server, MongoDB and other connectors are not ported.
+The `experimental-vector-stores` feature adds a provider-neutral vector store API in `agent_framework::vectors`. `VectorStoreField::key`, `data` and `vector(name, dimensions)` describe fields (`with_type`, `indexed`, `full_text_indexed`, `with_index_kind`, `with_distance_function`, `with_storage_name`); `VectorStoreCollectionDefinition::new` validates them (one key, at least one vector, no duplicates). A `VectorStore` hands out `VectorCollection`s, which `ensure_collection_exists`, `upsert`, `get`, `delete` and `search(vector, &VectorSearchOptions)`. Records are `serde_json::Value` objects keyed by field name, so a typed struct converts with `serde_json::to_value`, and both traits are object-safe, so `Box<dyn VectorCollection>` swaps between providers. The implementations are `InMemoryVectorStore` (brute force, for tests), `CosmosVectorStore` and `AzureAISearchStore`, plus, since 0.15.0, the connectors in the table below. Each is a cargo feature of the umbrella crate that implies `experimental-vector-stores`, and each is exposed as a module of the same name (`agent_framework::qdrant` and so on).
+
+| Store | Feature | Construct with | Notes |
+| --- | --- | --- | --- |
+| `QdrantStore` | `qdrant` | `QdrantStore::new(url)`, `from_env()` | Named dense vectors over Qdrant's REST API |
+| `PostgresStore` | `postgres` | `PostgresStore::connect(connection_string).await?`, `from_client(...)` | PostgreSQL with pgvector: a table per collection, typed columns |
+| `SqlServerStore` | `sql-server` | `SqlServerStore::connect(connection_string)?`, `from_env()` | SQL Server 2025 native `VECTOR(n)` columns and exact `VECTOR_DISTANCE` search (cosine, Euclidean, dot); bytes fields and generated keys are not supported |
+| `MongoDbStore` | `mongodb` | `MongoDbStore::connect(uri, database).await?`, `from_env().await?` | Atlas Vector Search, one index per vector field; filters become `$vectorSearch` prefilters, and only indexed fields can prefilter |
+| `AzureDocumentDbStore` | `azure-documentdb` | `AzureDocumentDbStore::connect(connection_string, database).await?`, `from_env().await?` | Azure DocumentDB (MongoDB vCore) with IVF, HNSW or DiskANN `cosmosSearch` indexes |
+| `RedisVectorStore` | `redis` with `experimental-vector-stores` | `RedisVectorStore::new(url)?`, `from_env()?` | Redis Search over HASH or JSON documents; scores are native distances, reported with `VectorSearchResult::SCORE_KIND_DISTANCE` |
+
+All of them implement the same `VectorStore` and `VectorCollection` traits as the in-memory store, so the code in this section works unchanged: describe the fields, `store.get_collection(name, definition)?`, `ensure_collection_exists().await?`, `upsert`, and `search(vector, &VectorSearchOptions)`. A filter the backend cannot express is refused, not dropped. The `agent-framework-duckdb` crate, an embedded DuckDB store, is not re-exported by the umbrella crate (its bundled DuckDB library would be linked into every build with all features), so depend on it directly. The connectors that need a server were written against the crates' own unit tests and documentation examples; they were compiled for this guide but not run against live servers.
+
+```rust
+use agent_framework::qdrant::QdrantStore;
+use agent_framework::vectors::{
+    Filter, VectorSearchOptions, VectorStore, VectorStoreCollectionDefinition, VectorStoreField,
+};
+
+#[tokio::main]
+async fn main() -> agent_framework::error::Result<()> {
+    let store = QdrantStore::new("http://localhost:6333");
+    let definition = VectorStoreCollectionDefinition::new(vec![
+        VectorStoreField::key("id").with_type("int"),
+        VectorStoreField::data("year").with_type("int").indexed(),
+        VectorStoreField::vector("embedding", 4),
+    ])?;
+    let docs = store.get_collection("docs", definition)?;
+    docs.ensure_collection_exists().await?;
+    let hits = docs
+        .search(
+            vec![0.1, 0.2, 0.3, 0.4],
+            &VectorSearchOptions::new(5).with_filter(Filter::gte("year", 2020)?),
+        )
+        .await?;
+    println!("{} hits", hits.len());
+    Ok(())
+}
+```
 
 `VectorSearchOptions::new(top)` takes `with_skip`, `with_include_vectors`, `with_vector_field_name` (needed when there are several vector fields), `with_filter` and `with_provider_filter` (a raw dialect string, ANDed with the portable filter). A result has `record`, `score` and `score_kind`. Score direction depends on the service, not only on the distance function: Azure AI Search always returns a higher-is-better relevance score, and hybrid search an RRF score, so read `result.higher_is_closer(...)` rather than assuming.
 
@@ -933,4 +971,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 ## Other integrations
 
 - **Foundry embeddings** (`foundry`): `FoundryEmbeddingClient`, for text only; see [providers](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_providers/).
-- **Not ported**: the Cosmos DB memory provider, Azure AI Content Understanding, ChatKit, sandboxed code execution, the Claude Agent SDK and Telegram adapters, and the `lab` packages. The repository's `SCOPE.md` explains each decision.
+- **Azure AI Content Understanding** (added in 0.15.0): `ContentUnderstandingContextProvider`, in `agent-framework-azure` behind the `content-understanding` feature (umbrella `azure-content-understanding`). It analyses supported attachments with Azure Content Understanding, removes them from the model input, injects the rendered document (or uploads it through a `FileSearchBackend`), resumes slow analyses on later turns and offers a `list_documents` tool. It needs an Azure resource and was not run for this guide.
+- **Valkey** (added in 0.15.0): `ValkeyChatHistoryProvider` in `agent-framework-redis`, a port of .NET's provider that resolves each session's conversation from its state bag rather than being pinned to one session.
+- **Redis scope matching** (fixed in 0.15.0): `RedisContextProvider` no longer returns one scope's memories under another's. The scope `TAG` query used to over-match, because a value containing a comma is indexed as several tags and matching is case-insensitive, so `user_id = "smith"` received `"smith,john"`'s memories. Every hit is now re-checked against the exact scope. Unlike Python's fix in 1.24.0, this needs no schema change or re-ingestion.
+- **Not ported**: the Cosmos DB memory provider, ChatKit, sandboxed code execution, the Telegram adapter, and the `lab` packages. The repository's `SCOPE.md` explains each decision.

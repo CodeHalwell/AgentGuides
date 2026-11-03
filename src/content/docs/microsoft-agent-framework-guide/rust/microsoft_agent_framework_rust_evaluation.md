@@ -8,25 +8,73 @@ sidebar:
   order: 17
 ---
 
-Python's Agent Framework has an evaluation module: `evaluate_agent` and `evaluate_workflow` run a set of queries, turn each result into an `EvalItem`, and apply checks such as `keyword_check` and `tool_call_args_match` through a `LocalEvaluator`, with Foundry's hosted evaluators as an option. **The Rust port has none of it.** Upstream marks evaluation experimental, and the port's `docs/feature-stages.md` lists it (`EVALS`) among the experimental features not ported yet, to go behind an `experimental-*` feature when it is. What the crate does have is everything an evaluation is built from: responses you can inspect and serialise, typed structured output, summed token usage, spans, the scripted-client pattern from the [testing page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_testing/#a-scripted-chat-client), and one evaluation type, the experimental harness's `Judge`.
+Python's Agent Framework has an evaluation module: `evaluate_agent` and `evaluate_workflow` run a set of queries, turn each result into an `EvalItem`, and apply checks such as `keyword_check` and `tool_call_args_match` through a `LocalEvaluator`, with Foundry's hosted evaluators as an option. **Since 0.15.0 the Rust port has it**, behind the `experimental-evals` feature (part of `experimental`), like the upstream feature it follows; nothing behind it is covered by semver. The [next section](#the-experimental-evals-module) shows it. Before 0.15.0 the crate had none of it, and the rest of this page builds the same things by hand from what the core always had: responses you can inspect and serialise, typed structured output, summed token usage, spans, the scripted-client pattern from the [testing page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_testing/#a-scripted-chat-client), and the experimental harness's `Judge`. That approach still earns its place when you want checks the module does not offer, or no experimental dependency.
 
-This page shows how to evaluate with those pieces. Every program below was compiled against `agent-framework` %%version=agent-framework-rs%%, and run, either on its own test double or against a local stand-in for the OpenAI API (whose canned answers explain the outputs shown). The [recipes page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_recipes/#a-regression-suite-with-a-judge-model) has a complete evaluation suite in one program; this page takes each part of that further.
+The hand-built sections below show how to evaluate with those pieces. Every program below was compiled against `agent-framework` %%version=agent-framework-rs%%, and run, either on its own test double or against a local stand-in for the OpenAI API (whose canned answers explain the outputs shown). The [recipes page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_recipes/#a-regression-suite-with-a-judge-model) has a complete evaluation suite in one program; this page takes each part of that further.
 
-## What is and is not ported
+## The `experimental-evals` module
+
+`agent_framework::evaluation` (feature `experimental-evals`) is a port of upstream's evaluation module. An `EvalItem` is one query and response, derived from a conversation by a `ConversationSplit` or your own splitter. An `Evaluator` scores a batch of items into `EvalResults`; `LocalEvaluator` runs `EvalCheck`s in process and is meant for CI smoke tests. `evaluate_agent()` runs an agent over queries, or takes responses you already have, and `evaluate_workflow(&workflow)` evaluates each agent in a workflow run and the overall output. Each returns one `EvalResults` per evaluator.
+
+```rust
+use std::sync::Arc;
+
+use agent_framework::evaluation::{evaluate_agent, evaluator, keyword_check, EvalItem, LocalEvaluator};
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Arc::new(
+        Agent::builder(OpenAIChatCompletionClient::from_env("%%model=openai-small%%")?)
+            .name("geo")
+            .instructions("Answer in one sentence.")
+            .build(),
+    );
+
+    let results = evaluate_agent()
+        .agent(agent)
+        .queries(["What is the capital of France?", "Capital of Italy?"])
+        .evaluator(LocalEvaluator::new(vec![
+            keyword_check(["paris"], false),
+            evaluator("short", |item: &EvalItem| item.response().len() < 200),
+        ]))
+        .eval_name("geography")
+        .run()
+        .await?;
+
+    for r in &results {
+        println!("{}: {} passed, {} failed of {}", r.provider, r.passed(), r.failed(), r.total());
+    }
+    results[0].raise_for_status(None)?; // an error here fails a CI job
+    Ok(())
+}
+```
+
+With the second query the model should answer "Rome", so `keyword_check(["paris"], false)` fails it, and `raise_for_status` returns an `EvalNotPassedError`. (Run against a stand-in that always answers "Paris is the capital of France.", both items pass, and the summary line reads `Local: 2 passed, 0 failed of 2`.)
+
+What the module offers:
+
+- **Checks.** `keyword_check(keywords, case_sensitive)`, `tool_called_check(names, mode)`, `tool_calls_present()` and `tool_call_args_match()` (with `ExpectedToolCall::new(name).with_arguments(json)`), and `evaluator(name, f)` or `async_evaluator(name, f)`, which wrap a function over the whole `EvalItem` whose result is a `bool`, a score, a JSON object or a `CheckResult`. The argument match is a subset match, as in Python.
+- **Run controls on `evaluate_agent()`.** `expected_output`, `expected_tool_calls`, `responses` (score pre-recorded responses instead of running the agent), `tools` (tool definitions for every item; they are not passed to the agent, and an `Agent` lists its own with `Agent::tools()`), `eval_name`, `context`, `conversation_split` and `num_repetitions`. `evaluate_workflow` also takes `include_overall` and `include_per_agent`, and reads each agent's input and response from the `AgentRun` events the built-in agent executors emit.
+- **Gates.** `EvalResults::raise_for_status(None)`, `assert_score_at_least`, `assert_dimension_score_at_least` and `assert_no_failed_items`, plus `passed()`, `failed()`, `total()` and `all_passed()`.
+- **Hosted evaluators.** `FoundryEvals`, Foundry's built-in and generated rubric evaluators over the Evals API, sits behind `agent-framework-foundry`'s `evals` feature, which the umbrella `experimental-evals` turns on when `foundry` is enabled. It needs a Foundry project and was not run for this guide.
+
+Not ported: the deprecated `AgentEvalConverter`. Function evaluators take the whole `EvalItem` rather than parameters matched by name.
+
+## What each part maps to
 
 | Python (`agent_framework`) | Rust %%version=agent-framework-rs%% |
 | --- | --- |
-| `evaluate_agent`, `evaluate_workflow` | Not ported. Loop over your cases calling `run_once` or `Workflow::run`. |
-| `EvalItem`, `EvalCheck`, `CheckResult`, `Evaluator`, `LocalEvaluator` | Not ported. An `AgentResponse` already holds the messages, tool calls, results, usage and finish reason; a check is a closure over it. |
-| `@evaluator` | No equivalent needed: checks are ordinary functions or closures. |
-| `keyword_check`, `tool_called_check`, `tool_calls_present`, `tool_call_args_match`, `ExpectedToolCall` | Not ported. Each is a few lines over `Message::function_calls` and `FunctionCallContent::parse_arguments` ([below](#rule-based-checks)). |
-| `ConversationSplit`, `ConversationSplitter`, `EvalItem.per_turn_items` | Not ported. Drive the conversation one turn at a time and check each reply ([multi-turn](#multi-turn-conversations)). |
-| `responses=` (pre-recorded responses) | `AgentResponse` implements `Serialize` and `Deserialize`, so save responses and score them later ([golden datasets](#golden-datasets-and-recorded-runs)). |
-| `num_repetitions` | A loop ([CI gate](#an-evaluation-gate-for-ci)). |
-| `FoundryEvals`, `AgentEvalConverter` | Not ported; the Foundry crate has no evaluation client. |
-| `EvalNotPassedError`, `raise_for_status` | Exit with a non-zero code, or `assert!` in a test. |
+| `evaluate_agent`, `evaluate_workflow` | `evaluate_agent()` and `evaluate_workflow(&workflow)` with `experimental-evals`. Without the feature, loop over your cases calling `run_once` or `Workflow::run`. |
+| `EvalItem`, `EvalCheck`, `CheckResult`, `Evaluator`, `LocalEvaluator` | The same names with `experimental-evals`. Without it, an `AgentResponse` already holds the messages, tool calls, results, usage and finish reason; a check is a closure over it. |
+| `@evaluator` | `evaluator(name, f)` and `async_evaluator(name, f)`, or an ordinary function or closure when you build checks by hand. |
+| `keyword_check`, `tool_called_check`, `tool_calls_present`, `tool_call_args_match`, `ExpectedToolCall` | The same names with `experimental-evals`; the hand-built versions are a few lines over `Message::function_calls` and `FunctionCallContent::parse_arguments` ([below](#rule-based-checks)). |
+| `ConversationSplit`, `ConversationSplitter`, `EvalItem.per_turn_items` | The same names with `experimental-evals`. By hand, drive the conversation one turn at a time and check each reply ([multi-turn](#multi-turn-conversations)). |
+| `responses=` (pre-recorded responses) | `.responses(...)` on `evaluate_agent()`. `AgentResponse` implements `Serialize` and `Deserialize`, so save responses and score them later ([golden datasets](#golden-datasets-and-recorded-runs)). |
+| `num_repetitions` | `.num_repetitions(n)`, or a loop ([CI gate](#an-evaluation-gate-for-ci)). |
+| `FoundryEvals` | `FoundryEvals`, behind `agent-framework-foundry`'s `evals` feature. `AgentEvalConverter` is not ported. |
+| `EvalNotPassedError`, `raise_for_status` | `EvalNotPassedError` and `EvalResults::raise_for_status`. By hand, exit with a non-zero code, or `assert!` in a test. |
 | LLM judge | `Judge` and `JudgeVerdict` in `agent_framework::harness`, behind `experimental-harness` ([below](#llm-as-judge-with-judge)); or any agent with a `ResponseFormat` ([rubric scoring](#rubric-and-pairwise-scoring)). |
-
 .NET's `Microsoft.Extensions.AI.Evaluation` libraries have no Rust counterpart either.
 
 ## Rule-based checks

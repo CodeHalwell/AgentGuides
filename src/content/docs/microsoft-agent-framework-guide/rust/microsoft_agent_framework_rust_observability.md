@@ -15,6 +15,7 @@ The crate instruments agents, model calls and tool calls with [`tracing`](https:
 | (none) | Spans, visible to any `tracing` subscriber | `tracing` only |
 | `otel-metrics` | Three GenAI histograms | The `opentelemetry` API crate, no SDK |
 | `otel-export` | `observability::export::OtelExport`, a ready OTLP/HTTP pipeline for spans and metrics; implies `otel-metrics` | `opentelemetry_sdk`, `opentelemetry-otlp`, `tracing-opentelemetry`; building it needs a C toolchain and `cmake` (for `aws-lc-rs`) |
+| `azure-monitor` | `OtelExport::with_azure_monitor` and `azure_monitor_from_env`, to export to Application Insights instead of an OTLP endpoint (umbrella feature `azure-monitor`; core's feature of the same name) | Implies `otel-export`; adds `opentelemetry-application-insights` |
 
 The examples were compiled against %%version=agent-framework-rs%% with `otel-export` and run against a stand-in for the OpenAI API, which also accepted the OTLP requests.
 
@@ -236,10 +237,36 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 | `with_traces(bool)` | `true` | Export spans; with `false`, `install()` does nothing, leaving the global subscriber free |
 | `with_metrics(bool)` | `true` | Export the histograms |
 | `with_metric_interval(d)` | 60 s | Push interval for metrics |
+| `with_span_processor(p)` | none | Run an OpenTelemetry SDK `SpanProcessor` on every span, ahead of the exporter, to add deployment attributes for example. Processors run in the order added |
+| `with_azure_monitor(conn)` | off | Export to Application Insights with this connection string instead of to an OTLP endpoint (`azure-monitor` feature) |
 
 `build()` returns an `OtelPipeline`. `install()` claims the global `tracing` subscriber with an `EnvFilter` from `RUST_LOG` (default `info`) and fails if one is already set; `tracing_layer()` gives the layer to add to a subscriber you build yourself; `shutdown()` flushes and stops both providers and returns any error rather than logging it, since the logging may be what is shutting down. Call `shutdown()` before exiting: spans are batched, and dropping the pipeline loses whatever is queued. Keep the pipeline alive as long as its layer is installed.
 
 The transport is OTLP over HTTP with protobuf, not gRPC, on a blocking HTTP client in the exporters' background threads (an async client would need a tokio reactor there). Only `OTEL_EXPORTER_OTLP_ENDPOINT` is read; the signal-specific endpoint variables, headers, sampling and batching settings are not, so a collector that needs an authentication header has to be reached through a local collector, or you build the pipeline yourself.
+
+### The resource attribute
+
+Since 0.15.0 the pipeline marks its telemetry with the resource attribute `microsoft.agent-framework="True"` (the string `"True"`, not a boolean, as in Python), shared by the tracer and meter providers. Azure's agent telemetry views, Foundry's and the Application Insights experiences built on them, use it to tell Agent Framework telemetry from an application's own. A resource describes the service, not individual spans, so the attribute identifies the service. If you build the providers yourself, add it to your own `Resource`.
+
+### Azure Monitor
+
+With the `azure-monitor` feature, `OtelExport::azure_monitor_from_env("travel-agent")?` sends the pipeline's traces and metrics to Application Insights, reading the connection string from `APPLICATIONINSIGHTS_CONNECTION_STRING` (the variable Python and the Azure Monitor distros read) and failing with a configuration error when it is unset or blank. `with_azure_monitor(connection_string)` takes the string directly, and the string is checked when `build()` runs. The rest of the pipeline, `install()` and `shutdown()` included, is unchanged.
+
+```rust
+use agent_framework::observability::export::OtelExport;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let pipeline = OtelExport::azure_monitor_from_env("travel-agent")?.build()?;
+    pipeline.install()?;
+    // ... run agents ...
+    pipeline.shutdown()?;
+    Ok(())
+}
+```
+
+### Workflow spans
+
+A workflow run emits `workflow.build`, `workflow.run`, `executor.process {id}`, `message.send` and `edge_group.process {type}` spans through `tracing`, with the names and attributes Python uses. Like the other spans they do nothing until a subscriber such as the `otel-export` pipeline is installed. `WorkflowBuilder::with_telemetry(WorkflowTelemetryOptions { ... })` turns kinds off (`disable_workflow_build`, `disable_workflow_run`, `disable_executor_process`, `disable_edge_group_process`, `disable_message_send`) and, with `enable_sensitive_data`, records message payloads on `message.send` and `executor.process`. The options have a `Default`, so name only the fields you change.
 
 ### Composing with your own subscriber
 
