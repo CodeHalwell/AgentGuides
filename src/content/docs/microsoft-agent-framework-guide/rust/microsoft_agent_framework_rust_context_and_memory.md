@@ -572,7 +572,7 @@ For finer control, build a `FileSkillsSource` (in `agent_framework::skills_files
 
 Scripts run through a third tool, `run_skill_script`, which the provider adds only when at least one skill has a script. A `SkillScript` is either inline, `SkillScript::inline(name, |args| async move { ... })`, which runs in-process, or a file (`.py` by default), named by its path relative to the skill, for example `scripts/extract.py`. File scripts need a runner, because there is no default one: `SkillsProvider::with_script_runner(|skill, script, args| async move { ... })` decides how to run them (a subprocess, a sandbox, a code interpreter). Without a runner, running a file script returns an error to the model. For a file script, `args` is an array of command-line strings.
 
-`run_skill_script` requires approval by default. `with_script_approval(false)` turns that off for trusted skills. `load_skill` and `read_skill_resource` do not require approval unless you ask: `with_load_skill_approval(true)` and `with_read_skill_resource_approval(true)`. (Python and .NET require approval for all three by default.) `with_filter(|skill| ...)` keeps only the skills the closure accepts, and `with_instructions_prompt(template)` replaces the catalogue introduction, with `{skills}` standing for the list.
+`run_skill_script` requires approval by default. `with_script_approval(false)` turns that off for trusted skills. `load_skill` and `read_skill_resource` do not require approval unless you ask: `with_load_skill_approval(true)` and `with_read_skill_resource_approval(true)`. (Python requires approval for all three by default.) `with_filter(|skill| ...)` keeps only the skills the closure accepts, and `with_instructions_prompt(template)` replaces the catalogue introduction, with `{skills}` standing for the list.
 
 ```rust
 use agent_framework::prelude::*;
@@ -598,7 +598,7 @@ fn main() -> Result<()> {
 }
 ```
 
-Only the skills a code-defined or file source supplies are ported. Upstream's MCP-served skills (SEP-2640) are available with the `mcp-skills` feature, which adds `skills::load_skills` to `agent-framework-mcp` and `McpClient::read_resource`; `FoundryToolbox::skills_provider` uses it for hosted agents.
+Skills served over MCP (SEP-2640) are also supported, with the `mcp-skills` feature, which adds `skills::load_skills` to `agent-framework-mcp` and `McpClient::read_resource`; `FoundryToolbox::skills_provider` uses it for hosted agents.
 
 ## The agent harness
 

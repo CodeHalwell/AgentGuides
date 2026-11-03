@@ -687,7 +687,7 @@ What decides how much the host remembers:
 - **Approvals.** With `store=false` a turn keeps no approval state, so an `mcp_approval_response` sent with `store=false` gets a 400 that says it needs `store=true`.
 - **Other servers.** `InvocationsHostServer` (feature `session-store`) serves the Invocations protocol with durable per-session agent state, and, with the `websocket` feature, `/invocations_ws`; the `voice` feature adds a Voice Live Bridge relay. `FoundryToolbox` reads a Foundry toolbox's MCP endpoint as a tool source and fetches its bearer token for every request.
 
-`FoundryRequestContext::from_headers` now returns `Result<_, InvalidOriginalSubject>`: a malformed `x-ms-original-subject` header is rejected before any handler runs. Not ported: the agentserver's resilient task runtime, built on the Foundry Tasks service. This section was written from the crate's documentation and changelog; the server was compiled but not run against the Foundry platform.
+`FoundryRequestContext::from_headers` now returns `Result<_, InvalidOriginalSubject>`: a malformed `x-ms-original-subject` header is rejected before any handler runs. Not ported: the agentserver's resilient task runtime, built on the Foundry Tasks service. This section was written from the crate's documentation and changelog. The example compiles and the builder methods named above (`with_background_source`, `with_background_poll_interval`, `with_session_store_provider`, `with_checkpoint_store`) exist in the 0.15.0 source, but the server was not run against the Foundry platform.
 
 ## What is not here
 

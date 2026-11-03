@@ -1537,7 +1537,7 @@ Things that are not checkpointed:
 
 - State in a `FunctionExecutor`'s closure, or in a custom executor that does not implement `snapshot_state`.
 - The child runs of a [sub-workflow](#sub-workflows). `WorkflowExecutor` keeps a paused child run in memory and does not snapshot it, so a request raised inside a sub-workflow cannot be answered after a restart.
-- The prebuilt orchestrations, whose builders have no `with_checkpointing`. See [checkpointing orchestrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_orchestrations/#checkpointing-an-approval-gate) for the part you can rebuild by hand.
+- Hand-built graphs of agent executors, unless you add `with_checkpointing` yourself. The prebuilt orchestration builders take `with_checkpointing(storage)` since 0.15.0; see [checkpointing orchestrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_orchestrations/#checkpointing-an-approval-gate).
 
 The library has no checkpoint-backed resume of a streamed run either: `run_from_checkpoint` does not stream.
 

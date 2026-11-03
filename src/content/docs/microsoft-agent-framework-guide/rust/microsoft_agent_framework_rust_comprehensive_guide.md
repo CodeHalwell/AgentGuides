@@ -490,6 +490,36 @@ async fn main() -> Result<()> {
 }
 ```
 
+### Background responses
+
+Added in 0.15.0. For work that takes longer than a request should wait, set `background: Some(true)` on `AgentRunOptions` (or `ChatOptions`). If the service accepts the request without finishing it, the response carries a `continuation_token`; poll by running again with `AgentRunOptions::new().with_continuation_token(token)` and no new messages, until the token is gone. A background run needs a session, so the polls share its conversation. A run that carries a token takes no new messages (the agent rejects a token sent with some), and neither history nor context providers are consulted for it. Treat the token as opaque.
+
+```rust
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Agent::builder(OpenAIChatClient::from_env("%%model=openai%%")?).build();
+    let mut session = agent.create_session();
+
+    let options = AgentRunOptions { background: Some(true), ..Default::default() };
+    let mut response = agent
+        .run_with_options(vec![Message::user("Write the quarterly report.")], Some(&mut session), options)
+        .await?;
+
+    while let Some(token) = response.continuation_token.clone() {
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        response = agent
+            .run_with_options(vec![], Some(&mut session), AgentRunOptions::new().with_continuation_token(token))
+            .await?;
+    }
+    println!("{}", response.text());
+    Ok(())
+}
+```
+
+The OpenAI Responses client (`OpenAIChatClient`) and the Azure OpenAI Responses client support it: they submit with `background: true`, return an `OpenAIContinuationToken` while the response is queued or in progress, poll with `GET /responses/{id}`, and can resume a stream with `starting_after`. Streamed updates carry an `operation_state` (`InProgress` or `Terminal`), and a terminal update clears the aggregated token. The tool loop's call and time budgets carry across continuations, so polling cannot exceed `max_function_calls` or `max_duration_seconds`, and a poll does not count as a model iteration. This was exercised against a stub client that returns a token and then completes; the real services were not called.
+
 `ChatOptions` covers the usual fields (`model`, `temperature`, `top_p`, `max_tokens`, `stop`, `seed`, `frequency_penalty`, `presence_penalty`, `logit_bias`, `tool_choice`, `allow_multiple_tool_calls`, `response_format`, `conversation_id`, `store`, `metadata`, `user`) plus `additional_properties`, whose entries are copied into the top level of the request body for provider-specific values. `SupportsAgentRun::run_with_options` on an agent that does not support options (the trait's default) logs a warning and ignores them.
 
 ## Middleware

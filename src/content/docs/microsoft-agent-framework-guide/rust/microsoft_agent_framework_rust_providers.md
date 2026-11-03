@@ -621,7 +621,7 @@ The endpoint is the project endpoint, `https://<resource>.services.ai.azure.com/
 
 The builder takes `name` (default: the model name, which also becomes the agent id), `model` (default: the client's), `instructions`, `description`, `tool` and `tools`. `FoundryAgent` implements `SupportsAgentRun`, including streaming and `run_with_options`; `inner()` returns the core `Agent` for anything else, such as `as_tool`.
 
-The agent runs entirely on the client side. It does not create, fetch or bind to an agent stored in the Foundry project (`AIProjectClient.agents` upstream, or .NET's `AsAIAgent`), and hosted Foundry agents are not supported. If your agent already exists in the portal, copy its instructions and tools into a definition.
+This agent runs entirely on the client side. It does not create, fetch or bind to an agent stored in the Foundry project (`AIProjectClient.agents` upstream, or .NET's `AsAIAgent`). To call a Prompt or Hosted Agent that already exists in the project, use `FoundryAgentChatClient` (added in 0.15.0, [below](#differences-from-python-and-net)); otherwise copy its instructions and tools into a definition.
 
 ### Per-run client headers
 
