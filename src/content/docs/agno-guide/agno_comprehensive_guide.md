@@ -910,6 +910,43 @@ while run.is_paused:
 
 `continue_run()` also takes `stream=True`, and `acontinue_run()` is the async form. In AgentOS the same flow is `POST /agents/{agent_id}/runs/{run_id}/continue`. Workflows have their own pause mechanism, `HumanReview`: see [Workflows](/agno-guide/agno_workflows/#human-review).
 
+### Approvals
+
+`@approval` (from `agno.approval`) marks a tool whose pause should also be recorded as an approval in the agent's `db`, so that an administrator can resolve it through AgentOS rather than only the code that started the run. It composes with `@tool` in either order, or works on a plain function.
+
+```python
+from agno.approval import approval
+from agno.tools import tool
+
+
+@approval                               # type="required": blocking
+@tool(requires_confirmation=True)
+def delete_file(path: str) -> str:
+    """Delete a file."""
+    return f"Deleted {path}"
+
+
+@approval(type="audit")                 # non-blocking: a record is written once the tool is resolved
+@tool(requires_user_input=True, user_input_fields=["reason"])
+def export_table(table: str, reason: str) -> str:
+    """Export a table."""
+    return f"Exported {table}: {reason}"
+
+
+@approval                               # on a plain function it implies requires_confirmation=True
+def wire(amount: int) -> str:
+    """Send money."""
+    return f"Sent {amount}"
+```
+
+- `type="required"` (the default) sets `requires_confirmation=True` if the tool has no pause flag of its own. When the run pauses, a record with status `pending` is written to the `approvals` table of the agent's `db`.
+- `type="audit"` needs one of `requires_confirmation`, `requires_user_input` or `external_execution` already set, and raises `ValueError` otherwise. The run pauses as usual, and a record with status `approved` or `rejected` is written once you resolve and continue it.
+- Any other `type` raises `ValueError`.
+
+Checked against %%version=agno%% with a scripted model and `SqliteDb`: a `required` tool pauses with `needs_confirmation` true and leaves a `pending` record; an `audit` tool leaves an `approved` record after `continue_run()`.
+
+The SDK does not wait for the record. Calling `agent.continue_run()` yourself, after `req.confirm()`, resumes the run and leaves the `required` record `pending`. The gate is in AgentOS: `POST /agents/{agent_id}/runs/{run_id}/continue` returns 403 while the run has a pending `required` approval. An administrator resolves it with `POST /approvals/{approval_id}/resolve` and a body of `{"status": "approved" | "rejected", "resolved_by": "...", "resolution_data": {...}}`; `GET /approvals` lists them, and resolving twice returns 409. So use `@approval` when the run is served through [AgentOS](/agno-guide/agno_agentos/), and plain `requires_confirmation` when your own code makes the decision.
+
 ## Agent reference
 
 The constructor takes keyword arguments only. Grouped by purpose (all exist on `Agent` in %%version=agno%%):
