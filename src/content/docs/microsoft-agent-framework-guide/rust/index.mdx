@@ -102,7 +102,7 @@ Upstream marks some APIs experimental (Python warns on use, .NET raises a compil
 | `experimental-agent-hooks` | Allow, deny and transform hooks at the agent, model-call and tool-call seams, and `Error::InterceptionBlocked` |
 | `experimental-evals` | `evaluate_agent`, `evaluate_workflow`, `LocalEvaluator` and its checks, and CI assertions on `EvalResults` |
 | `experimental-fides` | FIDES information-flow control: integrity and confidentiality labels, label-tracking and policy-enforcement function middleware, and a quarantined LLM (`agent_framework::security`) |
-| `experimental-computer-use` | Computer-use content (`ComputerToolCallContent`, `ComputerToolResultContent`) and a hosted computer tool; the tool loop returns to the caller on a pending call |
+| `experimental-computer-use` | Computer-use handling: validated constructors for `ComputerToolCallContent` and `ComputerToolResultContent`, a hosted computer tool, and the tool loop returning to the caller on a pending call. The types and their `Content` variants are always present, whether or not the feature is on |
 
 Everything else, including the workflow engine, all orchestrations, compaction, skills, `TextSearchProvider`, MCP, A2A, hosting and the memory providers, is on the stable side. The rules are in the repository's `docs/feature-stages.md`, which also lists the upstream experimental features with no Rust counterpart yet, such as functional workflows and MCP long-running tasks.
 

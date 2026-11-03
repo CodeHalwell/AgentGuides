@@ -598,7 +598,7 @@ fn main() -> Result<()> {
 }
 ```
 
-Skills served over MCP (SEP-2640) are also supported, with the `mcp-skills` feature, which adds `skills::load_skills` to `agent-framework-mcp` and `McpClient::read_resource`; `FoundryToolbox::skills_provider` uses it for hosted agents.
+Skills served over MCP (SEP-2640) are also supported, with the `mcp-skills` feature, which adds `skills::load_skills` to `agent-framework-mcp` and `McpClient::read_resource`; `FoundryToolbox::skills_provider` is a separate switch: it needs `foundry-hosting-skills`, the umbrella flag for the Foundry hosting crate's `skills` feature, as well as `foundry-hosting`. `mcp-skills` alone does not provide it.
 
 ## The agent harness
 
