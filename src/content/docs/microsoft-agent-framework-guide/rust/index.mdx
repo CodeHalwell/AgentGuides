@@ -65,15 +65,19 @@ The `agent-framework` crate re-exports the core crate at its root and each compa
 | `foundry` | Microsoft Foundry: `FoundryChatClient`, client-side prompt agents, embeddings, managed memory |
 | `anthropic` | Claude through the Anthropic API, Amazon Bedrock, Vertex AI or Foundry |
 | `gemini`, `mistral`, `ollama`, `foundry-local`, `bedrock`, `github-copilot` | Those providers' chat clients (and embeddings where they offer them) |
+| `claude` | `ClaudeAgent`, which drives the Claude Code CLI as an agent |
 | `copilotstudio` | A published Copilot Studio agent as a `SupportsAgentRun` participant |
 | `mcp` | MCP tools over stdio, streamable HTTP and WebSocket |
 | `a2a` | An A2A client (`A2AAgent`, `A2AClient`); serving A2A is part of `hosting` |
 | `hosting`, `agui-client` | axum routers for DevUI-style, OpenAI-compatible, AG-UI and A2A serving; an AG-UI chat client |
+| `foundry-hosting` | `ResponsesHostServer` and the other servers that run an agent or workflow as a Foundry hosted agent |
 | `redis`, `mem0`, `cosmos`, `azure-ai-search` | History stores and memory or retrieval providers |
 | `purview` | Purview data-loss-prevention middleware |
 | `tools` | Local and Docker shell tools, as `agent_framework::builtin_tools` |
-| `otel-metrics`, `otel-export` | GenAI metrics through the OpenTelemetry API; a ready-made OTLP exporter |
-| `full` | Every integration above except the two OpenTelemetry features |
+| `file-skills`, `mcp-skills` | `SKILL.md` skill packages from disk; skills served over MCP |
+| `otel-metrics`, `otel-export`, `azure-monitor` | GenAI metrics through the OpenTelemetry API; a ready-made OTLP exporter; export to Application Insights |
+| `qdrant`, `postgres`, `sql-server`, `mongodb`, `azure-documentdb` | Vector stores (each implies `experimental-vector-stores`) |
+| `full` | Every integration above except the OpenTelemetry features, `mcp-skills`, and the vector stores |
 
 ```toml
 [dependencies]
@@ -90,14 +94,17 @@ Upstream marks some APIs experimental (Python warns on use, .NET raises a compil
 | Feature | What it gates |
 | --- | --- |
 | `experimental-declarative-agents` | The whole declarative crate: YAML/JSON agents and workflows |
-| `experimental-harness` | The agent loop (`LoopAgent`), todo list, standing tool approvals, agent modes, file memory |
+| `experimental-harness` | The agent loop (`LoopAgent`), todo list, standing tool approvals, agent modes, file memory and file access, durable memory, background agents, and `create_harness_agent` |
 | `experimental-session-store` | Saving and restoring whole sessions by key (`AgentSessionStore`) |
 | `experimental-file-history` | `FileHistoryProvider` |
-| `experimental-vector-stores` | The vector store abstraction, vector collection tools, and the in-memory, Cosmos DB and Azure AI Search stores |
+| `experimental-vector-stores` | The vector store abstraction, vector collection tools, and the in-memory, Cosmos DB, Azure AI Search, Redis, Qdrant, PostgreSQL, SQL Server, MongoDB and Azure DocumentDB stores |
 | `experimental-progressive-tools` | Adding or removing tools mid-run from function middleware |
 | `experimental-agent-hooks` | Allow, deny and transform hooks at the agent, model-call and tool-call seams, and `Error::InterceptionBlocked` |
+| `experimental-evals` | `evaluate_agent`, `evaluate_workflow`, `LocalEvaluator` and its checks, and CI assertions on `EvalResults` |
+| `experimental-fides` | FIDES information-flow control: integrity and confidentiality labels, label-tracking and policy-enforcement function middleware, and a quarantined LLM (`agent_framework::security`) |
+| `experimental-computer-use` | Computer-use content (`ComputerToolCallContent`, `ComputerToolResultContent`) and a hosted computer tool; the tool loop returns to the caller on a pending call |
 
-Everything else, including the workflow engine, all orchestrations, compaction, skills, `TextSearchProvider`, MCP, A2A, hosting and the memory providers, is on the stable side. The rules are in the repository's `docs/feature-stages.md`, which also lists the upstream experimental features with no Rust counterpart yet: evaluation, FIDES, computer use, functional workflows, MCP long-running tasks, MCP skills and the Foundry tools.
+Everything else, including the workflow engine, all orchestrations, compaction, skills, `TextSearchProvider`, MCP, A2A, hosting and the memory providers, is on the stable side. The rules are in the repository's `docs/feature-stages.md`, which also lists the upstream experimental features with no Rust counterpart yet, such as functional workflows and MCP long-running tasks.
 
 ## Coming from Python or .NET
 
@@ -122,7 +129,7 @@ The crate mirrors the Python package's module layout, so most names carry over:
 The differences that change how code is written:
 
 - **Streaming is a separate method.** `run_stream` and `get_streaming_response` stand in for `stream=True`, and runs with local tools or agent middleware stream whole messages rather than tokens.
-- **Workflow messages are untyped JSON.** Executors receive and send `serde_json::Value`; there is no handler-type routing or edge type checking.
+- **Workflow messages are untyped JSON.** Executors receive and send `serde_json::Value`; there is no handler-type routing. Edges are type-checked only where both ends declare message types by name ([workflows](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_workflows/#declaring-message-types)).
 - **Group chat, handoff and Magentic are single executors** that call their participants in a loop, so their events carry one executor id.
 - **Middleware is fixed at build time.** There is no per-run `middleware=` argument and no decorator form.
 - **Handoff tools are not injected.** Attach `handoff_tool_spec(...)` tools to each handoff participant yourself.
@@ -130,7 +137,7 @@ The differences that change how code is written:
 - **Declarative workflows use a format of the port's own**, not Microsoft's Power Fx actions; declarative agents use the official schema.
 - **Some identity settings must be explicit.** For example, Purview needs a tenant id and application location where Python reads them from the token.
 
-Not ported, according to the repository's `SCOPE.md` and `docs/feature-stages.md`: the DevUI frontend (the API is served, with a small built-in debug page), Durable Task, Azure Functions and Foundry hosting, binding to an agent already hosted in Foundry, evaluation, the FIDES prompt-injection defence, functional workflows, ChatKit, sandboxed code execution, the Power Fx declarative workflow language, file-based skills, summarising compaction, workflow run cancellation, and the Postgres, Qdrant, MongoDB and other vector store connectors. The crate has no MCP server either (`as_mcp_server` in Python); the [MCP page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/#exposing-an-agent-as-an-mcp-server) shows a minimal hand-written one. Most topic pages close with what is missing in their area.
+Not ported, according to the repository's `SCOPE.md` and `docs/feature-stages.md`: the DevUI frontend (the API is served, with a small built-in debug page), Durable Task, Azure Functions, the Foundry agentserver's resilient task runtime, functional workflows, ChatKit, sandboxed code execution and the Power Fx declarative workflow language. The crate has no MCP server either (`as_mcp_server` in Python); the [MCP page](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/#exposing-an-agent-as-an-mcp-server) shows a minimal hand-written one. Most topic pages close with what is missing in their area.
 
 ## Pages in this guide
 

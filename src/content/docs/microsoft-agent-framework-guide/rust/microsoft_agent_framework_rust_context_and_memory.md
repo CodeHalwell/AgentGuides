@@ -322,7 +322,7 @@ Upstream filters the search input so history and other providers' messages are n
 
 ## Compaction
 
-Compaction bounds what is sent to the model as a conversation grows. `agent_framework::compaction` (stable) has a `CompactionStrategy` trait, four strategies, a `Tokenizer` trait, the `compact` function and `CompactionProvider`, the context provider that applies a strategy on every run.
+Compaction bounds what is sent to the model as a conversation grows. `agent_framework::compaction` (stable) has a `CompactionStrategy` trait, the strategies below, a `Tokenizer` trait, the `compact` function and `CompactionProvider`, the context provider that applies a strategy on every run. The four strategies in this table are synchronous and need no model; [summarisation, pipelines and triggers](#summarising-pipelines-and-triggers) cover the rest.
 
 | Strategy | Keeps | Counts |
 | --- | --- | --- |
@@ -406,7 +406,7 @@ fn main() {
 
 `AgentBuilder::with_compaction(strategy)` wraps the strategy in a `CompactionProvider` with `ApproxTokenizer` and registers it on the agent. Agent providers run after the session's, so it sees the history the session's history provider has just loaded, plus whatever earlier agent providers added, and replaces `ctx.messages` with the compacted list. Three things follow:
 
-- **Only the request shrinks.** The stored history keeps every message. Compaction is a view, recomputed on every run; there is no record of what was dropped, and nothing is summarised.
+- **Only the request shrinks.** The stored history keeps every message. Compaction is a view, recomputed on every run, and the synchronous strategies leave no record of what was dropped. (`SummarizationCompactionStrategy` does write a summary message into the request; it is still not stored.)
 - **The run's input is never compacted.** It is appended after the providers run, so a single huge input still goes out whole, and a `SlidingWindow(4)` request plateaus at four history messages plus the input.
 - **Registration order matters.** Compaction applies to messages added by providers before it, and not to those added after. Register it last if retrieval results or memory messages should survive it, or before them if they should be trimmed too.
 
@@ -469,7 +469,60 @@ async fn main() -> Result<()> {
 }
 ```
 
-What is not ported: upstream's annotation model (messages grouped into spans and flagged as excluded rather than removed), the LLM-backed `SummarizationStrategy`, `TokenBudgetComposedStrategy`, `ContextWindowStrategy` sized from the model's limits, compaction inside the tool loop between model calls, and per-run overrides. There is no trigger threshold either: a strategy runs on every request, and is a no-op while the conversation is within its limit. A custom strategy is one method, `compact(&self, messages: &[Message], tokenizer: &dyn Tokenizer) -> Vec<Message>`; run it through `compact` or `CompactionProvider` and it gets the same repairs as the built-in ones.
+What is not ported: upstream's annotation model as such (messages flagged as excluded in place; the `index` module below offers the same grouping, but strategies return a new list), `TokenBudgetComposedStrategy` (use a pipeline), compaction inside the tool loop between model calls, and per-run overrides. A strategy used directly through `with_compaction` has no trigger threshold: it runs on every request and is a no-op while the conversation is within its limit. A custom strategy is one method, `compact(&self, messages: &[Message], tokenizer: &dyn Tokenizer) -> Vec<Message>`; run it through `compact` or `CompactionProvider` and it gets the same repairs as the built-in ones.
+
+### Summarising, pipelines and triggers
+
+Added in 0.15.0. These build on `AsyncCompactionStrategy`, the asynchronous form of the trait (`compact_async`). Every `CompactionStrategy` is one already, so the two kinds mix freely. Register an async strategy with `AgentBuilder::with_async_compaction(...)` or `CompactionProvider::with_async_strategy(...)`; `with_compaction` still takes only the synchronous trait.
+
+| Type | What it does |
+| --- | --- |
+| `SummarizationCompactionStrategy::new(client)` | Once the conversation passes `target_count + threshold` non-system messages (defaults 4 and 2), asks a chat client to summarise the oldest groups and keeps about `target_count` of the newest. The summary is an assistant message marked with `COMPACTION_SUMMARY_KEY`. A failed or empty summarisation leaves the conversation unchanged. |
+| `ToolResultCompactionStrategy::new(keep_last)` | Like `SelectiveToolResult`, but the stand-in reads `[Tool results: <tool name>]`, and `.with_formatter(...)` makes it your own text. |
+| `ContextWindowCompactionStrategy::new(window, max_output)` | Sizes the budget from the model: `window - max_output` input tokens. Past 50% of it, older tool results are collapsed (the last 4 kept); if the conversation is still past 80%, the oldest messages are dropped. Tune with `with_tool_eviction_threshold`, `with_truncation_threshold` (both in `(0, 1]`, truncation not below eviction), `with_keep_last_tool_call_groups` and `preserve_first_user`. It is synchronous, so `with_compaction` takes it. |
+| `PipelineCompactionStrategy::new(vec![...])` | Runs strategies in order, each on the previous one's output. |
+| `TriggeredCompactionStrategy::new(trigger, strategy)` | Runs a strategy only when the trigger fires. `CompactionTriggers` has `tokens_exceed`, `tokens_below`, `messages_exceed`, `turns_exceed`, `groups_exceed`, `has_tool_calls`, `always`, `never`, and `all` and `any` to combine them. |
+
+`SummarizationCompactionStrategy` also takes `with_prompt(...)` and `with_max_summary_input_tokens(Some(n))`; the summarisation request is capped at 8,000 tokens by default, and `None` lifts the cap. `with_target_count(0)` is a configuration error.
+
+```rust
+use std::sync::Arc;
+
+use agent_framework::compaction::{
+    CompactionTriggers, PipelineCompactionStrategy, SummarizationCompactionStrategy,
+    ToolResultCompactionStrategy, TriggeredCompactionStrategy,
+};
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let client = Arc::new(OpenAIChatCompletionClient::from_env("%%model=openai-small%%")?);
+
+    let strategy = PipelineCompactionStrategy::new(vec![
+        // First collapse old tool output, which is usually the bulk of the tokens...
+        Arc::new(ToolResultCompactionStrategy::new(2)),
+        // ...then summarise, but only once the conversation is long.
+        Arc::new(TriggeredCompactionStrategy::new(
+            CompactionTriggers::messages_exceed(20),
+            SummarizationCompactionStrategy::new(client.clone()).with_target_count(6)?,
+        )),
+    ]);
+
+    let agent = Agent::builder(client)
+        .instructions("You are a research assistant.")
+        .with_async_compaction(strategy)
+        .build();
+
+    let mut session = agent.create_session();
+    let response = agent.run(vec![Message::user("Hello")], Some(&mut session)).await?;
+    println!("{}", response.text());
+    Ok(())
+}
+```
+
+The summary replaces the original messages and is trusted as an assistant message from then on, so a compromised summariser could plant instructions that persist. Point it at a model you trust as much as the primary one. Summarising costs an extra model call on the runs where it fires, and, because compaction is recomputed on every run, it fires again on each run while the stored history stays long (the stored history is never shortened).
+
+`compaction::index` exposes the grouping the newer strategies work on: `CompactionMessageIndex::from_messages(...)` splits a conversation into `CompactionMessageGroup`s of a `CompactionGroupKind`, keeping a tool call and its result together, and reports included and total counts of groups, messages, tokens, bytes and turns. Use it when you write a strategy that needs to reason about whole exchanges.
 
 ## Skills
 
@@ -506,11 +559,50 @@ async fn main() -> Result<()> {
 
 The set of loaded skills belongs to the provider instance, not to a session: a provider registered on the agent, as here, keeps a skill loaded for every user once any conversation has loaded it. Attach a `SkillsProvider` to each session (it is cheap to clone, but clones share the loaded set, so build one per session with `SkillsProvider::new`) when that matters. Two skills with the same name: the later one wins.
 
-Only inline skills built in code are ported. Upstream's file-based skills (`SKILL.md` directories), MCP-backed skills and the `run_skill_script` tool are not.
+### File-based skills and scripts
+
+Added in 0.15.0. With the `file-skills` feature (in `full`), `SkillsProvider::from_paths(["./skills"])?` discovers skills on disk, following the [Agent Skills specification](https://agentskills.io/specification). A skill is a directory with a `SKILL.md`: YAML frontmatter (`name`, `description`, and optionally `license`, `compatibility`, `allowed-tools` and `metadata`) followed by the instructions. Each path you give is either a skill directory or a parent of skill directories, searched two levels deep. Files beside the `SKILL.md` with a resource extension (`.md`, `.json`, `.yaml`, `.yml`, `.csv`, `.xml`, `.txt`) become resources, named by their `/`-separated relative path.
+
+For finer control, build a `FileSkillsSource` (in `agent_framework::skills_files`) and call `.load()`: `with_resource_extensions`, `with_search_depth`, `with_resource_filter`, `with_script_extensions` and `with_script_filter`. A few behaviours to know:
+
+- **Resources are read once, when the skills load.** Reload to pick up edits. Files over 1 MiB, or not valid UTF-8, are skipped.
+- **Links are never followed.** A symbolic link below a configured root is not adopted as a skill or read as a resource, so a skill cannot pull in files from outside its directory. Even so, load skills only from sources you trust: their instructions reach the model verbatim.
+- **Names follow the specification.** `validate_skill_name` rejects upper case, a leading or trailing hyphen and double hyphens, and names are limited to 64 characters (descriptions to 1,024).
+- **Duplicate YAML keys are an error**, including inside `metadata`.
+
+Scripts run through a third tool, `run_skill_script`, which the provider adds only when at least one skill has a script. A `SkillScript` is either inline, `SkillScript::inline(name, |args| async move { ... })`, which runs in-process, or a file (`.py` by default), named by its path relative to the skill, for example `scripts/extract.py`. File scripts need a runner, because there is no default one: `SkillsProvider::with_script_runner(|skill, script, args| async move { ... })` decides how to run them (a subprocess, a sandbox, a code interpreter). Without a runner, running a file script returns an error to the model. For a file script, `args` is an array of command-line strings.
+
+`run_skill_script` requires approval by default. `with_script_approval(false)` turns that off for trusted skills. `load_skill` and `read_skill_resource` do not require approval unless you ask: `with_load_skill_approval(true)` and `with_read_skill_resource_approval(true)`. (Python and .NET require approval for all three by default.) `with_filter(|skill| ...)` keeps only the skills the closure accepts, and `with_instructions_prompt(template)` replaces the catalogue introduction, with `{skills}` standing for the list.
+
+```rust
+use agent_framework::prelude::*;
+use agent_framework::skills::SkillScript;
+use serde_json::json;
+
+fn main() -> Result<()> {
+    // Skills discovered from ./skills/<name>/SKILL.md, plus an inline script on one of them.
+    let skills = SkillsProvider::from_paths(["./skills"])?
+        .with_script_runner(|skill, script, args| async move {
+            // Replace this with a real runner: a sandboxed subprocess, for example.
+            Ok(json!({ "skill": skill.name, "script": script.name, "args": args }))
+        })
+        .with_script_approval(true);
+
+    let calc = Skill::new("calc", "Do arithmetic").with_script(
+        SkillScript::inline("add", |args| async move { Ok(json!({ "args": args })) })
+            .with_description("Add the numbers in args"),
+    );
+    let _inline = SkillsProvider::new(vec![calc]);
+    let _ = skills;
+    Ok(())
+}
+```
+
+Only the skills a code-defined or file source supplies are ported. Upstream's MCP-served skills (SEP-2640) are available with the `mcp-skills` feature, which adds `skills::load_skills` to `agent-framework-mcp` and `McpClient::read_resource`; `FoundryToolbox::skills_provider` uses it for hosted agents.
 
 ## The agent harness
 
-The `experimental-harness` feature adds `agent_framework::harness`, a port of six parts of upstream's harness package: a loop that re-runs an agent until it is done, a judge, a todo list, operating modes, standing tool approvals and file memory. None of it has a semver promise. Upstream's background agents, the file access tools (`FileAccessProvider`), `_memory.py` and the `create_harness_agent` assembly are not ported.
+The `experimental-harness` feature adds `agent_framework::harness`, a port of upstream's harness package: a loop that re-runs an agent until it is done, a judge, a todo list, operating modes, standing tool approvals, file memory, and, since 0.15.0, the file access tools (`FileAccessProvider`), durable memory (`MemoryContextProvider` over a `MemoryStore`, with `MemoryFileStore` for files), background agents (`BackgroundAgentsProvider`) and the `create_harness_agent` assembly. None of it has a semver promise. The sections below cover the older parts in detail; [assembling a harness agent](#assembling-a-harness-agent) shows how the pieces are wired together.
 
 In Python the loop and tool approval are agent middleware. In this port agent middleware runs inside the context-provider pass and its `next` can be called only once, so both are agent wrappers instead, the shape .NET uses: `LoopAgent` and `ToolApprovalAgent` implement `SupportsAgentRun` around another agent, and each loop iteration is a full run with all its providers.
 
@@ -709,6 +801,38 @@ async fn main() -> Result<()> {
 ```
 
 Mutating tools hold a lock per provider for their whole read-modify-write, which is enough while one provider writes to a store; two providers over the same store and folder can interleave. The disk store writes UTF-8 text only. Description file names keep the whole file name (`notes.md_description.md`), as Go does, where Python and .NET drop the extension.
+
+### Assembling a harness agent
+
+`create_harness_agent(client)` returns a builder that wires the harness pieces for you; `.build()?` gives a `HarnessAgent`, which implements `SupportsAgentRun` and keeps handles on the providers it created. By default the agent gets the harness instructions followed by your own (`agent_instructions`), a `TodoProvider`, an `AgentModeProvider`, a `FileMemoryProvider` over a `FileSystemAgentFileStore` at `./agent-file-memory`, and a `ToolApprovalAgent` around it. Token-budget compaction is added when both `max_context_window_tokens` and `max_output_tokens` are set. A session from `HarnessAgent::create_session` keeps its history in memory, and history is saved after every model call, so a run that fails midway keeps its completed turns.
+
+```rust
+use std::sync::Arc;
+
+use agent_framework::harness::create_harness_agent;
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let client = Arc::new(OpenAIChatCompletionClient::from_env("%%model=openai%%")?);
+
+    let harness = create_harness_agent(client)
+        .name("worker")
+        .agent_instructions("Work through the task step by step, using the todo list.")
+        .max_context_window_tokens(128_000)
+        .max_output_tokens(4_096)
+        .build()?;
+
+    let mut session = harness.create_session();
+    let response = harness
+        .run(vec![Message::user("Plan and write a changelog entry.")], Some(&mut session))
+        .await?;
+    println!("{}", response.text());
+    Ok(())
+}
+```
+
+Building the agent creates the `agent-file-memory` folder in the working directory if it is missing; pass `file_memory_store(...)` to put it elsewhere, or `disable_file_memory()` to leave it out. Opt in to the rest with builder methods: `file_access_store(...)` for the file access tools (with `file_access_session_scoped`, `file_access_disable_write_tools` and the approval switches), `background_agents(...)`, `skills_provider(...)` or `skills_paths(...)` (the latter needs the `file-skills` feature), `shell(...)`, `web_search()`, and `loop_should_continue(...)` to wrap the result in a `LoopAgent`. `disable_todo`, `disable_mode` and `disable_compaction` switch off the defaults. Compared with Python, tool approval and the loop are wrappers around the agent, not middleware, so the result nests `LoopAgent(ToolApprovalAgent(Agent))`.
 
 ## Vector stores
 

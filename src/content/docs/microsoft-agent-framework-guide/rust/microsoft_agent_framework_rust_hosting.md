@@ -139,7 +139,7 @@ Every guard is opt-in: a plain `into_router()` is unauthenticated. `HostingSecur
 | `with_default_localhost_hosts()` | The allowlist `localhost`, `127.0.0.1`, `[::1]`, `::1` |
 | `apply(router)` | Wraps the router; the host check runs before the token check |
 
-The host allowlist defends a server bound to localhost against DNS rebinding, where a web page points a name it controls at `127.0.0.1` and has the user's browser call your agent. `AgentHost` has the same two settings as builder methods, plus `into_secure_router()` and `serve_secure()`, which apply the localhost allowlist by default. Those guard only the DevUI routes `AgentHost` builds, not routers merged or nested afterwards, which would sit outside the guard. When you serve more than one surface, compose the whole application first and wrap it once with `HostingSecurity`:
+The host allowlist defends a server bound to localhost against DNS rebinding, where a web page points a name it controls at `127.0.0.1` and has the user's browser call your agent. Since 0.15.0 the host guard also rejects cross-site state-changing requests, which the allowlist alone does not stop: a page on any origin can make the user's browser `POST http://localhost:8080/v1/responses` with `Host: localhost`. A request with `Sec-Fetch-Site: cross-site`, or an `Origin` that does not match the host, is refused on state-changing methods. If you serve the router to browsers on another origin, leave the allowlist unset (upstream's `AllowRemoteAccess`). The peer address is not checked, and an `Origin`'s scheme is not compared. The bearer token is compared in constant time, and the `Authorization` scheme is matched case-insensitively. The DevUI routes' SSE `error` event and 500 body no longer carry a failed run's error text, which can include a provider's raw error body or a file path; the client gets a fixed message and the detail is logged against the response id. AG-UI `RUN_ERROR` events no longer carry it either. `AgentHost` has the same two settings as builder methods, plus `into_secure_router()` and `serve_secure()`, which apply the localhost allowlist by default. Those guard only the DevUI routes `AgentHost` builds, not routers merged or nested afterwards, which would sit outside the guard. When you serve more than one surface, compose the whole application first and wrap it once with `HostingSecurity`:
 
 ```rust
 use std::time::Duration;
@@ -654,6 +654,41 @@ async fn main() -> Result<()> {
 }
 ```
 
+## Foundry hosted agents
+
+Added in 0.15.0. The `foundry-hosting` feature (in `full`) adds `agent_framework::foundry_hosting`, a port of upstream's `foundry_hosting` and the container protocol it builds on, for running an agent or workflow as an Azure AI Foundry hosted agent. `ResponsesHostServer` serves it on `POST /responses`: synchronous, streamed and background responses with stream replay, continuation by `previous_response_id` or `conversation`, get, delete, cancel and input-item routes, and rich output items (reasoning, refusals, function calls and results, MCP calls, image generation, shell calls, approval and OAuth consent requests, citations, usage). A workflow that pauses for a person can be resumed from a checkpoint (`with_checkpoint_store`). Every server also serves `GET /readiness` and the snapshot lifecycle routes, and a request span that joins the caller's `traceparent`. The platform's variables are read by `FoundryHostConfig::from_env()`.
+
+```rust
+use std::sync::Arc;
+
+use agent_framework::foundry_hosting::{FoundryHostConfig, ResponsesHostServer};
+use agent_framework::prelude::*;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let agent = Arc::new(
+        Agent::builder(OpenAIChatCompletionClient::from_env("%%model=openai-small%%")?)
+            .instructions("Be helpful.")
+            .build(),
+    );
+    ResponsesHostServer::agent(agent)
+        .with_config(FoundryHostConfig::from_env()?)
+        .serve()
+        .await
+}
+```
+
+What decides how much the host remembers:
+
+- **History sources.** `HistorySource::{AgentServer, Agent, Service}` choose where a conversation's history lives. With `Agent` or `Service`, the agent sessions can be kept in a session store (`with_session_store_provider`, feature `session-store`, for example Foundry storage) so that continuations survive a restart; without the feature they are kept live in the process.
+- **Response stores.** `InMemoryResponseStore` by default, or `FileResponseStore`. A custom `ResponseStore` should override `update_conversation` to write a conversation's transcript and state atomically; the default writes the two halves in sequence. The state-carrying methods `conversation_state` and `set_conversation_state` have no-op defaults, so a custom store must implement them to keep session state such as FIDES labels across turns.
+- **Restarts.** `serve` first fails background responses a previous process left `queued` or `in_progress`.
+- **Background polling.** `with_background_source(BackgroundSource::Provider)` hands a `background: true` response to the agent's provider and polls it with the continuation token (needs `HistorySource::Service`; `with_background_poll_interval` defaults to 2 seconds).
+- **Approvals.** With `store=false` a turn keeps no approval state, so an `mcp_approval_response` sent with `store=false` gets a 400 that says it needs `store=true`.
+- **Other servers.** `InvocationsHostServer` (feature `session-store`) serves the Invocations protocol with durable per-session agent state, and, with the `websocket` feature, `/invocations_ws`; the `voice` feature adds a Voice Live Bridge relay. `FoundryToolbox` reads a Foundry toolbox's MCP endpoint as a tool source and fetches its bearer token for every request.
+
+`FoundryRequestContext::from_headers` now returns `Result<_, InvalidOriginalSubject>`: a malformed `x-ms-original-subject` header is rejected before any handler runs. Not ported: the agentserver's resilient task runtime, built on the Foundry Tasks service. This section was written from the crate's documentation and changelog; the server was compiled but not run against the Foundry platform.
+
 ## What is not here
 
-There is no Azure Functions, Durable Task or Foundry hosted-agent hosting, no conversation store or run-resume endpoint behind `/v1/responses`, no `/v1/models` route, and no MCP server (see [exposing an agent over MCP](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/#exposing-an-agent-as-an-mcp-server)). The .NET ASP.NET Core hosting extensions map onto these routers rather than being ported. Telemetry for hosted runs is the agents' own; see [observability](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_observability/).
+There is no Azure Functions or Durable Task hosting, no conversation store or run-resume endpoint behind `/v1/responses` (the [Foundry hosted-agent server](#foundry-hosted-agents) has them), no `/v1/models` route, and no MCP server (see [exposing an agent over MCP](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_mcp/#exposing-an-agent-as-an-mcp-server)). The .NET ASP.NET Core hosting extensions map onto these routers rather than being ported. Telemetry for hosted runs is the agents' own; see [observability](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_observability/).

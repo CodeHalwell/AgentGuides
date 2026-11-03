@@ -668,7 +668,7 @@ The [context and memory page](/microsoft-agent-framework-guide/rust/microsoft_ag
 
 ### Skills
 
-A `Skill` is a named package of instructions and resources (`Skill::new(name, description).with_instructions(...).with_resource(name, text)`). `SkillsProvider::new(skills)` lists each skill's name and description in the instructions and gives the model `load_skill` and `read_skill_resource` tools, so a skill's full text is only sent once the model decides it needs it. Loaded skills belong to the provider instance, not to a session. Only inline skills built in code are ported; upstream's file-based skills, MCP-backed skills and skill scripts are not.
+A `Skill` is a named package of instructions and resources (`Skill::new(name, description).with_instructions(...).with_resource(name, text)`). `SkillsProvider::new(skills)` lists each skill's name and description in the instructions and gives the model `load_skill` and `read_skill_resource` tools, so a skill's full text is only sent once the model decides it needs it. Loaded skills belong to the provider instance, not to a session. Skills can also come from `SKILL.md` directories on disk (`SkillsProvider::from_paths`, feature `file-skills`) and carry scripts that the model runs through a `run_skill_script` tool, which requires approval by default; see [context and memory](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/#file-based-skills-and-scripts).
 
 ### Compaction
 
@@ -679,7 +679,7 @@ A `Skill` is a named package of instructions and resources (`Skill::new(name, de
 - `TokenBudget::new(tokens)`: leading system messages plus the newest messages that fit a token budget, counted by `ApproxTokenizer` (four characters to a token) unless you register `CompactionProvider::with_tokenizer` yourself.
 - `SelectiveToolResult::new(n)`: every message, with all but the newest `n` tool results replaced by a placeholder.
 
-The first three accept `.preserve_first_user()` to keep the opening request however long the conversation grows, so `.with_compaction(SlidingWindow::new(20).preserve_first_user())` is a reasonable default for a chat assistant. Compaction never leaves a tool call without its result: an exchange that a strategy would cut in half is dropped whole. There is no summarising (LLM-backed) strategy, and no compaction between model calls inside one tool loop.
+The first three accept `.preserve_first_user()` to keep the opening request however long the conversation grows, so `.with_compaction(SlidingWindow::new(20).preserve_first_user())` is a reasonable default for a chat assistant. Compaction never leaves a tool call without its result: an exchange that a strategy would cut in half is dropped whole. `ToolResultCompactionStrategy` and the two-phase `ContextWindowCompactionStrategy` (sized from the model's window) are synchronous strategies too. An LLM-backed `SummarizationCompactionStrategy`, `PipelineCompactionStrategy` and `TriggeredCompactionStrategy` are asynchronous and register with `with_async_compaction`; see [context and memory](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/#summarising-pipelines-and-triggers). There is no compaction between model calls inside one tool loop.
 
 ## Retries and errors
 
@@ -830,15 +830,32 @@ The crate ships no mock chat client, and you do not need one: a `ChatClient` tha
 
 `SecretString` wraps a key so that `Debug` and `Display` print a mask rather than the value (`expose_secret()` returns it). `load_setting(key, explicit, default)` resolves a setting from an explicit value, then a `.env` file in the working directory, then the environment variable, then the default. Provider clients read their own environment variables in `from_env`, so these helpers matter mostly for your own configuration code and custom providers.
 
+## Upgrading to 0.15.0
+
+The release is large, and pre-1.0 minor versions may break APIs. The changes most likely to need edits in application code, from the crate's changelog (the guide's 168 complete examples were compiled against 0.15.0, and two needed the `WorkflowEvent` changes below):
+
+- **`Message::text()` and the update text accessors join only plain text.** Reasoning content no longer leaks into the answer text. (Checked: a message holding a `TextReasoning` item and a text item returns only the text.)
+- **Responses parsers return one assistant message per `message` output item**, with the item's id as `message_id`, instead of one message whose id was the response id. This covers the OpenAI, Azure OpenAI and Foundry Responses clients. Read `response_id` rather than `messages[0].message_id`.
+- **`WorkflowEvent` has two new variants, `Warning` and `SubworkflowWarning`, and `AgentRun` has a new `input` field.** An exhaustive `match` needs arms for the variants, and a pattern that names every field of `AgentRun` needs a `..`. `ValidationType` gained `TypeCompatibility` in the same way.
+- **`Content` has new variants for computer use** (`ComputerToolCall`, `ComputerToolResult`), so an exhaustive `match` over `Content` needs arms for them. They are always present, whether or not `experimental-computer-use` is on.
+- **Struct literals need `..Default::default()`** for `Annotation` (new `additional_properties`), and for the MCP crate's `ToolDescriptor` (new `annotations`) and `CallToolResult` (new `meta`).
+- **Mixed declaration-only tool batches changed behaviour.** With a session, a declaration-only call's local siblings no longer run on the same turn: the batch pauses, the siblings are held in session state, and they run once, under the current tool policy, on the request that answers every declaration-only call. Without a session they still run on the same turn.
+- **`FunctionInvokingChatClient` holds its inner client in an `Arc`**, so its `ChatClient` impl requires `C: 'static`.
+- **Custom `ResponseStore`s** (Foundry hosting) should implement `update_conversation`, `conversation_state` and `set_conversation_state`; the defaults write the halves of a conversation in sequence and keep no state. `StoredResponse` gained `session_state`.
+- **Agent hooks records** (experimental) carry identities by default, and `CompositionRecord` is now `Composition` ([middleware](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_middleware/#agent-hooks-experimental)).
+- **`FoundryRequestContext::from_headers` returns a `Result`**, and `agent_framework_bedrock::convert::parse_response` takes the request's `modelId` as a second argument.
+
 ## Experimental agent APIs
 
 Some agent features carry no compatibility promise and compile only with their `experimental-*` feature (the `experimental` feature turns them all on, and `full` includes none of them):
 
-- `experimental-harness`: `LoopAgent` (re-runs an agent until a `Judge` or a todo list says it is done), `TodoProvider`, `ToolApprovalAgent` (standing approval rules), `AgentModeProvider`, and file memory over an `AgentFileStore`. See [context and memory](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/#the-agent-harness) and, for `ToolApprovalAgent`, [tools](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_tools/#standing-approvals-with-toolapprovalagent).
+- `experimental-harness`: `LoopAgent` (re-runs an agent until a `Judge` or a todo list says it is done), `TodoProvider`, `ToolApprovalAgent` (standing approval rules), `AgentModeProvider`, file memory over an `AgentFileStore`, file access, background agents, and `create_harness_agent`, which wires them together. See [context and memory](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/#the-agent-harness) and, for `ToolApprovalAgent`, [tools](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_tools/#standing-approvals-with-toolapprovalagent).
 - `experimental-agent-hooks`: interception at the agent, model-call and tool-call seams, with allow, deny and transform verdicts ([middleware](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_middleware/#agent-hooks-experimental)).
 - `experimental-progressive-tools`: add or remove tools mid-run from function middleware through `FunctionInvocationContext` ([tools](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_tools/#progressive-tools-experimental)).
 - `experimental-session-store` and `experimental-file-history`: whole-session persistence and a file-backed history provider ([sessions](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_sessions/)).
-- `experimental-vector-stores`: the vector store abstraction and vector collection tools ([context and memory](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/#vector-stores)), and the Cosmos DB and Azure AI Search stores ([integrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_integrations/#vector-stores)).
+- `experimental-vector-stores`: the vector store abstraction and vector collection tools ([context and memory](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_context_and_memory/#vector-stores)), and the Cosmos DB, Azure AI Search, Redis, Qdrant, PostgreSQL, SQL Server, MongoDB and Azure DocumentDB stores ([integrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_integrations/#vector-stores)).
+- `experimental-evals`: `evaluate_agent`, `evaluate_workflow` and `LocalEvaluator` ([evaluation](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_evaluation/#the-experimental-evals-module)).
+- `experimental-fides` and `experimental-computer-use`: information-flow control for tool results (`agent_framework::security`) and computer-use content. Neither is covered in detail in this guide.
 - `experimental-declarative-agents`: the declarative crate ([integrations](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_integrations/#declarative-agents-and-workflows)).
 
 Each can change in any minor release. The crate documentation on docs.rs is built with all features and labels each gated item with the feature it needs.
