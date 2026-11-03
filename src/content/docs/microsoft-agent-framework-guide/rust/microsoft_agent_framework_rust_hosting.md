@@ -201,7 +201,7 @@ async fn main() -> Result<()> {
     // ...then guard the whole app once. Layers added later wrap the earlier ones.
     let app = HostingSecurity::new()
         .with_bearer_token(&token)
-        .with_default_localhost_hosts()
+        // No localhost allowlist: this app is meant for a browser on another origin.
         .apply(app)
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(middleware::from_fn(deadline))
@@ -246,6 +246,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 ```
+
+This example leaves out `with_default_localhost_hosts()` on purpose. Since 0.15.0 the host check also rejects a state-changing request whose `Origin` does not match its `Host`, so with the allowlist on, a `POST` from `https://app.example.com` would be refused with 403 even with the right bearer token (only the preflight, answered before the guard, would succeed). A server meant for browsers on another origin relies on the bearer token, and on CORS as above, instead.
 
 The crate has no CORS, rate-limiting or body-size settings of its own; use axum and tower for them, as above. Layer order matters: the CORS layer is added last so that it wraps the bearer check, because a browser's preflight `OPTIONS` request carries no credentials. axum's `Json` extractor already refuses bodies over 2 MB; `DefaultBodyLimit::max` changes that. The timeout here bounds the time to the response head only, since a streamed body continues after the handler returns; bound a whole run with a timeout around the agent call, or with the agent's own [tool-loop limits](/microsoft-agent-framework-guide/rust/microsoft_agent_framework_rust_comprehensive_guide/#bounding-the-tool-loop). If you add `tower-http`, its `CorsLayer`, `TimeoutLayer` and `ConcurrencyLimitLayer` do the same jobs. TLS is not handled here either: terminate it in front of the server, because a bearer token over plain HTTP is only as private as the network.
 
@@ -656,7 +658,7 @@ async fn main() -> Result<()> {
 
 ## Foundry hosted agents
 
-Added in 0.15.0. The `foundry-hosting` feature (in `full`) adds `agent_framework::foundry_hosting`, a port of upstream's `foundry_hosting` and the container protocol it builds on, for running an agent or workflow as an Azure AI Foundry hosted agent. `ResponsesHostServer` serves it on `POST /responses`: synchronous, streamed and background responses with stream replay, continuation by `previous_response_id` or `conversation`, get, delete, cancel and input-item routes, and rich output items (reasoning, refusals, function calls and results, MCP calls, image generation, shell calls, approval and OAuth consent requests, citations, usage). A workflow that pauses for a person can be resumed from a checkpoint (`with_checkpoint_store`). Every server also serves `GET /readiness` and the snapshot lifecycle routes, and a request span that joins the caller's `traceparent`. The platform's variables are read by `FoundryHostConfig::from_env()`.
+Added in 0.15.0. The `foundry-hosting` feature (in `full`) adds `agent_framework::foundry_hosting`, a port of upstream's `foundry_hosting` and the container protocol it builds on, for running an agent or workflow as an Azure AI Foundry hosted agent. `ResponsesHostServer` serves it on `POST /responses`: synchronous, streamed and background responses with stream replay, continuation by `previous_response_id` or `conversation`, get, delete, cancel and input-item routes, and rich output items (reasoning, refusals, function calls and results, MCP calls, image generation, shell calls, approval and OAuth consent requests, citations, usage). A workflow that pauses for a person can be resumed from a checkpoint (`with_checkpoint_store`). Every server also serves `GET /readiness` and the snapshot lifecycle routes, and a request span. The span joins the caller's `traceparent` as its parent only with the `foundry-hosting-otel` feature (which turns on the companion crate's `otel` feature) and an OpenTelemetry-aware `tracing` subscriber installed, for example the `otel-export` pipeline; without them the trace and parent ids are recorded as attributes only. The platform's variables are read by `FoundryHostConfig::from_env()`.
 
 ```rust
 use std::sync::Arc;
@@ -680,12 +682,12 @@ async fn main() -> Result<()> {
 
 What decides how much the host remembers:
 
-- **History sources.** `HistorySource::{AgentServer, Agent, Service}` choose where a conversation's history lives. With `Agent` or `Service`, the agent sessions can be kept in a session store (`with_session_store_provider`, feature `session-store`, for example Foundry storage) so that continuations survive a restart; without the feature they are kept live in the process.
+- **History sources.** `HistorySource::{AgentServer, Agent, Service}` choose where a conversation's history lives. With `Agent` or `Service`, the agent sessions can be kept in a session store (`with_session_store_provider`, which needs the `experimental-session-store` feature of the umbrella crate, for example Foundry storage) so that continuations survive a restart; without the feature they are kept live in the process.
 - **Response stores.** `InMemoryResponseStore` by default, or `FileResponseStore`. A custom `ResponseStore` should override `update_conversation` to write a conversation's transcript and state atomically; the default writes the two halves in sequence. The state-carrying methods `conversation_state` and `set_conversation_state` have no-op defaults, so a custom store must implement them to keep session state such as FIDES labels across turns.
 - **Restarts.** `serve` first fails background responses a previous process left `queued` or `in_progress`.
 - **Background polling.** `with_background_source(BackgroundSource::Provider)` hands a `background: true` response to the agent's provider and polls it with the continuation token (needs `HistorySource::Service`; `with_background_poll_interval` defaults to 2 seconds).
 - **Approvals.** With `store=false` a turn keeps no approval state, so an `mcp_approval_response` sent with `store=false` gets a 400 that says it needs `store=true`.
-- **Other servers.** `InvocationsHostServer` (feature `session-store`) serves the Invocations protocol with durable per-session agent state, and, with the `websocket` feature, `/invocations_ws`; the `voice` feature adds a Voice Live Bridge relay. `FoundryToolbox` reads a Foundry toolbox's MCP endpoint as a tool source and fetches its bearer token for every request.
+- **Other servers.** `InvocationsHostServer` (needs `experimental-session-store`) serves the Invocations protocol with durable per-session agent state. `/invocations_ws` needs the companion crate's `websocket` feature, and a Voice Live Bridge relay its `voice` feature. The umbrella crate has no flag for either, so depend on `agent-framework-foundry-hosting` directly, at the same version, with `features = ["websocket"]` or `["voice"]`. `FoundryToolbox` reads a Foundry toolbox's MCP endpoint as a tool source and fetches its bearer token for every request.
 
 `FoundryRequestContext::from_headers` now returns `Result<_, InvalidOriginalSubject>`: a malformed `x-ms-original-subject` header is rejected before any handler runs. Not ported: the agentserver's resilient task runtime, built on the Foundry Tasks service. This section was written from the crate's documentation and changelog. The example compiles and the builder methods named above (`with_background_source`, `with_background_poll_interval`, `with_session_store_provider`, `with_checkpoint_store`) exist in the 0.15.0 source, but the server was not run against the Foundry platform.
 
