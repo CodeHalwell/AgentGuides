@@ -97,7 +97,7 @@ Sessions belong to the `user_id` that created them. A run that names an existing
 | Memory | `GET/POST/DELETE /memories`, `GET/PATCH/DELETE /memories/{memory_id}`, `GET /memory_topics`, `POST /optimize-memories` |
 | Knowledge | `GET/POST/DELETE /knowledge/content`, `POST /knowledge/search`, `GET /knowledge/config` |
 | Evals, traces, metrics | `GET/POST/DELETE /eval-runs`, `GET /traces`, `POST /traces/search`, `GET /metrics`, `POST /metrics/refresh` |
-| Operations | `/schedules`, `/approvals`, `/queue`, `/service-accounts`, `/components`, `/registry`, `POST /databases/{db_id}/migrate` |
+| Operations | `/schedules`, `/approvals` (see [Approvals](/agno-guide/agno_comprehensive_guide/#approvals)), `/queue`, `/service-accounts`, `/components`, `/registry`, `POST /databases/{db_id}/migrate` |
 
 The OpenAPI schema at `/openapi.json` is the authoritative list for your configuration; some routers only appear when the matching feature is enabled.
 
