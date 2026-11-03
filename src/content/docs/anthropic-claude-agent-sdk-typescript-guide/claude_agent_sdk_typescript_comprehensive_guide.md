@@ -561,6 +561,19 @@ export const options: Options = {
 - `decision` is only for blocking. To allow or deny a tool call, use `permissionDecision` inside `hookSpecificOutput`.
 - `includeHookEvents: true` adds hook lifecycle messages (`hook_started`, `hook_progress`, `hook_response`) to the stream, which helps when a hook does not seem to fire.
 
+### Failing closed with `onFailure`
+
+By default a callback that throws, or returns something that fails validation, is reported as a warning in the stream and the action goes ahead. For a guard that must not fail open, set `onFailure: 'block'` on the matcher (added in 0.3.317):
+
+```ts
+import type { Options } from '@anthropic-ai/claude-agent-sdk';
+
+export const strict: Options = {
+  hooks: { PreToolUse: [{ matcher: 'Bash', hooks: [addDryRun], onFailure: 'block' }] },
+};
+```
+
+With `'block'` the failed callback blocks the tool call, permission request or prompt it guards. It is ignored for `Stop`, `SubagentStop`, `TaskCompleted` and `TeammateIdle`. The query fails at start-up if the Claude Code binary does not support the option.
 
 ---
 

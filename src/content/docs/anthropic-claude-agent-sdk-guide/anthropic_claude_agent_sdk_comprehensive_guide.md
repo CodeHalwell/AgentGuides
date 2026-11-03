@@ -629,6 +629,20 @@ What each one relies on:
 - For a hook that should not hold up the run, return `{"async_": True}` (converted to `"async"` for the CLI, like `continue_`), with an optional `asyncTimeout` in milliseconds.
 - `ClaudeAgentOptions(include_hook_events=True)` adds hook lifecycle messages to the stream, which is useful when debugging why a hook did not fire.
 
+### Failing closed with `on_failure`
+
+By default a callback that raises, or returns something the CLI rejects, is treated as "no decision" and the action goes ahead. For a guard that must not fail open, set `on_failure="block"` on the matcher (added in 0.2.177):
+
+```python
+from claude_agent_sdk import ClaudeAgentOptions, HookMatcher
+
+options = ClaudeAgentOptions(
+    hooks={"PreToolUse": [HookMatcher(matcher="Bash", hooks=[add_dry_run], on_failure="block")]},
+)
+```
+
+With `"block"`, a callback that raises, returns `None` or returns an invalid value blocks the tool call, so a callback with no opinion must return `{}` rather than fall off the end. The option is ignored for `Stop`, `SubagentStop`, `TaskCompleted` and `TeammateIdle`. Connecting to a CLI too old to honour it raises `CLIConnectionError`; the bundled CLI supports it.
+
 ---
 
 ## Skills, slash commands and plugins
