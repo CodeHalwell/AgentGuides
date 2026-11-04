@@ -42,9 +42,9 @@ uv tool install crewai
 | `crewai create crew <name>` | Scaffold a crew project (interactive JSON wizard; `--classic` for Python/YAML). |
 | `crewai create flow <name>` | Scaffold a flow project (`--declarative` for a definition-file flow). |
 | `crewai create tool/skill/template <name>` | Scaffold a tool, an agent skill, or install a template (`-o <dir>`). |
-| `crewai run` | Run the project — crew or flow, whichever `pyproject.toml` declares. |
+| `crewai run [--inputs JSON]` | Run the project — crew or flow, whichever `pyproject.toml` declares. `--inputs '{"topic": "AI"}'` passes a JSON object to a flow or a JSON crew; `--definition` and `-f` as below. |
 | `crewai install` | Sync dependencies (wraps uv). |
-| `crewai update` | Update the project's `pyproject.toml` to use uv. |
+| `crewai update` | Convert a Poetry project to uv: rewrites `pyproject.toml` and keeps the original as `pyproject-old.toml`. It does not upgrade CrewAI (see [Gotchas](#gotchas)). |
 | `crewai train -n 5 -f trained.pkl` | Kick off `main:train`: run the crew with human feedback on every task, then distil the feedback (see [Training mode](#training-mode)). |
 | `crewai test -n 3 -m %%model=openai-small%%` | Kick off `main:test` (eval; OpenAI models only). |
 | `crewai eval` | Grade the last traced run through CrewAI AMP, running the crew first if there is none or the project changed since; `--models a,b` compares models on a deployment. `crewai eval export ID` downloads an evaluation's full data into `./crewai-eval-ID/`. |
@@ -60,7 +60,7 @@ uv tool install crewai
 | `crewai flow add-crew <name>` | Embed a crew in the flow. |
 | `crewai triggers list/run <app>/<trigger>` | Platform triggers. |
 | `crewai tool install/publish <handle>` | Tool Repository (platform). `tool create` is deprecated in favour of `crewai create tool`. |
-| `crewai skill list/install/publish` | Agent skills. `skill create` is deprecated in favour of `crewai create skill`. |
+| `crewai skill list/search/install/publish` | Agent skills. `list` shows local skills; `search [QUERY]` lists your organisation's skills on AMP. `skill create` is deprecated in favour of `crewai create skill`. |
 | `crewai template list` | Browse project templates (`template add` is deprecated in favour of `crewai create template`). |
 | `crewai deploy create/list/push/status/logs/remove` | CrewAI AMP deployments. |
 | `crewai login / logout` | Auth against CrewAI AMP. |
@@ -241,7 +241,7 @@ crewai flow add-crew research      # embed a crew scaffold inside the flow proje
 
 ```bash
 crewai login
-crewai deploy create               # first-time
+crewai deploy create               # first-time (--zip uploads a ZIP even if there is a git origin)
 crewai deploy push                 # redeploy
 crewai deploy list
 crewai deploy status -u <uuid>
@@ -325,4 +325,5 @@ Set `Crew(chat_llm=LLM(...))` for a predictable model; the CLI opens a REPL that
 - **`replay -t` needs logged outputs.** `log-tasks-outputs` confirms what's available.
 - **Legacy `--long`/`--short`/`--entities` are shims.** They all map to `--memory` now; don't rely on the distinction.
 - **`crewai chat` model resolution.** It uses `Crew.chat_llm`; if that is unset it falls back to the `MODEL` environment variable, then CrewAI's default model (`gpt-4.1-mini`), not to the agents' own LLMs. If the model cannot be created it prints "Unable to find a Chat LLM" and exits.
+- **`crewai update` does not upgrade CrewAI.** To upgrade the CLI use `uv tool upgrade crewai`; inside a project use `crewai install --upgrade-package crewai --upgrade-package crewai-tools`.
 - **`crewai uv` expects a `pyproject.toml`.** Outside a crew project it errors out with a clear message.
