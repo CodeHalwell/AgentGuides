@@ -1,6 +1,6 @@
 ---
 title: "AG2 Comprehensive Guide"
-description: "AG2 1.x reference: Agent, model configs, tools, dependency injection, code execution, structured output, multimodal input, human-in-the-loop, events, middleware, knowledge and compaction, the multi-agent Network, MCP, A2A and testing."
+description: "AG2 1.x reference: Agent, model configs, tools, dependency injection, code execution, structured output, multimodal input, human-in-the-loop, events, middleware, knowledge and compaction, the multi-agent Network, MCP, A2A, agent specs and testing."
 framework: "ag2"
 language: "python"
 sidebar:
@@ -486,6 +486,39 @@ agent = Agent(
 - `expose_tool=False` hides the store from the model when only your own code should use it. `aggregate=` / `aggregate_trigger=` distil conversations into longer-term memory.
 - `assembly=[...]` on the `Agent` takes `AssemblyPolicy` objects that decide what goes into each LLM request (for example working or episodic memory read from the store).
 
+### Controlling what the model sees: assembly policies
+
+`assembly=[...]` takes policies from `ag2.policies`. Each one receives the system prompts and the event list before every LLM call and returns changed copies; they run left to right, so each sees the previous one's output. The stored history is not altered, only the request.
+
+| Policy | Effect |
+|---|---|
+| `ConversationPolicy()` | Keeps only conversation and tool events (and compaction summaries); everything else on the stream is hidden from the model. |
+| `SlidingWindowPolicy(max_events, transparent=False)` | Keeps the last N events. |
+| `TokenBudgetPolicy(max_tokens, chars_per_token=4, transparent=False)` | Keeps the most recent events that fit a budget, estimated from character counts. |
+| `WorkingMemoryPolicy()`, `EpisodicMemoryPolicy(max_episodes=5)` | Inject `/memory/working.md` and recent conversation summaries from the knowledge store into the prompt. |
+| `AlertPolicy()` | Injects observer alerts into the prompt; a `FATAL` alert emits a `HaltEvent`. |
+
+Put injection policies (memory, alerts) before reduction policies (window, budget). Window and budget are targets: events orphaned by the cut (for example a tool result whose call was dropped) are removed too, and a cut that would leave nothing widens instead. With `transparent=True` the policy adds a note saying how many events are shown. `HistoryLimiter` and `TokenLimiter` in `ag2.middleware` do a similar trim as middleware.
+
+```python
+from ag2 import Agent
+from ag2.config import OpenAIConfig
+from ag2.policies import ConversationPolicy, SlidingWindowPolicy, TokenBudgetPolicy
+
+agent = Agent(
+    "chat",
+    prompt="Be brief.",
+    config=OpenAIConfig(model="%%model=openai-small%%"),
+    assembly=[
+        ConversationPolicy(),
+        SlidingWindowPolicy(max_events=40, transparent=True),
+        TokenBudgetPolicy(max_tokens=8_000),
+    ],
+)
+```
+
+Write your own by implementing `name` and `async def apply(self, prompts, events, context) -> (prompts, events)`.
+
 ## Sub-tasks and evaluation
 
 - `tasks=TaskConfig(...)` gives an agent `run_subtask(task)` and `run_subtasks(tasks, parallel=True)` tools for delegating work to sub-agents. The sub-agents inherit its tools, narrowed with `include_tools=` / `exclude_tools=`, and cannot delegate further. `TaskConfig(config=...)` picks a cheaper model for them, `extra_tools=` adds tools only they have, and `max_concurrency=` bounds how many run at once. `agent.task(...)` is the lifecycle handle for tracking a unit of work yourself.
@@ -517,6 +550,53 @@ lead = Agent(
 
 print(asyncio.run(lead.ask("How many words are in each of these: 'a b c' and 'd e'?")).body)
 ```
+
+### Agents as tools
+
+`agent.as_tool(description=..., name=None, stream=None)` (or `subagent_tool(agent, ...)` from `ag2.tools.subagents`) exposes a whole agent as a tool for another one. Unlike `TaskConfig`, the delegate keeps its own prompt, tools, model and config. The tool takes an `objective` and an optional `context` string, runs the agent as a sub-task, and returns its answer; a failure comes back as a text message rather than an exception. The default name is `task_<agent name>`.
+
+By default each delegation starts on a fresh `MemoryStream`. Pass `stream=persistent_stream()` so the delegate remembers its earlier delegations within one conversation (token cost grows with them), a `Stream` instance to share one stream you can subscribe to, or a factory `(agent, context) -> Stream`.
+
+`background_agent_tool(agent, description=...)` is the fire-and-forget version. It returns a task id at once, runs the delegate in the background, and queues the result as a follow-up message to the parent, which does not finish its `ask` until the task has completed.
+
+```python
+import asyncio
+
+from ag2 import Agent
+from ag2.events import ToolCallEvent
+from ag2.testing import TestConfig
+from ag2.tools.subagents import persistent_stream
+
+researcher = Agent(
+    "researcher",
+    prompt="Find facts and report them briefly.",
+    config=TestConfig("Paris has about 2.1 million residents."),  # use a real config in practice
+)
+
+lead = Agent(
+    "lead",
+    prompt="Delegate research, then answer.",
+    tools=[
+        researcher.as_tool(
+            description="Research a question and return a short answer.",
+            stream=persistent_stream(),
+        )
+    ],
+)
+
+reply = asyncio.run(
+    lead.ask(
+        "How many people live in Paris?",
+        config=TestConfig(
+            ToolCallEvent(name="task_researcher", arguments='{"objective": "Population of Paris"}'),
+            "About 2.1 million.",
+        ),
+    )
+)
+print(reply.body)
+```
+
+When testing `background_agent_tool` with `TestConfig`, `reply.body` sometimes returned the first turn's text ("Started.") rather than the follow-up. Subscribe to a `MemoryStream` and read the last `ModelMessage` instead of relying on it.
 
 ### Evaluating an agent
 
@@ -793,6 +873,34 @@ remote = Agent("remote", config=A2AConfig(card_url="http://127.0.0.1:8000"))
 ```
 
 The card is served at `/.well-known/agent-card.json`. `A2AServer` can also build REST and gRPC transports sharing one task store, and supports push notifications via `push_config_store=`; pass `push_url_validator=` (added in 1.2.0) to guard against SSRF through client-supplied webhook URLs.
+
+## Agent specs
+
+`AgentSpec` is a JSON-serialisable description of an agent's declarative parts: `name`, `prompt`, `tool_names` and the response schema. Middleware, callbacks, dependencies and dynamic prompts are not captured, so you supply them again when rebuilding. Tools are stored by name and resolved against the `available_tools` you pass to `to_agent`; a missing name raises `ToolResolutionError` listing what was available. Unknown keys in a spec load with an `UnknownSpecFieldWarning` naming the closest valid field.
+
+```python
+import asyncio
+
+from ag2 import Agent, tool
+from ag2.spec import AgentSpec
+from ag2.testing import TestConfig
+
+
+@tool
+def lookup(order_id: str) -> str:
+    """Look up an order."""
+    return "shipped"
+
+
+spec = AgentSpec.from_agent(Agent("support", prompt="You help.", tools=[lookup]))
+text = spec.model_dump_json(indent=2)  # store this in a file or database
+
+agent = AgentSpec.model_validate_json(text).to_agent(
+    available_tools=[lookup],
+    config=TestConfig("hello"),  # use a real config in practice
+)
+print(asyncio.run(agent.ask("hi")).body)
+```
 
 ## Testing
 
