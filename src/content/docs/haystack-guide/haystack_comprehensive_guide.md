@@ -578,6 +578,29 @@ print({name: len(items) for name, items in out.items()})
 
 `FileTypeRouter` accepts paths as well as `ByteStream`s. A path that does not exist goes to a `failed` output, or raises if you pass `raise_on_failure=True`.
 
+### Reshaping data between components with `OutputAdapter`
+
+When one component's output is not the type the next one expects, `OutputAdapter` converts it with a Jinja2 template. `output_type` is required and is used to connect the socket. This example joins retrieved documents into a single string:
+
+```python
+from haystack import Document, Pipeline
+from haystack.components.converters import OutputAdapter
+
+adapter = OutputAdapter(
+    template="{{ documents | map(attribute='content') | join('\\n') }}",
+    output_type=str,
+)
+print(adapter.run(documents=[Document(content="a"), Document(content="b")]))
+# {'output': 'a\nb'}
+
+pipe = Pipeline()
+pipe.add_component("adapter", adapter)
+print(pipe.run({"adapter": {"documents": [Document(content="x")]}}))
+# {'adapter': {'output': 'x'}}
+```
+
+Template variables become input sockets, so `documents` above is connected like any other input. Pass `custom_filters` to register your own Jinja filters. Templates are rendered in a sandbox unless you set `unsafe=True`, which you should only do for templates you wrote yourself.
+
 ### Agent Concepts in Haystack
 
 The `Agent` component (`haystack.components.agents.Agent`) runs this loop:
@@ -1738,7 +1761,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 
 | Date | Version | Changes |
 |------|---------|---------|
-| %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. Added chunking and routing: `SentenceWindowRetriever`, `HierarchicalDocumentSplitter` with `AutoMergingRetriever`, `MetadataRouter` and `FileTypeRouter`. |
+| %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. Added chunking and routing: `SentenceWindowRetriever`, `HierarchicalDocumentSplitter` with `AutoMergingRetriever`, `MetadataRouter` and `FileTypeRouter`. Added `OutputAdapter`. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
 | June 2026 | 2.30.0 | Last 2.x revision. |
 | November 2025 | 2.20.0 | First documented version. |
