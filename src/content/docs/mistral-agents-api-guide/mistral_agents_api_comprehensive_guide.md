@@ -663,6 +663,46 @@ We checked this against a scripted `httpx2.MockTransport`: the SDK sends `"reaso
 
 Upgrading from v1 as well? v2 moved every import from `mistralai` to `mistralai.client`, and Azure/GCP clients to `mistralai.azure.client` / `mistralai.gcp.client`.
 
+### Added in 3.7.0: webhooks and triggers
+
+`mistralai` %%version=mistralai%% has `client.beta.webhooks` and `client.beta.triggers`. A webhook is an inbound HTTPS endpoint that Mistral hosts for a third-party provider (`"slack"`, `"github"`, `"notion"`, `"linear"`, `"microsoft"` and a few others, or `"custom"`). A trigger connects a webhook to something that should run when an event arrives. Its `handler` is `"workflows"`, `"agents"` or `"spaces"`, and its `action` names the target by `primitive_id`; for agents the action type is `"start_agent_session"`.
+
+```python
+from mistralai.client import Mistral
+
+client = Mistral(api_key="...")
+
+webhook = client.beta.webhooks.create(
+    provider="github",
+    name="repo-events",
+    owner_type="workspace",                      # or "user"
+    secret="...",                                # the signing secret you set on the provider side
+    event_type_path="headers.X-GitHub-Event",    # where the event type sits in the request
+)
+print(webhook.url)  # register this URL with the provider
+
+trigger = client.beta.triggers.create(
+    event_source_id=webhook.id,
+    handler="agents",
+    action={"primitive_id": agent.id, "type": "start_agent_session"},
+    owner_type="workspace",
+    title="Review pushes",
+    filters="event_type == 'push'",              # jmespath, optional
+)
+
+print([t.title for t in client.beta.triggers.list(handler="agents")])
+print(client.beta.triggers.list_events(trigger_id=trigger.id).data)  # delivery history
+
+client.beta.triggers.delete(trigger_id=trigger.id)
+client.beta.webhooks.delete(webhook_id=webhook.id)
+```
+
+`webhooks` also has `list()`, `get()` and `get_signing_secret()`; `webhooks.create()` takes the signature settings for providers that do not follow a standard (`signature_header_name`, `signature_hash_algorithm`, `signature_extractor_regex`, `signature_payload_pattern`, `signature_encoding`, `validity_period_second`). Each trigger event records a status, when it was received and triggered, and a `detail` string, which is the place to look when a push produced no session.
+
+We ran this against a scripted `httpx2.MockTransport`, so request shapes and model parsing are checked (create returns 201, delete 204) but not the live service. The `agent` in the example is a stored agent from earlier in this guide. The TypeScript client exposes `beta.triggers` and `beta.webhooks` as well; we did not exercise it.
+
+Other changes in 3.7.0 outside this guide's scope: the Python search-index client moved (`client.beta.context.search_indexes` is new, and `search_indexes` / `managed_indexes` modules were replaced by `context_search_indexes` and `rag_search_indexes`), and connectors gained an OpenAPI spec description (`ConnectorOpenAPISpec`, with a `url` or `file` source). None of the code on these pages used them.
+
 ### Earlier history
 
 - **27 May 2025.** Mistral launched the Agents API as a beta: stored agents, server-side conversations (append, restart, streaming), built-in code execution, image generation, web search (with a premium news variant) and document libraries, handoffs, and MCP tool use. The launch post lists "persistent memory across conversations" without describing a mechanism beyond stored, branchable conversation history; this guide treats it as that history, not as a separate tool.
