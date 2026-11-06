@@ -246,12 +246,12 @@
     },
     "boto3": {
       "registry": "pypi",
-      "version": "1.43.122",
+      "version": "1.43.125",
       "guide": "amazon-bedrock-agents-guide"
     },
     "bedrock-agentcore": {
       "registry": "pypi",
-      "version": "1.25.1",
+      "version": "1.25.3",
       "guide": "amazon-bedrock-agents-guide"
     },
     "strands-agents": {
