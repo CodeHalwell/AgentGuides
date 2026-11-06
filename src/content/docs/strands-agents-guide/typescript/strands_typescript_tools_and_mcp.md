@@ -196,7 +196,7 @@ console.log(agent.tools.map((t) => t.name))
 
 Shell, file and code tools run on the host unless the agent has a sandbox. `DockerSandbox` from `@strands-agents/sdk/sandbox/docker` (`new DockerSandbox({ container, workingDir, user })`) and an SSH sandbox from `@strands-agents/sdk/sandbox/ssh` route them elsewhere; pass one as the agent's `sandbox` option.
 
-There is no TypeScript `strands-agents-tools` package: the vended tools are the whole set. Python-only tools such as `use_aws`, `workflow`, `retrieve` and the AgentCore browser and code interpreter wrappers have no TypeScript counterpart; write a Zod tool around the AWS SDK call you need.
+There is no TypeScript `strands-agents-tools` package: the vended tools are the whole set. The Python package's other tools (`use_aws`, `retrieve`, the AgentCore wrappers) were removed in 0.9 and have no TypeScript counterpart; write a Zod tool around the AWS SDK call you need.
 
 ## MCP
 

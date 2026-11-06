@@ -1,6 +1,6 @@
 ---
 title: "Strands Agents (Python): Tools and MCP"
-description: "Defining tools in Strands Python: the @tool decorator, schemas, ToolContext, streaming and async tools, module and class-based tools, executors, strands-agents-tools and its deprecations, vended tools, sandboxes and MCP clients."
+description: "Defining tools in Strands Python: the @tool decorator, schemas, ToolContext, streaming and async tools, module and class-based tools, executors, what `strands-agents-tools` 0.9 removed, vended tools, sandboxes and MCP clients."
 framework: "strands"
 language: "python"
 sidebar:
@@ -227,7 +227,7 @@ agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[catalogue.price],
 
 ### Module tools with TOOL_SPEC
 
-A module with a `TOOL_SPEC` dict and a function of the same name is a tool. This is the format most of `strands-agents-tools` uses, and it gives full control over the schema and the result:
+A module with a `TOOL_SPEC` dict and a function of the same name is a tool. This was the format `strands-agents-tools` used, and it gives full control over the schema and the result:
 
 ```python
 # weather_tool.py
@@ -293,40 +293,38 @@ To stop a run after a tool, a hook can set `event.end_turn` on `AfterToolsEvent`
 
 ## strands-agents-tools
 
-`strands-agents-tools` is a separate package of ready-made tools, imported as modules:
+`strands-agents-tools` 0.9.0 removed every tool it used to ship. Importing one (`from strands_tools import file_read`) now raises an `ImportError` whose message names the replacement. The package still installs, and `strands_tools.utils` remains, but there is nothing in it to hand to an agent. Pin `strands-agents-tools<0.9` only as a stop-gap while you migrate; 0.8 logs a deprecation warning for most of the tools below.
 
-```python
-from strands import Agent
-from strands_tools import file_read, use_aws, workflow
-
-agent = Agent(model="us.anthropic.%%model=anthropic%%", tools=[file_read, use_aws, workflow], callback_handler=None)
-```
-
-Tools that write files, run code or call AWS ask for confirmation on the terminal before acting. Set `BYPASS_TOOL_CONSENT=true` to skip the prompt in non-interactive environments, and only where the agent's permissions are already narrow.
-
-### Deprecations in 0.8
-
-Version 0.8 deprecates most of the general-purpose tools in favour of tools vended by `strands-agents` itself, MCP servers or SDK features. They still work but log a deprecation warning, which the package says becomes an error log in 0.9.0:
-
-| Deprecated (`strands_tools`) | Replacement |
-|------------------------------|-------------|
+| Removed (`strands_tools`) | Replacement |
+|---------------------------|-------------|
 | `shell` | `strands.vended_tools.shell`, which runs through the agent's sandbox instead of directly on the host |
-| `calculator`, `environment` | `strands.vended_tools.shell` (note: arbitrary commands, so a wider boundary than the tools it replaces) |
-| `editor` | `strands.vended_tools.file_editor` |
+| `calculator`, `environment` | `strands.vended_tools.shell` (arbitrary commands, so a wider boundary than the tools it replaces) |
+| `editor`, `file_read`, `file_write` | `strands.vended_tools.edit`, `read` and `write` (or `file_editor`) |
 | `http_request` | `strands.vended_tools.http_request` and `web_fetch` |
-| `python_repl`, `sleep` | `strands.vended_tools.python_repl`, `sleep` |
+| `python_repl`, `sleep`, `stop`, `handoff_to_user` | The vended tools of the same name |
+| `code_interpreter` | `strands.vended_tools.python_repl` for general programming; the [AgentCore client](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#code-interpretation) for the managed sandbox |
 | `journal` | `strands.vended_tools.notebook` |
 | `mcp_client` | `strands.vended_tools.make_mcp_router` |
 | `a2a_client` | `strands.vended_tools.make_a2a_client` |
+| `workflow`, `graph`, `agent_graph` | `strands.vended_tools.graph` (`make_graph`) |
+| `swarm` | `strands.vended_tools.swarm` (`make_swarm`) |
+| `use_agent`, `use_llm` | `strands.vended_tools.subagent` (`make_subagent`) |
 | `batch` | Nothing: concurrent tool execution is the default |
 | `current_time` | Inject the time as context (`ContextInjector` plugin) |
 | `think` | The provider's native reasoning (extended thinking) |
-| `memory`, `retrieve`, `mem0_memory` | `MemoryManager` with `BedrockKnowledgeBaseStore`, or the `mem0-strands` store |
-| `tavily`, `exa`, `bright_data`, `slack`, `chat_video`, `search_video` | The vendor's official MCP server |
+| `memory`, `retrieve`, `mem0_memory` | `MemoryManager` with `BedrockKnowledgeBaseStore` (`writable=False` for `retrieve`), or the `mem0-strands` store |
+| `agent_core_memory` | `MemoryManager` with the `AgentCoreMemoryStore` from `bedrock-agentcore` |
+| `elasticsearch_memory`, `mongodb_memory` | Your own `MemoryStore` over the vendor's client |
+| `use_aws` | The AWS MCP Server |
+| `tavily`, `exa`, `bright_data`, `slack`, `chat_video`, `search_video` | The vendor's official MCP server (`slack_bolt` directly for Socket Mode) |
 | `cron` | EventBridge Scheduler (or `shell`) |
-| `diagram`, `rss` | No replacement tool: have the model write code with graphviz, Mermaid or the `diagrams` package (`diagram`), or parse feeds with `feedparser` (`rss`) |
+| `image_reader` | Pass the image to the agent as an image content block |
+| `load_tool` | Pass tools to the `Agent`, or `Agent(load_tools_from_directory=True)` |
+| `browser` | Playwright from a custom tool (`BrowserClient` from `bedrock-agentcore` for AgentCore sessions) |
+| `diagram`, `rss`, `generate_image`, `generate_image_stability`, `speak`, `use_computer` | No replacement tool: write a custom tool around graphviz, `feedparser`, the Stability AI API, Amazon Polly or `pyautogui` |
+| `nova_reels` | None: Amazon Nova Reel reached end of life on Bedrock on 30 September 2026 |
 
-Not deprecated in this release: `file_read`, `file_write`, `use_aws`, `workflow`, `swarm`, `graph`, `agent_graph`, `use_agent`, `use_llm`, `handoff_to_user`, `stop`, `load_tool`, `image_reader`, `generate_image`, `generate_image_stability`, `nova_reels`, `speak`, `use_computer`, `agent_core_memory`, `elasticsearch_memory`, `mongodb_memory`, `code_interpreter` (AgentCore Code Interpreter) and `browser` (AgentCore Browser or local Chromium). Some need extras, for example `strands-agents-tools[agent-core-code-interpreter]`.
+The `strands.vended_tools` replacements were imported and, for `graph`, `swarm` and `subagent`, called against a scripted model on `strands-agents` %%version=strands-agents%%; `make_a2a_client` needs the `a2a` extra. The store and MCP-server replacements are as named in the package's own removal messages, and were not run here. Some replacements widen or narrow the security boundary: `shell` now goes through the sandbox, so it is tighter than the old tool, while `calculator` and `environment` become arbitrary command execution.
 
 ### Vended tools in strands-agents
 
@@ -371,7 +369,7 @@ agent = Agent(
 print(agent.tool_names)   # ['sandbox_file_editor', 'sandbox_shell']
 ```
 
-`DockerSandbox(container, working_dir=None, user=None)` runs commands with `docker exec` in a container you started and vends `sandbox_shell` and `sandbox_file_editor`. `strands.sandbox.ssh.SshSandbox(host, working_dir=..., identity_file=...)` does the same over SSH, and `PosixShellSandbox` is the base class for your own. On AWS, the managed option for model-written code is the AgentCore Code Interpreter (`strands_tools.code_interpreter`, or the [AgentCore client](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#code-interpretation)).
+`DockerSandbox(container, working_dir=None, user=None)` runs commands with `docker exec` in a container you started and vends `sandbox_shell` and `sandbox_file_editor`. `strands.sandbox.ssh.SshSandbox(host, working_dir=..., identity_file=...)` does the same over SSH, and `PosixShellSandbox` is the base class for your own. On AWS, the managed option for model-written code is the AgentCore Code Interpreter (`python_repl` or the [AgentCore client](/amazon-bedrock-agents-guide/python/bedrock_agentcore_comprehensive_guide/#code-interpretation)).
 
 ## MCP
 
@@ -514,5 +512,6 @@ If a server cannot start, the agent constructor raises a `ValueError` (wrapping 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-06 | 1.64.0 | `strands-agents-tools` 0.9.0 removed every tool it shipped. Replaced the deprecations table with a removal table naming each replacement, and updated the pages that imported `strands_tools` tools. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Corrected the `mcp` dependency range (1.23 up to 2.2, not 2.x only), the `shell` replacement note and the `diagram`/`rss` guidance. Added `MCPClient.load_servers()` for `mcpServers` config files. |
 | 2026-10-24 | 1.62.0 | New page. Documents schema generation limits (`Annotated` with `Field` unsupported; Pydantic parameters arrive as dicts), return-value handling, streaming tools, direct calls, module and class tools, executors, the `strands-agents-tools` 0.8 deprecations, vended tools, sandboxes and MCP with `mcp` 2.x. |

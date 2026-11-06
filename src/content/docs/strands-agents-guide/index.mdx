@@ -19,7 +19,7 @@ Strands Agents is an open-source (Apache 2.0) SDK from AWS for building agents. 
   <LinkCard
     title="Python"
     href="/strands-agents-guide/python/"
-    description="The reference SDK: the widest provider support, strands-agents-tools, evals, swarms, graphs, the workflow tool, A2A and real-time voice."
+    description="The reference SDK: the widest provider support, strands-agents-tools, evals, swarms, graphs, A2A and real-time voice."
   />
   <LinkCard
     title="TypeScript"
@@ -31,7 +31,7 @@ Strands Agents is an open-source (Apache 2.0) SDK from AWS for building agents. 
 <CardGrid>
   <Card title="Python install" icon="rocket">
     ```bash
-    pip install "strands-agents==%%version=strands-agents%%" "strands-agents-tools==%%version=strands-agents-tools%%"
+    pip install "strands-agents==%%version=strands-agents%%"
     ```
   </Card>
   <Card title="TypeScript install" icon="rocket">
@@ -71,7 +71,7 @@ There is no graph to draw and no prompt template to fill: the model sees the too
 | Runtime | Python 3.10+ | Node.js 22+, ESM only |
 | Tools | `@tool` functions (schema from type hints and docstrings) | `tool()` with Zod schemas, fully typed |
 | Providers | Bedrock, Anthropic, OpenAI, Gemini, LiteLLM, Ollama, Mistral, llama.cpp, Llama API, SageMaker, Writer | Bedrock, Anthropic, OpenAI, Google, Vercel AI SDK |
-| Multi-agent | Agents as tools, `Swarm`, `GraphBuilder`, `workflow` tool, A2A | Agents as tools, `Swarm`, `Graph`, A2A |
+| Multi-agent | Agents as tools, `Swarm`, `GraphBuilder`, model-driven `graph` tool, A2A | Agents as tools, `Swarm`, `Graph`, A2A |
 | Extras | Evals package, real-time voice (`BidiAgent`), the larger tool library | Vended tools only |
 
 Both SDKs share the concepts and most names, so moving between them is mostly syntax. Choose by the language of the service the agent lives in; choose Python if you need evals, the wider tool set or a provider only Python supports.

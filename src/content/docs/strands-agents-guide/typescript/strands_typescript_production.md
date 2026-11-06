@@ -266,7 +266,7 @@ As of %%version=@strands-agents/sdk%% against Python %%version=strands-agents%%:
 | Streaming output | Callback handlers or `stream_async` | `stream()` or hooks; no callback handlers |
 | Hooks | `hooks=[...]` in the constructor, `agent.add_hook()` | `agent.addHook(EventClass, fn)` only |
 | Providers | Bedrock, Anthropic, OpenAI (Chat and Responses), Gemini, LiteLLM, Ollama, Mistral, llama.cpp, Llama API, SageMaker, Writer | Bedrock, Anthropic, OpenAI (Responses by default, or Chat), Google, Vercel AI SDK |
-| Tool library | `strands-agents-tools` plus `strands.vended_tools` | Vended tools only; no `use_aws`, `workflow`, `retrieve`, browser or code-interpreter wrappers |
+| Tool library | `strands.vended_tools` (`strands-agents-tools` ships no tools from 0.9) | Vended tools only |
 | Multi-agent | `GraphBuilder`, `Swarm` with handoff tool, `workflow` tool; bounded defaults | `Graph({ nodes, edges })`, `Swarm` with structured-output handoffs; unbounded defaults, milliseconds |
 | Agent as tool | `as_tool(name, description, preserve_context, delegate)` | `asTool({ name, description, preserveContext })` |
 | Sessions | File, S3, snapshot and AgentCore Memory session managers | `SessionManager` with `LocalFileStorage`, `S3Storage` or `InMemoryStorage`; AgentCore Memory as a `MemoryManager` store |

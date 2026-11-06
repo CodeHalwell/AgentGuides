@@ -141,7 +141,7 @@ def handler(event, context):
     }
 ```
 
-Set the function timeout above your longest expected run, and keep the model's read timeout and the turn limit inside it. Package `strands-agents` (and only the extras you use) in the deployment package or a layer; `strands-agents-tools` pulls in many dependencies, so import individual tools only if you need them. For streaming to browsers from Lambda, use a response-streaming function URL with a Node.js handler or move to a container host.
+Set the function timeout above your longest expected run, and keep the model's read timeout and the turn limit inside it. Package `strands-agents` (and only the extras you use) in the deployment package or a layer; `strands-agents-tools` pulls in many dependencies and, from 0.9, ships no usable tools, so leave it out. For streaming to browsers from Lambda, use a response-streaming function URL with a Node.js handler or move to a container host.
 
 ## Containers: FastAPI on Fargate or EKS
 
@@ -277,7 +277,7 @@ Record per-call usage from `result.metrics.latest_agent_invocation.usage` for co
 - **Treat tool output as untrusted.** Web pages, emails and documents can contain instructions. Gate sensitive actions with an [intervention handler or interrupt](/strands-agents-guide/python/strands_hooks_and_interrupts/#interventions), not with the system prompt alone.
 - **Sandboxes.** Run model-written code in a container sandbox or the AgentCore Code Interpreter, not on the host.
 - **Guardrails.** Bedrock Guardrails on `BedrockModel` filter input and output for content policy.
-- **Tool consent.** Some `strands-agents-tools` tools prompt on the terminal; in a server set `BYPASS_TOOL_CONSENT=true` deliberately, or choose tools that do not need it.
+- **Tool consent.** Old `strands-agents-tools` releases (before 0.9) prompted on the terminal and honoured `BYPASS_TOOL_CONSENT=true`. If you still run one, set that variable deliberately in a server; the vended tools do not prompt.
 
 ## Testing without the cloud
 
@@ -430,7 +430,7 @@ Every Python example in this guide was checked this way, with a patch applied to
 - `callback_handler=None` in servers.
 - Traces exported with session and user attributes; usage recorded per call.
 - Tools narrow, credentials in roles or AgentCore Identity, sensitive actions behind interventions.
-- Deprecated `strands-agents-tools` tools replaced before 0.9.
+- Any `strands-agents-tools` imports replaced with vended tools: 0.9 removed them all.
 - Unit tests on a scripted model; evals with real models on a schedule.
 
 ## Revision history

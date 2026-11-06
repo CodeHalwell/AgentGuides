@@ -1,6 +1,6 @@
 {
   "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
-  "checked": "2026-11-05",
+  "checked": "2026-11-06",
   "packages": {
     "agent-framework": {
       "registry": "pypi",
@@ -256,22 +256,22 @@
     },
     "strands-agents": {
       "registry": "pypi",
-      "version": "1.62.0",
+      "version": "1.64.0",
       "guide": "strands-agents-guide"
     },
     "@strands-agents/sdk": {
       "registry": "npm",
-      "version": "1.22.0",
+      "version": "1.24.0",
       "guide": "strands-agents-guide"
     },
     "strands-agents-tools": {
       "registry": "pypi",
-      "version": "0.8.10",
+      "version": "0.9.0",
       "guide": "strands-agents-guide"
     },
     "strands-agents-evals": {
       "registry": "pypi",
-      "version": "1.7.0",
+      "version": "1.9.0",
       "guide": "strands-agents-guide"
     },
     "bedrock-agentcore-ts": {
