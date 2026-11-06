@@ -15,7 +15,7 @@ Topic pages go deeper on [tools and MCP](/strands-agents-guide/python/strands_to
 ## Installation
 
 ```bash
-pip install "strands-agents==%%version=strands-agents%%" "strands-agents-tools==%%version=strands-agents-tools%%"
+pip install "strands-agents==%%version=strands-agents%%"
 ```
 
 Python 3.10 or later. Model providers other than Bedrock, and some features, are optional extras:

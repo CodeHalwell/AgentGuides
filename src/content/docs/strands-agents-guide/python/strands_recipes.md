@@ -437,7 +437,7 @@ analyst = Agent(
 analyst("Read s3://reports/daily.txt and notify arn:aws:sns:us-west-2:123456789012:ops if anything failed.")
 ```
 
-The matching IAM policy needs only `s3:GetObject` on the report prefix, `dynamodb:GetItem` on the table and `sns:Publish` on the topic. `use_aws` from `strands-agents-tools` can call any AWS API, which is handy for exploration and hard to scope for production.
+The matching IAM policy needs only `s3:GetObject` on the report prefix, `dynamodb:GetItem` on the table and `sns:Publish` on the topic. The AWS MCP Server (the replacement for the removed `use_aws` tool) can call any AWS API, which is handy for exploration and hard to scope for production.
 
 ## Revision history
 

@@ -1,6 +1,6 @@
 ---
 title: "Strands Agents (Python): Multi-Agent Systems and A2A"
-description: "Coordinating several Strands agents in Python: agents as tools, Swarm handoffs, GraphBuilder graphs with conditions, loops and parallel branches, the workflow tool, orchestrator hooks and streaming, and the Agent2Agent protocol."
+description: "Coordinating several Strands agents in Python: agents as tools, Swarm handoffs, GraphBuilder graphs with conditions, loops and parallel branches, `graph`, `swarm` and `subagent` tools for the model, orchestrator hooks and streaming, and the Agent2Agent protocol."
 framework: "strands"
 language: "python"
 sidebar:
@@ -17,7 +17,7 @@ Checked against `strands-agents` %%version=strands-agents%% and `strands-agents-
 | **Agents as tools** | A supervisor model, by calling specialists as tools | One agent stays in charge and specialists answer sub-questions |
 | **Swarm** | Each agent, by handing off to another | Work moves between peers and the order is not known in advance |
 | **Graph** | You, with edges and conditions | The flow is known: pipelines, fan-out and fan-in, review loops |
-| **`workflow` tool** | The model, by creating a task list with dependencies | You want the model to plan a multi-step job and run it |
+| **Vended `graph`, `swarm`, `subagent` tools** | The model, by specifying the nodes or agents at run time | You want the model to decide the team shape |
 | **A2A** | Any of the above, across process or organisation boundaries | The other agent runs elsewhere, possibly not on Strands |
 
 Start with agents as tools; it is the simplest to debug. The [diagrams page](/strands-agents-guide/strands_diagrams/#multi-agent-patterns) shows each shape.
@@ -430,38 +430,33 @@ except RuntimeError as exc:
     print("stopped:", exc)   # stopped: dry run: not publishing
 ```
 
-## The workflow tool
+## Orchestration tools for the model
 
-For a fixed pipeline you know in advance, a graph is clearer. When you want the *model* to plan and run a multi-task job, with dependencies, priorities and a model per task, give it the `workflow` tool from `strands-agents-tools`. `agent.tool.workflow(...)` drives it directly:
+For a fixed pipeline you know in advance, a graph is clearer. When you want the *model* to decide at run time, `strands.vended_tools` has `graph`, `swarm` and `subagent` tools. The model supplies the node or agent specifications (a name and a system prompt each) and the tool builds and runs the `Graph` or `Swarm`; the nodes draw their tools from the calling agent. They replace the `workflow`, `graph`, `agent_graph`, `swarm` and `use_agent` tools that `strands-agents-tools` removed in 0.9. The `workflow` tool's per-task priorities and model settings have no equivalent. `agent.tool.<name>(...)` calls one directly:
 
 ```python
 from strands import Agent
-from strands_tools import workflow
+from strands.vended_tools import graph, subagent, swarm
 
-coordinator = Agent(model="us.anthropic.%%model=anthropic%%", tools=[workflow], callback_handler=None)
-
-coordinator.tool.workflow(
-    action="create",
-    workflow_id="document_processing",
-    tasks=[
-        {"task_id": "extract", "description": "Extract invoice fields from the document text.", "priority": 5},
-        {
-            "task_id": "classify",
-            "description": "Classify the document as invoice, contract, report or other.",
-            "dependencies": ["extract"],
-            "model_provider": "bedrock",
-            "model_settings": {"model_id": "us.anthropic.%%model=anthropic-small%%"},
-        },
-        {"task_id": "validate", "description": "Check the extracted fields are complete.", "dependencies": ["extract"]},
-    ],
+coordinator = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    tools=[graph, swarm, subagent],
+    callback_handler=None,
 )
 
-coordinator.tool.workflow(action="start", workflow_id="document_processing")
-status = coordinator.tool.workflow(action="status", workflow_id="document_processing")
-print(status["content"][0]["text"][:200])
+result = coordinator.tool.graph(
+    task="Summarise the incident report for the on-call channel.",
+    nodes=[
+        {"name": "draft", "instructions": "Draft a three-line summary."},
+        {"name": "review", "instructions": "Check the draft for unsupported claims."},
+    ],
+    edges=[{"from_node": "draft", "to_node": "review"}],
+)
+print(result["status"])
+print(result["content"][0]["text"])
 ```
 
-Tasks whose dependencies are met run in parallel. Workflow state is written to `~/.strands/workflows` (`STRANDS_WORKFLOW_DIR` changes it). `strands_tools` also has `swarm`, `graph` and `agent_graph` tools that let the model build those structures itself. Durable business processes with long waits, approvals and retries across days belong in AWS Step Functions, with each step invoking an agent (for example on AgentCore Runtime).
+`graph` needs at least two nodes (up to 20) and 50 edges at most; an empty edge list runs the nodes in parallel. `swarm` takes `agents` and an optional `entry_point`, and `subagent` takes a `task` and optional `instructions` and returns a final report from an agent with its own context. `make_graph`, `make_swarm` and `make_subagent` build configured versions. Durable business processes with long waits, approvals and retries across days belong in AWS Step Functions, with each step invoking an agent (for example on AgentCore Runtime).
 
 ## A2A (Agent2Agent)
 
@@ -534,4 +529,5 @@ Hosting A2A servers on AgentCore Runtime is covered in the [Bedrock A2A guide](/
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Documented that swarm limits and the graph node-execution limit return `Status.FAILED` rather than raising. |
+| 2026-11-06 | 1.64.0 | Replaced the `workflow` tool section (removed with `strands-agents-tools` 0.9) with the vended `graph`, `swarm` and `subagent` tools, run against a scripted model. |
 | 2026-10-24 | 1.62.0 | New page, from the multi-agent sections of the former Bedrock Strands page. Adds `as_tool` options (`delegate`), state propagation rules, swarm options and result fields, context-aware graph conditions, nested orchestrators, orchestrator streaming and hooks, and A2A server and client usage. |

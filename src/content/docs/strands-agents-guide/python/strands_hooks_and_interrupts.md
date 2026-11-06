@@ -340,7 +340,7 @@ agent("What time is it?")
 print(agent.messages[0]["content"])   # only the user's text: the injected block is not kept
 ```
 
-The injected text reaches the model verbatim, so escape any field a user influences. If the callback raises, injection is skipped and the model call goes ahead. `current_time` in `strands-agents-tools` is deprecated in favour of this.
+The injected text reaches the model verbatim, so escape any field a user influences. If the callback raises, injection is skipped and the model call goes ahead. `current_time` in `strands-agents-tools` was removed in 0.9 in favour of this.
 
 ### Goal loops
 
