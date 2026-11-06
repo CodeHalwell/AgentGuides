@@ -816,6 +816,50 @@ if __name__ == "__main__":
 
 `client.generate_live_view_url()` returns a presigned URL (valid for 300 seconds by default) that shows the session in a browser, which helps when debugging an agent. `browser_session` also accepts `viewport`, `proxy_configuration`, `extensions`, `profile_configuration` (persisted profiles), `enterprise_policies` and `certificates`, and `identifier` for a custom browser. Treat page content as untrusted input: a page can contain instructions aimed at your model.
 
+### Web search
+
+AgentCore Web Search is a Gateway connector target: you add a web search target to a gateway, and the agent calls it as an MCP tool. `WebSearchClient` wraps that call so you can use it from plain Python, without handling MCP content blocks. Calls are signed with ordinary AWS credentials; there is no search API key. The caller needs `bedrock-agentcore:InvokeGateway` on the gateway, and the gateway's service role needs `bedrock-agentcore:InvokeWebSearch` on the connector. An `AccessDeniedException` is nearly always one of those two missing. The connector is offered in a limited set of regions, so check the current list before you rely on it.
+
+```python
+from bedrock_agentcore.tools import WebSearchClient
+
+with WebSearchClient(region="us-east-1", gateway_id="my-gateway-abc123", target_name="web-search") as client:
+    response = client.search(
+        "boto3 release notes",
+        max_results=5,                      # 1 to 25; the service default is 10
+        include_domains=["github.com"],     # a root domain matches its subdomains
+        published_after="2026-01-01T00:00:00Z",
+    )
+    for result in response:
+        print(result.title, result.url, result.published_date)
+```
+
+Passing `target_name` saves a `tools/list` round trip on the first call. The query is limited to 200 characters, and each domain list to 100 entries. Domain and date filters need connector version 1.2.0 or later; earlier versions accept only the query and `max_results`. Request filters narrow the target's own domain rules and never widen them, so if the target already has an include list and yours shares no domains with it, the search returns nothing rather than raising an error. Search results are untrusted web content: do not let them drive tool calls without checks.
+
+### Knowledge bases from the SDK
+
+`KnowledgeBaseClient` gives one object over both the Bedrock Knowledge Bases control plane (`bedrock-agent`) and the retrieval APIs (`bedrock-agent-runtime`). It forwards an allowlist of boto3 methods, accepts snake_case or camelCase arguments, and adds `*_and_wait` helpers for the operations that are asynchronous (`create_knowledge_base_and_wait`, `start_ingestion_job_and_wait`, `ingest_knowledge_base_documents_and_wait` and the update and delete equivalents). The helpers poll until the resource is ready and raise `RuntimeError` on failure or `TimeoutError` after `max_wait` (300 seconds by default).
+
+```python
+from bedrock_agentcore.knowledge_base import KnowledgeBaseClient, WaitConfig
+
+client = KnowledgeBaseClient(region_name="us-east-1")
+
+job = client.start_ingestion_job_and_wait(
+    knowledge_base_id="KB123",
+    data_source_id="DS123",
+    wait_config=WaitConfig(max_wait=900, poll_interval=15),
+)
+print(job["status"])
+
+results = client.retrieve(
+    knowledge_base_id="KB123",
+    retrieval_query={"text": "What is the refund policy?"},
+)
+```
+
+`retrieve`, `retrieve_and_generate`, `rerank` and `agentic_retrieve_stream` are among the forwarded retrieval calls. A method outside the allowlist raises `AttributeError`; use boto3 directly for those.
+
 ### Workflows and Memory
 
 AgentCore has no workflow DSL of its own. Multi-step workflows are expressed either inside your agent (for example a Strands `GraphBuilder` graph; see the [Strands guide](/strands-agents-guide/python/strands_multi_agent/#graph)) or outside it with Step Functions or EventBridge calling `InvokeAgentRuntime` (see [Integration Patterns](#integration-patterns)).

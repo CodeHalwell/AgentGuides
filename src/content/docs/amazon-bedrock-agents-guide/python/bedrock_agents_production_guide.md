@@ -259,6 +259,32 @@ for result in results:
 
 `agentcore add evaluator llm-as-a-judge` defines a custom judge (with `--level SESSION|TRACE|TOOL_CALL`, instructions and a rating scale such as `pass-fail` or `1-5-quality`), and `add evaluator code-based` uses a Lambda function. For a pre-promotion gate, replay a stored dataset against the `canary` endpoint with `agentcore eval ondemand simulate` (or `eval batch-evaluation simulate` for a service-side batch), and move `prod` only if the scores hold. `agentcore eval dataset` creates and versions the datasets.
 
+### Prompt recommendations (preview)
+
+`RecommendationClient` asks the service to propose an improved system prompt from traces that have already been evaluated. It is marked as preview in the SDK, so expect the request shape to change. `start_recommendation_and_wait` starts the job and polls until it completes, which usually takes several minutes, so give it a longer `max_wait` than the five-minute default for large trace sets.
+
+```python
+from bedrock_agentcore.evaluation import RecommendationClient, WaitConfig
+
+client = RecommendationClient(region_name="us-west-2")
+
+recommendation = client.start_recommendation_and_wait(
+    wait_config=WaitConfig(max_wait=1800, poll_interval=30),
+    name="support-prompt-rec",
+    type="SYSTEM_PROMPT_RECOMMENDATION",
+    recommendationConfig={"systemPromptRecommendationConfig": {
+        "systemPrompt": {"text": "You are a support assistant."},
+        "agentTraces": {"batchEvaluation": {"batchEvaluationArn": BATCH_EVALUATION_ARN}},
+        "evaluationConfig": {"evaluators": [
+            {"evaluatorArn": "arn:aws:bedrock-agentcore:::evaluator/Builtin.GoalSuccessRate"},
+        ]},
+    }},
+)
+print(recommendation["recommendationResult"])
+```
+
+Read the output from `recommendationResult`; `recommendationConfig` in the response only echoes your input. The client also forwards `get_recommendation`, `list_recommendations` and `delete_recommendation`. Treat the result as a suggestion: run it through the same evaluations against the `canary` endpoint before you promote it.
+
 ## IAM least privilege
 
 Three kinds of principal need permissions. Keep them separate:
