@@ -286,6 +286,21 @@ async with MCPStdioTool(
         print(f"{fn.name}: {(fn.description or '')[:60]}")
 ```
 
+### Discovery limits and timeouts
+
+From 1.25.0, discovery of tools and prompts is bounded: at most 100 pages (`max_discovery_pages`) and 1,000 items (`max_discovery_items`) per catalogue, and framework-owned requests time out after 30 seconds (`request_timeout`). All three are constructor arguments on the MCP tool classes. Raise the limits for a legitimately larger server, or pass `None` to remove a limit only for a server you trust. If a refresh fails, the previously loaded catalogue is kept. A client you supply through `mcp_client=` keeps its own timeout policy. An `http_client=` only sets the HTTP transport: the framework still builds the MCP client with `request_timeout`, so raise or disable `request_timeout` as well for long-running calls.
+
+```python
+from agent_framework import MCPStreamableHTTPTool
+
+big = MCPStreamableHTTPTool(
+    name="catalogue",
+    url="https://example.com/mcp",
+    max_discovery_items=5000,
+    request_timeout=None,  # restores unlimited request timing
+)
+```
+
 ### Progressive disclosure for large servers
 
 With `use_progressive_disclosure=True` (experimental, `ExperimentalFeature.PROGRESSIVE_TOOLS`) the model initially sees only the tools named in `always_load=` plus three small loader tools that list, load and unload the server's other tools on demand. This keeps a 200-tool server from filling the context window with schemas:
@@ -723,5 +738,6 @@ async with MCPStdioTool(name="fs", command="...") as fs:
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-09 | 1.25.0 | Added discovery limits (`max_discovery_pages`, `max_discovery_items`) and the 30-second default `request_timeout`. |
 | 2026-10-25 | 1.23.0 | Updated for the move to MCP SDK 2.x: pruned installs need `tenacity`; WebSocket transport and MCP tasks removed (`MCPWebsocketTool`, `MCPTaskOptions` and `task_options` are deprecated stubs); `mcp` types are snake_case (`mime_type`, `is_error`, `max_tokens`); `http_client=` takes an `httpx2.AsyncClient`. Added `mcp_client=` and the caller-owned versus framework-owned lifecycle, a verified streamable-HTTP host for `as_mcp_server()` and the alpha `agent-framework-hosting-mcp`. Fixed earlier errors: prompts are in `.functions` (there is no `prompts` attribute), `result_parser` receives `list[Content]`, `is_connected` does not detect a dropped server, `terminate_on_close` ends the MCP session rather than closing the HTTP client. |
 | 2026-10-24 | 1.22.0 | Corrected tool naming (`name` is not a prefix; use `tool_name_prefix`), the default approval (`None` means no approval; unlisted tools in an `MCPSpecificApproval` dict run unapproved), sampling (denied unless `sampling_approval_callback` approves; deprecated in MCP), WebSocket auth (no header support), hosted-MCP trade-offs and the reconnect example; removed an invented DevUI/ChatKit MCP hosting claim. Added `static_headers`, progressive disclosure, `tool_result_content` and MCP tasks. |

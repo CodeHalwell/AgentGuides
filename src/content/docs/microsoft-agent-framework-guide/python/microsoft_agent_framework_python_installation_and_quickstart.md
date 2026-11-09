@@ -19,7 +19,7 @@ This guide covers everything you need to get your first agent running in Python 
 | Package name | `agent-framework` |
 | Current version | `%%version=agent-framework%%` |
 | Import root | `agent_framework` |
-| Python requirement | 3.11 or later (Python 3.10 still installs with 1.24.0 but is not supported; the next release is due to drop it from `Requires-Python`) |
+| Python requirement | 3.11 or later (Python 3.10 installs no longer resolve from 1.25.0) |
 
 ```bash
 pip install agent-framework

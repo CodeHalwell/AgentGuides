@@ -160,7 +160,7 @@ public static class WorkflowTracing
 | --- | --- | --- |
 | `workflow.build` | `Build()` call | `workflow.id`, `workflow.name`, `workflow.definition` (the graph as JSON) |
 | `workflow.session` | Run | `workflow.id`, `session.id` |
-| `workflow_invoke` | Execution of the run's supersteps | `workflow.id`, `session.id` |
+| `invoke_workflow {name}` | Execution of the run's supersteps (named `workflow_invoke` before 1.28.0) | `gen_ai.operation.name`, `gen_ai.workflow.name`, `workflow.id`, `session.id` |
 | `executor.process {id}` | Message handled | `executor.id`, `executor.type`, `message.type`; with sensitive data, `executor.input` and `executor.output` |
 | `message.send` | Message sent | `message.source_id`; with sensitive data, `message.content` |
 | `edge_group.process` | Edge group delivery | `edge_group.type`, `message.source_id`, `message.target_id`, `edge_group.delivery_status` |
