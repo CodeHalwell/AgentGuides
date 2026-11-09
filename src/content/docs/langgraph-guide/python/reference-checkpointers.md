@@ -356,7 +356,7 @@ print(result["approved"])  # True
 | Field | Type | Description |
 |---|---|---|
 | `value` | `Any` | The payload passed to `interrupt(value)` — question, instructions, or data for the human |
-| `id` | `str` | Identifies the task that raised it. Use in `Command(resume={id: answer})` to address it; several `interrupt()` calls in one node share one id |
+| `id` | `str` | Identifies the interrupt. Use in `Command(resume={id: answer})` to address it. Each `interrupt()` call has its own id since 1.2.20 (earlier releases shared the task's id across calls in one node) |
 | `response_schema` | `dict \| None` | JSON Schema for the expected resume value, if the node passed `response_schema=` |
 
 > **Note on removed fields.** Before v0.6.0, `Interrupt` had `ns`, `when` and `resumable` attributes and an `interrupt_id` property (added in 0.4). v0.6.0 removed the attributes and replaced `interrupt_id` with `id`; `interrupt_id` still works as a deprecated property. If you see code referencing the others, it targets an older LangGraph version.

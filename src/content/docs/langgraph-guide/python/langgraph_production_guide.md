@@ -131,6 +131,8 @@ asyncio.run(main())
 
 Each `part` has `.event` (`"metadata"` first, then the stream mode) and `.data`, which is plain JSON: messages are dicts. `client.runs.wait(...)` returns the final state instead; `client.runs.create(...)` starts a background run; `client.threads.get_state(thread_id)` reads state; `client.runs.stream(..., command={"resume": ...})` resumes an interrupt.
 
+By default a resume that answers an interrupt which is no longer waiting is ignored. Pass `strict_resume=True` to `runs.create`, `runs.stream` or `runs.wait` (`langgraph-sdk` 0.4.14) and the run fails with `UnknownInterruptError`, leaving the thread unchanged. It takes effect only on servers whose `/info` reports `strict_resume`, so check your deployment version before relying on it. `threads.get_state` and `threads.get_history` also accept `select` (0.4.13) to return only some fields of the state.
+
 To use a deployed graph like a local one (including as a node in another graph), use [`RemoteGraph`](/langgraph-guide/python/reference-remote-graph/).
 
 ## Authentication

@@ -243,7 +243,7 @@ pending = graph.get_state(cfg).interrupts          # one Interrupt per paused ta
 graph.invoke(Command(resume={i.id: "yes" for i in pending}), cfg)
 ```
 
-With more than one interrupt pending, a non-mapping resume value raises `RuntimeError: When there are multiple pending interrupts, you must specify the interrupt id when resuming.` The id identifies the task, so when one node calls `interrupt()` several times every call reports the same id; the graph pauses at each call in turn and you resume them in order. [Chapter 7](/langgraph-guide/python/chapter-07-human-in-the-loop/#example-3-resume-by-interrupt-id) has a runnable example.
+With more than one interrupt pending, a non-mapping resume value raises `RuntimeError: When there are multiple pending interrupts, you must specify the interrupt id when resuming.` Since 1.2.20 each `interrupt()` call has its own id, and when one node calls `interrupt()` several times the graph pauses at each call in turn, so you resume them in order. [Chapter 7](/langgraph-guide/python/chapter-07-human-in-the-loop/#example-3-resume-by-interrupt-id) has a runnable example.
 
 > Checkpoint history is not a complete interrupt audit log. Repeated `interrupt()` calls in one node reuse the same task slot, so `get_state_history()` only shows the interrupts each snapshot retained. If you need every interrupt that ever fired, record the `__interrupt__` events as you stream.
 
