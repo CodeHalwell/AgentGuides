@@ -4,17 +4,17 @@
   "packages": {
     "agent-framework": {
       "registry": "pypi",
-      "version": "1.24.0",
+      "version": "1.25.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "Microsoft.Agents.AI": {
       "registry": "nuget",
-      "version": "1.26.0",
+      "version": "1.28.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "xunit.v3": {
       "registry": "nuget",
-      "version": "4.0.2",
+      "version": "4.0.3",
       "guide": "microsoft-agent-framework-guide"
     },
     "Microsoft.AspNetCore.TestHost": {
@@ -39,7 +39,7 @@
     },
     "github.com/microsoft/agent-framework-go": {
       "registry": "go",
-      "version": "0.2.1",
+      "version": "0.3.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "agent-framework-rs": {
