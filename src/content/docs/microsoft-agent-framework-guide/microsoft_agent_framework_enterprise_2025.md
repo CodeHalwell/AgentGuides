@@ -219,7 +219,7 @@ async def multi_agent_traced_workflow() -> str:
         return analysis.text   # both invoke_agent spans share this trace
 ```
 
-Across process boundaries (an agent behind an HTTP API, or an A2A call) propagation is ordinary W3C `traceparent` handling: instrument your HTTP server and client (`opentelemetry-instrumentation-fastapi`, `-httpx`, or ASP.NET Core / `HttpClient` instrumentation in .NET) and the trace continues. Workflows add their own `workflow.run` and executor spans on top.
+Across process boundaries (an agent behind an HTTP API, or an A2A call) propagation is ordinary W3C `traceparent` handling: instrument your HTTP server and client (`opentelemetry-instrumentation-fastapi`, `-httpx`, or ASP.NET Core / `HttpClient` instrumentation in .NET) and the trace continues. Workflows add their own `invoke_workflow` and executor spans on top.
 
 ---
 

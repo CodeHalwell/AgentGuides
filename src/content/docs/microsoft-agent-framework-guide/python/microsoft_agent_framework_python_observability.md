@@ -84,7 +84,8 @@ Span names follow the GenAI convention of "operation plus target", so most carry
 | `invoke_agent <agent name>` | `Agent.run()` | `gen_ai.agent.name`, `gen_ai.agent.id`, `gen_ai.conversation.id` (when the run continues a service-side conversation), `gen_ai.tool.definitions`, usage summed over the run's model calls |
 | `chat <model>` | Every chat-client call | `gen_ai.request.model`, `gen_ai.response.model`, `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`, `gen_ai.response.finish_reasons` |
 | `execute_tool <tool name>` | Each tool invocation | `gen_ai.tool.name`, `gen_ai.tool.call.id`; arguments and result only with sensitive data enabled |
-| `workflow.build` / `workflow.run` | Workflow lifecycle | `workflow.name`, `workflow.id` |
+| `workflow.build` | Workflow construction | `workflow.name`, `workflow.id` |
+| `invoke_workflow <workflow name>` | Each workflow run (`invoke_workflow` when the workflow is unnamed) | `gen_ai.operation.name`, `gen_ai.workflow.name` (omitted when unnamed) |
 | `executor.process <executor id>` | Each executor run | `executor.id`, `executor.type` |
 | `edge_group.process <edge group type>` | Each edge traversal | `edge_group.id`, `edge_group.type`, `edge_group.delivery_status` |
 | `message.send` | Cross-executor messaging | `message.source_id`, `message.target_id`, `message.type` |
@@ -358,7 +359,7 @@ Complete `OtelAttr` reference — span attributes, span names, and metric instru
 
 | Attribute | String value |
 |---|---|
-| `OtelAttr.WORKFLOW_NAME` | `workflow.name` |
+| `OtelAttr.WORKFLOW_NAME` | `gen_ai.workflow.name` |
 | `OtelAttr.WORKFLOW_ID` | `workflow.id` |
 | `OtelAttr.EXECUTOR_ID` | `executor.id` |
 | `OtelAttr.EXECUTOR_TYPE` | `executor.type` |
@@ -375,7 +376,7 @@ Complete `OtelAttr` reference — span attributes, span names, and metric instru
 | `OtelAttr.TOOL_EXECUTION_OPERATION` | `execute_tool` |
 | `OtelAttr.AGENT_INVOKE_OPERATION` | `invoke_agent` |
 | `OtelAttr.WORKFLOW_BUILD_SPAN` | `workflow.build` |
-| `OtelAttr.WORKFLOW_RUN_SPAN` | `workflow.run` |
+| `OtelAttr.WORKFLOW_RUN_SPAN` | `invoke_workflow` (the base operation name; named spans append the workflow name) |
 | `OtelAttr.EXECUTOR_PROCESS_SPAN` | `executor.process` |
 | `OtelAttr.EDGE_GROUP_PROCESS_SPAN` | `edge_group.process` |
 | `OtelAttr.MESSAGE_SEND_SPAN` | `message.send` |
@@ -614,5 +615,6 @@ def no_telemetry():
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-09 | 1.25.0 | Workflow run spans are now `invoke_workflow <name>` with `gen_ai.workflow.name` (previously `workflow.run` and `workflow.name`); update span filters. |
 | 2026-11-02 | 1.24.0 | Noted the default `microsoft.agent-framework` resource attribute (framework-created providers only). |
 | 2026-10-24 | 1.22.0 | Corrected span names (they carry a suffix, e.g. `invoke_agent weather`, `chat gpt-4o-mini`), so the span processor, exporter filter and Application Insights queries now match on prefixes or `gen_ai.operation.name`; fixed the user-agent opt-out variable (`AGENT_FRAMEWORK_USER_AGENT_DISABLED`); removed the claim that `additional_properties` sets `gen_ai.conversation.id`. |
