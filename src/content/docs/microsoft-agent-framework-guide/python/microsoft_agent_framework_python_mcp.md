@@ -288,7 +288,7 @@ async with MCPStdioTool(
 
 ### Discovery limits and timeouts
 
-From 1.25.0, discovery of tools and prompts is bounded: at most 100 pages (`max_discovery_pages`) and 1,000 items (`max_discovery_items`) per catalogue, and framework-owned requests time out after 30 seconds (`request_timeout`). All three are constructor arguments on the MCP tool classes. Raise the limits for a legitimately larger server, or pass `None` to remove a limit only for a server you trust. If a refresh fails, the previously loaded catalogue is kept. A client you supply through `mcp_client=` or `http_client=` keeps its own transport and timeout policy.
+From 1.25.0, discovery of tools and prompts is bounded: at most 100 pages (`max_discovery_pages`) and 1,000 items (`max_discovery_items`) per catalogue, and framework-owned requests time out after 30 seconds (`request_timeout`). All three are constructor arguments on the MCP tool classes. Raise the limits for a legitimately larger server, or pass `None` to remove a limit only for a server you trust. If a refresh fails, the previously loaded catalogue is kept. A client you supply through `mcp_client=` keeps its own timeout policy. An `http_client=` only sets the HTTP transport: the framework still builds the MCP client with `request_timeout`, so raise or disable `request_timeout` as well for long-running calls.
 
 ```python
 from agent_framework import MCPStreamableHTTPTool
