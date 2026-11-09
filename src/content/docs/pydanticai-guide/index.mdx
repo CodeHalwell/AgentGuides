@@ -111,6 +111,7 @@ Condensed version history. The upstream [changelog](https://pydantic.dev/docs/ai
 | 2.61 | Oct 2026 | `Citations` capability and `TextPart.citations`; `thinking=False` sends the lowest accepted level on models that cannot disable thinking; async `auth` functions for hosted MCP capabilities. |
 | 2.62–2.63 | Oct 2026 | `BatchModelRequests` capability and `model_request_batch` for provider batch APIs; `PendingModelResponse`; `OpenAICompatibleProvider`; `ModelAuthenticationError`, `ModelNotFoundError` and `ModelRequestRejectedError`. |
 | 2.64 | Nov 2026 | `ModelFallback` capability (with `sticky=`); `RetryModelRequest` for retrying a request from model-request hooks; `first_event_timeout` model setting; `SpeechTimestamp` types. |
+| 2.65–2.66 | Nov 2026 | `ModelFallback` also falls back on refusals (`ContentFilterError` is in its default `fallback_on`); `FunctionToolset(requires_approval=True)` covers `Tool` instances passed to it; Z.ai quota 429s raise `ModelQuotaExceededError`; `include_instructions` on the `MCP` capability; `retries` on `SummarizingCompaction`; `OpenSandbox` and `RenderSandbox` workspaces. |
 
 Version ranges are where a feature first appears in the published wheels; the changelog has exact versions.
 
