@@ -160,7 +160,7 @@ print(final.values["published"])   # True
 
 ## Example 3: Resume by interrupt id
 
-Every `interrupt()` inside one task shares that task's id, so ids do not distinguish the first and second interrupt of the same node (Example 2 resumes those by order). Ids matter when **several tasks are paused at once**, typically parallel nodes. Each pending interrupt then has its own id, and `Command(resume={id: value, ...})` answers them in one call.
+Each `interrupt()` call gets its own id (from 1.2.20; earlier releases gave every call in one task the same id), so the first and second interrupt of the same node report different ids. A node that calls `interrupt()` twice still pauses at each in turn and is resumed in order (Example 2). Ids matter most when **several tasks are paused at once**, typically parallel nodes. Each pending interrupt then has its own id, and `Command(resume={id: value, ...})` answers them in one call.
 
 ```python
 from typing_extensions import TypedDict
@@ -402,7 +402,7 @@ A rejected resume value saves nothing, so the interrupt stays pending and can be
 - **No checkpointer = no resume.** Without a checkpointer, `invoke` still stops at `interrupt()` and returns the state with an `__interrupt__` key, but nothing is saved, so `Command(resume=...)` has nothing to resume. Always compile with a checkpointer (`InMemorySaver()` in tests) and pass a `thread_id`.
 - **`state.next` vs `state.interrupts`.** When paused, `graph.get_state(cfg).next` names the paused node (for example `('ask',)`); `state.interrupts` is the tuple of `Interrupt(value=..., id=...)` objects.
 - **Resume by id requires the correct id.** Pass the id exactly as reported by `Interrupt.id`. A mapping whose keys are not interrupt ids is not rejected: with a single pending interrupt, the whole dict becomes the resume value (checked against %%version=langgraph%%).
-- **Interrupts in one node share an id.** The id identifies the task, so a node that calls `interrupt()` twice reports the same id both times; resume those in order.
+- **Each `interrupt()` call has its own id.** Since 1.2.20 a node that calls `interrupt()` twice reports a different id for each call, but it pauses at them one at a time, so resume in order. Before 1.2.20 both calls reported the task's id.
 - **`Command(resume=scalar)` answers the next interrupt in order.** With interrupts from more than one task pending, a non-mapping resume value raises `RuntimeError: When there are multiple pending interrupts, you must specify the interrupt id when resuming.` Use `Command(resume={id: value})` there.
 
 
