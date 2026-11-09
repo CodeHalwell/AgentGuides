@@ -64,7 +64,7 @@ All of these live in `pydantic_ai.toolsets`; all except `DynamicToolset` are als
 | `schema_generator`            | `GenerateToolJsonSchema`  | Override Pydantic JSON-schema generator.                           |
 | `strict`                      | `None`                    | Forward `strict` hint to OpenAI.                                   |
 | `sequential`                  | `False`                   | Tools in this set must run serially.                               |
-| `requires_approval`           | `False`                   | All tools require HITL approval.                                   |
+| `requires_approval`           | `False`                   | All tools require HITL approval, including `Tool` instances passed in `tools` (since 2.66.0). |
 | `metadata`                    | `None`                    | Merged into each tool's metadata.                                  |
 | `defer_loading`               | `False`                   | Hide from model until tool search surfaces them.                   |
 | `include_return_schema`       | `None`                    | Include tool return schemas in definitions.                        |
