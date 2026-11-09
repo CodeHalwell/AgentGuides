@@ -165,8 +165,6 @@ AIAgent policyAgent = new ChatClientAgent(Models.ChatClient(),
 
 builder.AddA2AServer(policyAgent, options =>
 {
-    // ReturnMessage (the default) answers with a message; ReturnTask creates an A2A task the client can poll.
-    options.AgentRunMode = AgentRunMode.ReturnMessage;
     options.ServerOptions = new A2AServerOptions { SupportsStreaming = true };
 });
 
@@ -199,10 +197,9 @@ app.Run();
 
 | `A2AServerRegistrationOptions` | Default | Effect |
 | --- | --- | --- |
-| `AgentRunMode` | `ReturnMessage` | `ReturnMessage` answers with an A2A message; `ReturnTask` creates a task the client can poll or subscribe to; `ReturnTaskWhen(func)` decides per request |
 | `ServerOptions` | | The A2A SDK's `A2AServerOptions`: `SupportsStreaming`, `SupportedInputModes`, `SupportsExtendedAgentCard`, `AutoAppendHistory` |
 
-The overloads taking an agent name or an `IHostedAgentBuilder` serve a registered agent. With a session isolation provider configured, A2A tasks are scoped to the caller as well (`IsolationKeyScopedTaskStore`).
+From 1.28.0 `A2AServerRegistrationOptions` has no `AgentRunMode` property: the registration no longer offers a task mode (check the 1.28.0 release notes before relying on A2A tasks from this host), and earlier code that set `AgentRunMode.ReturnTask` or `ReturnTaskWhen(...)` there no longer compiles. The `AgentRunMode` type still exists and is taken by `A2AAgentHandler`'s constructor. The overloads taking an agent name or an `IHostedAgentBuilder` serve a registered agent. With a session isolation provider configured, A2A tasks are scoped to the caller as well (`IsolationKeyScopedTaskStore`).
 
 ```csharp
 using A2A;

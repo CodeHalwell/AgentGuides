@@ -1175,16 +1175,16 @@ The stand-in model calls the first tool it is offered, which here is `todos_add`
 
 `agent/skills` implements Agent Skills: packages of instructions, resources and scripts that the model loads only when a task needs them, which keeps the base prompt short. The provider lists each skill's name and description in the instructions and adds three tools, `load_skill`, `read_skill_resource` and `run_skill_script`. **All three require approval by default**; switch that off per tool with `DisableLoadSkillApproval`, `DisableReadSkillResourceApproval` and `DisableRunSkillScriptApproval`, or auto-approve with `skills.ReadOnlyToolsAutoApprovalRule` or `skills.AllToolsAutoApprovalRule` in a [`toolapproval`](/microsoft-agent-framework-guide/go/microsoft_agent_framework_go_tools/#standing-approvals-with-toolapproval) middleware.
 
-Skills come from code (`&skills.Skill{Frontmatter, GetContent, Resources, Scripts}`), from directories of `SKILL.md` files (`fsskills.NewSource(os.DirFS("skills"))`), or from any `skills.Source`. File-based scripts need a `ScriptRunner`, set through `fsskills.NewSourceOptions`; none is installed by default.
+Skills come from code (`&skills.Skill{Frontmatter, GetContent, Resources, Scripts}`), from directories of `SKILL.md` files (`fsskills.NewSource(os.DirFS("skills"))`), or from any `skills.Source`. A script's `Run` receives its arguments as raw JSON (`json.RawMessage`), so decode and validate them yourself; `ParametersSchema` tells the model the expected shape. File-based scripts need a `ScriptRunner` with the same signature, set through `fsskills.NewSourceOptions`; none is installed by default.
 
 ```go
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 
 	"github.com/microsoft/agent-framework-go/agent"
 	"github.com/microsoft/agent-framework-go/agent/harness/toolapproval"
@@ -1206,20 +1206,17 @@ var converter = &skills.Skill{
 		Read: func(context.Context) (any, error) { return "miles->km 1.60934; kg->lb 2.20462", nil },
 	}},
 	Scripts: []skills.Script{{
-		Name: "convert", Description: "Multiply a value by a factor. Arguments: [value, factor].",
-		Run: func(_ context.Context, _ *skills.Skill, args []string) (any, error) {
+		Name: "convert", Description: "Multiply a value by a factor. Arguments: a JSON array [value, factor].",
+		ParametersSchema: `{"type":"array","items":{"type":"number"},"minItems":2,"maxItems":2}`,
+		Run: func(_ context.Context, _ *skills.Skill, raw json.RawMessage) (any, error) {
+			var args []float64
+			if err := json.Unmarshal(raw, &args); err != nil {
+				return nil, fmt.Errorf("arguments must be a JSON array of numbers: %w", err)
+			}
 			if len(args) != 2 {
 				return nil, fmt.Errorf("want 2 arguments, got %d", len(args))
 			}
-			v, err := strconv.ParseFloat(args[0], 64)
-			if err != nil {
-				return nil, err
-			}
-			f, err := strconv.ParseFloat(args[1], 64)
-			if err != nil {
-				return nil, err
-			}
-			return v * f, nil
+			return args[0] * args[1], nil
 		},
 	}},
 }
