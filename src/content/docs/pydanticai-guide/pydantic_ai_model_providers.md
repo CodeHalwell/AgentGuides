@@ -220,7 +220,7 @@ agent = Agent(
 )
 ```
 
-- The default is `fallback_on=(ModelAPIError, ContentFilterError)`. Since 2.65.0 a refusal (a response with `finish_reason='content_filter'`) therefore moves on to the next model; pass `fallback_on=(ModelAPIError,)` to keep the old behaviour.
+- The default is `fallback_on=(ModelAPIError, ContentFilterError)`. Since 2.65.0 a refusal (a response with `finish_reason='content_filter'`) therefore moves on to the next model; pass `fallback_on=(ModelAPIError,)` to keep the old behaviour. This applies to non-streamed requests only: a streamed refusal is accepted without a warning, because whether the content filter ended the stream is only known once it has been streamed. An empty one then ends the run with `ContentFilterError`.
 - With no agent model, the first model you list serves the first attempt.
 - A model already tried in the step is skipped, so repeating the agent's own model in the list is harmless.
 - Each attempt re-runs `prepare_model_request` for the model about to serve it. `before_model_request` and `wrap_model_request` run once, and the model never sees a retry prompt.
