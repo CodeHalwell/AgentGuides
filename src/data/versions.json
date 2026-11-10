@@ -1,6 +1,6 @@
 {
   "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
-  "checked": "2026-11-09",
+  "checked": "2026-11-10",
   "packages": {
     "agent-framework": {
       "registry": "pypi",
@@ -226,12 +226,12 @@
     },
     "claude-agent-sdk": {
       "registry": "pypi",
-      "version": "0.2.177",
+      "version": "0.2.180",
       "guide": "anthropic-claude-agent-sdk-guide"
     },
     "@anthropic-ai/claude-agent-sdk": {
       "registry": "npm",
-      "version": "0.3.317",
+      "version": "0.3.322",
       "guide": "anthropic-claude-agent-sdk-typescript-guide"
     },
     "mistralai": {
