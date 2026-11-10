@@ -259,6 +259,33 @@ Transcripts go to `$HOME/.claude/projects/`. Mount a volume there if sessions mu
 
 ---
 
+## Start-up latency
+
+Every `query()` spawns a Claude Code process and waits for it to initialise, which adds to the time before the first message. Two functions move that work ahead of the request:
+
+- `startup({ options })` spawns the process and completes the initialise handshake, and returns a `WarmQuery`. Call `warm.query(prompt)` once to send the prompt to the ready process. Use it when you know the folder and options in advance, for example while a user is still typing. `warm.close()` discards it unused.
+- `prewarm({ options })` (marked alpha) parks a spare process before the session is known. It also loads tools, plugins and host-level MCP servers. Later, `spare.claim({ prompt, options })` binds it to a session and returns the `Query`. A claim can set `cwd`, `model`, `permissionMode`, `settings`, `agents` and a few other per-session values; `hooks`, `mcpServers`, `canUseTool`, `allowedTools` and `settingSources` are fixed at `prewarm()`. A parked spare holds roughly 230 to 260 MB.
+
+```typescript
+import { prewarm, query } from '@anthropic-ai/claude-agent-sdk'
+
+const spare = await prewarm({ options: { permissionMode: 'default' } })
+
+// Later, when a session starts in `folder`:
+const q = spare.claim({ prompt, options: { cwd: folder } })
+spare.claimed.catch((e: Error) => {
+  // Refused or died. option_not_applied means the session is already running.
+  if (!e.message.startsWith('option_not_applied')) void query({ prompt, options: { cwd: folder } })
+})
+for await (const message of q) {
+  // handle messages as usual
+}
+```
+
+Both are single use, so keep a pool and replace each spare once it is claimed. A claim can be refused (for example when the folder's project settings set `env`, `model` or `agent`), so always keep the ordinary `query()` path as a fallback.
+
+---
+
 ## Environment and configuration
 
 Validate configuration at start-up rather than on the first request:
