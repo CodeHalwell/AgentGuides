@@ -274,6 +274,49 @@ print(digest.next_run_at)   # Unix timestamp of the next 08:00 London time on a 
 
 Other arguments: `method`, `timeout_seconds`, `max_retries`, `retry_delay_seconds`, `if_exists` (`"raise"`, `"skip"`, `"update"`), `user_id`. The poller interval is `scheduler_poll_interval` (15 seconds). Creating schedules was verified; the poller firing them was not.
 
+## Serving external coding agents
+
+AgentOS can also serve agents that are not built from `Agent`. `ClaudeAgent` (`agno.agents.claude`) wraps the Claude Agent SDK, which runs Claude Code as a subprocess, and `CodexAgent` (`agno.agents.codex`) does the same for Codex. The harness runs its own tool loop; Agno adds the run interface, session storage and the AgentOS endpoints. Install the SDK alongside Agno (`pip install claude-agent-sdk`).
+
+```python
+from agno.agents.claude import ClaudeAgent
+from agno.os import AgentOS
+
+coder = ClaudeAgent(
+    name="Claude Coder",
+    allowed_tools=["Read", "Edit", "Bash"],  # pre-approved; does not restrict the tool set
+    permission_mode="acceptEdits",
+    max_turns=10,
+    max_budget_usd=1.0,
+)
+
+app = AgentOS(agents=[coder]).get_app()  # appears under /agents with id "claude-coder"
+```
+
+Standalone, `coder.print_response("Summarise main.py", stream=True)` works as it does for `Agent`. Points to know:
+
+- `tools` selects built-in tools, `allowed_tools` only pre-approves calls, and `disallowed_tools` blocks them. `max_turns` and `max_budget_usd` stop a run that goes on too long.
+- `output_schema` takes a Pydantic model; the run content is then the parsed object.
+- `cwd` is the working directory the harness sees. Files attached to a run are staged under `.agno/uploads/<run_id>/` and deleted afterwards unless `keep_uploads=True`.
+- `require_native_resume=True` fails a run if the earlier native conversation cannot be resumed, instead of replaying the history into a new one.
+- `CodexAgent` has similar arguments, plus `sandbox_mode`, `approval_mode` and `reasoning_effort`.
+
+### Running the harness in a sandbox
+
+Pass `sandbox=` to run the whole harness in a container each turn, with the files kept between turns as checkpoints. `DockerSandbox(image)` (`agno.sandbox.docker`) starts containers with no host bind mounts and the default `network="none"`; resource limits are `cpus`, `memory_mb`, `pids_limit` and `workspace_mb`. The harness needs to reach its model API, so use `network="isolated"` (or another network); with `"none"` Agno logs a warning. The agent or its AgentOS also needs a `PostgresDb`, which this page did not exercise.
+
+```python
+from agno.agents.claude import ClaudeAgent
+from agno.sandbox.docker import DockerSandbox
+
+coder = ClaudeAgent(
+    name="Sandboxed Coder",
+    sandbox=DockerSandbox("python:3.12-slim", network="isolated", cpus=1, memory_mb=1024),
+)
+```
+
+`Agent(sandbox=...)` is not supported yet: it raises an error pointing at `ClaudeAgent` and `CodexAgent`. Construction and registration with AgentOS were checked against agno %%version=agno%%; running a harness turn needs Claude Code or Codex credentials and, for a sandbox, Docker and Postgres, so those were not run.
+
 ## Adding AgentOS to an existing FastAPI app
 
 Pass your app as `base_app`; AgentOS adds its routes and middleware to it and `get_app()` returns the same object:
