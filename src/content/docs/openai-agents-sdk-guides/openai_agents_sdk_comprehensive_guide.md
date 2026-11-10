@@ -2380,6 +2380,25 @@ async def main():
 asyncio.run(main())
 ```
 
+### Compacting Long Histories
+
+`OpenAIResponsesCompactionSession` wraps another session and calls the Responses API's `responses.compact` after a turn once enough history has built up, replacing the stored items with a compacted version. It works only with OpenAI Responses models, and the wrapped store cannot be `OpenAIConversationsSession`. By default it triggers when ten or more compaction candidates exist; pass `should_trigger_compaction` to choose your own rule. The hook receives a dict with `compaction_candidate_items`, `session_items` and `response_id`:
+
+```python
+from agents import Agent, OpenAIResponsesCompactionSession, Runner, SQLiteSession
+
+session = OpenAIResponsesCompactionSession(
+    session_id="user-42",
+    underlying_session=SQLiteSession("user-42", "chat.db"),
+    should_trigger_compaction=lambda ctx: len(ctx["compaction_candidate_items"]) >= 20,
+)
+
+agent = Agent(name="Assistant", model="%%model=openai%%")
+result = Runner.run_sync(agent, "Remember that my name is Sam.", session=session)
+```
+
+Compaction makes its own model call (`model` defaults to `gpt-4.1` and must be an OpenAI model name), so it adds cost and a little latency to the turn that triggers it. Compacted items are opaque, so history you later read back from the store is no longer a readable transcript. Keep a separate log if you need one.
+
 ---
 
 ## Context Engineering
@@ -3076,6 +3095,32 @@ agent = Agent(
 ```
 
 Tool failures are returned to the model as an error message by default, so it can try again or explain; pass `failure_error_function=None` to `@function_tool` to raise instead. A hit turn limit, a refusal and an invalid final output can be turned into a normal result with `error_handlers={"max_turns": ..., "model_refusal": ..., "invalid_final_output": ...}`. The [production guide](/openai-agents-sdk-guides/openai_agents_sdk_production_guide/#bound-every-run) covers these together with timeouts.
+
+A handler receives a `RunErrorHandlerInput` (the `error`, the run `context` and a `run_data` snapshot with `new_items`, `raw_responses` and `last_agent`) and returns a `RunErrorHandlerResult`. A plain value or a dict with `final_output` is accepted too. `include_in_history=False` keeps the substitute answer out of the conversation history, which is usually what you want for a "gave up" message:
+
+```python
+from agents import Agent, Runner, RunErrorHandlerInput, RunErrorHandlerResult, function_tool
+from agents.testing import ScriptedModel, function_call
+
+@function_tool
+def lookup(q: str) -> str:
+    """Look something up."""
+    return "no luck"
+
+def on_max_turns(data: RunErrorHandlerInput) -> RunErrorHandlerResult:
+    lookups = [i for i in data.run_data.new_items if i.type == "tool_call_item"]
+    return RunErrorHandlerResult(
+        final_output=f"Gave up after {len(lookups)} lookups.",
+        include_in_history=False,
+    )
+
+# A scripted model that never stops calling the tool, so the turn limit is hit
+model = ScriptedModel([[function_call("lookup", {"q": "x"}, call_id=f"c{i}")] for i in range(2)])
+agent = Agent(name="Researcher", tools=[lookup], model=model)
+
+result = Runner.run_sync(agent, "Find x", max_turns=2, error_handlers={"max_turns": on_max_turns})
+print(result.final_output)  # Gave up after 2 lookups.
+```
 
 ### Testing Agent Applications
 
