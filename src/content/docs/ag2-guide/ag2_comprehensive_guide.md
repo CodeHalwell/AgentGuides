@@ -186,13 +186,59 @@ asyncio.run(main())
 
 A `Context` parameter gives the same access programmatically (`context.dependencies`, `context.variables`).
 
+### Variable scopes across delegation
+
+When an agent delegates through `as_tool()`, the worker receives a copy of the parent's variables by default, so its changes are not seen by the parent. Declare a variable with `ScopedValue(value, scope)` (`Scope` and `ScopedValue` are importable from `ag2`) to choose:
+
+- `Scope.COPIED` (the default): each delegate gets its own deep copy.
+- `Scope.SHARED`: every agent in the delegation tree reads and writes the same binding. It can only be declared at the root agent, and there is no locking, so guard compound updates yourself.
+- `Scope.LOCAL`: stays with the agent that declared it and is not passed on.
+
+Redeclaring a variable with a different scope raises `ScopeError`.
+
+```python
+import asyncio
+
+from ag2 import Agent, Scope, ScopedValue, tool
+from ag2.annotations import Context
+from ag2.events import ToolCallEvent
+from ag2.testing import TestConfig
+
+
+@tool
+def spend(amount: int, context: Context) -> str:
+    """Spend some of the budget."""
+    context.variables["spent"] += amount
+    return "ok"
+
+
+worker = Agent(
+    "worker",
+    config=TestConfig(ToolCallEvent(name="spend", arguments='{"amount": 5}'), "done"),
+    tools=[spend],
+)
+lead = Agent(
+    "lead",
+    tools=[worker.as_tool(description="Do the work.")],
+    variables={"spent": ScopedValue(0, Scope.SHARED)},
+)
+
+reply = asyncio.run(
+    lead.ask(
+        "Go.",
+        config=TestConfig(ToolCallEvent(name="task_worker", arguments='{"objective": "spend"}'), "Finished."),
+    )
+)
+print(reply.context.variables["spent"])  # 5: the worker's change is visible to the parent
+```
+
 ## Code execution
 
 Two kinds of code tool exist, and they are not interchangeable:
 
 | Tool | Where code runs | Works with |
 |---|---|---|
-| `SandboxCodeTool(environment)`, `SandboxShellTool(environment)` | Client-side, in the environment you pass: `LocalEnvironment` (a subprocess on your machine, no isolation), `ag2.extensions.docker.DockerEnvironment` (needs the `docker` package and a daemon), `ag2.extensions.daytona.DaytonaEnvironment` | Every provider |
+| `SandboxCodeTool(environment)`, `SandboxShellTool(environment)` | Client-side, in the environment you pass: `LocalEnvironment` (a subprocess on your machine, no isolation), `ag2.extensions.docker.DockerEnvironment` (needs the `docker` package and a daemon), `ag2.extensions.daytona.DaytonaEnvironment`, `ag2.extensions.e2b.E2BEnvironment` (E2B cloud sandboxes) or `ag2.extensions.boxd.BoxdEnvironment` (the last two were added in 1.3.0; each needs its own SDK installed, and importing without it raises a missing-dependency error). I only checked that they import and are exported, not that they run against the services | Every provider |
 | `CodeExecutionTool()`, `ShellTool()` | Server-side, in the model provider's sandbox | Only providers with native code execution or shell tools |
 
 ```python
@@ -459,13 +505,13 @@ asyncio.run(main())
 
 ## Knowledge, memory and compaction
 
-`knowledge=KnowledgeConfig(...)` attaches a `KnowledgeStore` to an agent. By default the agent gets a `knowledge` tool for reading and writing the store, and each conversation's event log is persisted there. A compaction strategy keeps long histories inside the context window:
+`KnowledgePlugin(store=..., ...)` in `plugins=[...]` attaches a `KnowledgeStore` to an agent. By default the agent gets a `knowledge` tool for reading and writing the store, and each conversation's event log is persisted there. A compaction strategy keeps long histories inside the context window:
 
 ```python
-from ag2 import Agent, KnowledgeConfig
+from ag2 import Agent
 from ag2.compact import CompactTrigger, SummarizeCompact, TailWindowCompact
 from ag2.config import OpenAIConfig
-from ag2.knowledge import SqliteKnowledgeStore
+from ag2.knowledge import KnowledgePlugin, SqliteKnowledgeStore
 
 config = OpenAIConfig(model="%%model=openai-small%%")
 
@@ -473,22 +519,26 @@ agent = Agent(
     "assistant",
     prompt="You are a long-running assistant.",
     config=config,
-    knowledge=KnowledgeConfig(
-        store=SqliteKnowledgeStore("agent-memory.db"),
-        compact=TailWindowCompact(target=40),               # free: keep the last 40 events
-        # compact=SummarizeCompact(target=40, config=config),  # one LLM call: summarise the rest
-        compact_trigger=CompactTrigger(max_events=80),       # or max_tokens=...
-    ),
+    plugins=[
+        KnowledgePlugin(
+            store=SqliteKnowledgeStore("agent-memory.db"),
+            compact=TailWindowCompact(target=40),               # free: keep the last 40 events
+            # compact=SummarizeCompact(target=40, config=config),  # one LLM call: summarise the rest
+            compact_trigger=CompactTrigger(max_events=80),       # or max_tokens=...
+        )
+    ],
 )
 ```
 
+`Agent(knowledge=KnowledgeConfig(...))` still works in %%version=ag2%% but is deprecated and goes in 1.4.0 (`KnowledgeConfig` itself stays; `KnowledgePlugin` takes the same options). An agent can have only one `KnowledgePlugin` per invocation: combining two, or one with `knowledge=`, raises `ValueError`. A delegated worker with its own plugin uses its own store rather than its parent's.
+
 - Stores: `MemoryKnowledgeStore` (tests), `SqliteKnowledgeStore`, `DiskKnowledgeStore` (needs `watchdog`), `RedisKnowledgeStore` (extra `redis`).
 - `expose_tool=False` hides the store from the model when only your own code should use it. `aggregate=` / `aggregate_trigger=` distil conversations into longer-term memory.
-- `assembly=[...]` on the `Agent` takes `AssemblyPolicy` objects that decide what goes into each LLM request (for example working or episodic memory read from the store).
+- `AssemblyPolicy` objects, registered through `AssemblerMiddleware`, decide what goes into each LLM request (for example working or episodic memory read from the store). See below.
 
 ### Controlling what the model sees: assembly policies
 
-`assembly=[...]` takes policies from `ag2.policies`. Each one receives the system prompts and the event list before every LLM call and returns changed copies; they run left to right, so each sees the previous one's output. The stored history is not altered, only the request.
+`AssemblerMiddleware` takes policies from `ag2.policies`. Each one receives the system prompts and the event list before every LLM call and returns changed copies; they run left to right, so each sees the previous one's output. The stored history is not altered, only the request.
 
 | Policy | Effect |
 |---|---|
@@ -502,24 +552,58 @@ Put injection policies (memory, alerts) before reduction policies (window, budge
 
 ```python
 from ag2 import Agent
+from ag2.assembly import AssemblerMiddleware
 from ag2.config import OpenAIConfig
+from ag2.middleware import HaltCheckMiddleware, Middleware
 from ag2.policies import ConversationPolicy, SlidingWindowPolicy, TokenBudgetPolicy
 
 agent = Agent(
     "chat",
     prompt="Be brief.",
     config=OpenAIConfig(model="%%model=openai-small%%"),
-    assembly=[
-        ConversationPolicy(),
-        SlidingWindowPolicy(max_events=40, transparent=True),
-        TokenBudgetPolicy(max_tokens=8_000),
+    middleware=[
+        Middleware(
+            AssemblerMiddleware,
+            policies=[
+                ConversationPolicy(),
+                SlidingWindowPolicy(max_events=40, transparent=True),
+                TokenBudgetPolicy(max_tokens=8_000),
+            ],
+        ),
+        Middleware(HaltCheckMiddleware),  # lets a FATAL alert from AlertPolicy stop the model call
     ],
 )
 ```
 
+Since 1.3.0 `Agent(assembly=[...])` is deprecated and removed in 1.4.0; pass the policies to `AssemblerMiddleware` as above. Register `HaltCheckMiddleware` straight after it when you use `AlertPolicy`: once a `HaltEvent` has been emitted in the turn, later model calls return a `HALTED: <reason>` message instead of reaching the provider.
+
+### Adding live status to each request
+
+`statusbar_middleware` appends freshly computed input to every model request without writing it to the conversation history, which suits a clock, a budget counter or a queue depth. The callback can be sync or async, takes the same injected parameters as a tool (such as `Context`), and returns one `Input`, a sequence of them, or `None`. A plain `str` is rejected with `TypeError`; wrap it in `TextInput`. `persist=True` keeps each non-empty result in the history as an observation.
+
+```python
+from ag2 import Agent
+from ag2.annotations import Context
+from ag2.events import TextInput
+from ag2.middleware import statusbar_middleware
+from ag2.testing import TestConfig
+
+
+@statusbar_middleware
+def budget(context: Context):
+    return TextInput("Budget left: 12 calls.")
+
+
+agent = Agent("worker", config=TestConfig("Understood."), middleware=[budget])
+```
+
+Register it before `RetryMiddleware` so one snapshot is reused across provider retries.
+
 Write your own by implementing `name` and `async def apply(self, prompts, events, context) -> (prompts, events)`.
 
 ## Sub-tasks and evaluation
+
+> **Deprecated in 1.3.0, removed in 1.4.0:** `Agent(tasks=TaskConfig(...))`, the injected `run_subtask` / `run_subtasks` tools and `agent.task()`. Build worker agents explicitly and expose them with `as_tool()` (below). For tracking a unit of work yourself, use `Task(owner_id=..., spec=TaskSpec(...))` from `ag2.task`. The description of `TaskConfig` that follows is kept for code you are migrating.
 
 - `tasks=TaskConfig(...)` gives an agent `run_subtask(task)` and `run_subtasks(tasks, parallel=True)` tools for delegating work to sub-agents. The sub-agents inherit its tools, narrowed with `include_tools=` / `exclude_tools=`, and cannot delegate further. `TaskConfig(config=...)` picks a cheaper model for them, `extra_tools=` adds tools only they have, and `max_concurrency=` bounds how many run at once. `agent.task(...)` is the lifecycle handle for tracking a unit of work yourself.
 
@@ -553,7 +637,7 @@ print(asyncio.run(lead.ask("How many words are in each of these: 'a b c' and 'd 
 
 ### Agents as tools
 
-`agent.as_tool(description=..., name=None, stream=None)` (or `subagent_tool(agent, ...)` from `ag2.tools.subagents`) exposes a whole agent as a tool for another one. Unlike `TaskConfig`, the delegate keeps its own prompt, tools, model and config. The tool takes an `objective` and an optional `context` string, runs the agent as a sub-task, and returns its answer; a failure comes back as a text message rather than an exception. The default name is `task_<agent name>`.
+`agent.as_tool(description=..., name=None, stream=None)` (or `subagent_tool(agent, ...)` from `ag2.tools.subagents`) exposes a whole agent as a tool for another one. Unlike `TaskConfig`, which it replaces, the delegate keeps its own prompt, tools, model and config. The tool takes an `objective` and an optional `context` string, runs the agent as a sub-task, and returns its answer; a failure comes back as a text message rather than an exception. The default name is `task_<agent name>`.
 
 By default each delegation starts on a fresh `MemoryStream`. Pass `stream=persistent_stream()` so the delegate remembers its earlier delegations within one conversation (token cost grows with them), a `Stream` instance to share one stream you can subscribe to, or a factory `(agent, context) -> Stream`.
 

@@ -50,7 +50,7 @@ CMD ["python", "-m", "app"]
 
 - A Network `Hub` persists its registry and write-ahead log through a `KnowledgeStore`. `MemoryKnowledgeStore` is for tests; use `DiskKnowledgeStore`, `SqliteKnowledgeStore` or `RedisKnowledgeStore` (extra `redis`) in production so channels can be restored with `Hub.hydrate()` after a restart.
 - `TransitionGraph`s are plain data (`to_dict()`), so workflow channels survive restarts without re-registering Python callables.
-- For long single-agent sessions, attach `knowledge=KnowledgeConfig(...)` with a compaction strategy (`TailWindowCompact` or `SummarizeCompact` from `ag2.compact`) to cap history growth. See [Knowledge, memory and compaction](/ag2-guide/ag2_comprehensive_guide/#knowledge-memory-and-compaction).
+- For long single-agent sessions, add `plugins=[KnowledgePlugin(store=..., ...)]` with a compaction strategy (`TailWindowCompact` or `SummarizeCompact` from `ag2.compact`) to cap history growth. See [Knowledge, memory and compaction](/ag2-guide/ag2_comprehensive_guide/#knowledge-memory-and-compaction).
 
 ## Resilience
 
