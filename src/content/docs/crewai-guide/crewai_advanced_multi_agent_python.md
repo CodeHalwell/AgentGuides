@@ -132,7 +132,7 @@ print(crew.kickoff(inputs={"topic": "grid-scale storage"}).raw)
 
 ## Planning
 
-`Crew(planning=True)` runs a planning step before the tasks and adds the plan to each task's prompt; `planning_llm` picks the model. Per-agent planning (`Agent(planning=True, planning_config=PlanningConfig(...))`) makes one agent plan before acting on each of its tasks. Planning helps on long, multi-step tasks and is wasted on short ones.
+`Crew(planning=True)` runs a planning step before the tasks and adds the plan to each task's prompt; `planning_llm` picks the model (default `gpt-6-luna`, as for agents). Per-agent planning (`Agent(planning=True, planning_config=PlanningConfig(...))`) makes one agent plan before acting on each of its tasks. Planning helps on long, multi-step tasks and is wasted on short ones.
 
 ## Parallel specialists
 

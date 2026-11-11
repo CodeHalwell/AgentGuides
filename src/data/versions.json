@@ -1,6 +1,6 @@
 {
   "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
-  "checked": "2026-11-10",
+  "checked": "2026-11-11",
   "packages": {
     "agent-framework": {
       "registry": "pypi",
@@ -146,12 +146,12 @@
     },
     "crewai": {
       "registry": "pypi",
-      "version": "1.15.35",
+      "version": "1.15.39",
       "guide": "crewai-guide"
     },
     "crewai-tools": {
       "registry": "pypi",
-      "version": "1.15.35",
+      "version": "1.15.39",
       "guide": "crewai-guide"
     },
     "ag2": {
