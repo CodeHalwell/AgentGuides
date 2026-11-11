@@ -47,7 +47,7 @@ uv tool install crewai
 | `crewai update` | Convert a Poetry project to uv: rewrites `pyproject.toml` and keeps the original as `pyproject-old.toml`. It does not upgrade CrewAI (see [Gotchas](#gotchas)). |
 | `crewai train -n 5 -f trained.pkl` | Kick off `main:train`: run the crew with human feedback on every task, then distil the feedback (see [Training mode](#training-mode)). |
 | `crewai test -n 3 -m %%model=openai-small%%` | Kick off `main:test` (eval; OpenAI models only). |
-| `crewai eval` | Grade the last traced run through CrewAI AMP, running the crew first if there is none or the project changed since; `--models a,b` compares models on a deployment. `crewai eval export ID` downloads an evaluation's full data into `./crewai-eval-ID/`. |
+| `crewai eval [--no-open]` | Grade the last traced run through CrewAI AMP, running the crew first if there is none or the project changed since; `--models a,b` compares models on a deployment. `--no-open` prints the report link instead of opening a browser (SSH, CI). `crewai eval export ID` downloads an evaluation's full data into `./crewai-eval-ID/`. |
 | `crewai replay -t <task_id>` | Re-run starting from a specific task. |
 | `crewai log-tasks-outputs` | List logged task outputs. |
 | `crewai reset-memories -m -kn -a` | Reset memory / knowledge / kickoff outputs. |
@@ -324,6 +324,6 @@ Set `Crew(chat_llm=LLM(...))` for a predictable model; the CLI opens a REPL that
 - **`reset-memories` without flags prints a help line and exits.** You must pick at least one type.
 - **`replay -t` needs logged outputs.** `log-tasks-outputs` confirms what's available.
 - **Legacy `--long`/`--short`/`--entities` are shims.** They all map to `--memory` now; don't rely on the distinction.
-- **`crewai chat` model resolution.** It uses `Crew.chat_llm`; if that is unset it falls back to the `MODEL` environment variable, then CrewAI's default model (`gpt-4.1-mini`), not to the agents' own LLMs. If the model cannot be created it prints "Unable to find a Chat LLM" and exits.
+- **`crewai chat` model resolution.** It uses `Crew.chat_llm`; if that is unset it falls back to the `MODEL` environment variable, then CrewAI's default model (`gpt-6-luna`), not to the agents' own LLMs. If the model cannot be created it prints "Unable to find a Chat LLM" and exits.
 - **`crewai update` does not upgrade CrewAI.** To upgrade the CLI use `uv tool upgrade crewai`; inside a project use `crewai install --upgrade-package crewai --upgrade-package crewai-tools`.
 - **`crewai uv` expects a `pyproject.toml`.** Outside a crew project it errors out with a clear message.
