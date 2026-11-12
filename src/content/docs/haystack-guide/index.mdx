@@ -92,7 +92,7 @@ import { Card, CardGrid, LinkCard, Aside } from '@astrojs/starlight/components';
 - **`AsyncPipeline` merged into `Pipeline`**, which now has `run`, `run_async`, `run_async_generator` and `stream`.
 - **Agent hooks.** `before_run`, `before_llm`, `before_tool`, `after_tool`, `on_exit`, `after_run`; human-in-the-loop confirmation is a `ConfirmationHook` in `haystack.hooks.human_in_the_loop`.
 - **Stricter defaults.** Prompt variables are required; tools read `State` only through `inputs_from_state`; `Pipeline.load` uses a module allowlist.
-- **Added during 3.x.** Context-management hooks (`CompactionHook`, `ToolResultOffloadHook`), `TokenBudgetHook`, `SkillToolset` and `stop_run` for hooks; Python 3.10 support was dropped in 3.4.0.
+- **Added during 3.x.** Context-management hooks (`CompactionHook`, `ToolResultOffloadHook`), `TokenBudgetHook`, `StructuredOutputHook`, `SkillToolset` and `stop_run` for hooks; Python 3.10 support was dropped in 3.4.0.
 - **Leaner core.** Hugging Face, sentence-transformers, web search, Whisper, OpenAPI, OpenTelemetry and Datadog components moved to integration packages under `haystack_integrations.*`; `haystack-experimental` is no longer installed by default.
 
 ## Minimal example

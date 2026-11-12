@@ -1323,7 +1323,7 @@ A tool can also receive the whole `State` by declaring a parameter typed as `hay
 
 `inputs_from_state` is a convenience, not a security boundary: if the model supplies an argument with the same name, the model's value wins and the state lookup is skipped. Read privileged values such as tenant or user IDs from a `State`-typed parameter instead (`state.get("tenant_id")`); the [multi-tenant recipe](/haystack-guide/haystack_recipes/#multi-tenant-customer-support-agent) shows the pattern.
 
-The Agent reserves nine state names, which cannot appear in `state_schema`: `step_count`, `token_usage`, `tool_call_counts` and `exit_reason` (run metadata, returned as outputs), and `continue_run`, `stop_run`, `tools`, `hook_context` and `context_tokens` (internal keys that hooks read or set).
+The Agent reserves ten state names, which cannot appear in `state_schema`: `step_count`, `token_usage`, `tool_call_counts` and `exit_reason` (run metadata, returned as outputs), and `max_agent_steps` (reserved from 3.5.0; initialisation raises `ValueError` if a custom key uses it), `continue_run`, `stop_run`, `tools`, `hook_context` and `context_tokens` (internal keys that hooks read or set).
 
 #### Exit conditions
 
@@ -1733,6 +1733,18 @@ The upstream [migration guide](https://github.com/deepset-ai/haystack/blob/main/
 | Confirmation strategies saw the fully prepared tool arguments | They see only the arguments the model requested; `inputs_from_state` values and `State` parameters are injected at execution |
 | Python 3.10 supported | Python 3.11 or later from 3.4.0 |
 
+### Upgrading within 3.x
+
+Changes in 3.5.0 that can alter existing code:
+
+- **Default OpenAI model.** `OpenAIChatGenerator`, `OpenAIResponsesChatGenerator` and the LLM evaluators now default to `gpt-5.6-terra`. Pipelines saved to YAML keep the `gpt-5-mini` they were saved with, which OpenAI retires on 11 December 2026, so update the YAML or pin `model=` explicitly.
+- **Connection order.** Variadic and multi-sender `list` inputs now receive values in the order of the `Pipeline.connect()` calls, not in run order. Order-dependent components such as a weighted `DocumentJoiner` can give different results; check the `connections` order in saved YAML.
+- **Streaming usage.** `OpenAIChatGenerator` and `AzureOpenAIChatGenerator` request token usage when streaming. Disable it with `generation_kwargs={"stream_options": {"include_usage": False}}`.
+- **Reasoning items.** With `OpenAIResponsesChatGenerator`, read `id`, `encrypted_content` and `status` from `reasoning.extra["reasoning_items"]`, not `reasoning.extra`.
+- **`XLSXToDocument`.** Strings such as "NA" and "NULL" stay as text; pass `read_excel_kwargs={"keep_default_na": True}` to `XLSXToDocument` to restore the old conversion.
+- **Dependencies.** Minimum `openai` is 3.26.0 and minimum `pydantic` is 2.12 (2.14 on Python 3.15 and later).
+- **Reserved state key.** `max_agent_steps` can no longer be a custom `state_schema` key.
+
 ### Before and after
 
 ```python
@@ -1762,6 +1774,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 | Date | Version | Changes |
 |------|---------|---------|
 | %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. Added chunking and routing: `SentenceWindowRetriever`, `HierarchicalDocumentSplitter` with `AutoMergingRetriever`, `MetadataRouter` and `FileTypeRouter`. Added `OutputAdapter`. |
+| 2026-11-12 | 3.5.0 | `StructuredOutputHook` and `StepBudgetReminderHook` (in the advanced agents page); 3.5 upgrade notes; `max_agent_steps` added to the reserved state keys. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
 | June 2026 | 2.30.0 | Last 2.x revision. |
 | November 2025 | 2.20.0 | First documented version. |
