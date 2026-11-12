@@ -39,6 +39,16 @@ agent = Agent(
 
 Only the Agent's own chat-generator calls count; tokens spent inside tools (including `AgentTool` sub-agents) or by other hooks do not. Give each sub-agent its own budget. To keep long runs within the context window rather than a spending limit, see [context management](/haystack-guide/haystack_comprehensive_guide/#context-management).
 
+### Step reminders
+
+`StepBudgetReminderHook` (experimental) is a `before_llm` hook that tells the model how many steps remain once it is within `remind_within_steps` calls of `max_agent_steps`, and asks it to wrap up. The model can ignore the reminder, so it complements the cap rather than replacing it:
+
+```python
+from haystack.hooks.budget import StepBudgetReminderHook
+
+hooks = {"before_llm": [StepBudgetReminderHook()]}  # pass to Agent(..., max_agent_steps=10, hooks=hooks)
+```
+
 ## Stateful hooks
 
 The `@hook` decorator suits simple functions. For hooks that hold configuration or resources, implement the `Hook` protocol directly: a `run(self, state)` method, and optionally `run_async(self, state)`. `TokenBudgetHook` is written this way; here are two more:
@@ -207,6 +217,42 @@ print(ask(agent, "Is the Great Wall visible from orbit?"))
 ```
 
 The system message is dropped from the history before retrying because the Agent prepends it again on every run.
+
+### `StructuredOutputHook`
+
+`StructuredOutputHook` (added in 3.5.0) validates the Agent's final text reply against a Pydantic model or JSON schema, and works with any chat generator. It runs at `on_exit`, strips a surrounding Markdown code fence, and stores the parsed result in `state`. If the reply is invalid it adds a correction message and lets the model try again, up to `max_retries` times (default 2; retries count towards `max_agent_steps`). When retries run out it stores `None`. The state key must be declared in `state_schema`. This does the retry loop above for you:
+
+```python
+from pydantic import BaseModel
+
+from haystack.components.agents import Agent
+from haystack.components.generators.chat import MockChatGenerator
+from haystack.dataclasses import ChatMessage
+from haystack.hooks.structured_output import StructuredOutputHook
+
+
+class Verdict(BaseModel):
+    answer: str
+    confidence: float
+    sources: list[str]
+
+
+llm = MockChatGenerator(responses=[
+    "The Wall is hard to see from orbit.",  # not JSON: the hook asks again
+    '{"answer": "Rarely", "confidence": 0.7, "sources": ["nasa.gov"]}',
+])
+agent = Agent(
+    chat_generator=llm,
+    system_prompt="Answer as JSON with answer, confidence and sources.",
+    state_schema={"structured_output": {"type": dict}},
+    hooks={"on_exit": [StructuredOutputHook(schema=Verdict)]},
+)
+result = agent.run(messages=[ChatMessage.from_user("Is the Great Wall visible from orbit?")])
+print(result["structured_output"])
+# {'answer': 'Rarely', 'confidence': 0.7, 'sources': ['nasa.gov']}
+```
+
+`on_exit` hooks do not run when the run ends on `max_agent_steps` or a `stop_run`, so use `result.get("structured_output")` in code that must tolerate those cases. Where the generator supports native structured output, pass the same schema there as well so retries are rarely needed.
 
 ### A `final_answer` tool
 
