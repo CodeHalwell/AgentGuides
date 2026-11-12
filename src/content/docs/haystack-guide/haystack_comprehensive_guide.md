@@ -1741,7 +1741,7 @@ Changes in 3.5.0 that can alter existing code:
 - **Connection order.** Variadic and multi-sender `list` inputs now receive values in the order of the `Pipeline.connect()` calls, not in run order. Order-dependent components such as a weighted `DocumentJoiner` can give different results; check the `connections` order in saved YAML.
 - **Streaming usage.** `OpenAIChatGenerator` and `AzureOpenAIChatGenerator` request token usage when streaming. Disable it with `generation_kwargs={"stream_options": {"include_usage": False}}`.
 - **Reasoning items.** With `OpenAIResponsesChatGenerator`, read `id`, `encrypted_content` and `status` from `reasoning.extra["reasoning_items"]`, not `reasoning.extra`.
-- **`XLSXToDocument`.** Strings such as "NA" and "NULL" stay as text; pass `keep_default_na=True` to restore the old conversion.
+- **`XLSXToDocument`.** Strings such as "NA" and "NULL" stay as text; pass `read_excel_kwargs={"keep_default_na": True}` to `XLSXToDocument` to restore the old conversion.
 - **Dependencies.** Minimum `openai` is 3.26.0 and minimum `pydantic` is 2.12.
 - **Reserved state key.** `max_agent_steps` can no longer be a custom `state_schema` key.
 
