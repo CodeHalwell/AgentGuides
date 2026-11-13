@@ -818,7 +818,22 @@ if __name__ == "__main__":
 
 ### Web search
 
-AgentCore Web Search is a Gateway connector target: you add a web search target to a gateway, and the agent calls it as an MCP tool. `WebSearchClient` wraps that call so you can use it from plain Python, without handling MCP content blocks. Calls are signed with ordinary AWS credentials; there is no search API key. The caller needs `bedrock-agentcore:InvokeGateway` on the gateway, and the gateway's service role needs `bedrock-agentcore:InvokeWebSearch` on the connector. An `AccessDeniedException` is nearly always one of those two missing. The connector is offered in a limited set of regions, so check the current list before you rely on it.
+AgentCore Web Search can be reached two ways. Since `bedrock-agentcore` 1.26.0, `WebSearchClient` calls the Web Search API directly when you give it no gateway argument. Alternatively you add a web search connector target to a gateway, and the agent calls it as an MCP tool; passing `gateway_id` (or `gateway_arn`, or `gateway_endpoint`) makes the client use that route without you handling MCP content blocks. Either way calls are signed with ordinary AWS credentials; there is no search API key.
+
+| Route | Caller needs | Also needs |
+| --- | --- | --- |
+| Direct (no gateway argument) | `bedrock-agentcore:InvokeWebSearch` on `arn:aws:bedrock-agentcore:<region>:aws:tool/web-search.v1` | Nothing else |
+| Through a gateway | `bedrock-agentcore:InvokeGateway` on the gateway | The gateway's service role needs `bedrock-agentcore:InvokeWebSearch` on the connector |
+
+An `AccessDeniedException` is nearly always one of those permissions missing. The service is offered in a limited set of regions, so check the current list before you rely on it.
+
+```python
+from bedrock_agentcore.tools import WebSearchClient
+
+# Direct: no gateway to create
+client = WebSearchClient(region="us-east-1")
+response = client.search("boto3 release notes", max_results=5)
+```
 
 ```python
 from bedrock_agentcore.tools import WebSearchClient
@@ -834,7 +849,22 @@ with WebSearchClient(region="us-east-1", gateway_id="my-gateway-abc123", target_
         print(result.title, result.url, result.published_date)
 ```
 
-Passing `target_name` saves a `tools/list` round trip on the first call. The query is limited to 200 characters, and each domain list to 100 entries. Domain and date filters need connector version 1.2.0 or later; earlier versions accept only the query and `max_results`. Request filters narrow the target's own domain rules and never widen them, so if the target already has an include list and yours shares no domains with it, the search returns nothing rather than raising an error. Search results are untrusted web content: do not let them drive tool calls without checks.
+Through a gateway, passing `target_name` saves a `tools/list` round trip on the first call. The query is limited to 200 characters, and each domain list to 100 entries. Without `max_results` the direct API returns up to 25 results and a gateway tool up to 10. Domain and date filters need connector version 1.2.0 or later; earlier versions accept only the query and `max_results`. Request filters narrow the target's own domain rules and never widen them, so if the target already has an include list and yours shares no domains with it, the search returns nothing rather than raising an error. Search results are untrusted web content: do not let them drive tool calls without checks.
+
+To enforce rules the model must not be able to lift, set the filters on the client rather than on each call. A per-call exclude list is added to the client's, an include list is intersected with it, and a date bound only applies when it is stricter:
+
+```python
+client = WebSearchClient(
+    region="us-east-1",
+    exclude_domains=["example.com"],
+    published_after="2026-11-01T00:00:00Z",
+)
+# Searches from 2026-11-01 and excludes example.com and b.com;
+# the earlier published_after is ignored because it would widen the client's rule.
+client.search("openssl advisory", exclude_domains=["b.com"], published_after="2026-01-01T00:00:00Z")
+```
+
+For tests, pass `backend=` a `WebSearchBackend` subclass whose `search(arguments)` returns `{"id": ..., "results": [...]}`; the client then makes no network call.
 
 ### Knowledge bases from the SDK
 
