@@ -291,6 +291,54 @@ agent = Agent(
 
 To stop a run after a tool, a hook can set `event.end_turn` on `AfterToolsEvent`, or a tool can use the vended `stop` tool; `Agent.as_tool(delegate=True)` ends the turn with a sub-agent's answer. Retrying a tool is a hook concern (`AfterToolCallEvent.retry = True`), covered on the [hooks page](/strands-agents-guide/python/strands_hooks_and_interrupts/#retrying-tool-and-model-calls).
 
+### Background tools
+
+A slow tool normally blocks the turn: the model asks for it, and nothing else happens until it returns. With `background_tasks=`, a tool call can be dispatched instead, leaving the model free to keep working while it runs:
+
+```python
+import time
+
+from strands import Agent, tool
+
+
+@tool
+def nightly_report(region: str) -> str:
+    """Build the nightly report for a region.
+
+    Args:
+        region: Region code.
+    """
+    time.sleep(30)
+    return f"report for {region}"
+
+
+agent = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    tools=[nightly_report],
+    background_tasks={"max_concurrency": 2, "timeout": 300.0},
+    callback_handler=None,
+)
+print(agent.tool_names)   # ['nightly_report', 'strands_manage_background_task']
+print(agent("Start the nightly report for eu-west-1, then tell me what else you can do."))
+```
+
+`background_tasks=True` takes the defaults; a `BackgroundTasksConfig` (a `TypedDict` in `strands.background_tasks`) sets them:
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `wait_for_completion` | `True` | The invocation does not return until background work finishes |
+| `max_concurrency` | `4` | Background tasks physically running at once |
+| `timeout` | infinity | Per-execution timeout, in seconds |
+| `agentic` | `["*"]` | Tools (or names) the model may choose to send to the background |
+| `always` | — | Tools that always run in the background |
+| `never` | — | Tools that never do |
+
+Two things change when background execution is on. Every `agentic` tool's schema gains a reserved boolean parameter, `_background_execution`, which is how the model asks for the call to be dispatched; a tool whose own schema declares that name raises `TypeError` when the agent is built. And the agent gains a `strands_manage_background_task` tool, which lists, inspects and cancels tasks.
+
+A dispatched call returns a task id to the model straight away. When the task finishes, the result is delivered on the next model call as a synthetic `strands_manage_background_task` "get" call and its result, so the model never has to poll. Each task passes through `queued`, `working` and then `completed`, `failed` or `cancelled`, with `input_required` while an [interrupt](/strands-agents-guide/python/strands_hooks_and_interrupts/#interrupts) from the task is unanswered; the loop pauses rather than calling the model again while any task is waiting for input.
+
+Not everything can run in the background: structured-output tools, delegating sub-agents (`as_tool(delegate=True)`) and a few internal tools always run in the foreground. Naming one of them in `always` or `agentic` explicitly raises `TypeError` at construction; under the `["*"]` default they are simply left alone. `agent.load_snapshot()` refuses while tasks are still tracked, so take and restore [snapshots](/strands-agents-guide/python/strands_comprehensive_guide/#snapshots) between invocations, not mid-flight.
+
 ## strands-agents-tools
 
 `strands-agents-tools` 0.9.0 removed every tool it used to ship. Importing one (`from strands_tools import file_read`) now raises an `ImportError` whose message names the replacement. The package still installs, and `strands_tools.utils` remains, but there is nothing in it to hand to an agent. Pin `strands-agents-tools<0.9` only as a stop-gap while you migrate; 0.8 logs a deprecation warning for most of the tools below.
@@ -512,6 +560,7 @@ If a server cannot start, the agent constructor raises a `ValueError` (wrapping 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-13 | 1.64.0 | Added background tools: `BackgroundTasksConfig`, the `_background_execution` parameter, the `strands_manage_background_task` tool, task statuses and which tools cannot be dispatched. |
 | 2026-11-06 | 1.64.0 | `strands-agents-tools` 0.9.0 removed every tool it shipped. Replaced the deprecations table with a removal table naming each replacement, and updated the pages that imported `strands_tools` tools. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Corrected the `mcp` dependency range (1.23 up to 2.2, not 2.x only), the `shell` replacement note and the `diagram`/`rss` guidance. Added `MCPClient.load_servers()` for `mcpServers` config files. |
 | 2026-10-24 | 1.62.0 | New page. Documents schema generation limits (`Annotated` with `Field` unsupported; Pydantic parameters arrive as dicts), return-value handling, streaming tools, direct calls, module and class tools, executors, the `strands-agents-tools` 0.8 deprecations, vended tools, sandboxes and MCP with `mcp` 2.x. |

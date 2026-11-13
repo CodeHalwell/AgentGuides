@@ -274,7 +274,7 @@ Record per-call usage from `result.metrics.latest_agent_invocation.usage` for co
 
 - **Least-privilege roles.** The agent can do whatever its tools can do with the process's credentials. Prefer narrow tools (`get_invoice`) over general ones (`use_aws`, `shell`), and scope the IAM role to them.
 - **Identity outside the model.** Pass user and tenant IDs in `invocation_state` and enforce them in tools; never let the model supply the ID that authorises an action.
-- **Treat tool output as untrusted.** Web pages, emails and documents can contain instructions. Gate sensitive actions with an [intervention handler or interrupt](/strands-agents-guide/python/strands_hooks_and_interrupts/#interventions), not with the system prompt alone.
+- **Treat tool output as untrusted.** Web pages, emails and documents can contain instructions. Gate sensitive actions with an [intervention handler or interrupt](/strands-agents-guide/python/strands_hooks_and_interrupts/#interventions), not with the system prompt alone. `HumanInTheLoop(allowed_tools=[...])` is the ready-made version: it pauses with an interrupt, which suits a stateless service, and a [risk classifier](/strands-agents-guide/python/strands_hooks_and_interrupts/#human-in-the-loop) can keep the asking down to the calls that warrant it.
 - **Sandboxes.** Run model-written code in a container sandbox or the AgentCore Code Interpreter, not on the host.
 - **Guardrails.** Bedrock Guardrails on `BedrockModel` filter input and output for content policy.
 - **Tool consent.** Old `strands-agents-tools` releases (before 0.9) prompted on the terminal and honoured `BYPASS_TOOL_CONSENT=true`. If you still run one, set that variable deliberately in a server; the vended tools do not prompt.
@@ -437,4 +437,5 @@ Every Python example in this guide was checked this way, with a patch applied to
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-13 | 1.64.0 | Pointed the security checklist at the vended human-in-the-loop handler. |
 | 2026-10-24 | 1.62.0 | New page, expanding the deployment section of the former Bedrock Strands page: hosting options, per-session agents, AgentCore Runtime, Lambda and FastAPI examples, limits, the two retry layers, tracing, security and testing with a scripted model or a patched Bedrock client. |

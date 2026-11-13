@@ -486,7 +486,65 @@ if result.stop_reason == "interrupt":
 print(result)
 ```
 
-`Confirm` accepts `True`, `"y"` or `"yes"` by default (`evaluate=` changes that). A handler that raises blocks execution by default; set `on_error` to `"deny"` (fail closed) or `"proceed"` (fail open) to change that. Ready-made handlers live in `strands.vended_interventions`: `hitl` (human approval with an optional risk classifier) and `cedar` (Cedar policy authorisation, `cedar` extra).
+`Confirm` accepts `True`, `"y"` or `"yes"` by default (`evaluate=` changes that). A handler that raises blocks execution by default; set `on_error` to `"deny"` (fail closed) or `"proceed"` (fail open) to change that. Ready-made handlers live in `strands.vended_interventions`: `hitl` (below) and `cedar` (Cedar policy authorisation, `cedar` extra).
+
+### Human-in-the-loop
+
+`HumanInTheLoop` is the handler above, written for you. By default every tool needs approval and the agent pauses with an interrupt, which is what a web service wants: nothing is held open while a person decides.
+
+```python
+from strands import Agent, tool
+from strands.vended_interventions.hitl import HumanInTheLoop
+
+
+@tool
+def read_file(path: str) -> str:
+    """Read a file.
+
+    Args:
+        path: Path to read.
+    """
+    return f"contents of {path}"
+
+
+@tool
+def delete_file(path: str) -> str:
+    """Delete a file.
+
+    Args:
+        path: Path to delete.
+    """
+    return f"deleted {path}"
+
+
+agent = Agent(
+    model="us.anthropic.%%model=anthropic%%",
+    tools=[read_file, delete_file],
+    interventions=[HumanInTheLoop(allowed_tools=["read_file"])],
+    callback_handler=None,
+)
+
+result = agent("Read notes.txt, then delete it.")
+if result.stop_reason == "interrupt":
+    print(result.interrupts[0].reason)     # Approve "delete_file"? Input: {"path": "notes.txt"}
+    result = agent([{"interruptResponse": {"interruptId": result.interrupts[0].id, "response": "yes"}}])
+print(result)
+```
+
+`allowed_tools` names the tools that run without asking; everything else is escalated. `"*"` allows all of them and `"!name"` excludes one from that wildcard, so `["*", "!delete_file"]` asks only about deletions. It must be a list — a bare string raises `ValueError`.
+
+| Option | Effect |
+|--------|--------|
+| `ask=None` (default) | Pause with an interrupt; the caller resumes with a response |
+| `ask="stdio"` | Prompt on the terminal and block until the person answers; for interactive CLIs only, as the prompt cannot be cancelled |
+| `ask=callable` | Your own prompt (Slack, a web UI); may be async, and the agent blocks on it |
+| `classifier=True` | A model judges each escalated call against built-in risk criteria and only asks about risky ones |
+| `classifier=<DecisionModel>` | The same judgement through a [decision model](/strands-agents-guide/python/strands_comprehensive_guide/#decision-models), on the model you give it |
+| `classifier=<callable>` | Your own classifier, returning a `ClassifierResult` (from `strands.vended_interventions.hitl.classifier`) |
+| `enable_trust=True` | `"t"` or `"trust"` approves and remembers the tool in `agent.state` for the rest of the session |
+| `evaluate=`, `evaluate_trust=` | Your own readings of the person's answer |
+
+A denied call does not raise: the model is told `DENIED: Tool "delete_file" denied: the human rejected the call.` and carries on. An inline `ask` that returns `None` counts as a denial; one that raises aborts the run, so catch what you can inside it. With a classifier, an `Uncertain` answer requires approval and its reason is shown in the prompt. `name` is a fixed class attribute, so only one `HumanInTheLoop` can be registered per agent; subclass it with a different `name` to layer two policies.
 
 ## Interrupts
 
@@ -611,5 +669,6 @@ Prefer hooks for observing and simple edits; reach for middleware when you need 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-13 | 1.64.0 | Added the vended `HumanInTheLoop` intervention: allow-list syntax, interrupt and inline `ask` modes, risk classifiers (including a decision model), trust and denial behaviour. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added `MessageUpdatedEvent` and examples for `ContextInjector`, `GoalLoop`, `ContextOffloader` and steering handlers. |
 | 2026-10-24 | 1.62.0 | New page. Hook events with writable fields, hook providers, blocking, redaction, retries and resume patterns, plugins and Agent Skills, intervention handlers, interrupts from tools and hooks, and middleware. |
