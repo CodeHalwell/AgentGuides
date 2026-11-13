@@ -483,6 +483,52 @@ except StructuredOutputException as exc:
 
 `Agent.structured_output(Model, prompt)` from earlier releases still exists but is deprecated; use `structured_output_model=`.
 
+## Decision models
+
+A decision model answers closed questions about some text: is this urgent, which team owns it, does this tool call need approval. It is a smaller primitive than an agent — no tools, no loop, one model call — and it is what the SDK's own classifiers are built on. `LLMDecisionModel` adapts any `Model`; `ask` is async and takes the text plus a map of question identifiers to questions:
+
+```python
+import asyncio
+
+from strands import LLMDecisionModel, Uncertain
+from strands.models import BedrockModel
+
+decision = LLMDecisionModel(model=BedrockModel(model_id="us.anthropic.%%model=anthropic-small%%"))
+
+result = asyncio.run(
+    decision.ask(
+        "My card was charged twice for order 5512 and nobody has replied to my email.",
+        {
+            "team": {
+                "question": "Which team should handle this?",
+                "choices": ["billing", "technical", "sales"],
+                "uncertainty": False,          # force a choice: no uncertain answer
+            },
+            "urgent": {"question": "Is the customer asking for urgent help?", "choices": "boolean"},
+        },
+    )
+)
+
+for question_id, answer in result.answers.items():
+    if isinstance(answer, Uncertain):
+        print(question_id, "uncertain:", answer.reason)
+    else:
+        print(question_id, answer)         # 'billing', True
+print(result.metadata.latency_ms, result.usage)
+```
+
+Each question has a `question` and `choices`, which is either `"boolean"` or a list of strings. Answers come back keyed by the same identifiers: a `bool` for a boolean question, one of the choices otherwise, or an `Uncertain` when the model declines to commit. `Uncertain` is a truthy object, so narrow with `isinstance(answer, Uncertain)` rather than testing truthiness. Uncertainty is allowed by default; `"uncertainty": False` removes it from the choices offered to the model, and `{"min_confidence": 0.8}` sets a threshold for implementations that report confidence (`LLMDecisionModel` does not).
+
+The question map must not be empty, choices must be unique and non-empty, and `"uncertain"` is reserved. Breaking those raises `ValueError`; a model that answers outside the choices or omits an answer raises `StructuredOutputException`. The user text is passed to the model as untrusted data, with instructions not to treat it as instructions, but the usual care still applies.
+
+When you call a decision model from inside a hook, an intervention or a tool, pass the request's context so its tokens are counted against that call:
+
+```python
+result = await decision.ask(text, questions, invocation_context=event.invocation_context)
+```
+
+The request's `limits` never stop a decision, but the decision's tokens are added to the request's usage, so they count towards those limits for the rest of the call. Every `ask` opens a `decision` span (`gen_ai.operation.name=decision`, with the question ids and answers as span events), so decisions show up in traces alongside `chat` and `execute_tool` spans. `DecisionModel` is the base class if you want to back decisions with something other than a chat model; `strands.decisions` also exposes `DecisionInput`, `Question`, `DecisionResult` and `DecisionMetadata` for typing your own. The [human-in-the-loop handler](/strands-agents-guide/python/strands_hooks_and_interrupts/#human-in-the-loop) accepts a decision model directly as its risk classifier.
+
 ## Streaming
 
 There are two ways to receive events while the loop runs.
@@ -671,6 +717,57 @@ agent("Hello")
 
 The message-log managers write one object per message; the snapshot manager writes the whole agent atomically and is the one Strands recommends for new agents. Session IDs and agent IDs must not contain path separators. Members of a `Swarm` or `Graph` cannot have their own session manager; give one to the swarm or graph instead.
 
+### Snapshots
+
+A `Snapshot` is the agent's state as one JSON-compatible object. `agent.take_snapshot()` captures it and `agent.load_snapshot()` puts it back, with no storage involved — useful for a speculative branch you may want to undo, for moving an agent between processes, or for your own persistence:
+
+```python
+import json
+
+from strands import Agent, Snapshot
+
+agent = Agent(model="us.anthropic.%%model=anthropic%%", state={"tier": "gold"}, callback_handler=None)
+agent("My name is Priya.")
+
+before = agent.take_snapshot(preset="session", app_data={"label": "after-greeting"})
+agent("Actually, forget everything I said.")
+
+agent.load_snapshot(before)          # the second turn is gone, state and history are as they were
+print(len(agent.messages))           # 2
+
+saved = json.dumps(before.to_dict())             # store it wherever you like
+restored = Snapshot.from_dict(json.loads(saved))
+agent.load_snapshot(restored)
+```
+
+The fields are `messages`, `state`, `conversation_manager_state`, `interrupt_state`, `system_prompt` and `model_state`. `preset="session"` is the first four; `include=[...]` adds fields and `exclude=[...]` removes them, and an unknown name raises `SnapshotException`. `app_data=` holds anything of your own, stored verbatim. Loading restores only the fields the snapshot carries and leaves the rest alone, and it refuses a snapshot whose `schema_version` is not `"1.0"` or whose scope is not `"agent"`. An agent with background tasks still in flight cannot load one.
+
+`SnapshotSessionManager` uses the same objects, and `snapshot_trigger=` makes each one an immutable checkpoint you can rewind to:
+
+```python
+import asyncio
+
+from strands import Agent
+from strands.session import SnapshotSessionManager
+from strands.storage import LocalFileStorage
+
+sessions = SnapshotSessionManager(
+    "user-42",
+    storage=LocalFileStorage("./sessions"),
+    snapshot_trigger=lambda *, agent_data, **kwargs: True,   # checkpoint after every invocation
+)
+agent = Agent(model="us.anthropic.%%model=anthropic%%", session_manager=sessions, callback_handler=None)
+agent("First question")
+agent("Second question")
+
+checkpoints = asyncio.run(sessions.list_snapshot_ids(agent))      # oldest first
+agent("Third question")
+asyncio.run(sessions.restore_snapshot(agent, snapshot_id=checkpoints[0]))
+print(len(agent.messages))                                        # back to the first exchange
+```
+
+These four methods are async. `save_snapshot(agent, is_latest=False)` forces a checkpoint at any point, `list_snapshot_ids` pages with `limit=` and `start_after=`, `restore_snapshot` without an id restores the latest, and `delete_session()` removes the lot. `save_latest_on=` controls how often the latest snapshot is overwritten: `"invocation"` (the default), `"message"`, or `"trigger"` for trigger-only saves. Guardrail redactions are flushed immediately whichever you choose.
+
 ### AgentCore Memory
 
 For managed short- and long-term memory on AWS, use the session manager in `bedrock-agentcore`:
@@ -768,7 +865,7 @@ finally:
     timer.cancel()
 ```
 
-`agent.cancel()` cancels the current call from another thread or task. Token limits are soft: a single large response can overshoot by one turn. Limits are per call, not cumulative.
+`agent.cancel()` cancels the current call from another thread or task; `cancel(message=...)` makes that text the final assistant message, and `cancel(after_current_tools=True)` is the cooperative version — tools already requested in this turn finish, and the loop exits before the next model call (this is what the vended `stop` tool uses). A cancellation that interrupts the loop returns `stop_reason == "cancelled"`; a deferred one that never gets to apply, because the turn ended in plain text, is a no-op. Token limits are soft: a single large response can overshoot by one turn. Limits are per call, not cumulative.
 
 `idempotency_token=` deduplicates retried requests: a second call with the same token while the first is running waits for and returns the first call's result.
 
@@ -1064,7 +1161,7 @@ These exist in this release and are worth knowing about, but are newer and chang
 - **Sandboxes** (`sandbox=DockerSandbox(...)`): route the vended shell and file tools into a container. See [tools](/strands-agents-guide/python/strands_tools_and_mcp/#sandboxes).
 - **Long-term memory** (`memory_manager=MemoryManager(stores=[...])`): see [above](#long-term-memory).
 - **Real-time voice** (`strands.bidi.BidiAgent`): see [above](#real-time-voice-and-text-with-bidiagent).
-- **Background tasks** (`background_tasks=True`): the model can start tools in the background and receive their results later. A `BackgroundTasksConfig` sets `wait_for_completion` (default `True`: an invocation does not return until background work finishes), `max_concurrency` (default 4), a per-execution `timeout`, and which tools run in the background: `agentic` (the model chooses; the default for every tool), `always` or `never`.
+- **Background tools** (`background_tasks=True`): the model can start tools in the background and receive their results later. See [tools](/strands-agents-guide/python/strands_tools_and_mcp/#background-tools).
 - **Checkpointing** (`checkpointing=True`): the loop pauses at cycle boundaries with `stop_reason == "checkpoint"` and a `result.checkpoint`, so a durable execution engine such as Temporal can persist progress and resume after a crash. The checkpoint types live in `strands.experimental.checkpoint` and may change.
 - **Concurrent invocations**: by default a second call on a busy agent raises `ConcurrencyException`. `concurrent_invocation_mode=ConcurrentInvocationMode.UNSAFE_REENTRANT` (from `strands.types.agent`) lifts the lock without making the agent safe to share; the documentation for the option gives no guarantees about what happens to the history.
 
@@ -1072,5 +1169,6 @@ These exist in this release and are worth knowing about, but are newer and chang
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-13 | 1.64.0 | Added decision models (`LLMDecisionModel`, `Question`, `Uncertain`) and snapshots (`take_snapshot`, `load_snapshot`, checkpoint and rewind with `SnapshotSessionManager`). Documented `cancel(message=..., after_current_tools=True)` and moved background tools to the tools page. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added real-time voice (`BidiAgent`, models, I/O, events, hooks, limits), long-term memory (`MemoryManager`), OpenAI-compatible Bedrock endpoints (`bedrock_mantle_config`), `ClassifierStrategy` routing, Gemini, Mistral, llama.cpp and Responses API examples, and background tasks, checkpointing and concurrent-invocation options. Corrected the extras table (voice extras, Python 3.12 for Nova Sonic). |
 | 2026-10-24 | 1.62.0 | New page in the standalone Strands guide, replacing the Strands page in the Amazon Bedrock guide. Adds the agent loop, `AgentResult`, provider table, routing, streaming events, conversation and context managers, snapshot sessions, limits and cancellation. All examples run against an offline Bedrock stub. |

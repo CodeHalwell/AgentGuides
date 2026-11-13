@@ -84,6 +84,8 @@ invoke_agent <agent name>                 gen_ai.operation.name=invoke_agent, ge
 
 Attributes follow the OpenTelemetry GenAI semantic conventions (`gen_ai.system` is `strands-agents`). A `Graph` or `Swarm` run adds an `invoke_graph` or `invoke_swarm` span around its agents' `invoke_agent` spans, so a whole multi-agent request is one trace.
 
+A [decision model](/strands-agents-guide/python/strands_comprehensive_guide/#decision-models) adds a `decision` span of its own (`gen_ai.operation.name=decision`, `gen_ai.decision.latency_ms`, token counts, and the question ids and answers as span events). The risk classifier behind the [human-in-the-loop handler](/strands-agents-guide/python/strands_hooks_and_interrupts/#human-in-the-loop) is one of these, so an approval prompt is traceable back to the judgement that caused it. Tokens spent on a decision are added to the usage of the request that made it (so they count towards that call's `limits={"total_tokens": ...}`), but they are not in `result.metrics`, which counts the main loop's own model calls. Read the span, not the metrics, to see what classifiers and judges cost.
+
 Add your own attributes to every span of an agent with `trace_attributes`, which is the usual way to make traces searchable by user or session:
 
 ```python
@@ -240,5 +242,6 @@ LLM judges cost money and vary between runs, so a common split is: deterministic
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-13 | 1.64.0 | Documented the `decision` span and where a classifier's tokens are, and are not, counted. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added a multi-turn evaluation example with `ActorSimulator` and listed the generator, tool simulator, detector, red-team and chaos modules. |
 | 2026-10-24 | 1.62.0 | New page. Result metrics (per call and lifetime), `StrandsTelemetry`, the span tree and attributes captured from a real run, trace attributes, and `strands-agents-evals` experiments with deterministic and LLM-judge evaluators. |

@@ -347,6 +347,39 @@ try {
 
 The SDK adds a tool named `strands_structured_output` with your schema, forces it if the model answers without it, and retries with the validation errors. `StructuredOutputError` means it still failed.
 
+## Decision models
+
+A decision model answers closed questions about a piece of text — one model call, no tools and no loop — and is what the SDK's own classifiers are built on. `LLMDecisionModel` wraps any `Model`, and the answers are typed from the `choices` you give:
+
+```typescript
+import { BedrockModel, LLMDecisionModel, Uncertain } from '@strands-agents/sdk'
+
+const decision = new LLMDecisionModel({
+  model: new BedrockModel({ modelId: 'us.anthropic.%%model=anthropic-small%%' }),
+})
+
+const result = await decision.ask('My card was charged twice for order 5512, and nobody has replied.', {
+  team: {
+    question: 'Which team should handle this?',
+    choices: ['billing', 'technical', 'sales'],
+    uncertainty: false, // force a choice: no uncertain answer
+  },
+  urgent: { question: 'Is the customer asking for urgent help?', choices: 'boolean' },
+})
+
+const team = result.answers.team // 'billing' | 'technical' | 'sales' | Uncertain
+if (!(team instanceof Uncertain)) {
+  console.log(team.toUpperCase())
+}
+const urgent = result.answers.urgent // boolean | Uncertain
+console.log(urgent instanceof Uncertain ? urgent.reason : urgent)
+console.log(result.metadata.latencyMs, result.usage?.totalTokens)
+```
+
+`choices` is `'boolean'` or a tuple of strings, and `ask` is declared with a `const` type parameter, so an inline question map keeps its literal types without `as const`. To declare the map ahead of time, wrap it in `defineQuestions({ ... })`, which preserves those literals. An answer is the narrowed value or an `Uncertain` carrying the model's reason; `uncertainty: false` removes that option from the model's enum, though the static type still includes it, so narrow with `instanceof Uncertain` before use.
+
+When you ask from inside a running request, pass `{ invocationContext }` from the hook event or tool context: the decision's tokens are then counted towards that request, though its limits never stop the decision itself. `{ cancelSignal }` aborts the call. Every `ask` opens a `decision` span. `TypeSafeDecisionModel` and `DecisionsAPIDecisionModel` are the other implementations exported from the package root; `DecisionModel` is the base class to extend for your own.
+
 ## Streaming events
 
 `agent.stream()` yields typed events with a `type` discriminator; narrowing on it gives full types. The ones you will use:
@@ -484,7 +517,20 @@ console.log(later.messages.length) // 2
 const inS3 = new SessionManager({ sessionId: 'user-42', storage: new S3Storage('agent-sessions', { prefix: 'prod/' }) })
 ```
 
-Session IDs may contain only lowercase letters, digits, hyphens and underscores; anything else throws when the `SessionManager` is created (agent `id`s are checked the same way when a snapshot is saved), so normalise user or tenant IDs first. This is stricter than Python, which only rejects path separators. `saveLatestOn` controls when the latest snapshot is written (`'invocation'` by default), and `snapshotTrigger` writes immutable checkpoints you can restore later. Graphs and swarms accept a `sessionManager` too. For long-term memory that is extracted and searched rather than replayed, see [long-term memory](#long-term-memory) below; AgentCore Memory is available through `bedrock-agentcore` (see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/)).
+Session IDs may contain only lowercase letters, digits, hyphens and underscores; anything else throws when the `SessionManager` is created (agent `id`s are checked the same way when a snapshot is saved), so normalise user or tenant IDs first. This is stricter than Python, which only rejects path separators. `saveLatestOn` controls when the latest snapshot is written (`'invocation'` by default), and `snapshotTrigger` writes immutable checkpoints you can restore later. Graphs and swarms accept a `sessionManager` too.
+
+The same snapshots are available without a session manager, which is the simplest way to undo a speculative turn or hand an agent's state to another process:
+
+```typescript
+const checkpoint = agent.takeSnapshot({ preset: 'session', appData: { label: 'after-greeting' } })
+await agent.invoke('Actually, forget everything I said.')
+
+agent.loadSnapshot(checkpoint) // history and state as they were
+const stored = JSON.stringify(checkpoint) // plain JSON: store it anywhere
+agent.loadSnapshot(JSON.parse(stored) as typeof checkpoint)
+```
+
+The fields are `messages`, `state`, `systemPrompt`, `modelState` and `interrupts`, all of which `preset: 'session'` captures; `include` and `exclude` adjust the set and `appData` holds anything of your own. Python's snapshots carry a `conversation_manager_state` field as well, so snapshots are not interchangeable between the two SDKs. For long-term memory that is extracted and searched rather than replayed, see [long-term memory](#long-term-memory) below; AgentCore Memory is available through `bedrock-agentcore` (see the [AgentCore TypeScript guide](/amazon-bedrock-agents-guide/typescript/agentcore_typescript_guide/)).
 
 ## Long-term memory
 
@@ -537,7 +583,7 @@ if (result.stopReason.startsWith('limit') || result.stopReason === 'cancelled') 
 }
 ```
 
-`agent.cancel()` stops the current call from elsewhere. Errors exported from the package root include `ModelThrottledError`, `ContextWindowOverflowError`, `MaxTokensError`, `StructuredOutputError`, `ConcurrentInvocationError`, `ToolValidationError`, `ToolNotFoundError` and `ModelError`.
+`agent.cancel()` stops the current call from elsewhere, and `agent.cancel({ message: 'Enough' })` makes that text the final assistant message. `agent.cancel({ afterCurrentTools: true })` lets the tools already in flight finish and stops before the next model call, which is how a tool ends the loop from the inside; a deferred cancel that never applies, because the turn ended in plain text, is a no-op. Errors exported from the package root include `ModelThrottledError`, `ContextWindowOverflowError`, `MaxTokensError`, `StructuredOutputError`, `ConcurrentInvocationError`, `ToolValidationError`, `ToolNotFoundError` and `ModelError`.
 
 ## Other features
 
@@ -554,5 +600,6 @@ These exist in this release and are newer than the core; the details are in the 
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-13 | 1.24.0 | Added decision models (`LLMDecisionModel`, `defineQuestions`, `Uncertain`) and agent snapshots (`takeSnapshot`, `loadSnapshot`, field list and the difference from Python). Documented `cancel({ message, afterCurrentTools })`. |
 | 2026-10-24 | %%version=@strands-agents/sdk%% | Audit against the installed packages. Added long-term memory (`MemoryManager`, `FileMemoryStore`), `bedrockMantleConfig` for OpenAI-compatible Bedrock endpoints, a `VercelModel` example with the AI SDK 3.x provider requirement, `pinFirst`, `proactiveCompression` and `contextManager`, and an other-features list. |
 | 2026-10-24 | 1.22.0 | New page in the standalone Strands guide, expanding the TypeScript Strands page from the Amazon Bedrock guide: project set-up, `AgentResult`, provider table (OpenAI defaults to Responses), routing, stream events, conversation managers, state, sessions with storage backends, limits and errors. Examples type-check under `strict` and run against an offline Bedrock stub. |
