@@ -1,6 +1,6 @@
 {
   "$comment": "The only place a current package version or model ID is written. Docs refer to an entry as %%version=<key>%% and the build fills it in (src/plugins/remark-versions.mjs). Bump with `node scripts/check-versions.mjs --latest --write`. \"name\" overrides the registry package name when two registries share one (npm langchain is keyed langchainjs). Model IDs: %%model=<role>%% (see models).",
-  "checked": "2026-11-13",
+  "checked": "2026-11-16",
   "packages": {
     "agent-framework": {
       "registry": "pypi",
@@ -70,17 +70,17 @@
     },
     "langgraph": {
       "registry": "pypi",
-      "version": "1.2.20",
+      "version": "1.2.22",
       "guide": "langgraph-guide"
     },
     "@langchain/langgraph": {
       "registry": "npm",
-      "version": "1.7.2",
+      "version": "1.7.4",
       "guide": "langgraph-guide"
     },
     "langgraph-checkpoint": {
       "registry": "pypi",
-      "version": "4.3.1",
+      "version": "4.3.2",
       "guide": "langgraph-guide"
     },
     "langgraph-checkpoint-sqlite": {
@@ -90,12 +90,12 @@
     },
     "langgraph-checkpoint-postgres": {
       "registry": "pypi",
-      "version": "3.2.0",
+      "version": "3.2.1",
       "guide": "langgraph-guide"
     },
     "langgraph-prebuilt": {
       "registry": "pypi",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "guide": "langgraph-guide"
     },
     "langgraph-sdk": {
@@ -105,28 +105,28 @@
     },
     "langgraph-cli": {
       "registry": "pypi",
-      "version": "0.4.42",
+      "version": "0.4.43",
       "guide": "langgraph-guide"
     },
     "langchain": {
       "registry": "pypi",
-      "version": "1.4.9",
+      "version": "1.5.0",
       "guide": "langgraph-guide"
     },
     "langchain-core": {
       "registry": "pypi",
-      "version": "1.7.6",
+      "version": "1.8.1",
       "guide": "langgraph-guide"
     },
     "langchainjs": {
       "registry": "npm",
       "name": "langchain",
-      "version": "1.6.3",
+      "version": "1.6.6",
       "guide": "langgraph-guide"
     },
     "@langchain/core": {
       "registry": "npm",
-      "version": "1.3.5",
+      "version": "1.4.1",
       "guide": "langgraph-guide"
     },
     "@langchain/langgraph-checkpoint": {
