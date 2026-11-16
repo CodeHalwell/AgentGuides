@@ -970,7 +970,7 @@ The harness providers give an agent planning and working-memory tools. Add them 
 | `TodoProvider` (with `TodoSessionStore`) | A task list: `todos_add`, `todos_complete`, `todos_remove`, `todos_get_remaining`, `todos_get_all` | Stable since 1.12.0 |
 | `TodoFileStore` | Todos persisted to disk | Experimental (`HARNESS`) |
 | `AgentModeProvider` | Named modes (default `plan` / `execute`) with `mode_get` / `mode_set` tools | Stable since 1.12.0 |
-| `MemoryContextProvider` + `MemoryFileStore` | Long-term memory extracted from conversations and injected into later sessions | Experimental (`HARNESS`) |
+| `MemoryContextProvider` + `MemoryFileStore` | Long-term memory extracted from conversations and injected into later sessions | Experimental (`HARNESS`); deprecated in 1.26.0, use `FileMemoryProvider` |
 | `FileMemoryProvider` | Session-scoped scratch files | Stable |
 | `FileAccessProvider` | A shared workspace with read, write, grep and replace tools | Experimental (`HARNESS`) |
 | `BackgroundAgentsProvider` | Delegation to sub-agents running concurrently | Experimental (`HARNESS`) |

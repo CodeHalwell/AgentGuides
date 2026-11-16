@@ -10,6 +10,8 @@ sidebar:
 
 > **Stability.** `TodoProvider`, `TodoSessionStore`, `AgentModeProvider` and the `get_agent_mode` / `set_agent_mode` helpers graduated from experimental in 1.12.0. `MemoryContextProvider`, `MemoryStore` / `MemoryFileStore`, `TodoFileStore`, `FileAccessProvider`, `BackgroundAgentsProvider` and `AgentLoopMiddleware` are still marked `ExperimentalFeature.HARNESS` and emit an `ExperimentalWarning` on first use; they may change between minor releases.
 >
+> **Deprecation (1.26.0).** `MemoryContextProvider`, `MemoryFileStore`, `MemoryStore`, `MemoryIndexEntry` and `MemoryTopicRecord` are deprecated and will be removed after 31 December 2026. They still import and read existing memories, but creating a `MemoryFileStore` or `MemoryContextProvider`, or subclassing `MemoryStore`, now emits a `DeprecationWarning`. For new work use [`FileMemoryProvider`](#filememoryprovider--session-scoped-scratch-files) with a `FileSystemAgentFileStore`. It is not a drop-in replacement: it uses a different folder layout, does not extract memories automatically, keeps no transcript history and does not migrate existing files.
+>
 > Verified against `agent-framework` %%version=agent-framework%% (re-checked %%versions-checked%%; first written for 1.5.0). The tool names the providers expose were renamed in 1.7.0 (`add_todos` → `todos_add`, `set_mode` → `mode_set`, and so on); this page uses the current names.
 
 HARNESS providers are a family of `ContextProvider` implementations that give agents durable, session-scoped capabilities beyond conversation history:
@@ -653,6 +655,10 @@ class RedisTodoStore(TodoStore):
 
 ## `MemoryContextProvider` — durable long-term memory
 
+:::caution
+Deprecated in 1.26.0 and scheduled for removal after 31 December 2026 (see the note at the top of this page). The section is kept for existing deployments. New code should use [`FileMemoryProvider`](#filememoryprovider--session-scoped-scratch-files) with an explicit `scope`, for example a user ID, when memory needs to span sessions; the default scope is the session.
+:::
+
 `MemoryContextProvider` gives agents cross-session recall. It automatically extracts durable facts from transcripts after each session and injects the most relevant topics at the start of future sessions — the agent accumulates knowledge without keeping entire conversation histories in the context window.
 
 It is a `HistoryProvider` (subtype of `ContextProvider`) and handles both history persistence and memory extraction in a single provider.
@@ -1258,6 +1264,8 @@ session = agent.create_session()
 response = await agent.run("Compare three heat-pump designs and write a summary.", session=session)
 ```
 
+`loop_return_final_only=True` (added in 1.26.0, default `False`) makes a non-streaming `agent.run()` return only the final loop iteration's response instead of every iteration's messages. Streaming behaviour is unchanged.
+
 The function itself is stable, but some features it can switch on are experimental and emit an `ExperimentalWarning` when used: background agents (`background_agents=`), file access (`file_access_store=`), looping (`loop_should_continue=`) and shell tools (`shell_executor=`, from the pre-release `agent-framework-tools` package).
 
 ---
@@ -1295,4 +1303,5 @@ The function itself is stable, but some features it can switch on are experiment
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-11-16 | 1.26.0 | Marked `MemoryContextProvider`, `MemoryFileStore` and `MemoryStore` as deprecated (removal after 2026-12-31) and pointed to `FileMemoryProvider`. Documented `loop_return_final_only` on `create_harness_agent`. |
 | 2026-10-24 | 1.22.0 | Corrected the `TodoFileStore` and `MemoryFileStore` directory layouts (the provider's `source_id` is part of the path and file name) and the `history_message_filter` example (`Message` is not a dataclass and its contents are `Content` objects); marked `history_dumps` / `history_loads` deprecated. |

@@ -4,7 +4,7 @@
   "packages": {
     "agent-framework": {
       "registry": "pypi",
-      "version": "1.25.0",
+      "version": "1.26.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "Microsoft.Agents.AI": {
@@ -19,27 +19,27 @@
     },
     "Microsoft.AspNetCore.TestHost": {
       "registry": "nuget",
-      "version": "10.0.14",
+      "version": "10.0.15",
       "guide": "microsoft-agent-framework-guide"
     },
     "OpenTelemetry.Exporter.InMemory": {
       "registry": "nuget",
-      "version": "1.20.1",
+      "version": "1.21.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "Microsoft.Extensions.AI.Evaluation.Quality": {
       "registry": "nuget",
-      "version": "10.11.0",
+      "version": "11.0.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "Microsoft.Extensions.AI.Evaluation.Reporting": {
       "registry": "nuget",
-      "version": "10.11.0",
+      "version": "11.0.0",
       "guide": "microsoft-agent-framework-guide"
     },
     "github.com/microsoft/agent-framework-go": {
       "registry": "go",
-      "version": "0.3.0",
+      "version": "0.3.1",
       "guide": "microsoft-agent-framework-guide"
     },
     "agent-framework-rs": {

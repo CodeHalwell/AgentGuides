@@ -1251,6 +1251,96 @@ func main() {
 
 The provider caches the skill list and the generated tools; `RefreshInterval`, `DisableCaching` and `CacheIsolationKeySelector` control that. `SkillFilter` hides skills, and `IncludeDetailedErrors` returns script error text to the model (only for trusted scripts, since error text can carry injected instructions).
 
+#### Skills from an MCP server
+
+`agent/skills/mcpskills` (added in v0.3.1) discovers skills served by a trusted MCP server. It reads the `skill://index.json` resource, which lists each skill's name, description, `type` and `url`. It supports `skill-md` entries and ZIP archive entries; other entry types, such as `mcp-resource-template`, are skipped. For `skill-md` entries, discovery uses the index metadata only. The first `GetContent` call fetches and caches `SKILL.md`, and `GetResource` reads sibling resources on demand, as text or binary `message.DataContent`.
+
+The source borrows an initialised `*mcp.ClientSession` (for example from `mcptool.Connect`). Close the source before the session, or hand it to the provider with `OwnsSources: true` as below. Discovery is not cached by the source itself; the skills provider caches it by default, so set `RefreshInterval` or `DisableCaching` if the server's skills change. Archive skills are re-downloaded on every discovery and are bounded by `ArchiveMaxFileCount` (default 20), `ArchiveMaxSizeBytes` and `ArchiveMaxUncompressedSizeBytes` (1 MiB each by default), with an optional SHA-256 digest check. Extracted archive scripts are never executable.
+
+Only connect to servers you trust. Remote instructions and resources are prompt-injection surface, and a digest shows that the archive matches the server's index, not that the server is trustworthy.
+
+This program stands in for a skills server with an in-memory MCP server and reads the skill back without a model:
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	"github.com/microsoft/agent-framework-go/agent/skills"
+	"github.com/microsoft/agent-framework-go/agent/skills/mcpskills"
+	"github.com/microsoft/agent-framework-go/tool/mcptool"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+)
+
+func resource(uri, mediaType, text string) (*mcp.Resource, mcp.ResourceHandler) {
+	return &mcp.Resource{URI: uri, Name: uri, MIMEType: mediaType},
+		func(context.Context, *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
+			return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
+				URI: uri, MIMEType: mediaType, Text: text,
+			}}}, nil
+		}
+}
+
+func main() {
+	ctx := context.Background()
+
+	// A stand-in for a trusted skills server.
+	server := mcp.NewServer(&mcp.Implementation{Name: "skills", Version: "1.0.0"}, nil)
+	server.AddResource(resource("skill://index.json", "application/json", `{"skills":[{
+  "name":"unit-converter","type":"skill-md",
+  "description":"Convert miles and kilometres using a reference table.",
+  "url":"skill://unit-converter/SKILL.md"}]}`))
+	server.AddResource(resource("skill://unit-converter/SKILL.md", "text/markdown", `---
+name: unit-converter
+description: Convert miles and kilometres using a reference table.
+---
+Read references/conversion-table.md, then multiply by the factor.`))
+	server.AddResource(resource("skill://unit-converter/references/conversion-table.md", "text/markdown",
+		"Miles to kilometres: multiply by 1.60934."))
+
+	clientTransport, serverTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(ctx, serverTransport, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer serverSession.Close()
+	session, err := mcptool.Connect(ctx, clientTransport)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer session.Close()
+
+	source := mcpskills.NewSource(mcpskills.Config{Session: session})
+	provider := skills.NewContextProvider(skills.ContextProviderOptions{
+		Sources:     []skills.Source{source},
+		OwnsSources: true, // closing the provider closes the source
+	})
+	defer provider.Close()
+
+	// Discovery on its own, without a model.
+	found, err := source.Skills(ctx, skills.SourceContext{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	for _, s := range found {
+		body, _ := s.GetContent(ctx)
+		fmt.Println(s.Frontmatter.Name, "-", s.Frontmatter.Description)
+		fmt.Println(body)
+		r, err := s.GetResource(ctx, "references/conversion-table.md")
+		fmt.Printf("%v %v\n", r != nil, err)
+		if r != nil {
+			v, _ := r.Read(ctx)
+			fmt.Println(v)
+		}
+	}
+}
+```
+
+Pass the provider to an agent through `ContextProviders` exactly as in the example above; the same `load_skill` and `read_skill_resource` tools then work against the remote skill.
+
 ### `harness.AgentConfig`
 
 `harness.AgentConfig(settings, agentConfig)` returns an `agent.Config` with todos, modes, file memory, skills, hosted web search, standing tool approvals, OpenTelemetry tracing, message injection and per-call history persistence added, and harness instructions (`harness.DefaultInstructions`) placed before yours. Pass the result to any provider constructor:
