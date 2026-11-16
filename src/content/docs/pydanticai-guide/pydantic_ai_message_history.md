@@ -119,6 +119,71 @@ except UsageLimitExceeded as exc:
 
 Use `conversation=` when you persist chat sessions: it is one value to store, it keeps per-conversation spend honest, and a run paused for human approval can be resumed from storage with `deferred_tool_results=` alongside it. `message_history=` still works and is the right tool when you assemble or edit the message list yourself.
 
+## `ConversationStore` — a store that keeps each message once
+
+Serialising the whole `Conversation` into one blob (pattern 1 below) rewrites every message on every turn, and gives you no help with two writers saving the same session. `pydantic_ai.conversation_store` provides a `ConversationStore` that keeps a conversation as a log: one `ConversationEntry` per message, each pointing at the entry before it, plus a `ConversationRecord` holding the head of the log, accumulated `usage`, any pending `deferred_tool_requests`, a `scope` and a `revision`. A save appends only the messages the store does not have yet. These names are imported from `pydantic_ai.conversation_store`, not from the top-level package.
+
+`InMemoryConversationStore` is the bundled backend, intended for tests and examples. For anything durable you subclass `ConversationStore` and implement five storage primitives (`read_record`, `read_records`, `write_record`, `delete_record`, `read_entry`); the store works out what is new, where a history branches and what a fork shares. `write_record` must raise `ConversationConflict` when the stored revision is not `expected_revision`. The package ships no database backends.
+
+```python
+import asyncio
+
+from pydantic_ai import Agent, Conversation
+from pydantic_ai.conversation_store import ConversationConflict, InMemoryConversationStore
+from pydantic_ai.models.test import TestModel
+
+agent = Agent(TestModel(custom_output_text='Noted.'))
+store = InMemoryConversationStore()
+
+
+async def chat(conversation_id: str, prompt: str, user: str) -> str:
+    conversation = await store.load(conversation_id, scope=user) or Conversation(conversation_id=conversation_id)
+    result = await agent.run(prompt, conversation=conversation)
+    await store.save(result, scope=user)
+    return result.output
+
+
+async def main() -> None:
+    await chat('c-1', 'My name is Alice.', 'alice')
+    await chat('c-1', 'What is my name?', 'alice')
+
+    loaded = await store.load('c-1', scope='alice')
+    print(len(loaded.messages))
+    #> 4
+    print(await store.load('c-1', scope='bob'))  # another scope: treated as missing
+    #> None
+
+    # Regenerate from an earlier point: keep two messages, continue on a new branch
+    branched = await store.branch('c-1', at=2, expected_revision=loaded.revision, scope='alice')
+    await store.save(await agent.run('Call me Al.', conversation=branched), scope='alice')
+    record = (await store.list_conversations(scope='alice'))[0]
+    print(len(record.branches))  # the abandoned history stays stored
+    #> 1
+
+    # `loaded` is now stale, so saving it again is refused
+    try:
+        await store.save(loaded, scope='alice')
+    except ConversationConflict as exc:
+        print('conflict', exc.conversation_id)
+    #> conflict c-1
+
+    # Explore from the same point without moving the original
+    fork = await store.fork('c-1', at=2, new_conversation_id='c-1-alt')
+    print(fork.conversation_id, len(fork.messages))
+    #> c-1-alt 2
+
+
+asyncio.run(main())
+```
+
+What to know when using it:
+
+- `save` accepts a `Conversation` or an `AgentRunResult`, and returns the new entries. Their `id`s are stable, so they suit a rating or billing row.
+- `scope` (a user or channel, say) is separate from `conversation_id`. A conversation saved under one scope is invisible to `load`, `branch`, `fork` and `delete` called with another, and `list_conversations(scope=...)` lists by it.
+- `load(limit=n)` returns only the last `n` messages for a run that needs recent turns; saving it still appends to the whole stored conversation. The window can begin mid-turn, and the request repairs that before sending.
+- A history trimmed by a capability such as `ProcessHistory` does not shrink what is stored. `branch(at=...)` or `branch(from_entry=...)` moves the head; `fork` starts a new conversation that shares the earlier entries.
+- Concurrent writers: catch `ConversationConflict`, reload and retry. `delete` removes the record; whether orphaned entries are erased depends on the backend, so check yours before relying on it for erasure requests.
+
 ## Passing history back in
 
 Any of `run`, `run_sync`, `run_stream`, or `iter` accept `message_history`:
@@ -368,7 +433,7 @@ for msg in result.all_messages():
 
 ### 1. Database-backed conversation store
 
-One row per session, holding the serialised `Conversation`. SQLite keeps the example self-contained; the same two functions work against any key-value or relational store.
+For a log-structured store with branching and conflict checks, see [`ConversationStore`](#conversationstore--a-store-that-keeps-each-message-once) above. The simpler alternative is one row per session, holding the serialised `Conversation`. SQLite keeps the example self-contained; the same two functions work against any key-value or relational store.
 
 ```python
 import sqlite3
