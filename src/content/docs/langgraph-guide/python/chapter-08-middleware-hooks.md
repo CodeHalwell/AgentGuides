@@ -201,6 +201,8 @@ All of these are in `langchain.agents.middleware`.
 | `PIIMiddleware(pii_type, strategy=...)` | Detects e-mail addresses, card numbers, IPs, MAC addresses, URLs or a custom pattern, and blocks, redacts, masks or hashes them |
 | `LLMToolSelectorMiddleware(model=..., max_tools=...)` | Uses a small model to choose which tools to offer when there are many |
 | `ProviderToolSearchMiddleware(searchable_tools=[...])` | Defers the named tools behind the provider's server-side tool search (Anthropic and OpenAI only), so their schemas are not sent on every call |
+| `ModelRefusalMiddleware()` | Raises `ModelRefusalError` when a response contains a standard `refusal` content block, instead of returning it as a normal answer. See [Treating refusals as errors](#treating-refusals-as-errors) |
+| `ModelRouterMiddleware(choices=..., instructions=..., classifier=...)` | Beta. Classifies the latest human message once per run with a decision model and uses the chosen `ModelChoice` for every model call in that run. Classifier failures end the run rather than falling back silently |
 | `TodoListMiddleware()` | Gives the agent a `write_todos` planning tool |
 | `ShellToolMiddleware`, `FilesystemFileSearchMiddleware`, `LLMToolEmulator` | Shell and file-search tools; emulated tools for testing |
 
@@ -276,6 +278,54 @@ Each decision in `resume={"decisions": [...]}` is one of:
 - `{"type": "respond", "message": "..."}`: the tool does not run; your text comes back as a successful `ToolMessage`. Use it for "ask the user" tools whose real implementation is a human answer.
 
 In the default `interrupt_mode="batched"`, one interrupt covers every gated call from a model turn, and `decisions` must hold one entry per entry in `action_requests`, in the same order. `interrupt_on={"tool": True}` allows all four decisions.
+
+### Treating refusals as errors
+
+By default a refusal comes back as an ordinary `AIMessage`. `ModelRefusalMiddleware` raises `ModelRefusalError` instead. List it after `ModelFallbackMiddleware` so the fallback can catch the error and try another model. It only reacts to explicit `refusal` content blocks; it does not infer refusals from text. With streaming, content may already have been emitted before the refusal is known.
+
+```python
+from langchain.agents import create_agent
+from langchain.agents.middleware import ModelFallbackMiddleware, ModelRefusalMiddleware
+from langchain_core.exceptions import ModelRefusalError
+
+# Without a fallback, the error reaches your code:
+agent = create_agent("anthropic:%%model=anthropic%%", tools=[], middleware=[ModelRefusalMiddleware()])
+try:
+    agent.invoke({"messages": [("user", "...")]})
+except ModelRefusalError as exc:
+    print("refused:", exc)
+
+# With a fallback listed first, a refusal triggers the second model:
+agent = create_agent(
+    "anthropic:%%model=anthropic%%",
+    tools=[],
+    middleware=[ModelFallbackMiddleware("openai:%%model=openai%%"), ModelRefusalMiddleware()],
+)
+```
+
+### Updating state from `wrap_model_call`
+
+A `wrap_model_call` hook normally returns a `ModelResponse`. To also write state keys, return `ExtendedModelResponse(model_response=response, command=Command(update={...}))` (import it from `langchain.agents.middleware.types`). The command is applied after the model node through the graph's reducers, so `messages` in it are added alongside the model's reply, not replacing it. For plain keys, an outer middleware's command overwrites an inner one's.
+
+```python
+from langchain.agents import AgentState
+from langchain.agents.middleware import AgentMiddleware
+from langchain.agents.middleware.types import ExtendedModelResponse
+from langgraph.types import Command
+from typing_extensions import NotRequired
+
+
+class SeenState(AgentState):
+    calls_seen: NotRequired[int]
+
+
+class Track(AgentMiddleware[SeenState]):
+    state_schema = SeenState
+
+    def wrap_model_call(self, request, handler):
+        response = handler(request)
+        return ExtendedModelResponse(model_response=response, command=Command(update={"calls_seen": 1}))
+```
 
 ### Approving only some calls, one interrupt per call
 
