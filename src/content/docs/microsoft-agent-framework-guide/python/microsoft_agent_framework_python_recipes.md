@@ -1396,7 +1396,11 @@ Key points:
 
 ---
 
-### Recipe 27 — Long-term memory with `MemoryContextProvider` (Experimental)
+### Recipe 27 — Long-term memory with `MemoryContextProvider` (Experimental, deprecated)
+
+:::caution
+`MemoryContextProvider` and its stores are deprecated as of 1.26.0 and will be removed after 31 December 2026; using them emits a `DeprecationWarning`. For new code use `FileMemoryProvider` with `FileSystemAgentFileStore` and an explicit `scope` (see [the harness page](/microsoft-agent-framework-guide/python/microsoft_agent_framework_python_harness/#filememoryprovider--session-scoped-scratch-files)). It does not extract facts for you: the agent decides what to write through the `file_memory_*` tools, and existing `MemoryFileStore` files are not migrated.
+:::
 
 `MemoryContextProvider` gives an agent cross-session memory. After every turn it automatically extracts facts from the conversation into per-topic Markdown files, maintains a `MEMORY.md` index, and archives transcripts for semantic search. On subsequent turns the index is injected into context so the agent recalls earlier sessions without exceeding the context window.
 
@@ -1514,7 +1518,7 @@ The store enforces path isolation — owner IDs with `..` or absolute path chara
 | Skills | `SkillsProvider(my_skill)` or `SkillsProvider([skill_a, skill_b])` — takes a positional `source` (single `Skill`, list of `Skill`, or a `SkillsSource`) |
 | Eval gates | `LocalEvaluator(*checks)` + `evaluate_agent(...)` |
 | Agent todo list | `TodoProvider(store=TodoFileStore(...))` |
-| Cross-session memory (exp.) | `MemoryContextProvider(store=MemoryFileStore(..., owner_state_key=...))` |
+| Cross-session memory | `FileMemoryProvider(FileSystemAgentFileStore(root), scope=user_id)` (`MemoryContextProvider` is deprecated since 1.26.0) |
 | Compact context via provider | `CompactionProvider(before_strategy=..., after_strategy=..., history_source_id=...)` |
 | Drop old tool-call groups | `SelectiveToolCallCompactionStrategy(keep_last_tool_call_groups=N)` |
 | Summarise old tool results | `ToolResultCompactionStrategy(keep_last_tool_call_groups=N)` |
