@@ -508,6 +508,8 @@ options = ClaudeAgentOptions(
 )
 ```
 
+`autoAllowBashIfSandboxed` is off unless you set it (recent Claude Code releases no longer auto-approve sandboxed commands by default). Without it, sandboxed Bash commands still go through `can_use_tool`, rules and the permission mode; set it to `True` only when the sandbox is the control you rely on.
+
 Since 0.2.166 `ignoreViolations` is a `dict[str, list[str]]` mapping a command-pattern substring to violation-text substrings, for example `{"*": ["/tmp"]}`.
 
 ---
