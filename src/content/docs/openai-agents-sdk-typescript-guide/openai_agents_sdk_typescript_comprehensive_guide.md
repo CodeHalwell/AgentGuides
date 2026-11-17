@@ -484,6 +484,32 @@ export const frontDesk = new Agent({
 });
 ```
 
+### Recovering from a Failed Handoff
+
+If a handoff throws (for example from `onHandoff`), the error normally propagates out of `run()`. Since 0.22.0, `handoff()` accepts an `errorFunction`. Its return value is sent to the model as the handoff's tool result and the run continues on the source agent, so it can apologise or answer itself. Return only text you are happy for the model to see, or throw to propagate the failure. Cancellation, input filters and Realtime handoffs behave as before, and anything the failed invocation already did is not undone.
+
+```typescript
+import { Agent, handoff } from '@openai/agents';
+
+const specialist = new Agent({ name: 'Specialist', instructions: 'Answer in detail.' });
+
+export const frontDesk = new Agent({
+  name: 'Front Desk',
+  instructions: 'Hand complex questions to the specialist.',
+  handoffs: [
+    handoff(specialist, {
+      onHandoff: () => {
+        throw new Error('No specialist capacity'); // stands in for a real check
+      },
+      errorFunction: (_ctx, error) => {
+        console.error('Handoff failed:', error);
+        return 'The specialist is unavailable. Answer the user yourself.';
+      },
+    }),
+  ],
+});
+```
+
 ### Agents as Tools
 
 When a manager should stay in charge and only consult specialists, turn the specialists into tools with `agent.asTool()`. The specialist runs as a nested run and its final output becomes the tool result; the conversation does not move:
