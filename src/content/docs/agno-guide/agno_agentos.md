@@ -93,10 +93,10 @@ Sessions belong to the `user_id` that created them. A run that names an existing
 | Discovery | `GET /health`, `GET /info` (unauthenticated metadata), `GET /config` (agents, teams, workflows, databases, available models, interfaces) |
 | Agents | `GET /agents`, `GET /agents/{id}`, `POST /agents/{id}/runs`, `GET /agents/{id}/runs/{run_id}`, `POST .../runs/{run_id}/continue` (resume a paused run), `POST .../runs/{run_id}/cancel`, `POST .../runs/{run_id}/resume` (reconnect to a streaming run), `POST /agents/{id}/sessions/{session_id}/fork` and `/compact` |
 | Teams, workflows | the same shapes under `/teams` and `/workflows` |
-| Sessions | `GET/POST/DELETE /sessions` (filter with `type=agent|team|workflow`, `user_id`, …), `GET/PATCH/DELETE /sessions/{session_id}`, `GET /sessions/{session_id}/runs`, `POST /sessions/{session_id}/rename` |
+| Sessions | `GET/POST/DELETE /sessions` (filter with `type=agent|team|workflow`, `user_id`, …), `GET/PATCH/DELETE /sessions/{session_id}`, `GET /sessions/{session_id}/runs` (paginate with `limit`, `before_run_index`, `after_run_index`; the response has `data` and `meta` with `total_count`, `has_more`, `oldest_run_index`, `newest_run_index`), `POST /sessions/{session_id}/rename` |
 | Memory | `GET/POST/DELETE /memories`, `GET/PATCH/DELETE /memories/{memory_id}`, `GET /memory_topics`, `POST /optimize-memories` |
 | Knowledge | `GET/POST/DELETE /knowledge/content`, `POST /knowledge/search`, `GET /knowledge/config` |
-| Evals, traces, metrics | `GET/POST/DELETE /eval-runs`, `GET /traces`, `POST /traces/search`, `GET /metrics`, `POST /metrics/refresh` |
+| Evals, traces, metrics | `GET/POST/DELETE /eval-runs`, `GET /traces`, `POST /traces/search`, `GET /metrics`, `POST /metrics/refresh`, and the dashboard queries `GET /os/metrics/{runs,sessions,tokens,latency,models,users}` (with `POST /os/metrics/refresh`) |
 | Operations | `/schedules`, `/approvals` (see [Approvals](/agno-guide/agno_comprehensive_guide/#approvals)), `/queue`, `/service-accounts`, `/components`, `/registry`, `POST /databases/{db_id}/migrate` |
 
 The OpenAPI schema at `/openapi.json` is the authoritative list for your configuration; some routers only appear when the matching feature is enabled.
@@ -197,10 +197,27 @@ app = agent_os.get_app()
 | Interface | Import | Routes | Needs |
 |-----------|--------|--------|-------|
 | AG-UI | `agno.os.interfaces.agui.AGUI(agent=... or team=...)` | `POST /agui` (AG-UI event stream; verified with a `RunAgentInput` body), `GET /status` | `agno[agui]` |
-| A2A | `agno.os.interfaces.a2a.A2A(agents=[...], teams=[...], workflows=[...])`, or `AgentOS(a2a_interface=True)` | `/a2a/agents/{id}/.well-known/agent-card.json`, `/a2a/agents/{id}/v1/message:send`, `.../message:stream`, `.../tasks:get`, `.../tasks:cancel` (and the same for teams and workflows) | `agno[a2a]` |
-| Slack | `agno.os.interfaces.slack.Slack(agent=...)` | `POST /slack/events`, `POST /slack/interactions` | `agno[slack]`, `SLACK_TOKEN`, `SLACK_SIGNING_SECRET` |
+| A2A | `agno.os.interfaces.a2a.A2A(agents=[...], teams=[...], workflows=[...])`, or `AgentOS(a2a_interface=True)` | `GET /a2a/agents/{id}/.well-known/agent-card.json`, and a JSON-RPC endpoint at `POST /a2a/agents/{id}` (the same for teams and workflows) | `agno[a2a]` |
+| Slack | `agno.os.interfaces.slack.Slack(agent=...)` | `POST /slack/events`, `POST /slack/interactions` | `agno[slack]` (Slack Bolt), `SLACK_TOKEN`, `SLACK_SIGNING_SECRET` |
 | Telegram | `agno.os.interfaces.telegram.Telegram(agent=...)` | `POST /telegram/webhook`, `GET /telegram/status` | `agno[telegram]` (importing the module without it raises `ImportError`), `TELEGRAM_TOKEN` |
 | WhatsApp | `agno.os.interfaces.whatsapp.Whatsapp(agent=...)` | `/whatsapp/webhook` (GET verify, POST messages), `GET /whatsapp/status` | `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN` |
+
+**A2A.** Since 3.2.0 the A2A interface speaks A2A v1.0 on `a2a-sdk` 1.x. The old `/v1/message:*` and `/v1/tasks:*` routes are gone: clients send JSON-RPC methods (`SendMessage`, and so on) to the entity's own URL. The Agent Card lists both protocol versions, and the endpoint answers v0.3 clients (`message/send`) unless a request names another version. A v1.0 request carries an `A2A-Version: 1.0` header:
+
+```python
+body = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "SendMessage",
+    "params": {"message": {"messageId": "1", "role": "ROLE_USER", "parts": [{"text": "hi"}]}},
+}
+response = client.post("/a2a/agents/assistant", json=body, headers={"A2A-Version": "1.0"})
+# response.json()["result"]["task"]["status"]["state"] == "TASK_STATE_COMPLETED"
+```
+
+Upgrade the server and any `A2AClient` or `RemoteAgent(protocol="a2a")` together.
+
+**Slack.** The Slack interface is built on Slack Bolt (`agno[slack]` pins `slack_bolt` 1.x). `approvers=[...]` lists the Slack user IDs allowed to approve or deny a human-in-the-loop request; without it only the person who started the run can. `users={slack_id: principal}` maps Slack users to AgentOS principals, which AgentOS needs when you serve the manager under `AgentOS(authorization=...)`. The module no longer exports `SlackEventHandler`, `HITLHandler` or `verify_slack_signature`.
 
 Each takes one agent, team or workflow (A2A takes lists) and a `prefix` to change the mount point. This release has no Discord interface module, although the project README mentions Discord.
 
@@ -371,6 +388,23 @@ asyncio.run(main())
 ```
 
 `AgentOS(agents=[...])` also accepts `RemoteAgent` (and `teams=` / `workflows=` accept `RemoteTeam` / `RemoteWorkflow`), so one OS can front another; that was not exercised. `RemoteAgent(protocol="a2a")` talks to any A2A server instead. The client also has `run_agent_stream`, `continue_agent_run`, `cancel_agent_run`, team and workflow equivalents, and session and memory methods.
+
+## Super Agent
+
+`AgentOS(manager=OSManager(...))` adds a built-in manager, Super Agent, that works on the OS itself: it can read a source directory, search the Agno documentation and build components through its Platform Builder member. It needs `AgentOS(db=...)` and a model, either on the `OSManager` or from the registry.
+
+```python
+from agno.os import AgentOS
+from agno.os.manager.config import OSManager
+
+agent_os = AgentOS(
+    db=db,
+    agents=[assistant],
+    manager=OSManager(model=model, root="./src", access_docs=False),
+)
+```
+
+Defaults worth knowing: `tool_call_limit=24` and `member_tool_call_limit=24` (3.2.0 raised the manager limit from 8), `num_history_runs=5`, and `access_docs=True`; pass `access_docs=False` for offline deployments. Since 3.2.0 Super Agent does the work itself rather than routing through manager members, and AgentOS refuses to start if `root=` is set and your own tools are named `read_file`, `list_files` or `search_content`. Construction was checked against agno %%version=agno%%; a live Super Agent run was not, and neither was the `company=` option.
 
 ## AgentOS reference
 
