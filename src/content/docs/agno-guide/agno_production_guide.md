@@ -125,7 +125,7 @@ Because the instrumentation is standard OpenTelemetry, you can also send spans t
 ### Metrics and logs
 
 - Every run has `run.metrics` (input, output, cached and reasoning tokens, `cost` where the provider reports it, `duration`, `time_to_first_token`); `agent.get_session_metrics(session_id=...)` totals a session.
-- AgentOS aggregates daily metrics: `GET /metrics`, `POST /metrics/refresh`.
+- AgentOS aggregates daily metrics: `GET /metrics`, `POST /metrics/refresh`. Since 3.2.0 it also serves the homepage queries under `/os/metrics/` (`runs`, `sessions`, `tokens`, `latency`, `models`, `users`).
 - `debug_mode=True` (or `AGNO_DEBUG=true`) logs each request and response; `debug_level=2` logs more. Debug output includes prompts and tool results, so keep it out of production logs.
 - `store_events=True` keeps the streamed events on the stored run, for auditing what the user saw.
 
