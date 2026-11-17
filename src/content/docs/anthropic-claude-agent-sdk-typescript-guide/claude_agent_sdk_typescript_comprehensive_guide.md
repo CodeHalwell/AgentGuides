@@ -451,6 +451,8 @@ const sandboxed: Options = {
 };
 ```
 
+`autoAllowBashIfSandboxed` defaults to `false`: since 0.3.325 sandboxed Bash commands still go through the permission flow (`canUseTool`, rules, permission mode) unless you set it to `true`, as above. Set it only when the sandbox, not an approval prompt, is the control you rely on.
+
 ---
 
 ## Hooks
@@ -794,7 +796,7 @@ export const options: Options = {
 };
 ```
 
-Since 0.3.142 MCP servers connect in the background: the session starts immediately and slow servers show `status: 'pending'` in the init message. `CLAUDE_CODE_MCP_STARTUP_WAIT_MS` (via `env`) bounds the first-turn wait. At runtime, `Query` offers `mcpServerStatus()`, `toggleMcpServer()`, `reconnectMcpServer()` and `setMcpServers()`.
+Since 0.3.142 MCP servers connect in the background: the session starts immediately and slow servers show `status: 'pending'` in the init message. `CLAUDE_CODE_MCP_STARTUP_WAIT_MS` (via `env`) bounds the first-turn wait. By default (`mcpServersDelivery: 'argv'`) the SDK passes `mcpServers` on Claude Code's command line; since 0.3.326 that is deprecated, and a future release will default to `'initialize'`, which sends them in the initialize request. Set `mcpServersDelivery: 'initialize'` now if your Claude Code is recent enough, or `'argv'` explicitly if you pin an older one. At runtime, `Query` offers `mcpServerStatus()`, `toggleMcpServer()`, `reconnectMcpServer()` and `setMcpServers()`.
 
 ---
 
@@ -861,7 +863,7 @@ await renameSession('SESSION_ID', 'Payments risk review');
 await tagSession('SESSION_ID', 'reviewed');
 ```
 
-`forkSession()`, `deleteSession()`, `getSessionInfo()`, `listSubagents()` and `getSubagentMessages()` are also exported.
+`forkSession()`, `deleteSession()`, `getSessionInfo()`, `listSubagents()` and `getSubagentMessages()` are also exported. Since 0.3.325, `archiveSession()` and `unarchiveSession()` hide and restore a session without deleting it; the `SDKSessionInfo` that `listSessions()` and `getSessionInfo()` return has an `archived` field.
 
 ### Session stores
 
@@ -1142,3 +1144,5 @@ From the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-typ
 - **0.3.282** — `@anthropic-ai/claude-agent-sdk/core`, a smaller entry point for bundled apps; `prewarm()` (alpha).
 - **0.3.301** — `BUILTIN_TOOL_NAMES` and `LEGACY_TOOL_NAME_ALIASES`; per-tool permission policies on SDK MCP servers.
 - **0.3.311** — `cacheCreationEphemeral5mInputTokens` and `cacheCreationEphemeral1hInputTokens` in `ModelUsage`; minimum Node.js raised to 18.14.0.
+- **0.3.325** — `archiveSession()` and `unarchiveSession()`; `autoAllowBashIfSandboxed` must be `true` for sandboxed Bash to skip approval.
+- **0.3.326** — `mcpServersDelivery` option (`'argv'` deprecated as the future default).

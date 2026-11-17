@@ -226,12 +226,12 @@
     },
     "claude-agent-sdk": {
       "registry": "pypi",
-      "version": "0.2.180",
+      "version": "0.2.183",
       "guide": "anthropic-claude-agent-sdk-guide"
     },
     "@anthropic-ai/claude-agent-sdk": {
       "registry": "npm",
-      "version": "0.3.322",
+      "version": "0.3.326",
       "guide": "anthropic-claude-agent-sdk-typescript-guide"
     },
     "mistralai": {
