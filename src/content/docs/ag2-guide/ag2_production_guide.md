@@ -44,7 +44,7 @@ CMD ["python", "-m", "app"]
 
 - **A2A** — `A2AServer(agent).build_jsonrpc(...)` returns an ASGI app; run it under uvicorn or any ASGI server. REST and gRPC transports can share one `task_store=`. Since 1.2.0 `A2AServer` can run on several replicas: pass a versioned shared task store together with an `event_stream=` that carries task events between replicas (see the upstream A2A server docs).
 - **MCP** — `ag2.mcp.MCPServer(agent)` exposes an `Agent` as an MCP server: `await server.run_stdio()` for a subprocess client, or run the server object itself under uvicorn for streamable HTTP at `/mcp`. See [Serving an agent as an MCP server](/ag2-guide/ag2_comprehensive_guide/#serving-an-agent-as-an-mcp-server).
-- **AG-UI / ACP** — adapters in `ag2.ag_ui` and `ag2.acp` (extras `ag-ui`, `acp`) connect agents to front-ends and editor clients.
+- **AG-UI / ACP** — adapters in `ag2.ag_ui` and `ag2.acp` (extras `ag-ui`, `acp`) connect agents to front-ends and editor clients (see [ACP: coding agents and editors](/ag2-guide/ag2_comprehensive_guide/#acp-coding-agents-and-editors)).
 
 ## State and durability
 

@@ -383,6 +383,8 @@ asyncio.run(main())
 
 `AgentRun` owns the turn's task: leaving the `async with` block cancels a turn that is still running, so await `run.result()` (or `run.start()` and then the result) inside the block. Subscribe before driving, because callbacks fire inline as events are published.
 
+Messages you pass to `run.enqueue(...)` while a turn is running are folded into its next model call. If the turn ends without another model call (a `final` tool result, or calls handed to a client tool), the message stays queued for the next turn on that stream rather than being lost (behaviour as of 1.3.2).
+
 ## Observing a turn with MemoryStream
 
 ```python
@@ -957,6 +959,64 @@ remote = Agent("remote", config=A2AConfig(card_url="http://127.0.0.1:8000"))
 ```
 
 The card is served at `/.well-known/agent-card.json`. `A2AServer` can also build REST and gRPC transports sharing one task store, and supports push notifications via `push_config_store=`; pass `push_url_validator=` (added in 1.2.0) to guard against SSRF through client-supplied webhook URLs.
+
+## ACP: coding agents and editors
+
+The Agent Client Protocol (ACP) is how editors talk to coding agents. `ag2.acp` supports both roles (requires `ag2[acp]`).
+
+**Driving a CLI coding agent.** An ACP config is a model config whose "model" is an external agent process. `ClaudeCodeConfig`, `CodexConfig`, `OpenCodeConfig` and `KiloCodeConfig` carry the launch command for each adapter (`ACPConfig(["your-agent"])` takes any other); the adapter binary must be on `PATH`.
+
+```python
+import asyncio
+
+from acp import schema
+
+from ag2 import Agent
+from ag2.acp import ClaudeCodeConfig
+from ag2.acp.testing import ACPTurn, fake_acp_config
+
+# Real use: the config launches the adapter as a subprocess.
+real = ClaudeCodeConfig(cwd=".", permission_policy="ask", turn_timeout=300)
+
+
+async def main() -> None:
+    # Tests: a scripted in-process agent stands in for the subprocess.
+    reply = schema.AgentMessageChunk(
+        session_update="agent_message_chunk",
+        content=schema.TextContentBlock(type="text", text="Done."),
+    )
+    cfg = fake_acp_config(ACPTurn(updates=[reply]), permission_policy="auto")
+    async with cfg:  # leaving the scope closes every session the config started
+        coder = Agent("coder", config=cfg)
+        print((await coder.ask("Fix the failing tests")).body)
+
+
+asyncio.run(main())
+```
+
+Settings worth knowing:
+
+- `permission_policy` answers the agent's permission requests: `"ask"` (default) routes them to the agent's `hitl_hook` or `context.input`, `"auto"` allows, `"deny"` rejects. `elicitation_policy` does the same for questions the agent puts to the user (`"ask"` or `"decline"`).
+- The subprocess inherits only `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM` and `USER`. Pass API keys in `env=`; a shell `export` does not reach it. A login stored under `$HOME` works without.
+- `cwd` is the workspace the agent reads and writes, and `fs_root` confines file access (it defaults to `cwd`). `allow_terminal=False` withholds the terminal capability.
+- `expose_tools=True` (default) serves the agent's own function tools to the CLI agent over a local HTTP MCP server, and passes `MCPServerTool` entries through. The set of MCP servers is fixed when the session is created on the first turn.
+- `turn_timeout` bounds a prompt turn; on expiry AG2 sends `session/cancel` and, after `cancel_timeout` seconds, tears the connection down.
+- `ACPRemoteConfig(url="wss://…", headers={…})` reaches an agent that is already running. It needs `pip install "agent-client-protocol[http]"`. The workspace stays on the AG2 side, so a remote agent works on your local files.
+
+**Serving an AG2 agent to an editor.** Wrap it in `ACPAgent` and run it over stdio, which is how ACP clients normally launch agents:
+
+```python
+from ag2 import Agent
+from ag2.acp import ACPAgent, SessionConfig
+
+served = ACPAgent(
+    Agent("workie", prompt="You are a helpful coding assistant."),
+    sessions=SessionConfig(max_sessions=8, ttl=600, max_concurrent_turns=4),
+)
+# await served.run_stdio()
+```
+
+Each `session/new` gets an isolated history; prompts on one session queue (bounded by `max_queued`) and `session/cancel` stops that session's running turn and everything queued behind it. History is dropped when the connection closes unless you set `SessionConfig(retain_history=True)` with a durable `storage`, which lets a later `session/load` resume it. `auth=` takes an `AuthProvider` such as `StaticTokenAuth`; it decides whether a client may connect, not who it is, so serve one tenant per instance. Reasoning is not sent to clients unless you pass `stream_thoughts=True`. A turn that calls `context.input()` fails unless you supply `hitl_hook=`.
 
 ## Agent specs
 
