@@ -363,6 +363,18 @@ agent = Agent(role="Researcher", goal="Search the web", backstory="Analyst.", to
 
 `BaseTool.from_langchain` is a class method, so the LangChain package must be installed separately; `langchain-community` is not a CrewAI dependency. `crewai.tools.base_tool.to_langchain([crew_tool])` converts the other way and returns `CrewStructuredTool` instances.
 
+## Adding content to RAG tools
+
+The search tools in `crewai-tools` (`PDFSearchTool`, `RagTool` and the like) share one `add()` method. It accepts file paths, URLs, directories and raw strings. Without `data_type=`, the type is chosen from the file extension: `.pdf`, `.csv`, `.md`/`.mdx`, `.docx`, `.json`, `.jsonl`/`.ndjson` (from 1.15.40), `.xml` and `.txt`.
+
+```python
+from crewai_tools.rag.data_types import DataTypes
+
+DataTypes.from_content("events.jsonl")  # DataType.JSONL
+```
+
+A JSONL file is checked line by line before it is embedded. A malformed record raises `ValueError("Invalid JSONL at line 2: ...")`, so fix the file rather than expecting the bad row to be skipped. `add()` also rejects unsafe paths and URLs (for example, private hosts) with `Blocked unsafe ...`; 1.15.41 added a way to approve specific private hosts. Embedding the content needs an embedding provider, which defaults to OpenAI; set `config=` on the tool to change it. We ran the type detection and the JSONL loader against the installed release; we did not run an embedding step.
+
 ## Built-in helper tools
 
 `crewai.tools.agent_tools` exposes the tools the framework itself installs when you set `Agent.allow_delegation=True`:
