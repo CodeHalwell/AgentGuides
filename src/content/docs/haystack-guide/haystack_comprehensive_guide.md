@@ -44,6 +44,8 @@ Haystack 3 is a consolidation release rather than a rewrite. The component and p
    - [Multi-Agent Pipeline Design Patterns](#multi-agent-pipeline-design-patterns)
    - [SearchableToolset and SkillToolset](#searchabletoolset-and-skilltoolset)
    - [LLMRanker](#llmranker)
+   - [Ranking by metadata and ordering for the context window](#ranking-by-metadata-and-ordering-for-the-context-window)
+   - [Validating JSON output](#validating-json-output)
 4. [Migrating from Haystack 2.x](#migrating-from-haystack-2x)
 
 **Continue elsewhere in this guide:** [Multi-agent systems](/haystack-guide/haystack_multi_agent_guide/) for coordination patterns · [Advanced agents](/haystack-guide/haystack_advanced_agents_python/) for hooks, budgets, state and custom components · [Observability](/haystack-guide/haystack_observability_python/) for tracing, logging, retries and fallbacks · [Production guide](/haystack-guide/haystack_production_guide/) for deployment, security, testing and evaluation · [Recipes](/haystack-guide/haystack_recipes/) for end-to-end examples.
@@ -577,6 +579,29 @@ print({name: len(items) for name, items in out.items()})
 ```
 
 `FileTypeRouter` accepts paths as well as `ByteStream`s. A path that does not exist goes to a `failed` output, or raises if you pass `raise_on_failure=True`.
+
+#### Structure-aware splitters
+
+`DocumentSplitter` cuts by a fixed unit, which can slice through a paragraph or a section. Two splitters respect the document's structure instead.
+
+`RecursiveDocumentSplitter` tries each entry in `separators` in turn (the default is paragraph, line, sentence, then space) and only falls back to the next when a piece is still longer than `split_length`. `split_unit` is `"word"`, `"char"` or `"token"`. Each chunk carries `split_id`, `source_id` and `page_number` metadata.
+
+`MarkdownHeaderSplitter` cuts at Markdown headings and records where each chunk sits in the outline:
+
+```python
+from haystack import Document
+from haystack.components.preprocessors import MarkdownHeaderSplitter
+
+md = "# Guide\nIntro\n## Install\npip install x\n## Use\nrun it\n"
+chunks = MarkdownHeaderSplitter(header_split_levels=[1, 2]).run([Document(content=md)])["documents"]
+for chunk in chunks:
+    print(chunk.meta["header"], chunk.meta["parent_headers"], repr(chunk.content))
+# Guide [] '# Guide\nIntro\n'
+# Install ['Guide'] '## Install\npip install x\n'
+# Use ['Guide'] '## Use\nrun it\n'
+```
+
+`header` and `parent_headers` make useful filters or prompt context. `keep_headers=False` strips the heading from the chunk text, and `secondary_split` (`"word"`, `"passage"`, `"period"` or `"line"`, with `split_length`) breaks up sections that are still too long.
 
 ### Reshaping data between components with `OutputAdapter`
 
@@ -1703,6 +1728,52 @@ The prompt is a Jinja2 template with `query` and `documents`; pass `prompt=` to 
 
 ---
 
+### Ranking by metadata and ordering for the context window
+
+`LLMRanker` spends a model call per query. Two rankers do cheaper, deterministic work and run offline.
+
+`MetaFieldRanker` sorts by a metadata field, such as recency. `ranking_mode="linear_score"` blends the field with the existing retrieval score using `weight`; the default `"reciprocal_rank_fusion"` blends by rank. `missing_meta` decides what happens to documents without the field: `"bottom"` (default), `"top"` or `"drop"`. Set `meta_value_type` to `"date"` when the field is a date string.
+
+`LostInTheMiddleRanker` reorders documents so the most relevant sit at the start and end of the list, where long-context models attend best. It does not drop anything unless you set `top_k` or `word_count_threshold`. Place it last, just before the prompt builder.
+
+```python
+from haystack import Document
+from haystack.components.rankers import LostInTheMiddleRanker, MetaFieldRanker
+
+docs = [
+    Document(content="old", meta={"year": 2019}, score=0.9),
+    Document(content="new", meta={"year": 2024}, score=0.5),
+    Document(content="undated", score=0.7),
+]
+newest = MetaFieldRanker(meta_field="year", weight=0.5, ranking_mode="linear_score", missing_meta="drop")
+print([d.content for d in newest.run(documents=docs)["documents"]])
+# ['new', 'old']
+
+ranked = [Document(content=str(i), score=s) for i, s in enumerate([0.5, 0.3, 0.1, 0.05])]
+print([d.content for d in LostInTheMiddleRanker().run(documents=ranked)["documents"]])
+# ['0', '2', '3', '1']
+```
+
+`TopPSampler` keeps documents until their cumulative score probability reaches `top_p`. It imports `torch`, so install that first.
+
+### Validating JSON output
+
+`JsonSchemaValidator` checks the last assistant message against a JSON schema. Valid messages come out of `validated`; invalid ones come out of `validation_error` as a message describing what failed, which you can feed back to the generator in a loop (see the iterative refinement example above):
+
+```python
+from haystack.components.validators import JsonSchemaValidator
+from haystack.dataclasses import ChatMessage
+
+validator = JsonSchemaValidator(json_schema={
+    "type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"],
+})
+print(list(validator.run(messages=[ChatMessage.from_assistant('{"n": 3}')])))
+# ['validated']
+bad = validator.run(messages=[ChatMessage.from_assistant('{"n": "x"}')])
+print(list(bad), "is not of type 'integer'" in bad["validation_error"][0].text)
+# ['validation_error'] True
+```
+
 ## Migrating from Haystack 2.x
 
 The upstream [migration guide](https://github.com/deepset-ai/haystack/blob/main/MIGRATION.md) is authoritative; the changes most likely to affect code in this guide's style are below.
@@ -1774,6 +1845,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 | Date | Version | Changes |
 |------|---------|---------|
 | %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. Added chunking and routing: `SentenceWindowRetriever`, `HierarchicalDocumentSplitter` with `AutoMergingRetriever`, `MetadataRouter` and `FileTypeRouter`. Added `OutputAdapter`. |
+| 2026-11-19 | 3.5.0 | Added `MarkdownHeaderSplitter`, `RecursiveDocumentSplitter`, `MetaFieldRanker`, `LostInTheMiddleRanker` and `JsonSchemaValidator`. |
 | 2026-11-12 | 3.5.0 | `StructuredOutputHook` and `StepBudgetReminderHook` (in the advanced agents page); 3.5 upgrade notes; `max_agent_steps` added to the reserved state keys. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
 | June 2026 | 2.30.0 | Last 2.x revision. |
