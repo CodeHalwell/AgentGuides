@@ -418,6 +418,8 @@ graph_engine = graph_index.as_query_engine(include_text=True)
 graph_index.storage_context.persist(persist_dir="./graph_storage")   # reload with load_index_from_storage
 ```
 
+By default the LLM extractors (`SimpleLLMPathExtractor`, `DynamicLLMPathExtractor`, `SchemaLLMPathExtractor`) log a failed extraction and carry on, so a chunk can silently contribute no triples. Pass `raise_on_error=True` while building an index if you would rather fail fast.
+
 `SchemaLLMPathExtractor` restricts extraction to entity and relation types you list, which gives a cleaner graph than free-form triples. The default store is in-memory (`SimplePropertyGraphStore`); for real data use a graph database integration such as `Neo4jPropertyGraphStore` (`llama-index-graph-stores-neo4j`), passed as `property_graph_store=`. Extraction makes one LLM call per chunk, so building the index costs far more than a vector index over the same documents.
 
 ### 3.10 Multimodal documents and queries
@@ -941,6 +943,18 @@ async def handle_turn(user_id: str, message: str) -> str:
         async_database_uri="postgresql+asyncpg://app:secret@db/agents",
     )
     return str(await agent.run(user_msg=message, memory=memory))
+```
+
+To use a store other than the default `SQLAlchemyChatStore`, pass any `AsyncDBChatStore` subclass as `chat_store=`. Since 0.14.24 it takes precedence over `table_name=` and `async_database_uri=`, which are then ignored. You can also build the `SQLAlchemyChatStore` yourself to control the table and engine:
+
+```python
+from llama_index.core.storage.chat_store.sql import SQLAlchemyChatStore
+
+store = SQLAlchemyChatStore(
+    table_name="agent_memory",
+    async_database_uri="sqlite+aiosqlite:///memory.db",
+)
+memory = Memory.from_defaults(session_id="user-123", chat_store=store, token_limit=40_000)
 ```
 
 ---
@@ -1491,6 +1505,21 @@ query_engine = index.as_query_engine(
     ],
 )
 ```
+
+`StructuredLLMRerank` does the same job as `LLMRerank` but asks the LLM for a structured list of document numbers and relevance scores instead of parsing free text, which is more reliable with function-calling models. It has a native async path (since 0.14.25), so an async query engine reranks batches without blocking the event loop. Documents are scored in batches of `choice_batch_size` (default 10).
+
+```python
+from llama_index.core.postprocessor import StructuredLLMRerank
+
+reranker = StructuredLLMRerank(
+    llm=OpenAI(model="%%model=openai-small%%"),   # a non-function-calling LLM logs a warning
+    top_n=3,
+    choice_batch_size=10,
+    raise_on_structured_prediction_failure=False,  # default True raises ValueError
+)
+```
+
+With `raise_on_structured_prediction_failure=False`, a batch whose structured output cannot be parsed is logged and its nodes are kept with a score of 0 rather than failing the query.
 
 Other useful post-processors: `SentenceTransformerRerank` (local cross-encoder), `LongContextReorder`, `PrevNextNodePostprocessor`, `MetadataReplacementPostProcessor` (pair with `SentenceWindowNodeParser`), and provider rerankers such as `llama-index-postprocessor-cohere-rerank`.
 
