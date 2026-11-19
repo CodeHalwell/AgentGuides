@@ -225,7 +225,7 @@ For servers that need credentials, store them once and refer to them by name, or
 ```python
 client.beta.connectors.create_credentials(
     connector_id_or_name="internal-tickets",
-    consumer_scope="workspace",          # "user", "workspace" or "organization"
+    consumer_scope="workspace",          # "user" or "workspace" when creating
     name="default",
     credentials={"headers": {"Authorization": f"Bearer {os.environ['TICKETS_TOKEN']}"}},
     is_default=True,
@@ -236,6 +236,17 @@ auth = client.beta.connectors.get_auth_url(
     app_return_url="https://myapp.example.com/oauth/callback",
 )
 print("send the user to", auth.auth_url)
+```
+
+Stored credentials take one of four forms: `headers` (a dict of header names to values), `query_params` (a dict of query-string parameters, for servers that expect an API key in the URL; added in SDK 3.8.0), `bearer_token` (a string) or `oauth` (client-credentials settings). `create_credentials()` accepts `consumer_scope="user"` or `"workspace"`; `update_credentials()` also accepts `"organization"`.
+
+```python
+client.beta.connectors.create_credentials(
+    connector_id_or_name="internal-tickets",
+    consumer_scope="user",
+    name="personal",
+    credentials={"query_params": {"api_key": os.environ["TICKETS_KEY"]}},
+)
 ```
 
 To call a connector's tools directly, without the model (useful in tests and for checking credentials), `connectors.mcp_client()` opens an official `mcp` client session through Mistral's Connectors Gateway, using the Mistral client's credentials. It needs `mistralai[agents]`:
