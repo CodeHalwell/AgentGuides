@@ -256,12 +256,12 @@
     },
     "strands-agents": {
       "registry": "pypi",
-      "version": "1.64.0",
+      "version": "1.65.0",
       "guide": "strands-agents-guide"
     },
     "@strands-agents/sdk": {
       "registry": "npm",
-      "version": "1.24.0",
+      "version": "1.26.0",
       "guide": "strands-agents-guide"
     },
     "strands-agents-tools": {
@@ -271,7 +271,7 @@
     },
     "strands-agents-evals": {
       "registry": "pypi",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "guide": "strands-agents-guide"
     },
     "bedrock-agentcore-ts": {
