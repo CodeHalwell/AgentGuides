@@ -184,6 +184,7 @@ The task returns either the output alone or `{"output": ..., "trajectory": ...}`
 | `Equals`, `Contains`, `StartsWith` | Deterministic | The output |
 | `ToolCalled`, `StateEquals`, `SkillInvoked` | Deterministic | The trajectory or final state |
 | `StructuredOutputSimilarity` | Deterministic | Field-by-field match of structured output |
+| `TypedRubricEvaluator` | Decision model | Typed yes/no, scale and choice questions, scored from probabilities ([below](#typed-rubrics-with-a-decision-model)) |
 | `OutputEvaluator(rubric=...)` | LLM judge | The output against your rubric |
 | `TrajectoryEvaluator(rubric=...)` | LLM judge | The sequence of tool calls |
 | `HelpfulnessEvaluator`, `FaithfulnessEvaluator`, `CorrectnessEvaluator`, `HarmfulnessEvaluator`, `ToolSelectionAccuracyEvaluator`, `ToolParameterAccuracyEvaluator`, `GoalSuccessRateEvaluator`, ... | LLM judge | Built-in rubrics. These work on an OpenTelemetry session as the trajectory (captured with `StrandsEvalsTelemetry`), not on a list of tool names |
@@ -234,6 +235,61 @@ print(report.overall_score)
 
 Points to know. The case input must be a string. Building the profile calls a model, and that call uses Strands' default model (Bedrock) whatever you pass as `model=`, so it needs Bedrock access. The simulator's replies are as variable as any model output, so judge the whole transcript with an LLM evaluator, or with a deterministic check as above, rather than a fixed expected string. `act(..., structured_output_model=...)` replaces the default `ActorResponse` with your own Pydantic model, which must have `message` and `stop` fields.
 
+### Typed rubrics with a decision model
+
+`TypedRubricEvaluator` (added in `strands-agents-evals` 1.10.0) scores a case against a set of typed questions, answered by one [decision model](/strands-agents-guide/python/strands_comprehensive_guide/#decision-models) call. Each question becomes one result row, and the case score is the weighted mean of the rows that apply. There are three question types:
+
+| Type | Scored as |
+|------|-----------|
+| `Noul(text, expected=True)` | The probability of the expected answer (a yes/no question) |
+| `Scale(text, levels=[...])` | The expected level, normalised to 0 to 1; levels run worst first |
+| `Choice(text, options={label: credit})` | The expected credit over the options that apply; an option whose credit is `None` means "does not apply" |
+
+Set `required=True` on a question to fail the case whenever that question fails, whatever the composite. `weight`, `pass_threshold` and `state_fields` (which of `input`, `actual_output`, `expected_output`, `expected_assertion`, `metadata`, `user_prompt` and `assistant_response` the model sees; the default is `input` and `actual_output`) tune the rest. Refer to fields in backticks in the question text, as below.
+
+The scores come from probabilities, so the decision model must report them in `DecisionResult.metadata.probabilities`. `LLMDecisionModel` does not, and the evaluator rejects a result without them. The stub below stands in for a backend that does:
+
+```python
+from strands.decisions import DecisionMetadata, DecisionModel, DecisionResult
+from strands_evals import Case, Experiment
+from strands_evals.evaluators import Choice, Noul, Scale, TypedRubricEvaluator
+
+
+class FixedDecisionModel(DecisionModel):
+    async def _ask(self, state, questions, **kwargs):
+        probabilities = {
+            "answers": {"true": 0.9, "false": 0.1},
+            "tone": {"curt": 0.1, "fine": 0.3, "warm": 0.6},
+            "safety": {"refuses": 0.0, "hedges": 0.0, "complies": 0.1, "nothing_risky": 0.9},
+        }
+        answers = {"answers": True, "tone": "warm", "safety": "nothing_risky"}
+        return DecisionResult(
+            answers=answers,
+            metadata=DecisionMetadata(latency_ms=1, probabilities=probabilities),
+        )
+
+
+evaluator = TypedRubricEvaluator(
+    questions={
+        "answers": Noul("Does `actual_output` answer `input`?", weight=2.0),
+        "tone": Scale("How polite is `actual_output`?", levels=["curt", "fine", "warm"]),
+        "safety": Choice(
+            "How does `actual_output` handle the risky part of `input`?",
+            options={"refuses": 1.0, "hedges": 0.5, "complies": 0.0, "nothing_risky": None},
+            required=True,
+        ),
+    },
+    decision_model=FixedDecisionModel(),
+    pass_threshold=0.7,
+)
+
+experiment = Experiment(cases=[Case(name="order", input="Where is ORD-1?")], evaluators=[evaluator])
+report = experiment.run_evaluations(lambda case: "It shipped yesterday.")
+print(report.overall_score, report.test_passes)  # 0.85 [True]
+```
+
+Here `safety` does not apply (90% of the probability is on `nothing_risky`), so it is left out of the mean: (2 x 0.9 + 1 x 0.75) / 3 = 0.85. Prefer ids, as above, over a plain list of questions, which gets the ids `q1`, `q2` and so on. `to_dict()` saves the rubric but not the decision model, so after `Experiment.from_file()` reattach it with `evaluator.decision_model = ...`.
+
 ### Running evals in CI
 
 LLM judges cost money and vary between runs, so a common split is: deterministic evaluators on every pull request, with a scripted model (see [testing without the cloud](/strands-agents-guide/python/strands_production_guide/#testing-without-the-cloud)) where the model's choices do not matter; the full suite with real models and LLM judges on a schedule, tracking `overall_score` over time rather than failing on a single bad run.
@@ -242,6 +298,7 @@ LLM judges cost money and vary between runs, so a common split is: deterministic
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-20 | 1.65.0 | Added `TypedRubricEvaluator` (`strands-agents-evals` 1.10.0): question types, scoring, and a runnable example with a stub decision model. |
 | 2026-11-13 | 1.64.0 | Documented the `decision` span and where a classifier's tokens are, and are not, counted. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added a multi-turn evaluation example with `ActorSimulator` and listed the generator, tool simulator, detector, red-team and chaos modules. |
 | 2026-10-24 | 1.62.0 | New page. Result metrics (per call and lifetime), `StrandsTelemetry`, the span tree and attributes captured from a real run, trace attributes, and `strands-agents-evals` experiments with deterministic and LLM-judge evaluators. |
