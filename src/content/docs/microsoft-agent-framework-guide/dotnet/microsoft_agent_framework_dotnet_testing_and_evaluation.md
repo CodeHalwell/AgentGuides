@@ -34,6 +34,7 @@ A test project for .NET 10 with xUnit v3 runs on Microsoft.Testing.Platform. Ref
     <PackageReference Include="OpenTelemetry.Exporter.InMemory" Version="%%version=OpenTelemetry.Exporter.InMemory%%" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Quality" Version="%%version=Microsoft.Extensions.AI.Evaluation.Quality%%" />
     <PackageReference Include="Microsoft.Extensions.AI.Evaluation.Reporting" Version="%%version=Microsoft.Extensions.AI.Evaluation.Reporting%%" />
+    <!-- TestHost is versioned with the target framework: 10.x for net10.0 (11.0.0 targets net11.0 only) -->
     <!-- plus Microsoft.Agents.AI, .Workflows, .Hosting and .Hosting.OpenAI, as in the app under test -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>

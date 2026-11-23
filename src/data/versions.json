@@ -29,12 +29,12 @@
     },
     "Microsoft.Extensions.AI.Evaluation.Quality": {
       "registry": "nuget",
-      "version": "11.0.0",
+      "version": "11.0.1",
       "guide": "microsoft-agent-framework-guide"
     },
     "Microsoft.Extensions.AI.Evaluation.Reporting": {
       "registry": "nuget",
-      "version": "11.0.0",
+      "version": "11.0.1",
       "guide": "microsoft-agent-framework-guide"
     },
     "github.com/microsoft/agent-framework-go": {
