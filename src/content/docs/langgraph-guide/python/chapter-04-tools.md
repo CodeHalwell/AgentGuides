@@ -636,6 +636,41 @@ tool_node = ToolNode(
 )
 ```
 
+A state override reaches the tool itself: a tool that takes `Annotated[dict, InjectedState]` sees the state you pass to `request.override(state=...)`. This was fixed in `langgraph-prebuilt` 1.1.3; earlier releases injected the original state. From 1.1.3, and `langgraph` 1.2.23, tool calls dispatched with `Send` also receive the same state as calls reached by an edge.
+
+```python
+from typing import Annotated
+from langchain_core.tools import tool
+from langchain_core.messages import AIMessage
+from langgraph.graph import MessagesState, StateGraph, START, END
+from langgraph.prebuilt import ToolNode, InjectedState
+
+
+@tool
+def peek(state: Annotated[dict, InjectedState]) -> str:
+    """Show the injected note."""
+    return str(state.get("note"))
+
+
+class S(MessagesState):
+    note: str
+
+
+def wrap(request, execute):
+    return execute(request.override(state={**request.state, "note": "overridden"}))
+
+
+graph = (
+    StateGraph(S)
+    .add_node("tools", ToolNode([peek], wrap_tool_call=wrap))
+    .add_edge(START, "tools")
+    .add_edge("tools", END)
+    .compile()
+)
+call = AIMessage("", tool_calls=[{"name": "peek", "args": {}, "id": "c1"}])
+print(graph.invoke({"messages": [call], "note": "original"})["messages"][-1].content)  # overridden
+```
+
 If you pass only `wrap_tool_call`, async runs fall back to it. The interceptor runs every time the tool node executes, including when the node is re-run on resume after an interrupt, so keep any side effects in it idempotent.
 
 ---

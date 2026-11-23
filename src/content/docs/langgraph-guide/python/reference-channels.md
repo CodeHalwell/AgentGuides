@@ -541,6 +541,50 @@ r = graph.invoke({"step": r["step"]}, cfg)
 print(r["log"])   # ['step-0-ran', 'step-1-ran'] — rebuilt from the stored writes
 ```
 
+### Message histories on `DeltaChannel`
+
+`langgraph.graph.message` ships a batch reducer, `_messages_delta_reducer`, for message lists. It is underscore-prefixed and documented as experimental, so treat it as unstable. It handles the same cases as `add_messages` that matter for long histories: de-duplication by id, `RemoveMessage` for one id, and `RemoveMessage(id=REMOVE_ALL_MESSAGES)` to reset (only writes after the reset are kept). It also coerces dicts, strings and tuples to message objects. It does not replicate everything: a `RemoveMessage` with an unknown id is ignored rather than raising, and messages without an id are not given one. From langgraph 1.2.24 it handles `REMOVE_ALL_MESSAGES` inside a batch correctly and tolerates a `None` checkpoint value in `DeltaChannel`.
+
+```python
+from typing import Annotated
+from typing_extensions import TypedDict
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+from langgraph.channels import DeltaChannel
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import _messages_delta_reducer
+
+
+class State(TypedDict):
+    messages: Annotated[list, DeltaChannel(_messages_delta_reducer)]
+
+
+def reply(state: State) -> dict:
+    return {"messages": [AIMessage("hi", id="a1")]}
+
+
+def trim(state: State) -> dict:
+    return {"messages": [RemoveMessage(id="h1")]}
+
+
+graph = (
+    StateGraph(State)
+    .add_node("reply", reply)
+    .add_node("trim", trim)
+    .add_edge(START, "reply")
+    .add_edge("reply", "trim")
+    .add_edge("trim", END)
+    .compile(checkpointer=InMemorySaver())
+)
+cfg = {"configurable": {"thread_id": "delta-messages"}}
+r = graph.invoke({"messages": [HumanMessage("hello", id="h1")]}, cfg)
+print([m.id for m in r["messages"]])   # ['a1']
+r = graph.invoke({"messages": [{"role": "user", "content": "again", "id": "h2"}]}, cfg)
+print([m.id for m in r["messages"]])   # ['a1', 'h2']
+```
+
+Give every message an id when you use this reducer, since nothing assigns one. Prefer `MessagesState` unless checkpoint size is a measured problem.
+
 For a numeric counter or a short list, `BinaryOperatorAggregate` is lighter. `DeltaChannel.from_checkpoint` also accepts a plain value, so you can switch an existing `BinaryOperatorAggregate` field over without losing thread state.
 
 ---
@@ -942,6 +986,7 @@ print(snap.values.get("embedding"))   # None — not persisted
 
 | Version | Change |
 |---|---|
+| 1.2.24 | `_messages_delta_reducer` handles `REMOVE_ALL_MESSAGES`; `DeltaChannel` tolerates a `None` checkpoint value. |
 | 1.2.0 | `DeltaChannel` added (beta): stores deltas and rebuilds the value by replaying ancestor writes. See [`DeltaChannel`](#deltachannel-beta) above. |
 | 0.5 | `dynamic_barrier_value` and the `context` channel module removed (both present in 0.4.10, gone in 0.5.4). |
 
