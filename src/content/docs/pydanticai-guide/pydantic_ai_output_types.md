@@ -485,6 +485,39 @@ The validator may:
 
 Up to the agent's output retry budget (`retries={'output': N}`; a bare `retries=N` sets both the tool and output budgets, default 1) validator-triggered retries are allowed before the run fails. The separate `output_retries=` argument from V1 no longer exists.
 
+## Validation context — run-time data for Pydantic validators
+
+`Agent(validation_context=...)` is passed to Pydantic as `info.context` when tool arguments and structured output are validated. Give it a value, or a callable that receives the `RunContext`, so validators can use run-time data such as a list of allowed values.
+
+```python
+from pydantic import BaseModel, ValidationInfo, field_validator
+from pydantic_ai import Agent
+from pydantic_ai.models.test import TestModel
+
+
+class Booking(BaseModel):
+    room: str
+
+    @field_validator('room')
+    @classmethod
+    def known_room(cls, v: str, info: ValidationInfo) -> str:
+        allowed = (info.context or {}).get('rooms', [])
+        if allowed and v not in allowed:
+            raise ValueError(f'{v!r} is not one of {allowed}')
+        return v
+
+
+agent = Agent(
+    TestModel(custom_output_args={'room': 'Atlas'}),
+    output_type=Booking,
+    validation_context=lambda ctx: {'rooms': ['Atlas', 'Borealis']},
+)
+print(agent.run_sync('Book a room').output)
+#> room='Atlas'
+```
+
+A failed validation is sent back to the model as a retry, within the output retry budget, so the model can correct itself.
+
 ## Output streaming
 
 See the [streaming guide](/pydanticai-guide/pydantic_ai_streaming/). `StreamedRunResult.get_output()` validates the final assembled output using the same `output_type` pipeline.
