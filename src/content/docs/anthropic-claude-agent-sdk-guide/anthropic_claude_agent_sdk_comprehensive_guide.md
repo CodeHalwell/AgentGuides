@@ -152,7 +152,7 @@ your code ──► query() / ClaudeSDKClient ──► Claude Code CLI subproce
 | `StreamEvent` | only with `include_partial_messages=True` | `event` (raw API stream event) |
 | `RateLimitEvent` | when a rate-limit state changes | `rate_limit_info` |
 
-Task-related messages (`TaskStartedMessage`, `TaskProgressMessage`, `TaskNotificationMessage`) are subclasses of `SystemMessage`, emitted for background tasks and subagents.
+Task-related messages (`TaskStartedMessage`, `TaskProgressMessage`, `TaskUpdatedMessage`, `TaskNotificationMessage`) are subclasses of `SystemMessage`, emitted for background tasks and subagents. `TaskNotificationMessage` has `task_id`, `status`, `output_file`, `summary` and optional `usage`, but not every finished background task sends one: some report completion only through a `TaskUpdatedMessage` whose `patch.status` is terminal, so clear a task from your active set on either.
 
 **Content blocks** inside `AssistantMessage.content` and `UserMessage.content`: `TextBlock(text)`, `ThinkingBlock(thinking, signature)`, `ToolUseBlock(id, name, input)`, `ToolResultBlock(tool_use_id, content, is_error)`, plus `ServerToolUseBlock` / `ServerToolResultBlock`.
 
@@ -1160,7 +1160,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-Rewinding restores files only; the conversation history is unchanged. To rewind the conversation as well, start a new run with `resume=` and `resume_session_at=`.
+`rewind_files()` returns `None` and has no dry-run option; the TypeScript SDK's `rewindFiles()` does. Rewinding restores files only; the conversation history is unchanged. To rewind the conversation as well, start a new run with `resume=` and `resume_session_at=`.
 
 ---
 

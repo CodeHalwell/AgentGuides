@@ -124,6 +124,7 @@ Ready? **[Start Zero → Hero step 1 →](/anthropic-claude-agent-sdk-guide/anth
 
 | Date | Version | Summary |
 |------|---------|---------|
+| 2026-11-24 | 0.2.188 | Bumped from 0.2.183 (0.2.184 to 0.2.188; no changelog entries beyond bundled CLI updates). Documented `TaskUpdatedMessage` and the fact that not every background task sends a `TaskNotificationMessage`; noted that `rewind_files()` has no dry run. Checked against the installed package. |
 | 2026-11-17 | 0.2.183 | Bumped from 0.2.180 (0.2.181 to 0.2.183; bundled Claude CLI updates only, no API changes). Clarified that `autoAllowBashIfSandboxed` must be set for sandboxed Bash to skip approval. |
 | 2026-10-25 | 0.2.174 | Bumped from 0.2.170 (0.2.171 to 0.2.174, released 2026-10-21 to 2026-10-24). The Python sources are unchanged; only the bundled Claude Code CLI moved (2.1.306 to 2.1.310). Re-ran the guide's imports against the installed package and the offline stub-CLI test from the recipes (success and `ResultError` paths): both pass. No API changes to document. |
 | 2026-10-25 | 0.2.170 | Audit against the installed package: added hook patterns (input rewriting, prompt screening, Stop hook) and a skills, slash commands and plugins section; `autoCompactThreshold` read with `.get()` because the key is optional. |
