@@ -93,7 +93,7 @@ e = Agent(model="anthropic:%%model=anthropic%%")   # same as Claude(id=...)
 
 Useful string prefixes (from `agno.models.utils`): `openai` (the Responses API, `OpenAIResponses`), `openai-chat` (`OpenAIChat`), `anthropic` (`Claude`), `google` (`Gemini`), `aws-bedrock`, `azure-openai`, `groq`, `mistral`, `ollama`, `openrouter`, `litellm`, `vllm`, `xai` and more (68 prefixes in `agno.models.utils.MODEL_PROVIDER_CLASSES` in this release). Each provider lives in `agno.models.<provider>`; OpenAI-compatible endpoints use `OpenAILike(id=..., base_url=..., api_key=...)`.
 
-Settings that every model class shares (`agno.models.base.Model`): `retries`, `delay_between_retries`, `exponential_backoff`, `cache_response` (cache responses on disk, for development), `cache_ttl`. Provider classes add their own: `temperature`, `max_tokens` / `max_output_tokens`, `reasoning_effort` on the OpenAI classes, `thinking` on `Claude`, `api_key`, `base_url`, `timeout`.
+Settings that every model class shares (`agno.models.base.Model`): `retries`, `delay_between_retries`, `exponential_backoff`, `cache_response` (cache responses on disk, for development), `cache_ttl`. Provider classes add their own: `temperature`, `max_tokens` / `max_output_tokens`, `reasoning_effort` on the OpenAI classes, `thinking` on `Claude`, `api_key`, `base_url`, `timeout`. Since 3.2.1, `OpenRouter`, `Perplexity` and `Requesty` default `max_tokens` to `None` (the parameter is omitted and the routed model's own limit applies) rather than 1024, and `Sambanova` defaults to `Meta-Llama-3.3-70B-Instruct`. Set `max_tokens` explicitly if you relied on the old cap.
 
 ### Fallback models
 
