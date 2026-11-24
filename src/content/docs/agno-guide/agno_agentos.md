@@ -217,7 +217,7 @@ response = client.post("/a2a/agents/assistant", json=body, headers={"A2A-Version
 
 Upgrade the server and any `A2AClient` or `RemoteAgent(protocol="a2a")` together.
 
-**Slack.** The Slack interface is built on Slack Bolt (`agno[slack]` pins `slack_bolt` 1.x). `approvers=[...]` lists the Slack user IDs allowed to approve or deny a human-in-the-loop request; without it only the person who started the run can. `users={slack_id: principal}` maps Slack users to AgentOS principals, which AgentOS needs when you serve the manager under `AgentOS(authorization=...)`. The module no longer exports `SlackEventHandler`, `HITLHandler` or `verify_slack_signature`.
+**Slack.** The Slack interface is built on Slack Bolt (`agno[slack]` pins `slack_bolt` 1.x). `approvers=[...]` lists the Slack user IDs allowed to approve or deny a human-in-the-loop request; without it only the person who started the run can. `users={slack_id: principal}` maps Slack users to AgentOS principals, which AgentOS needs when you serve the manager under `AgentOS(authorization=...)`. Since 3.2.1, `default_role="<managed role>"` gives Slack users who are not in `users=` that role's access under authorization; they still act and are recorded as themselves. Without `default_role`, unmapped users are refused when Super Agent is served under authorization. The module no longer exports `SlackEventHandler`, `HITLHandler` or `verify_slack_signature`.
 
 Each takes one agent, team or workflow (A2A takes lists) and a `prefix` to change the mount point. This release has no Discord interface module, although the project README mentions Discord.
 
