@@ -130,6 +130,7 @@ All have a 1M-token context window. `fallbackModel` names a model to use if the 
 | `result` | `success` or `error_*` | `SDKResultMessage` | `is_error`, `result`, `total_cost_usd`, `usage`, `modelUsage`, `num_turns`, `structured_output`, `errors`, `terminal_reason` |
 | `system` | `compact_boundary` | `SDKCompactBoundaryMessage` | compaction happened |
 | `system` | `task_started`, `task_progress`, `task_notification` | | background tasks and subagents |
+| `system` | `informational` | `SDKInformationalMessage` | status and warning lines: `content`, `level` (`'info'`, `'notice'`, `'suggestion'`, `'warning'`) and an optional `tag` |
 | `rate_limit_event` | — | `SDKRateLimitEvent` | rate-limit state changes |
 
 The result is the last message of a turn. Its `subtype` is `'success'`, or one of `'error_during_execution'`, `'error_max_turns'`, `'error_max_budget_usd'`, `'error_max_structured_output_retries'`; only the success variant has `result`, `structured_output` and `api_error_status`. Check `is_error` as well as `subtype`: when the last model call fails, the result has `subtype: 'success'`, `is_error: true` and the API error text in `result`.
@@ -498,6 +499,8 @@ export const options: Options = {
 
 Common output fields: `continue` (set `false` to stop), `stopReason`, `systemMessage`, `decision`, `reason`, and `hookSpecificOutput`. For `PreToolUse`, `permissionDecision` is `'allow' | 'deny' | 'ask' | 'defer'` and `updatedInput` rewrites the input; for `PostToolUse`, `additionalContext` adds text for the model and `updatedToolOutput` replaces the tool's output before the model sees it (see [Middleware](/anthropic-claude-agent-sdk-typescript-guide/claude_agent_sdk_typescript_middleware/#redacting-tool-output)). All matchers for an event run concurrently.
 
+Since 0.3.327 `query()` refuses hook options that are not arrays: each event's value and each matcher's `hooks` must be a real `Array`, not a `Set`, generator, plain object, `true` or number. If a hook fails to load from managed settings, the session carries on and a `system` message with subtype `informational`, level `warning` and tag `managed_hooks_not_loaded` is emitted; since 0.3.330 the tag `settings_not_in_effect` reports a `settings` option or file that failed validation and was ignored. A `settings` option given as a JSON string that does not parse makes `query()` fail with an error.
+
 
 ### Hook patterns
 
@@ -733,7 +736,7 @@ const result = await run(
 console.log(text(result));
 ```
 
-`AgentDefinition` requires `description` and `prompt`; optional fields include `tools`, `disallowedTools`, `model`, `mcpServers`, `skills`, `maxTurns`, `effort`, `permissionMode` and `omitClaudeMd`. Messages produced inside a subagent carry `parent_tool_use_id` and `agent_id`. Set `forwardSubagentText: true` to receive a subagent's text and thinking blocks too. No more than 20 subagents run at once by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` changes that).
+`AgentDefinition` requires `description` and `prompt`; optional fields include `tools`, `disallowedTools`, `model`, `mcpServers`, `skills`, `maxTurns`, `effort`, `permissionMode` and `omitClaudeMd`. An `mcpServers` entry on an `AgentDefinition` can name a server configured on the session or give inline config; passing a `createSdkMcpServer()` server there is deprecated since 0.3.327 (it is ignored with a warning). Put in-process servers in the top-level `mcpServers` option. An inline definition in `agents` wins over a user, project, plugin or built-in agent of the same name. Messages produced inside a subagent carry `parent_tool_use_id` and `agent_id`. Set `forwardSubagentText: true` to receive a subagent's text and thinking blocks too. No more than 20 subagents run at once by default (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS` changes that).
 
 ### Orchestrating in code
 
@@ -1018,6 +1021,8 @@ if (checkpoint) {
 q.close();
 ```
 
+`rewindFiles()` returns a `RewindFilesResult`: `canRewind`, an optional `error`, and, for a dry run, `filesChanged`, `insertions` and `deletions`. On a real rewind `skippedLinks` counts tracked files left alone because a symlink, hard link or other non-regular file sat at the path, or because the sandbox can write to the folder; check it before assuming everything was restored. `rewindFiles()` refuses when managed settings set `fileCheckpointingEnabled: false`.
+
 Rewinding restores files only; the conversation is unchanged.
 
 ---
@@ -1146,3 +1151,7 @@ From the upstream [CHANGELOG](https://github.com/anthropics/claude-agent-sdk-typ
 - **0.3.311** — `cacheCreationEphemeral5mInputTokens` and `cacheCreationEphemeral1hInputTokens` in `ModelUsage`; minimum Node.js raised to 18.14.0.
 - **0.3.325** — `archiveSession()` and `unarchiveSession()`; `autoAllowBashIfSandboxed` must be `true` for sandboxed Bash to skip approval.
 - **0.3.326** — `mcpServersDelivery` option (`'argv'` deprecated as the future default).
+- **0.3.327 (breaking)** — `query()` refuses options that cannot be sent (an agent with a circular or BigInt field), and hook options must be arrays. `createSdkMcpServer()` servers inside an agent's `mcpServers` are deprecated.
+- **0.3.328** — an inline `agents` definition overrides same-named agents from other sources; `onFailure` for `mcp_tool` hooks in `Settings`.
+- **0.3.330** — `system/informational` warning tagged `settings_not_in_effect`; `settings` as an unparseable JSON string now fails `query()`.
+- **0.3.331** — `task_notification.output_file` names a foreground subagent's output file as well; `rewindFiles()` refuses under managed `fileCheckpointingEnabled: false`; `listSessions()` without a limit no longer opens every transcript at once.
