@@ -61,7 +61,7 @@ pip install 'openai-agents[sqlalchemy]'
 # LiteLLM support for multi-provider model access
 pip install 'openai-agents[litellm]'
 
-# Sandbox backends (Docker shown; also e2b, modal, daytona, vercel, cloudflare, blaxel, runloop)
+# Sandbox backends (Docker shown; also e2b, modal, daytona, vercel, cloudflare, blaxel)
 pip install 'openai-agents[docker]'
 ```
 
@@ -882,6 +882,22 @@ asyncio.run(main())
 ```
 
 A filter is any function that takes and returns a `HandoffInputData` (`input_history`, `pre_handoff_items`, `new_items`), so you can also write your own, for example to redact personal data. `RunConfig(handoff_input_filter=...)` applies one filter to every handoff in a run.
+
+By default an exception raised while invoking a handoff (for example in your `on_handoff` callback) propagates out of `Runner.run`. Pass `failure_error_function` to `handoff()` to return the error to the calling agent instead, so it can answer without transferring. `agents.default_tool_error_function` gives a generic message; a custom sync or async formatter should return only text that is safe to show the model, and may re-raise errors that are not recoverable. Side effects of the callback are not rolled back, and errors in transfer hooks or input filters still propagate.
+
+```python
+from agents import Agent, default_tool_error_function, handoff
+
+async def notify_billing(ctx) -> None:
+    ...  # may raise if the billing backend is down
+
+triage = Agent(
+    name="Triage",
+    instructions="Route billing questions to Billing; apologise if the transfer fails.",
+    handoffs=[handoff(billing_agent, on_handoff=notify_billing,
+                      failure_error_function=default_tool_error_function)],
+)
+```
 
 ### Routing Logic and Conditional Handoffs
 

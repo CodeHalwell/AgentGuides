@@ -84,6 +84,7 @@ This guide targets **`openai-agents` %%version=openai-agents%%**. The SDK is ver
 
 | Release | Changes |
 |---------|---------|
+| 0.26 | **Breaking:** Runloop sandbox provider and its `runloop` extra removed. `handoff(..., failure_error_function=...)` returns handoff invocation errors to the calling agent; default tool-error text shortened. Session helpers `coerce_session_settings`, `resolve_session_limit` and `await_session_mutation` exported from `agents.memory`. |
 | 0.24 | MCP tool annotations exposed on converted tools; run-wide tool exception formatting; session, sandbox and approval fixes. |
 | 0.23 | Configurable MCP listing page limits; opt-in Docker removal protection for sandboxes; encrypted-history scan budget for sessions; Sandbox Agents no longer labelled beta. |
 | 0.22 | **Breaking:** failed or incomplete non-streaming Responses raise `ModelBehaviorError`; `OpenAIProvider(openai_client=...)` rejects `organization`/`project`. Blocked terminal tool output is withheld from history. |
