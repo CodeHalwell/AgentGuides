@@ -341,6 +341,22 @@ def run_task_limited(task: str):
         return run_task(task)
 ```
 
+API-backed models (`OpenAIModel`, `LiteLLMModel`, `InferenceClientModel` and the other `ApiModel` subclasses) also take two arguments for the provider's own limits:
+
+```python
+from smolagents import OpenAIModel
+
+model = OpenAIModel(
+    "%%model=openai%%",
+    requests_per_minute=60,   # spaces calls at least one second apart
+    retry=True,               # the default
+)
+```
+
+- `requests_per_minute` makes the model sleep before each call so that consecutive calls are at least `60 / requests_per_minute` seconds apart. It is per model instance, so several agents sharing one instance share the limit, while separate instances do not. It is off by default.
+- `retry` is on by default. A failed call is retried when the error text contains `429`, `rate limit`, `rate_limit` or `too many requests`, up to three attempts with exponential back-off and jitter, starting from a 60-second wait. Any other error is raised at once. The wait and attempt count are module constants in `smolagents.models`, not constructor arguments. Pass `retry=False` to get a single attempt, for example when a gateway in front of the service already retries.
+- Local models (`TransformersModel`, `VLLMModel`, `MLXModel`) are not `ApiModel` subclasses and have neither argument.
+
 ---
 
 ## Error Handling & Resilience
