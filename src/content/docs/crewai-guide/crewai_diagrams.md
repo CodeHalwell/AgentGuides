@@ -28,7 +28,7 @@ sidebar:
          ├─ role, goal, backstory   (required)
          ├─ llm ──────────────► LLM: native SDK (openai, anthropic, gemini, …) or LiteLLM
          ├─ tools, mcps, apps
-         ├─ knowledge_sources ───► vector store (ChromaDB by default)
+         ├─ knowledge_sources ───► vector store (local Qdrant by default)
          └─ memory ──────────────► Memory (falls back to the crew's)
 ```
 
