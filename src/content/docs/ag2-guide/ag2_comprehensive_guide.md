@@ -339,7 +339,38 @@ teacher = Agent(
 )
 ```
 
-The hook may be sync or async and may return a `HumanMessage` or a plain string. Tools that need approval before running can also be wrapped declaratively with the `approval_required` tool middleware from `ag2.middleware`.
+The hook may be sync or async and may return a `HumanMessage` or a plain string.
+
+### Approving tool calls
+
+To gate a tool without writing the question into the tool body, pass `approval_required(...)` from `ag2.middleware` as tool middleware. It asks through the same `hitl_hook` before the tool runs, and returns `denied_message` to the model instead if the answer is not a yes.
+
+```python
+from ag2 import Agent, tool
+from ag2.events import HumanInputRequest, ToolApprovalRequest
+from ag2.middleware import approval_required
+
+
+@tool(middleware=[approval_required("Run {tool_name} with {tool_arguments}?", denied_message="Refund declined by a human.")])
+def refund(order_id: str) -> str:
+    """Refund an order."""
+    return f"refunded {order_id}"
+
+
+def hitl_hook(event: HumanInputRequest) -> str:
+    assert isinstance(event, ToolApprovalRequest)  # carries tool_call_id and choices
+    return input(f"{event.content} [y/n/always] ")
+
+
+support = Agent("support", tools=[refund], hitl_hook=hitl_hook)
+```
+
+- `message` accepts `{tool_name}` and `{tool_arguments}` placeholders.
+- The answers `y`, `yes` and `1` approve the call. `always` approves it and later calls to the same tool in the same context (switch this off with `allow_always=False`). Anything else is a denial.
+- `timeout=` (seconds) is unset by default, so the turn waits for as long as the human takes. If a deadline expires, the turn ends with `HumanInputTimeoutError` and the tool does not run.
+- The request is a `ToolApprovalRequest`, a subclass of `HumanInputRequest`, so a UI can show which call it is about. Its `choices` list (of `ApprovalChoice`) lets a transport offer more than yes or no. A choice comes back as an `ApprovalChoiceMessage`; read it with `context.ask_message(request)` (added in 1.3.4), which returns the whole `HumanMessage` where `context.ask(...)` returns only its text.
+
+I ran this with `TestConfig` and a hook that answered `no` and then `yes`: the first call returned the denial message without running `refund`, and the second ran it.
 
 ## Streaming and observing a turn
 
