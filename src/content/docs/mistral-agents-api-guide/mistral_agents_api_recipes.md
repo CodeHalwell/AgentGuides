@@ -1,6 +1,6 @@
 ---
 title: "Mistral Agents API: Ready-to-Use Recipes"
-description: "Copy-and-adapt Python recipes for Mistral's Agents API: web search, persistent chat, multi-agent routing, function tools, RAG, streaming, branching, error handling and a small CLI app."
+description: "Copy-and-adapt Python recipes for Mistral's Agents API: web search, persistent chat, multi-agent routing, function tools, RAG, streaming, branching, error handling, a small CLI app and client-side retrieval with embeddings."
 framework: "mistral-agents-api"
 language: "python"
 sidebar:
@@ -326,3 +326,30 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 ```
+
+---
+
+## 10. Client-side retrieval with embeddings
+
+The document library in recipe 5 is managed by Mistral. If you want to own the index (your own vector store, your own chunking), call the embeddings endpoint directly and pass the best chunks to an agent as context.
+
+```python
+import math
+from common import client
+
+def embed(texts: list[str]) -> list[list[float]]:
+    resp = client.embeddings.create(model="mistral-embed", inputs=texts)
+    return [d.embedding for d in resp.data]
+
+def cosine(a: list[float], b: list[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b))
+    return dot / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)))
+
+def top_k(query: str, chunks: list[str], k: int = 3) -> list[str]:
+    vectors = embed(chunks)
+    q = embed([query])[0]
+    ranked = sorted(zip(chunks, vectors), key=lambda cv: cosine(q, cv[1]), reverse=True)
+    return [chunk for chunk, _ in ranked[:k]]
+```
+
+Embed the chunks once and store the vectors; the function above re-embeds them on every call to keep the example short. `embeddings.create` also accepts `output_dimension`, `output_dtype` (`float`, `int8`, `uint8`, `binary` or `ubinary`) and `encoding_format`. From `mistralai` 3.9.0 the `inputs` type also admits image and audio chunks, but which models accept them is decided by the API, so check the model's documentation before relying on it.
