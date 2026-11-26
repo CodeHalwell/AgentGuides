@@ -580,6 +580,24 @@ print({name: len(items) for name, items in out.items()})
 
 `FileTypeRouter` accepts paths as well as `ByteStream`s. A path that does not exist goes to a `failed` output, or raises if you pass `raise_on_failure=True`.
 
+Two more routers work on documents that are already loaded. `DocumentTypeRouter` routes by MIME type, read from a metadata field (`mime_type_meta_field`) or guessed from a file path in one (`file_path_meta_field`). `DocumentLengthRouter` sends documents to `short_documents` or `long_documents` around a character `threshold`, which is a cheap way to keep near-empty extractions (a scanned PDF with no text layer, say) out of the index. Documents with no `content` count as short.
+
+```python
+from haystack.components.routers import DocumentLengthRouter, DocumentTypeRouter
+
+docs = [Document(content="a", meta={"file_path": "a.txt"}), Document(content="b", meta={"file_path": "b.pdf"}),
+        Document(content="c", meta={"file_path": "c.png"})]
+by_type = DocumentTypeRouter(mime_types=["text/plain", "application/pdf"], file_path_meta_field="file_path")
+print({name: [d.content for d in items] for name, items in by_type.run(documents=docs).items()})
+# {'text/plain': ['a'], 'application/pdf': ['b'], 'unclassified': ['c']}
+
+lengths = DocumentLengthRouter(threshold=10).run(
+    documents=[Document(content="hi"), Document(content="a much longer piece of text"), Document(content=None)]
+)
+print({name: [d.content for d in items] for name, items in lengths.items()})
+# {'short_documents': ['hi', None], 'long_documents': ['a much longer piece of text']}
+```
+
 #### Structure-aware splitters
 
 `DocumentSplitter` cuts by a fixed unit, which can slice through a paragraph or a section. Two splitters respect the document's structure instead.
@@ -602,6 +620,16 @@ for chunk in chunks:
 ```
 
 `header` and `parent_headers` make useful filters or prompt context. `keep_headers=False` strips the heading from the chunk text, and `secondary_split` (`"word"`, `"passage"`, `"period"` or `"line"`, with `split_length`) breaks up sections that are still too long.
+
+Source code and spreadsheets have their own tools. `PythonCodeSplitter` cuts Python at function, class and method boundaries rather than at a line count. It aims for between `min_effective_lines` and `max_effective_lines` (20 and 100 by default) per chunk, so short files stay in one document. Each chunk's metadata records `start_line`, `end_line`, `unit_kinds` (such as `function` or `method`) and `split_id`. `CSVDocumentCleaner` drops empty rows and columns from CSV text (`remove_empty_rows`, `remove_empty_columns`) and can skip leading rows or columns with `ignore_rows` and `ignore_columns`. `CSVDocumentSplitter` and `CSVDocumentCleaner` need `pip install pandas`.
+
+```python
+from haystack.components.preprocessors import CSVDocumentCleaner
+
+cleaned = CSVDocumentCleaner().run([Document(content="a,b,\n1,2,\n,,\n")])["documents"]
+print(repr(cleaned[0].content))
+# 'a,b\n1,2\n'
+```
 
 ### Reshaping data between components with `OutputAdapter`
 
@@ -1754,7 +1782,68 @@ print([d.content for d in LostInTheMiddleRanker().run(documents=ranked)["documen
 # ['0', '2', '3', '1']
 ```
 
+`MetaFieldGroupingRanker` keeps documents from the same source together, which suits prompts that quote several chunks of one file. `group_by` names the metadata field, `subgroup_by` an optional second level and `sort_docs_by` the field to order within each group. Groups appear in the order they were first seen in the input, and documents lacking the `group_by` field are appended at the end.
+
+```python
+from haystack.components.rankers import MetaFieldGroupingRanker
+
+pages = [Document(content="b p2", meta={"src": "b", "page": 2}), Document(content="a p1", meta={"src": "a", "page": 1}),
+         Document(content="b p1", meta={"src": "b", "page": 1})]
+grouped = MetaFieldGroupingRanker(group_by="src", sort_docs_by="page").run(documents=pages)["documents"]
+print([d.content for d in grouped])
+# ['b p1', 'b p2', 'a p1']
+```
+
 `TopPSampler` keeps documents until their cumulative score probability reaches `top_p`. It imports `torch`, so install that first.
+
+### Query expansion
+
+One phrasing of a question often misses documents that use different words. `QueryExpander` asks a chat generator for alternative queries, and `MultiQueryTextRetriever` runs a retriever once per query (in threads, `max_workers=3` by default) and returns the combined documents. The generator must reply with JSON of the form `{"queries": [...]}`; the component's default prompt asks for that, but a model that wraps the JSON in prose will fail to parse, so request structured output where the provider supports it. With `include_original_query=True` (the default) the original is appended to the list. `n_expansions` is a ceiling, not a guarantee.
+
+```python
+from haystack import Document, component
+from haystack.components.query import QueryExpander
+from haystack.components.retrievers import MultiQueryTextRetriever
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
+from haystack.dataclasses import ChatMessage
+from haystack.document_stores.in_memory import InMemoryDocumentStore
+
+
+@component
+class StubGenerator:
+    @component.output_types(replies=list[ChatMessage])
+    def run(self, messages: list[ChatMessage], generation_kwargs: dict | None = None):
+        return {"replies": [ChatMessage.from_assistant('{"queries": ["cat food", "feline diet"]}')]}
+
+
+expander = QueryExpander(chat_generator=StubGenerator(), n_expansions=2)
+queries = expander.run(query="cat nutrition")["queries"]
+print(queries)
+# ['cat food', 'feline diet', 'cat nutrition']
+
+store = InMemoryDocumentStore()
+store.write_documents([Document(content="cat food guide"), Document(content="feline diet tips"), Document(content="dogs")])
+multi = MultiQueryTextRetriever(retriever=InMemoryBM25Retriever(document_store=store, top_k=2))
+print([d.content for d in multi.run(queries=queries)["documents"]])
+# ['cat food guide', 'feline diet tips']
+```
+
+Replace the stub with a real chat generator in practice. `MultiQueryTextRetriever.run` also takes `retriever_kwargs` (for example `{"filters": ...}`), which are passed to every call. Follow it with a joiner or ranker if you need documents deduplicated or reordered.
+
+### Extracting a value from model output
+
+`RegexTextExtractor` returns the first capture group of a pattern from a string, or from the last message in a list of `ChatMessage`s. It is a lighter alternative to JSON when you only need one token, such as a label after "Answer:". If nothing matches, `captured_text` is an empty string.
+
+```python
+from haystack.components.extractors import RegexTextExtractor
+from haystack.dataclasses import ChatMessage
+
+extract = RegexTextExtractor(regex_pattern=r"Answer: (\w+)")
+print(extract.run(text_or_messages="Thinking... Answer: Paris"))
+# {'captured_text': 'Paris'}
+print(extract.run(text_or_messages=[ChatMessage.from_assistant("no match")]))
+# {'captured_text': ''}
+```
 
 ### Validating JSON output
 
@@ -1845,6 +1934,7 @@ agent = Agent(chat_generator=OpenAIChatGenerator(), tools=[get_weather])
 | Date | Version | Changes |
 |------|---------|---------|
 | %%versions-checked%% | %%version=haystack-ai%% | Rewritten for Haystack 3: every example now uses `Agent(chat_generator=..., ...)` and `agent.run(messages=...)`; removed fabricated APIs (`Agent(llm=...)`, `run(query=..., max_iterations=...)`, `Pipeline.from_yaml/to_yaml`, `haystack.cloud`, `.output`/`.input` sockets); integrations moved to `haystack_integrations.*`; `ToolInvoker` section replaced by migration notes; added state, hooks, HITL, `AgentTool`, `SuperComponent`, `stream()`; examples checked against the installed package with `MockChatGenerator`. Re-audited: added sections on document stores and retrievers, branching and concurrent pipelines, a runnable MCP server example and a custom human-in-the-loop UI; documented component serialisation behaviour. Added chunking and routing: `SentenceWindowRetriever`, `HierarchicalDocumentSplitter` with `AutoMergingRetriever`, `MetadataRouter` and `FileTypeRouter`. Added `OutputAdapter`. |
+| %%versions-checked%% | %%version=haystack-ai%% | Added `DocumentTypeRouter`, `DocumentLengthRouter`, `PythonCodeSplitter`, `CSVDocumentCleaner`, `MetaFieldGroupingRanker`, query expansion (`QueryExpander`, `MultiQueryTextRetriever`) and `RegexTextExtractor`. |
 | 2026-11-19 | 3.5.0 | Added `MarkdownHeaderSplitter`, `RecursiveDocumentSplitter`, `MetaFieldRanker`, `LostInTheMiddleRanker` and `JsonSchemaValidator`. |
 | 2026-11-12 | 3.5.0 | `StructuredOutputHook` and `StepBudgetReminderHook` (in the advanced agents page); 3.5 upgrade notes; `max_agent_steps` added to the reserved state keys. |
 | 2026-10-21 | 3.4.1 | Python 3.11+; context management (`CompactionHook`, `ToolResultOffloadHook`, `TokenBudgetHook`), `SkillToolset`, images and files; `inputs_from_state` security note and the full reserved-keys list; multi-agent and resilience material each moved to one home; three migration rows added. |
