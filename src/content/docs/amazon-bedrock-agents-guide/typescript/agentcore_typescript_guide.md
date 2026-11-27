@@ -199,6 +199,34 @@ app.run()
 
 `app.getAsyncTaskInfo()` returns the active task count and running jobs, for logging or diagnostics.
 
+### Build warmup hook
+
+Since `bedrock-agentcore` 0.5.0, the app can serve the build warmup hook that Runtime calls during `CreateAgentRuntime` and `UpdateAgentRuntime`, first for `memory` and then for `disk`. Pass `warmupHook` with a `path` and an async handler per type; the same path must be set in the runtime's `hooksConfiguration.build.warmup.action.httpPost.path`.
+
+```typescript
+import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
+
+let config: { loaded: boolean } | undefined
+
+const app = new BedrockAgentCoreApp({
+  invocationHandler: {
+    process: async () => ({ config }),
+  },
+  warmupHook: {
+    path: '/warmup',
+    handlers: {
+      memory: async () => {
+        config = { loaded: true } // stand-in for loading a model or index
+      },
+    },
+  },
+})
+
+app.run()
+```
+
+A type without a handler is answered with 200 `skipped`, and a request with no warmup-type header gets 400. Handlers must be async and must not block the event loop, so `/ping` keeps answering. An optional `port` (8000–12000) serves the hook on a separate listener on 127.0.0.1.
+
 ---
 
 ## Memory
@@ -445,5 +473,6 @@ Compared with the Python `bedrock-agentcore` SDK at the time of writing:
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-27 | `bedrock-agentcore` 0.5.0 | Added the build warmup hook. Example compiled with `tsc --strict`. |
 | 2026-10-24 | `bedrock-agentcore` 0.4.6 | Added the Vercel AI SDK import paths; CLI references updated for CLI 1.0. |
 | 2026-10-21 | `bedrock-agentcore` 0.4.6 | New page. Examples compiled with `tsc --strict`; Runtime server run locally against a stub model. |
