@@ -290,6 +290,58 @@ print(report.overall_score, report.test_passes)  # 0.85 [True]
 
 Here `safety` does not apply (90% of the probability is on `nothing_risky`), so it is left out of the mean: (2 x 0.9 + 1 x 0.75) / 3 = 0.85. Prefer ids, as above, over a plain list of questions, which gets the ids `q1`, `q2` and so on. `to_dict()` saves the rubric but not the decision model, so after `Experiment.from_file()` reattach it with `evaluator.decision_model = ...`.
 
+### Escalating uncertain cases with a cascade
+
+`Cascade` (added in `strands-agents-evals` 1.11.0) runs a typed rubric on every case and sends only the unsure ones to a fallback evaluator, usually an LLM judge. One question in the rubric is the gate. When its probability falls inside `escalate_when=Band(question=..., low=..., high=...)`, or the question does not apply to the case, the fallback's rows are returned instead. Each row's `metadata` records `path` (`"fast"` or `"fallback"`) and `p_gate`; fallback rows also carry `escalation_reason` and the rubric's `fast_rows`. A failing fallback fails the case rather than quietly keeping the rubric's verdict. `fallback` cannot itself be a `Cascade`.
+
+The band should contain the rubric's own pass line in `p_gate` terms, or the cases nearest the line stay on the fast path. Choose the band and `pass_threshold` from the same fit, for the same decision-model checkpoint. The stub decision model below reports a different probability per input, and the stub judge stands in for an LLM judge:
+
+```python
+from strands.decisions import DecisionMetadata, DecisionModel, DecisionResult
+from strands_evals import Case, Experiment
+from strands_evals.evaluators import Cascade, Evaluator, Noul, TypedRubricEvaluator
+from strands_evals.types import Band
+from strands_evals.types.evaluation import EvaluationOutput
+
+
+class ProbabilityModel(DecisionModel):
+    P = {"Where is ORD-1?": 0.97, "Where is ORD-2?": 0.55}
+
+    async def _ask(self, state, questions, **kwargs):
+        p = next(v for k, v in self.P.items() if k in str(state))
+        return DecisionResult(
+            answers={"answers": p >= 0.5},
+            metadata=DecisionMetadata(latency_ms=1, probabilities={"answers": {"true": p, "false": 1 - p}}),
+        )
+
+
+class StubJudge(Evaluator):
+    def evaluate(self, evaluation_case):
+        return [EvaluationOutput(score=0.0, test_pass=False, reason="judge: answer is vague")]
+
+    async def evaluate_async(self, evaluation_case):
+        return self.evaluate(evaluation_case)
+
+
+cascade = Cascade(
+    fast=TypedRubricEvaluator(
+        questions={"answers": Noul("Does `actual_output` answer `input`?")},
+        decision_model=ProbabilityModel(),
+        pass_threshold=0.7,
+    ),
+    fallback=StubJudge(),
+    escalate_when=Band(question="answers", low=0.4, high=0.8),
+)
+experiment = Experiment(
+    cases=[Case(name="clear", input="Where is ORD-1?"), Case(name="unsure", input="Where is ORD-2?")],
+    evaluators=[cascade],
+)
+report = experiment.run_evaluations(lambda case: "It shipped yesterday.")
+print(report.test_passes, report.scores)   # [True, False] [0.97, 0.0]
+```
+
+The first case (0.97) is outside the band and keeps the rubric's score. The second (0.55) is inside it, so the judge answers. `to_dict()` saves both evaluators and the band but not a decision model; reattach it with `cascade.fast.decision_model = ...` (and on `cascade.fallback` when that is a `TypedRubricEvaluator`).
+
 ### Running evals in CI
 
 LLM judges cost money and vary between runs, so a common split is: deterministic evaluators on every pull request, with a scripted model (see [testing without the cloud](/strands-agents-guide/python/strands_production_guide/#testing-without-the-cloud)) where the model's choices do not matter; the full suite with real models and LLM judges on a schedule, tracking `overall_score` over time rather than failing on a single bad run.
@@ -298,6 +350,7 @@ LLM judges cost money and vary between runs, so a common split is: deterministic
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-27 | 1.67.0 | Added `Cascade` (`strands-agents-evals` 1.11.0): escalating uncertain rubric cases to a fallback judge, with a runnable example. |
 | 2026-11-20 | 1.65.0 | Added `TypedRubricEvaluator` (`strands-agents-evals` 1.10.0): question types, scoring, and a runnable example with a stub decision model. |
 | 2026-11-13 | 1.64.0 | Documented the `decision` span and where a classifier's tokens are, and are not, counted. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added a multi-turn evaluation example with `ActorSimulator` and listed the generator, tool simulator, detector, red-team and chaos modules. |
