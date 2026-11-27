@@ -281,6 +281,34 @@ if __name__ == "__main__":
 
 For work that is not a single coroutine, call `app.add_async_task("name", {"detail": 1})` to get a task ID and `app.complete_async_task(task_id)` when it finishes. `app.get_async_task_info()` returns the active count and running jobs. To take full control of the status, decorate a function with `@app.ping` that returns `PingStatus.HEALTHY` or `PingStatus.HEALTHY_BUSY`.
 
+### Build warmup hooks
+
+Since `bedrock-agentcore` 1.28.0 you can run set-up work while Runtime prepares the agent, rather than on the first invocation. AgentCore Runtime sends a `POST` to a path you choose twice during `CreateAgentRuntime` and `UpdateAgentRuntime`: first for `memory`, then for `disk`. Declare the path with `HookConfig`, then register a handler per type with `@app.warmup`:
+
+```python
+from bedrock_agentcore.runtime import BedrockAgentCoreApp, HookConfig, WarmupType
+
+app = BedrockAgentCoreApp(warmup_hook=HookConfig(path="/warmup"))
+STATE: dict = {}
+
+
+@app.warmup(WarmupType.MEMORY)
+def load_config() -> None:
+    STATE["config"] = {"loaded": True}  # stand-in for loading a model or index
+
+
+@app.entrypoint
+def invoke(payload):
+    return {"config": STATE.get("config")}
+```
+
+The behaviour worth knowing:
+
+- Handlers take no arguments and may be sync or async, but not generators. An exception returns 500, which fails the create or update.
+- A type with no handler is answered with 200. A request without the `X-Amzn-Bedrock-AgentCore-Runtime-Warmup-Type` header gets 400.
+- Registering the same type twice, or calling `@app.warmup` without `warmup_hook`, raises `ValueError`.
+- The same path must be set in the runtime's `hooksConfiguration.build.warmup.action.httpPost.path` (with an optional `port` of 8000–12000, which `HookConfig(port=...)` also takes; a separate port needs `app.run()`).
+
 Cross-cutting concerns such as authentication checks, payload limits and access logs belong in middleware. See [Middleware](/amazon-bedrock-agents-guide/python/bedrock_agents_middleware_python/#4-middleware-in-the-agentcore-runtime-app), which uses `BedrockAgentCoreApp(middleware=[...])`.
 
 ---
