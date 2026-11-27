@@ -634,7 +634,46 @@ support = Agent(
 
 `pin_first=N` keeps the first N messages (for example a document the user pasted at the start). `proactive_compression=True` makes either manager compress before the model call once 70% of the model's `context_window_limit` is used (`{"compression_threshold": 0.8}` sets another ratio), instead of waiting for the provider to report an overflow.
 
-The newer `context_manager=` argument replaces the conversation manager with a strategy pipeline: `"auto"` truncates large tool results and summarises at 85% utilisation, `"agentic"` gives the model tools to manage its own context, and `False` turns context management off. Set `context_window_limit` on the model when you use it, otherwise a 200,000-token default is assumed.
+### Context manager
+
+`context_manager=` replaces the conversation manager with an ordered pipeline of strategies. It is a stable import (`strands.context_manager`) from 1.67.0; `strands.experimental.context_manager` still works as a deprecated alias, and the experimental `StashConfig` is now `ArchiveConfig`. The argument takes a preset string, a `ContextManager`, or a `ContextManagerConfig` dict. `"auto"` truncates large tool results and summarises at 85% utilisation, `"agentic"` (still experimental) gives the model tools to manage its own context, and `False` turns context management off. Set `context_window_limit` on the model when you use it, otherwise a 200,000-token default is assumed and a warning is logged.
+
+Each strategy is built with `Offload.drop`, `Offload.truncate` or `Offload.summarize`, given a target, and gated with `.when(...)`:
+
+| Target | Acts on |
+|--------|---------|
+| `"*"` | Whole messages (needs `.when()` conditions) |
+| `"tool_results"`, `"tool_result_errors"` | Successful or failed tool result blocks |
+| `"assistant_text"`, `"user_text"` | Text blocks outside tool results |
+| `"media"` | Images, documents, video and audio outside tool results (needs `context_utilization` or `preserve_recent`) |
+| `["search", "!bash"]` | Results from the named tools; a `!` excludes one |
+
+| Condition | Meaning |
+|-----------|---------|
+| `context_utilization="70%"` | Fire once the context reaches this share of the window (a fraction or token count also works) |
+| `block_threshold=2000` | Only act on blocks or messages larger than this many tokens |
+| `preserve_recent=4` | Never touch the newest N matching messages (or a share, such as `"70%"`) |
+
+You can also list preset names in `strategies=`: `"proactive_summarization"`, `"large_tool_offloading"`, `"overflow_protection"` and `"stale_tool_cleanup"`. The presets' thresholds may change between releases; use explicit `Offload` strategies when you need them pinned. A strategy holds per-agent state, so build one per agent. An emergency truncation is always appended as the last step, and runs only if the window is still overflowing.
+
+```python
+from strands import Agent
+from strands.context_manager import ContextManager, Offload
+
+manager = ContextManager(
+    strategies=[
+        # Keep a 500-token preview of any tool result over 2,000 tokens.
+        Offload.truncate("tool_results", {"preview_tokens": 500}).when(block_threshold=2000),
+        # Drop tool results outside the newest five that hold one.
+        "stale_tool_cleanup",
+        # Summarise the oldest messages at 80% utilisation, keeping the newest four.
+        Offload.summarize("*").when(context_utilization="80%", preserve_recent=4),
+    ],
+)
+agent = Agent(model="us.anthropic.%%model=anthropic%%", context_manager=manager, callback_handler=None)
+```
+
+Content that a strategy removes goes to an archive (in-memory by default) and the agent gets a `retrieve_context` tool to fetch it back. A truncated result reads `[Truncated: 1 block, ~13,500 tokens]` followed by the preview. Pass `archive={"storage": ...}` to keep it in durable storage, `archive={"retrieval_tool": False}` to leave the tool out, or `archive=False` to disable archiving. `stash=` is the deprecated name for `archive=` and is removed in 1.68.0.
 
 ## State
 
@@ -1169,6 +1208,7 @@ These exist in this release and are worth knowing about, but are newer and chang
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-11-27 | 1.67.0 | Documented the stable `strands.context_manager` module: `Offload` strategies, targets, conditions, presets and the archive. |
 | 2026-11-13 | 1.64.0 | Added decision models (`LLMDecisionModel`, `Question`, `Uncertain`) and snapshots (`take_snapshot`, `load_snapshot`, checkpoint and rewind with `SnapshotSessionManager`). Documented `cancel(message=..., after_current_tools=True)` and moved background tools to the tools page. |
 | 2026-10-24 | %%version=strands-agents%% | Audit against the installed packages. Added real-time voice (`BidiAgent`, models, I/O, events, hooks, limits), long-term memory (`MemoryManager`), OpenAI-compatible Bedrock endpoints (`bedrock_mantle_config`), `ClassifierStrategy` routing, Gemini, Mistral, llama.cpp and Responses API examples, and background tasks, checkpointing and concurrent-invocation options. Corrected the extras table (voice extras, Python 3.12 for Nova Sonic). |
 | 2026-10-24 | 1.62.0 | New page in the standalone Strands guide, replacing the Strands page in the Amazon Bedrock guide. Adds the agent loop, `AgentResult`, provider table, routing, streaming events, conversation and context managers, snapshot sessions, limits and cancellation. All examples run against an offline Bedrock stub. |
